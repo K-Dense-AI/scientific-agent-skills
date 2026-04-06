@@ -2,8 +2,10 @@
 name: bids
 description: >
   Use this skill when working with Brain Imaging Data Structure (BIDS) datasets:
-  organizing neuroimaging data, querying BIDS layouts, validating compliance,
-  converting DICOM to BIDS, writing metadata sidecars, or creating BIDS derivatives.
+  organizing neuroscience and biomedical data (MRI, EEG, MEG, iEEG, PET, microscopy,
+  NIRS, motion capture, EMG, MR spectroscopy, behavioral), querying BIDS layouts,
+  validating compliance, converting DICOM to BIDS, writing metadata sidecars, or
+  creating BIDS derivatives.
 license: https://creativecommons.org/licenses/by/4.0/
 metadata:
     skill-author: Yaroslav Halchenko
@@ -13,16 +15,24 @@ metadata:
 
 ## Overview
 
-The Brain Imaging Data Structure (BIDS) is a community standard for organizing and describing neuroimaging datasets. It defines a consistent file naming convention, directory hierarchy, and metadata schema so that datasets are immediately understandable by humans and software tools alike. BIDS is governed by the BIDS Specification (currently v1.10.x) and is maintained by the community via the BIDS-Standard GitHub organization.
+The Brain Imaging Data Structure (BIDS) is a community standard for organizing and describing neuroscience and biomedical research datasets. It defines a consistent file naming convention, directory hierarchy, and metadata schema so that datasets are immediately understandable by humans and software tools alike. BIDS is governed by the BIDS Specification (currently v1.11.x) and is maintained by the community via the BIDS-Standard GitHub organization.
 
-BIDS originated for MRI but now covers EEG, MEG, iEEG, PET, microscopy, NIRS, motion capture, and other modalities. Adoption is required or strongly encouraged by major data repositories (OpenNeuro, DANDI, LORIS), most neuroimaging journals (NeuroImage, Human Brain Mapping), and funding agencies (NIH, ERC).
+While BIDS originated for MRI, it has grown well beyond neuroimaging. The specification now covers 11 modalities spanning imaging, electrophysiology, and behavioral data:
+
+- **Imaging**: MRI (structural, functional, diffusion, fieldmaps, perfusion/ASL), PET, microscopy
+- **Electrophysiology**: EEG, MEG, iEEG (intracranial EEG), EMG
+- **Other**: NIRS (near-infrared spectroscopy), motion capture, behavioral data (without imaging), MR spectroscopy
+
+Active BEPs are extending BIDS further — notably BEP032 (microelectrode electrophysiology) will add support for extracellular recordings including Neuropixels probes, bringing BIDS to a prevalent methodology in animal neuroscience research (see also the neuropixels-analysis skill).
+
+Adoption is required or strongly encouraged by major data repositories (OpenNeuro, DANDI), leading journals (NeuroImage, Human Brain Mapping, Scientific Data), and funding agencies (NIH, ERC).
 
 The Python ecosystem for BIDS centers on **PyBIDS** (`pybids`) for querying and indexing BIDS datasets, and the **bids-validator** (Deno-based, available as PyPI package `bids-validator-deno` or via Deno directly) for compliance checking. Conversion from DICOM is typically done with **HeuDiConv**, **dcm2bids**, or **BIDScoin**.
 
 ## When to Use This Skill
 
 Apply this skill when:
-- Organizing raw neuroimaging data into BIDS-compliant directory structures
+- Organizing raw neuroscience data (imaging, electrophysiology, behavioral) into BIDS-compliant directory structures
 - Querying an existing BIDS dataset to find specific files by subject, session, task, run, or modality
 - Validating a dataset against the BIDS specification before sharing or submission
 - Converting DICOM data from scanners into BIDS format
@@ -666,7 +676,7 @@ layout = BIDSLayout("/data", database_path="/data/.pybids_cache.db")
    func/sub-01_task-rest_bold.nii.gz	2025-01-15T10:30:00	good
    ```
 
-7. **Version your dataset** - Use `CHANGES` to document dataset modifications. Consider DataLad for full version control of large neuroimaging datasets.
+7. **Version your dataset** - Use `CHANGES` to document dataset modifications. Consider DataLad for full version control of large datasets.
 
 8. **Deface anatomical images** - Remove facial features from T1w/T2w images before sharing (e.g., using `pydeface`, `mri_deface`, or `afni_refacer`). Store defaced versions as the primary data or use `_defacemask` files.
 
@@ -695,7 +705,7 @@ BEPs are community-driven proposals to extend BIDS to new modalities, derivative
 | 024 | Computed Tomography scan | raw | Seeking contributors |
 | 026 | Microelectrode Recordings | raw | Seeking new leader |
 | 028 | Provenance | metadata | Has PR (#2099) |
-| 032 | Microelectrode electrophysiology | raw | Has PR (#2307), preview available |
+| 032 | Microelectrode electrophysiology | raw | Has PR (#2307), preview available — covers Neuropixels and other extracellular probes; relates to neuropixels-analysis skill |
 | 033 | Advanced Diffusion Weighted Imaging | raw | Seeking contributors |
 | 034 | Computational modeling | derivative | Has PR (#967) |
 | 035 | Mega-analyses with non-compliant derivatives | derivative | In development |
