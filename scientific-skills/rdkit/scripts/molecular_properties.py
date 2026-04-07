@@ -16,7 +16,7 @@ from pathlib import Path
 
 try:
     from rdkit import Chem
-    from rdkit.Chem import Descriptors, Lipinski
+    from rdkit.Chem import Descriptors, Lipinski, QED
 except ImportError:
     print("Error: RDKit not installed. Install with: conda install -c conda-forge rdkit")
     sys.exit(1)
@@ -68,7 +68,7 @@ def calculate_properties(mol):
         'BertzCT': Descriptors.BertzCT(mol),
 
         # Drug-likeness
-        'QED': Descriptors.qed(mol),
+        'QED': QED.qed(mol),
     }
 
     # Lipinski's Rule of Five
