@@ -1,0 +1,74 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+*.venv
+
+# Skill Data (NEVER commit - contains auth and personal notebooks!)
+data/
+data/*
+data/**/*
+
+# Claude-specific
+.claude/
+*.claude
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+scripts/__pycache__/
+scripts/*.pyc
+
+# Environment
+.env
+*.env
+.env.*
+
+# Browser/Auth state (if accidentally placed outside data/)
+browser_state/
+auth/
+auth_info.json
+library.json
+notebooks.json
+state.json
+cookies.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Logs
+*.log
+logs/
+*.debug
+
+# Backups
+*.backup
+*.bak
+*.tmp
+*.temp
+
+# Test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Package artifacts
+dist/
+build/
+*.egg-info/
