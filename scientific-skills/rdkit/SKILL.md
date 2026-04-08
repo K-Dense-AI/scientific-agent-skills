@@ -67,6 +67,8 @@ for mol in suppl:
 suppl = Chem.SmilesMolSupplier('molecules.smi', titleLine=False)
 
 # For large files or compressed data
+import gzip
+
 with gzip.open('molecules.sdf.gz') as f:
     suppl = Chem.ForwardSDMolSupplier(f)
     for mol in suppl:
