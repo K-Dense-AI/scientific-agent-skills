@@ -744,7 +744,7 @@ See `references/use_cases.md` for complete end-to-end workflow examples includin
 - **Estimate size first** - Check collection size before downloading - some collection sizes are in terabytes!
 - **Save manifests** - Always save query results with Series UIDs for reproducibility and data provenance
 - **Read documentation** - IDC data structure and metadata fields are documented at https://learn.canceridc.dev/
-- **Use IDC forum** - Search for questons/answers and ask your questions to the IDC maintainers and users at https://discourse.canceridc.dev/
+- **Use IDC forum** - Search for questions/answers and ask your questions to the IDC maintainers and users at https://discourse.canceridc.dev/
 
 ## Troubleshooting
 
