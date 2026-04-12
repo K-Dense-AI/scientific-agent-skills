@@ -79,6 +79,7 @@ Each skill includes:
 - [FAQ](#faq)
 - [Support](#support)
 - [Join Our Community](#join-our-community)
+- [Use with Other AI Agents](#-use-with-other-ai-agents-via-skillkit)
 - [Citation](#citation)
 - [License](#license)
 
@@ -167,9 +168,34 @@ Scientific Agent Skills is powered by **50+ incredible open source projects** ma
 
 - **Python**: 3.11+ (3.12+ recommended for best compatibility)
 - **uv**: Python package manager (required for installing skill dependencies)
+- **Git LFS**: Required for cloning large skill assets (models, datasets) — install before cloning
 - **Client**: Any agent that supports the [Agent Skills](https://agentskills.io/) standard (Cursor, Claude Code, Gemini CLI, Codex, etc.)
 - **System**: macOS, Linux, or Windows with WSL2
 - **Dependencies**: Automatically handled by individual skills (check `SKILL.md` files for specific requirements)
+
+### Installing Git LFS
+
+Some skills include large binary assets (model weights, reference datasets) tracked with Git LFS. Without Git LFS, these files will appear as small pointer stubs rather than the actual content, causing checkout failures.
+
+**macOS:**
+```bash
+brew install git-lfs && git lfs install
+```
+
+**Linux:**
+```bash
+sudo apt-get install git-lfs && git lfs install   # Debian/Ubuntu
+# or
+sudo yum install git-lfs && git lfs install       # RHEL/CentOS
+```
+
+**Windows:**
+Download the installer from [git-lfs.github.com](https://git-lfs.github.com), then run:
+```powershell
+git lfs install
+```
+
+After installing, re-clone or run `git lfs pull` in an existing clone to fetch the full file contents.
 
 ### Installing uv
 
@@ -683,6 +709,35 @@ Connect with other scientists, researchers, and AI enthusiasts using AI agents f
 Whether you're just getting started or you're a power user, our community is here to support you. We share tips, troubleshoot issues together, showcase cool projects, and discuss the latest developments in AI-powered scientific research.
 
 **See you there!** 💬
+
+---
+
+## 🤝 Use with Other AI Agents (via SkillKit)
+
+[SkillKit](https://skillkit.dev) is a cross-agent package manager that lets you search, install, and translate Agent Skills for use with Cursor, Codex, Gemini CLI, Windsurf, and other tools — without manually copying folders.
+
+### Quick Start
+
+```bash
+npm install -g skillkit
+```
+
+**Search for skills:**
+```bash
+skillkit search "scientific"
+```
+
+**Install this skill collection:**
+```bash
+skillkit install claude-scientific-skills
+```
+
+**Translate skills for a specific agent** (e.g., Cursor):
+```bash
+skillkit translate claude-scientific-skills --agent cursor
+```
+
+SkillKit automatically places skills in the correct directory for your target agent and handles any format differences between tools. See the [SkillKit documentation](https://skillkit.dev) for the full list of supported agents.
 
 ---
 
