@@ -1,0 +1,111 @@
+# Visual Search Array Generation Parameters
+# Machine-readable parameter specification for generating visual search arrays
+# All values are validated against the citations in the main SKILL.md
+
+display:
+ max_eccentricity_deg: 15.0 # Maximum distance from fixation in degrees of visual angle (Wolfe et al., 1998)
+ min_item_spacing_deg: 1.0 # Minimum center-to-center distance in degrees (Bouma, 1970; prevents crowding)
+ min_fixation_distance_deg: 1.0 # Minimum distance of items from fixation point
+ item_size_range_deg:
+ min: 0.5
+ max: 2.0 # Standard range for search items (Wolfe, 2021)
+
+set_sizes:
+ classify_search_type: [4, 8, 12, 16] # Minimum 3 set sizes; 4 recommended (Wolfe, 2021)
+ test_pop_out: [8, 16, 32] # Wide range for confirming parallel search
+ standard_conjunction: [4, 8, 12, 16, 20] # Fine-grained slope estimation (Wolfe, 1994)
+ quick_screening: [6, 12, 18] # Three evenly spaced sizes
+ max_practical: 50 # Constrained by spacing and eccentricity limits
+
+trial_structure:
+ target_present_ratio: 0.5 # Standard 1:1 ratio (Chun & Wolfe, 1996)
+ low_prevalence_ratio: 0.1 # For prevalence effect studies (Wolfe et al., 2005)
+ min_trials_per_cell: 20 # Minimum per set_size x presence combination (Wolfe, 2021)
+ recommended_trials_per_cell: 30 # For stable RT distributions
+ practice_trials: 20 # Before data collection
+ max_consecutive_same_type: 4 # Randomization constraint on present/absent runs
+
+timing_ms:
+ fixation_duration:
+ min: 500
+ max: 1000
+ display_duration: null # null = until response (self-paced is standard)
+ brief_presentation:
+ min: 100
+ max: 200 # For pre-attentive processing tests (Treisman & Gelade, 1980)
+ response_deadline:
+ min: 3000
+ max: 5000
+ inter_trial_interval:
+ min: 500
+ max: 1000
+ feedback_duration: 500
+
+search_slope_benchmarks_ms_per_item:
+ # Target-present slopes (Wolfe, 2021)
+ highly_efficient:
+ max: 5
+ label: "pop-out"
+ efficient:
+ min: 5
+ max: 10
+ label: "feature-like"
+ moderately_efficient:
+ min: 10
+ max: 20
+ label: "guided search"
+ inefficient:
+ min: 20
+ max: 30
+ label: "conjunction-like"
+ very_inefficient:
+ min: 30
+ label: "serial / spatial configuration"
+ absent_to_present_slope_ratio: 2.0 # For self-terminating search (Treisman & Gelade, 1980)
+
+feature_dimensions:
+ color:
+ min_hue_difference_deg: 30 # In CIE L*a*b* hue angle for pop-out (Nagy & Sanchez, 1990)
+ equate_luminance: true # Always equate luminance across colors
+ recommended_color_space: "CIE L*a*b*" # Device-independent; avoid RGB for reporting
+ max_distinct_colors: 4 # Typical for conjunction search (Wolfe, 1994)
+
+ orientation:
+ pop_out_threshold_deg: 30 # Minimum difference for reliable pop-out (Wolfe et al., 1992)
+ feature_search_jnd_deg: 15 # Minimum for efficient search (Foster & Ward, 1991)
+ cardinal_advantage: true # Vertical/horizontal detected faster than obliques (Appelle, 1972)
+ recommended_obliques_deg: [45, 135] # Avoid cardinal effects unless studying them
+
+ size:
+ pop_out_ratio: 1.5 # Target/distractor size ratio for pop-out (Treisman & Gelade, 1980)
+ weber_fraction: 0.05 # Approximate size discrimination JND (Nachmias, 2011)
+
+crowding:
+ # Critical spacing ~ 0.5 x eccentricity (Bouma, 1970)
+ bouma_constant: 0.5
+ examples:
+ - eccentricity_deg: 5
+ min_spacing_deg: 2.5
+ - eccentricity_deg: 10
+ min_spacing_deg: 5.0
+ - eccentricity_deg: 2
+ min_spacing_deg: 1.0
+
+placement_algorithms:
+ - name: "grid_with_jitter"
+ description: "Regular grid positions with random jitter added"
+ jitter_range_deg: 0.3 # Uniform +/- jitter (Wolfe et al., 1998)
+
+ - name: "random_with_rejection"
+ description: "Random positions, reject violations of spacing constraints"
+ max_attempts: 1000 # Maximum placement attempts before regenerating
+
+ - name: "concentric_rings"
+ description: "Items placed on rings at fixed eccentricities"
+ controls_eccentricity: true # Best for controlling eccentricity distribution
+
+randomization:
+ target_position: "counterbalance across quadrants and eccentricity bins"
+ set_size_order: "randomize within blocks"
+ conjunction_distractor_split: 0.5 # 50% share each feature with target (Treisman & Gelade, 1980)
+ block_structure: "within-block mixing is standard (Wolfe, 2021)"

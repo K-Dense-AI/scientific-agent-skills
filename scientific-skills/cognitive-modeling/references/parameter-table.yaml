@@ -1,0 +1,204 @@
+# ACT-R Subsymbolic Parameter Reference Table
+# Each parameter includes its symbol, default value, typical range, and citation.
+
+declarative_memory:
+ base_level_decay:
+ symbol: "d"
+ default: 0.5
+ range: [0.1, 1.0]
+ description: >
+ Controls the rate at which base-level activation decays over time.
+ Higher values produce faster forgetting. The default of 0.5 was
+ derived from the environmental statistics of memory access patterns.
+ citation: "Anderson & Schooler, 1991; Anderson, 2007"
+ notes: >
+ Typically fixed at 0.5 in most ACT-R models. Only free this
+ parameter if the model specifically addresses forgetting dynamics.
+
+ activation_noise:
+ symbol: "s"
+ default: 0.4
+ range: [0.1, 0.8]
+ description: >
+ Scale parameter of the logistic noise added to chunk activations.
+ Determines the stochasticity of memory retrieval. Higher values
+ make retrieval more variable and error-prone.
+ citation: "Anderson, 2007"
+ notes: >
+ Common free parameter. Values below 0.2 produce near-deterministic
+ retrieval. Values above 0.6 produce highly stochastic behavior.
+
+ latency_factor:
+ symbol: "F"
+ default: 1.0
+ range: [0.2, 5.0]
+ description: >
+ Scales the retrieval time equation RT = F * exp(-f * A_i).
+ Higher values slow all retrievals proportionally.
+ citation: "Anderson, 2007"
+ notes: >
+ Common free parameter used to scale model time to match
+ observed reaction times.
+
+ latency_exponent:
+ symbol: "f"
+ default: 1.0
+ range: "Usually fixed at 1.0"
+ description: >
+ Exponent in the retrieval time equation. Rarely varied.
+ citation: "Anderson, 2007"
+
+ retrieval_threshold:
+ symbol: "tau"
+ default: "-infinity"
+ range: [-2.0, 2.0]
+ description: >
+ Minimum activation required for successful retrieval.
+ Chunks below this threshold result in retrieval failure.
+ Default of -infinity means all chunks can be retrieved.
+ citation: "Anderson, 2007"
+ notes: >
+ Set empirically when modeling retrieval failures or errors.
+ Common values range from 0.0 to -2.0 for typical tasks.
+
+ maximum_associative_strength:
+ symbol: "S (mas)"
+ default: "context-dependent"
+ range: [1.0, 5.0]
+ description: >
+ Maximum strength of associative links for spreading activation.
+ Total spreading activation from a source is S divided by the
+ fan (number of associations).
+ citation: "Anderson & Reder, 1999; Anderson, 2007, Ch. 5"
+ notes: >
+ Critical for fan-effect models. Value depends on the task
+ and the number of associations in the model.
+
+ mismatch_penalty:
+ symbol: "P"
+ default: "application-dependent"
+ range: [0.5, 2.0]
+ description: >
+ Penalty applied per mismatching slot during partial matching.
+ Higher values make partial matches less likely to succeed.
+ citation: "Anderson, 2007"
+ notes: >
+ Only relevant when partial matching is enabled (:mp t).
+ Must be tuned to the specific task.
+
+ goal_activation:
+ symbol: "G"
+ default: 1.0
+ range: [0.5, 5.0]
+ description: >
+ Activation spread from the goal buffer to declarative memory.
+ citation: "Anderson, 2007, Ch. 5"
+
+spreading_activation:
+ weight_distribution:
+ description: >
+ Source activation W is divided equally among all sources
+ by default: W_j = G / n, where n is the number of chunks
+ in source buffers.
+ citation: "Anderson, 2007"
+
+ associative_strength:
+ equation: "S_ji = S - ln(fan_j)"
+ description: >
+ Associative strength from source j to chunk i decreases
+ logarithmically with the fan of source j.
+ citation: "Anderson & Reder, 1999"
+
+procedural_memory:
+ utility_noise:
+ symbol: "sigma (egs)"
+ default: 0.0
+ range: [0.1, 2.0]
+ description: >
+ Noise added to production utilities during conflict resolution.
+ When 0, the highest-utility production always fires (deterministic).
+ Non-zero values introduce stochastic production selection.
+ citation: "Anderson, 2007"
+ notes: >
+ Enable for models of strategy selection, exploration, or
+ probability matching behavior.
+
+ utility_learning_rate:
+ symbol: "alpha"
+ default: 0.2
+ range: [0.01, 1.0]
+ description: >
+ Learning rate for updating production utilities via reward
+ propagation. Higher values produce faster learning but more
+ instability.
+ citation: "Anderson, 2007"
+ notes: >
+ Only relevant when utility learning is enabled (:ul t).
+
+ initial_utility:
+ symbol: "U0"
+ default: 0.0
+ range: "Task-dependent"
+ description: >
+ Starting utility for new productions. Can be set per production.
+ citation: "Anderson, 2007"
+
+ production_compilation:
+ description: >
+ Mechanism by which two sequential productions are compiled
+ into a single production, modeling skill acquisition and the
+ transition from declarative to procedural knowledge.
+ citation: "Taatgen & Anderson, 2002"
+ notes: >
+ Enable with :epl t. Controls the power law of practice.
+
+timing:
+ production_cycle:
+ value_ms: 50
+ description: "Time for one production to fire"
+ citation: "Anderson, 2007"
+
+ visual_encoding:
+ value_ms: 85
+ description: "Time to encode a visual object after attending to it"
+ citation: "Anderson, 2007, Ch. 6"
+
+ visual_attention_shift:
+ value_ms: 185
+ description: "Time for an attention shift to a new visual location"
+ citation: "Anderson, 2007, Ch. 6"
+
+ motor_initiation:
+ value_ms: 50
+ description: "Time to initiate a motor movement"
+ citation: "Anderson, 2007, Ch. 6"
+
+ motor_execution:
+ value_ms: 100
+ description: "Base time for motor execution (Fitts' law scaling applies)"
+ citation: "Anderson, 2007, Ch. 6"
+
+ imaginal_delay:
+ value_ms: 200
+ description: "Time for the imaginal module to create or modify a chunk"
+ citation: "Anderson, 2007, Ch. 4"
+
+ audio_encoding:
+ value_ms: 285
+ description: "Time to encode an auditory event"
+ citation: "Anderson, 2007, Ch. 6"
+
+# Parameter selection heuristics
+guidelines:
+ commonly_fixed:
+ - "d = 0.5 (base-level decay; Anderson & Schooler, 1991)"
+ - "f = 1.0 (latency exponent)"
+ - "Production cycle = 50 ms"
+ - "Visual/motor timing parameters (unless modeling perceptual tasks)"
+ commonly_free:
+ - "s (activation noise) -- most commonly freed parameter"
+ - "F (latency factor) -- scales predicted RT to observed RT"
+ - "tau (retrieval threshold) -- when modeling errors"
+ - "S/mas (maximum associative strength) -- for spreading activation models"
+ max_recommended_free: 5
+ max_recommended_free_source: "Roberts & Pashler, 2000; general modeling best practice"
