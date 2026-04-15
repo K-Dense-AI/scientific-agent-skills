@@ -1668,7 +1668,7 @@ wheels = [
 
 [[package]]
 name = "scientific-agent-skills"
-version = "2.34.3"
+version = "2.37.1"
 source = { virtual = "." }
 dependencies = [
     { name = "cisco-ai-skill-scanner" },
