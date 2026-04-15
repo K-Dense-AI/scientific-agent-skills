@@ -1,0 +1,7 @@
+condition	timepoint	MDM2_inhibitor	DNA_damaging	HDAC_inhibitor	CDK_inhibitor	Proteasome_inhibitor	Negative_control
+Drug_EC50	4h	0.3464	0.3879	0.1149	0.0018	0.0897	0.0
+Drug_EC50	8h	0.1927	0.1595	-0.0106	0.2065	0.0115	0.0
+Drug_EC50	24h	0.3739	0.275	0.217	0.1171	-0.0168	0.0
+Drug_2xEC50	4h	0.1742	0.0263	0.1153	-0.0419	0.0488	0.0
+Drug_2xEC50	8h	0.0199	0.1105	0.2824	0.3175	0.0393	0.0
+Drug_2xEC50	24h	0.7183	0.6344	0.6129	0.3812	0.1279	0.0
