@@ -1,0 +1,33 @@
+# RSC (Royal Society of Chemistry) journal style — Praxis
+# Single column: 84 mm (3.31 in), double column: 170 mm (6.69 in)
+# Minimum font size: 6 pt, Arial/Helvetica
+
+figure.figsize: 3.31, 2.48
+figure.dpi: 300
+figure.facecolor: white
+font.family: sans-serif
+font.sans-serif: Arial, Helvetica, DejaVu Sans
+font.size: 7
+axes.linewidth: 0.5
+axes.labelsize: 7
+axes.titlesize: 8
+axes.titleweight: bold
+axes.labelpad: 3
+axes.facecolor: white
+axes.edgecolor: black
+axes.prop_cycle: cycler('color', ['E69F00', '56B4E9', '009E73', 'F0E442', '0072B2', 'D55E00', 'CC79A7', '000000'])
+xtick.labelsize: 6
+ytick.labelsize: 6
+xtick.major.size: 3
+ytick.major.size: 3
+xtick.direction: in
+ytick.direction: in
+xtick.top: true
+ytick.right: true
+lines.linewidth: 1.0
+lines.markersize: 4
+legend.fontsize: 6
+legend.frameon: false
+savefig.dpi: 300
+savefig.bbox: tight
+savefig.pad_inches: 0.05

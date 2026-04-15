@@ -1,0 +1,61 @@
+# ACS (American Chemical Society) journal style — Praxis
+# Single column: 3.25 in (82.5 mm), double column: 7.00 in (178 mm)
+# Minimum font size: 6 pt, Arial font
+# 300 dpi minimum
+
+figure.figsize: 3.25, 2.44
+figure.dpi: 300
+figure.facecolor: white
+figure.edgecolor: white
+
+# Font
+font.family: sans-serif
+font.sans-serif: Arial, Helvetica, DejaVu Sans
+font.size: 7
+font.weight: normal
+
+# Axes
+axes.linewidth: 0.5
+axes.labelsize: 7
+axes.titlesize: 8
+axes.titleweight: bold
+axes.labelpad: 3
+axes.facecolor: white
+axes.edgecolor: black
+# ACS-inspired colour cycle (colourblind-safe)
+axes.prop_cycle: cycler('color', ['0072B2', 'D55E00', '009E73', 'E69F00', 'CC79A7', '56B4E9', 'F0E442', '000000'])
+
+# Ticks
+xtick.labelsize: 6
+ytick.labelsize: 6
+xtick.major.size: 3
+ytick.major.size: 3
+xtick.minor.size: 1.5
+ytick.minor.size: 1.5
+xtick.major.width: 0.5
+ytick.major.width: 0.5
+xtick.minor.width: 0.3
+ytick.minor.width: 0.3
+xtick.direction: in
+ytick.direction: in
+xtick.top: true
+ytick.right: true
+
+# Lines
+lines.linewidth: 1.0
+lines.markersize: 4
+
+# Legend
+legend.fontsize: 6
+legend.frameon: false
+legend.borderaxespad: 0.5
+
+# Grid
+grid.linewidth: 0.3
+grid.alpha: 0.3
+
+# Saving
+savefig.dpi: 300
+savefig.bbox: tight
+savefig.pad_inches: 0.05
+savefig.transparent: false
