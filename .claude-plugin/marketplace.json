@@ -13,7 +13,7 @@
       "name": "scientific-skills",
       "description": "Collection of scientific skills",
       "source": "./",
-      "strict": false,
+      "strict": true,
       "skills": [
         "./scientific-skills/adaptyv",
         "./scientific-skills/aeon",
