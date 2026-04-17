@@ -24,7 +24,7 @@ The fundamental module for working with molecules.
 **Writing Molecules:**
 
 - `Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)` - Convert to SMILES
-- `Chem.MolToSmarts(mol, isomericSmarts=False)` - Convert to SMARTS
+- `Chem.MolToSmarts(mol, isomericSmiles=False)` - Convert to SMARTS
 - `Chem.MolToMolBlock(mol, includeStereo=True, confId=-1)` - Convert to MOL block
 - `Chem.MolToMolFile(mol, filename, includeStereo=True, confId=-1)` - Write MOL file
 - `Chem.MolToPDBBlock(mol, confId=-1)` - Convert to PDB block
