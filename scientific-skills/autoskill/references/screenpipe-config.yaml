@@ -1,0 +1,61 @@
+# Starter screenpipe configuration for autoskill users.
+#
+# Copy the relevant sections into your screenpipe config (or pass as CLI
+# flags when starting the daemon). Screenpipe handles app/window filtering
+# at capture time — sensitive apps on this list will never be OCR'd, so
+# their content never reaches autoskill's pipeline.
+#
+# Reference: https://github.com/screenpipe/screenpipe
+#
+# Review and edit for your setup. This is a conservative baseline, not
+# an exhaustive list. Add any app where you handle secrets.
+
+ignored_apps:
+  # Password managers
+  - "1Password"
+  - "Bitwarden"
+  - "Dashlane"
+  - "Keeper"
+  - "LastPass"
+  - "KeePassXC"
+
+  # Private messaging
+  - "Signal"
+  - "Telegram"
+  - "WhatsApp"
+  - "iMessage"
+  - "Messages"
+
+  # Mail composition (inbound reading is fine; composition often contains secrets)
+  # Remove if you explicitly want mail workflows analyzed.
+  - "Mail"
+  - "Outlook"
+
+  # Banking / finance apps (add yours)
+  # - "Bank of America"
+  # - "Chase"
+
+# Window title globs to ignore (matched across all apps).
+# Useful for catching sensitive URLs in browsers that are otherwise OK to observe.
+ignored_windows:
+  - "*Bitwarden*"
+  - "*1Password*"
+  - "*login*"
+  - "*Sign in*"
+  - "*Private Browsing*"
+  - "*Incognito*"
+  - "*online banking*"
+  - "*bank*"
+  - "*account settings*"
+
+# Optionally restrict capture to specific hours (local time).
+# Uncomment to apply.
+# hours:
+#   start: "09:00"
+#   end:   "19:00"
+
+# Content types to capture. Drop "audio" if you don't want transcripts.
+content_types:
+  - ocr
+  - ui
+  # - audio

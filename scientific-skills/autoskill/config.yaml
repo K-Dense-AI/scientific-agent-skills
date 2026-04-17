@@ -1,0 +1,53 @@
+# autoskill configuration
+#
+# LLM backend for skill synthesis. Detection/clustering always runs locally;
+# only redacted cluster summaries are sent to the LLM.
+#
+# Local is the default — your screen content never leaves the machine.
+# Cloud backends (claude, foundry) are available for users who explicitly
+# opt in; see the backend sections below.
+backend: local    # local | claude | foundry
+
+# Per-backend settings. Only the selected backend's block is used.
+local:
+  # LM Studio exposes an OpenAI-compatible server. Start it from the
+  # "Developer" tab; the default port is 1234.
+  endpoint: http://localhost:1234/v1
+  # Gemma-4-31B-it is the recommended default: strong reasoning at a size
+  # most modern workstation GPUs can run. Swap for any LM Studio model ID.
+  model: Gemma-4-31B-it
+
+claude:
+  model: claude-opus-4-7
+  # api_key read from ANTHROPIC_API_KEY env var
+
+foundry:
+  endpoint: https://foundry.example.com/anthropic
+  model: claude-opus-4-7
+  # api_key read from FOUNDRY_API_KEY env var
+
+# Screenpipe HTTP endpoint. For TLS, point this at your local Caddy proxy
+# (see references/https-proxy.md).
+screenpipe:
+  url: http://localhost:3030
+  # Screenpipe requires a bearer token for its local API. Either set `token`
+  # here, or export SCREENPIPE_TOKEN in your environment (preferred — keeps
+  # the token out of version control). Retrieve with: `screenpipe auth token`.
+  # token: your-token-here
+
+# Embedding model for matching against existing scientific skills.
+# Local only; no API calls.
+embeddings:
+  model: sentence-transformers/all-MiniLM-L6-v2
+
+# Clustering thresholds.
+cluster:
+  min_session_minutes: 5        # skip sessions shorter than this
+  idle_gap_minutes: 10          # new session after this much inactivity
+  min_cluster_size: 2           # need this many similar sessions before proposing
+
+# Content redaction regexes applied before any cluster summary leaves
+# the local detection layer. Defense-in-depth on top of screenpipe's
+# own app/window filtering.
+redaction:
+  enabled: true
