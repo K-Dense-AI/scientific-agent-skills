@@ -205,6 +205,8 @@ Scientific Agent Skills is powered by **50+ incredible open source projects** ma
 
 👉 **[View the full list of projects to support](docs/open-source-sponsors.md)**
 
+If you're looking for a Chinese search-and-install entry point for AI skills across Claude Code, OpenCode, and other agents, see [Skills宝](https://skilery.com).
+
 ---
 
 ## ⚙️ Prerequisites
