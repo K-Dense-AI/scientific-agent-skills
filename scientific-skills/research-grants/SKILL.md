@@ -433,6 +433,8 @@ Demonstrate that the project is well-planned and achievable within the proposed 
 - Phase-based structure with exit criteria
 - Demonstration and transition planning
 
+For detailed milestone and schedule guidance, refer to `references/timeline_planning.md`.
+
 
 ### 9. Team Qualifications and Collaboration
 
@@ -515,6 +517,8 @@ Develop realistic budgets that align with the proposed work and agency guideline
 - Justify travel (conferences, collaborations)
 - Explain consultant roles and rates
 - Show how budget aligns with timeline
+
+For detailed budget strategy, refer to `references/budget_preparation.md`.
 
 
 ## Review Criteria by Agency
@@ -600,6 +604,7 @@ Varies by program office, but generally includes:
 4. **Value (價值)**: Academic contribution and societal/industrial impact.
 
 For detailed review criteria, refer to `references/nstc_guidelines.md`.
+For a cross-agency comparison, refer to `references/review_criteria.md`.
 - **What if you succeed?** (Impact if the research works)
 - **What if you're right?** (Implications of your hypothesis)
 - **Who cares?** (Why it matters for national security)
@@ -920,6 +925,9 @@ This skill includes comprehensive reference files covering specific aspects of g
 - `references/broader_impacts.md`: Strategies for compelling broader impacts statements
 - `references/specific_aims_guide.md`: Writing effective specific aims pages
 - `references/nstc_guidelines.md`: NSTC-specific guidelines and review criteria
+- `references/budget_preparation.md`: Building realistic budgets and budget justifications
+- `references/review_criteria.md`: Cross-agency comparison of how proposals are evaluated
+- `references/timeline_planning.md`: Designing milestones, work packages, and realistic project schedules
 
 Load these references as needed when working on specific aspects of grant writing.
 

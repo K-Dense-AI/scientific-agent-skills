@@ -115,9 +115,9 @@ For in-depth help on specific components:
 ### Specialized Guides
 - `references/broader_impacts.md` - NSF broader impacts strategies
 - `references/specific_aims_guide.md` - NIH Specific Aims page mastery
-- `references/budget_preparation.md` - Budget development (coming soon)
-- `references/review_criteria.md` - Comparative review criteria (coming soon)
-- `references/timeline_planning.md` - Project management (coming soon)
+- `references/budget_preparation.md` - Budget development, justification, and agency-specific budgeting strategy
+- `references/review_criteria.md` - Comparative review criteria across NSF, NIH, DOE, DARPA, and NSTC
+- `references/timeline_planning.md` - Project timelines, milestones, decision points, and schedule design
 
 ### Templates
 - `assets/nsf_project_summary_template.md`
