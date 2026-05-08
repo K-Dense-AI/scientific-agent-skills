@@ -1,14 +1,14 @@
 ---
 name: imaging-data-commons
-description: Query and download public cancer imaging data from NCI Imaging Data Commons using idc-index. Use for accessing large-scale radiology (CT, MR, PET) and pathology datasets for AI training or research. No authentication required. Query by metadata, visualize in browser, check licenses.
+description: Query and download public cancer imaging data from NCI Imaging Data Commons using idc-index. Invoke for any question about IDC collections, cancer imaging datasets, DICOM data access, radiology (CT, MR, PET) or pathology AI training sets, metadata queries, visualization, or license checks — even when the user doesn't explicitly mention "IDC". No authentication required.
 license: This skill is provided under the MIT License. IDC data itself has individual licensing (mostly CC-BY, some CC-NC) that must be respected when using the data.
 metadata:
-  version: "1.1"
-  source-skill-version: "1.4.0"
-  skill-author: Andrey Fedorov, @fedorov
-  idc-index: "0.11.14"
-  idc-data-version: "v23"
-  repository: https://github.com/ImagingDataCommons/idc-claude-skill
+    version: "1.2"
+    source-skill-version: "1.6.4"
+    skill-author: Andrey Fedorov, @fedorov
+    idc-index: "0.12.3"
+    idc-data-version: "v24"
+    repository: https://github.com/ImagingDataCommons/idc-claude-skill
 ---
 
 # Imaging Data Commons
@@ -17,7 +17,9 @@ metadata:
 
 Use the `idc-index` Python package to query and download public cancer imaging data from the National Cancer Institute Imaging Data Commons (IDC). No authentication required for data access.
 
-**Current IDC Data Version: v23** (always verify with `IDCClient().get_idc_version()`)
+**Expected network access:** `idc-index` queries a local DuckDB index (no network for metadata). File downloads use public GCS (`storage.googleapis.com`) and AWS S3 (`s3.amazonaws.com`) — no authentication required. DICOMweb access uses either the public IDC proxy (`proxy.imaging.datacommons.cancer.gov`, no auth) or the Google Cloud Healthcare API (`healthcare.googleapis.com`, requires GCP authentication). Optional BigQuery queries (`bigquery.googleapis.com`) also require GCP authentication. No credentials or environment variables are accessed by this skill.
+
+**Current IDC Data Version: v24** (always verify with `IDCClient().get_idc_version()`)
 
 **Primary tool:** `idc-index` ([GitHub](https://github.com/imagingdatacommons/idc-index))
 
@@ -26,13 +28,13 @@ Use the `idc-index` Python package to query and download public cancer imaging d
 ```python
 import idc_index
 
-REQUIRED_VERSION = "0.11.14"  # Must match metadata.idc-index in this file
+REQUIRED_VERSION = "0.12.2"  # Must match metadata.idc-index in this file
 installed = idc_index.__version__
 
 if installed < REQUIRED_VERSION:
     print(f"Upgrading idc-index from {installed} to {REQUIRED_VERSION}...")
     import subprocess
-    subprocess.run(["pip3", "install", "--upgrade", "--break-system-packages", "idc-index"], check=True)
+    subprocess.run(["pip3", "install", "--upgrade", "--break-system-packages", f"idc-index=={REQUIRED_VERSION}"], check=True)
     print("Upgrade complete. Restart Python to use new version.")
 else:
     print(f"idc-index {installed} meets requirement ({REQUIRED_VERSION})")
@@ -44,7 +46,7 @@ else:
 from idc_index import IDCClient
 client = IDCClient()
 
-# Verify IDC data version (should be "v23")
+# Verify IDC data version (should be "v24")
 print(f"IDC data version: {client.get_idc_version()}")
 
 # Get collection count and total series
@@ -80,8 +82,7 @@ print(stats)
 **Core Sections (inline):**
 - IDC Data Model - Collection and analysis result hierarchy
 - Index Tables - Available tables and joining patterns
-- Installation - Package setup and version verification
-- Core Capabilities - Essential API patterns (query, download, visualize, license, citations, batch)
+- Core Capabilities - Essential API patterns (query, download, visualize, license, citations)
 - Best Practices - Usage guidelines
 - Troubleshooting - Common issues and solutions
 
@@ -90,7 +91,7 @@ print(stats)
 | Guide | When to Load |
 |-------|--------------|
 | `index_tables_guide.md` | Complex JOINs, schema discovery, DataFrame access |
-| `use_cases.md` | End-to-end workflow examples (training datasets, batch downloads) |
+| `use_cases.md` | End-to-end workflows: training datasets, batch downloads, DICOM reading with pydicom/SimpleITK, pipeline integration |
 | `sql_patterns.md` | Quick SQL patterns for filter discovery, annotations, size estimation |
 | `clinical_data_guide.md` | Clinical/tabular data, imaging+clinical joins, value mapping |
 | `cloud_storage_guide.md` | Direct S3/GCS access, versioning, UUID mapping |
@@ -125,48 +126,64 @@ The `idc-index` package provides multiple metadata index tables, accessible via 
 
 **Important:** Use `client.indices_overview` to get current table descriptions and column schemas. This is the authoritative source for available columns and their types — always query it when writing SQL or exploring data structure.
 
+```python
+from idc_index import IDCClient
+
+client = IDCClient()
+
+# Find which table(s) contain a specific column (no fetch required)
+target = "SliceThickness"
+for table_name, info in client.indices_overview.items():
+    if any(c["name"] == target for c in info["schema"]["columns"]):
+        print(f"'{target}' is in: {table_name}")
+# → 'SliceThickness' is in: ct_index
+
+# List all columns in a table from the schema (no fetch required)
+ct_cols = [c["name"] for c in client.indices_overview["ct_index"]["schema"]["columns"]]
+print("ct_index columns:", ct_cols)
+# → ['SeriesInstanceUID', 'PixelSpacing_row_mm', 'PixelSpacing_col_mm', 'Rows',
+#    'Columns', 'SliceThickness', 'KVP', 'ConvolutionKernel', ...]
+```
+
 ### Available Tables
 
-| Table | Row Granularity | Loaded | Description |
-|-------|-----------------|--------|-------------|
-| `index` | 1 row = 1 DICOM series | Auto | Primary metadata for all current IDC data |
-| `prior_versions_index` | 1 row = 1 DICOM series | Auto | Series from previous IDC releases; for downloading deprecated data |
-| `collections_index` | 1 row = 1 collection | fetch_index() | Collection-level metadata and descriptions |
-| `analysis_results_index` | 1 row = 1 analysis result collection | fetch_index() | Metadata about derived datasets (annotations, segmentations) |
-| `clinical_index` | 1 row = 1 clinical data column | fetch_index() | Dictionary mapping clinical table columns to collections |
-| `sm_index` | 1 row = 1 slide microscopy series | fetch_index() | Slide Microscopy (pathology) series metadata |
-| `sm_instance_index` | 1 row = 1 slide microscopy instance | fetch_index() | Instance-level (SOPInstanceUID) metadata for slide microscopy |
-| `seg_index` | 1 row = 1 DICOM Segmentation series | fetch_index() | Segmentation metadata: algorithm, segment count, reference to source image series |
-| `ann_index` | 1 row = 1 DICOM ANN series | fetch_index() | Microscopy Bulk Simple Annotations series metadata; references annotated image series |
-| `ann_group_index` | 1 row = 1 annotation group | fetch_index() | Detailed annotation group metadata: graphic type, annotation count, property codes, algorithm |
-| `contrast_index` | 1 row = 1 series with contrast info | fetch_index() | Contrast agent metadata: agent name, ingredient, administration route (CT, MR, PT, XA, RF) |
-| `volume_geometry_index` | 1 row = 1 CT/MR/PT series | fetch_index() | 3D volume geometry validation for single-frame CT, MR, and PT series; boolean checks for orientation, spacing, dimensions, and slice positions; composite `regularly_spaced_3d_volume` flag |
-| `rtstruct_index` | 1 row = 1 RTSTRUCT series | fetch_index() | RT Structure Set metadata: total ROI count, ROI names, generation algorithms, interpreted types, and the referenced image series UID |
+Always call `client.fetch_index("table_name")` before querying any index table — it is safe and idempotent for all tables, including those loaded automatically at startup.
 
-**Auto** = loaded automatically when `IDCClient()` is instantiated
-**fetch_index()** = requires `client.fetch_index("table_name")` to load
+| Table | Row Granularity | Description |
+|-------|-----------------|-------------|
+| `index` | 1 row = 1 DICOM series | Primary metadata for all current IDC data |
+| `version_metadata_index` | 1 row = 1 IDC release version | IDC version release timestamps; join on `idc_version` to correlate series with their release date |
+| `collections_index` | 1 row = 1 collection | Collection-level metadata and descriptions |
+| `analysis_results_index` | 1 row = 1 analysis result collection | Metadata about derived datasets (annotations, segmentations) |
+| `clinical_index` | 1 row = 1 (collection, table, column) triple | Dictionary mapping clinical data table columns to collections |
+| `sm_index` | 1 row = 1 slide microscopy series | Slide Microscopy (pathology) series metadata |
+| `sm_instance_index` | 1 row = 1 slide microscopy instance | Instance-level (SOPInstanceUID) metadata for slide microscopy |
+| `seg_index` | 1 row = 1 DICOM Segmentation series | Segmentation metadata: algorithm, segment count, reference to source image series |
+| `ann_index` | 1 row = 1 DICOM ANN series | Microscopy Bulk Simple Annotations series metadata; references annotated image series |
+| `ann_group_index` | 1 row = 1 annotation group | Detailed annotation group metadata: graphic type, annotation count, property codes, algorithm |
+| `contrast_index` | 1 row = 1 series with contrast info | Contrast agent metadata: agent name, ingredient, administration route (CT, MR, PT, XA, RF) |
+| `volume_geometry_index` | 1 row = 1 CT/MR/PT series | 3D volume geometry validation for single-frame CT, MR, and PT series; boolean checks for orientation, spacing, dimensions, and slice positions; composite `regularly_spaced_3d_volume` flag |
+| `rtstruct_index` | 1 row = 1 RTSTRUCT series | RT Structure Set metadata: total ROI count, ROI names, generation algorithms, interpreted types, and the referenced image series UID |
+| `ct_index` | 1 row = 1 CT series | CT acquisition/reconstruction parameters: pixel spacing, slice thickness, kVp, convolution kernel, tube current (min/max for dose-modulated), exposure, spiral pitch, scan options |
+| `mr_index` | 1 row = 1 MR series | MR acquisition/sequence parameters: field strength, scanning sequence, TE (array for multi-echo), TR, flip angle, DiffusionBValue (array for DWI), pixel bandwidth, receive coil, number of temporal positions |
+| `pt_index` | 1 row = 1 PET series | PET acquisition/reconstruction/radiopharmaceutical parameters: series type, units, decay/scatter/attenuation correction, reconstruction method, radionuclide, injected dose, frame duration (array for dynamic PET) |
+| `prior_versions_index` | 1 row = 1 DICOM series | **Reproducibility only.** Contains series permanently removed from IDC (all `max_idc_version` < current version; zero overlap with `index`). Use ONLY when a user explicitly needs to reproduce work from a prior IDC version using data no longer in the current release. Do NOT use for version history or "what's new" questions — those use `series_init_idc_version`/`series_revised_idc_version` in the main `index` table. Column names `min_idc_version`/`max_idc_version` here are NOT equivalent to `series_init_idc_version`/`series_revised_idc_version` in `index`. |
 
 ### Joining Tables
 
-**Key columns are not explicitly labeled, the following is a subset that can be used in joins.**
+**`SeriesInstanceUID` is the universal join key** for all series-level specialized tables: `sm_index`, `sm_instance_index`, `seg_index`, `ann_index`, `ann_group_index`, `contrast_index`, `volume_geometry_index`, `rtstruct_index`, `ct_index`, `mr_index`, `pt_index`. Always join these to `index` on `SeriesInstanceUID`. The exceptions below use different column names.
 
 | Join Column | Tables | Use Case |
 |-------------|--------|----------|
 | `collection_id` | index, prior_versions_index, collections_index, clinical_index | Link series to collection metadata or clinical data |
-| `SeriesInstanceUID` | index, prior_versions_index, sm_index, sm_instance_index | Link series across tables; connect to slide microscopy details |
-| `StudyInstanceUID` | index, prior_versions_index | Link studies across current and historical data |
-| `PatientID` | index, prior_versions_index | Link patients across current and historical data |
 | `analysis_result_id` | index, analysis_results_index | Link series to analysis result metadata (annotations, segmentations) |
 | `source_DOI` | index, analysis_results_index | Link by publication DOI |
-| `crdc_series_uuid` | index, prior_versions_index | Link by CRDC unique identifier |
-| `Modality` | index, prior_versions_index | Filter by imaging modality |
-| `SeriesInstanceUID` | index, seg_index, ann_index, ann_group_index, contrast_index | Link segmentation/annotation/contrast series to its index metadata |
-| `segmented_SeriesInstanceUID` | seg_index → index | Link segmentation to its source image series (join seg_index.segmented_SeriesInstanceUID = index.SeriesInstanceUID) |
-| `referenced_SeriesInstanceUID` | ann_index → index | Link annotation to its source image series (join ann_index.referenced_SeriesInstanceUID = index.SeriesInstanceUID) |
-| `SeriesInstanceUID` | index, volume_geometry_index | Link series to its 3D geometry validation result (join index.SeriesInstanceUID = volume_geometry_index.SeriesInstanceUID) |
-| `SeriesInstanceUID` / `referenced_SeriesInstanceUID` | index, rtstruct_index | Join RTSTRUCT series to its metadata (index.SeriesInstanceUID = rtstruct_index.SeriesInstanceUID); use rtstruct_index.referenced_SeriesInstanceUID to find the source image series |
+| `segmented_SeriesInstanceUID` | seg_index → index | Link segmentation to its source image series (`seg_index.segmented_SeriesInstanceUID = index.SeriesInstanceUID`) |
+| `referenced_SeriesInstanceUID` | ann_index → index, rtstruct_index → index | Link annotation or RTSTRUCT to its source image series |
 
-**Note:** `Subjects`, `Updated`, and `Description` appear in multiple tables but have different meanings (counts vs identifiers, different update contexts).
+**Note:** `subjects`, `updated`, and `description` appear in multiple tables but have different meanings (counts vs identifiers, different update contexts).
+
+**Note on `prior_versions_index`:** Joining `prior_versions_index` with `index` on `SeriesInstanceUID` always returns zero rows — there is no overlap. This table is for historical reproducibility only; never join it with `index` to answer questions about current data or version history.
 
 For detailed join examples, schema discovery patterns, key columns reference, and DataFrame access, see `references/index_tables_guide.md`.
 
@@ -227,28 +244,6 @@ All idc-index metadata tables are published as Parquet files to a public GCS buc
 
 See `references/parquet_access_guide.md` for URL patterns, available files, and DuckDB query examples.
 
-## Installation and Setup
-
-**Required (for basic access):**
-```bash
-pip install --upgrade idc-index
-```
-
-**Important:** New IDC data release will always trigger a new version of `idc-index`. Always use `--upgrade` flag while installing, unless an older version is needed for reproducibility.
-
-**IMPORTANT:** IDC data version v23 is current. Always verify your version:
-```python
-print(client.get_idc_version())  # Should return "v23"
-```
-If you see an older version, upgrade with: `pip install --upgrade idc-index`
-
-**Tested with:** idc-index 0.11.14 (IDC data version v23)
-
-**Optional (for data analysis):**
-```bash
-pip install pandas numpy pydicom
-```
-
 ## Core Capabilities
 
 ### 1. Data Discovery and Exploration
@@ -276,14 +271,14 @@ collections_summary = client.sql_query(query)
 # For richer collection metadata, use collections_index
 client.fetch_index("collections_index")
 collections_info = client.sql_query("""
-    SELECT collection_id, CancerTypes, TumorLocations, Species, Subjects, SupportingData
+    SELECT collection_id, cancer_types, tumor_locations, species, subjects, supporting_data
     FROM collections_index
 """)
 
 # For analysis results (annotations, segmentations), use analysis_results_index
 client.fetch_index("analysis_results_index")
 analysis_info = client.sql_query("""
-    SELECT analysis_result_id, analysis_result_title, Subjects, Collections, Modalities
+    SELECT analysis_result_id, analysis_result_title, subjects, collections, modalities
     FROM analysis_results_index
 """)
 ```
@@ -352,7 +347,7 @@ results = client.sql_query("""
     SELECT i.collection_id, i.PatientID, i.SeriesInstanceUID, i.Modality
     FROM index i
     JOIN collections_index c ON i.collection_id = c.collection_id
-    WHERE c.CancerTypes LIKE '%Breast%'
+    WHERE c.cancer_types LIKE '%Breast%'
       AND i.Modality = 'MR'
     LIMIT 20
 """)
@@ -364,12 +359,71 @@ results = client.sql_query("""
 - Clinical: PatientAge, PatientSex, StudyDate
 - Descriptions: StudyDescription, SeriesDescription
 - Licensing: license_short_name
+- Versioning: series_init_idc_version (IDC version when series was first added), series_revised_idc_version (IDC version when series was last revised)
 
-**Note:** Cancer type is in `collections_index.CancerTypes`, not in the primary `index` table.
+**Note:** Cancer type is in `collections_index.cancer_types`, not in the primary `index` table.
+
+**Version tracking — "what's new in IDC vX?"**
+
+Use `series_init_idc_version` and `series_revised_idc_version` in the main `index` table. Do NOT use `prior_versions_index` for this — it contains only removed series.
+
+```python
+from idc_index import IDCClient
+client = IDCClient()
+
+VERSION = 24  # Replace with target version
+
+# Series added for the first time in vVERSION
+new_series = client.sql_query(f"""
+    SELECT collection_id,
+           COUNT(DISTINCT SeriesInstanceUID) as new_series,
+           ROUND(SUM(series_size_MB)/1000, 2) as size_GB
+    FROM index
+    WHERE series_init_idc_version = {VERSION}
+    GROUP BY collection_id
+    ORDER BY new_series DESC
+""")
+
+# Series revised (updated content) in vVERSION but originally added earlier
+revised_series = client.sql_query(f"""
+    SELECT collection_id,
+           COUNT(DISTINCT SeriesInstanceUID) as revised_series
+    FROM index
+    WHERE series_revised_idc_version = {VERSION}
+      AND series_init_idc_version < {VERSION}
+    GROUP BY collection_id
+    ORDER BY revised_series DESC
+""")
+
+# When was each collection first added to IDC?
+client.fetch_index("version_metadata_index")
+first_appearance = client.sql_query("""
+    WITH first_versions AS (
+        SELECT collection_id, MIN(series_init_idc_version) as first_version
+        FROM index
+        GROUP BY collection_id
+    )
+    SELECT f.collection_id, f.first_version, v.version_timestamp as first_release_date
+    FROM first_versions f
+    JOIN version_metadata_index v ON f.first_version = v.idc_version
+    ORDER BY f.first_version DESC
+""")
+```
+
+To verify column names and descriptions before writing queries, use `client.get_index_schema('index')` or `client.indices_overview` — see Best Practices.
 
 ### 3. Downloading DICOM Files
 
-Download imaging data efficiently from IDC's cloud storage:
+Download imaging data efficiently from IDC's cloud storage.
+
+**IMPORTANT — two download methods with different signatures:**
+
+| Method | First arg | Second arg | Use when |
+|--------|-----------|------------|----------|
+| `download_from_selection` | `downloadDir` (required) | filter kwargs (optional) | Filtering by collection, patient, study, or series |
+| `download_dicom_series` | `seriesInstanceUID` (required) | `downloadDir` (required) | Downloading specific series by UID only |
+
+**`download_from_selection` takes filter keyword arguments, NOT a DataFrame.** The name "from_selection" refers to filtering the IDC index by criteria — not accepting a pandas DataFrame. To download the results of a query, extract UIDs from the DataFrame and pass them as a list.
 
 **Download entire collection:**
 ```python
@@ -378,15 +432,16 @@ from idc_index import IDCClient
 client = IDCClient()
 
 # Download small collection (RIDER Pilot ~1GB)
+# downloadDir is the FIRST positional argument
 client.download_from_selection(
-    collection_id="rider_pilot",
-    downloadDir="./data/rider"
+    downloadDir="./data/rider",
+    collection_id="rider_pilot"
 )
 ```
 
-**Download specific series:**
+**Download specific series (from a query result):**
 ```python
-# First, query for series UIDs
+# Step 1: Query for series UIDs
 series_df = client.sql_query("""
     SELECT SeriesInstanceUID
     FROM index
@@ -396,10 +451,26 @@ series_df = client.sql_query("""
     LIMIT 5
 """)
 
-# Download only those series
+# Step 2: Extract UIDs as a list from the DataFrame
+uids = list(series_df['SeriesInstanceUID'].values)
+
+# Step 3: Pass the list to download_from_selection (NOT the DataFrame itself)
 client.download_from_selection(
-    seriesInstanceUID=list(series_df['SeriesInstanceUID'].values),
+    downloadDir="./data/lung_ct",
+    seriesInstanceUID=uids       # list of strings, not a DataFrame
+)
+
+# Alternative: download_dicom_series has seriesInstanceUID as FIRST arg (different order!)
+client.download_dicom_series(
+    seriesInstanceUID=uids,      # FIRST arg here
     downloadDir="./data/lung_ct"
+)
+
+# Download from Google Storage instead of AWS
+client.download_from_selection(
+    downloadDir="./data/lung_ct",
+    seriesInstanceUID=uids,
+    source_bucket_location="gcs"
 )
 ```
 
@@ -410,16 +481,16 @@ Default `dirTemplate`: `%collection_id/%PatientID/%StudyInstanceUID/%Modality_%S
 ```python
 # Simplified hierarchy (omit StudyInstanceUID level)
 client.download_from_selection(
-    collection_id="tcga_luad",
     downloadDir="./data",
+    collection_id="tcga_luad",
     dirTemplate="%collection_id/%PatientID/%Modality"
 )
 # Results in: ./data/tcga_luad/TCGA-05-4244/CT/
 
 # Flat structure (all files in one directory)
 client.download_from_selection(
-    seriesInstanceUID=list(series_df['SeriesInstanceUID'].values),
     downloadDir="./data/flat",
+    seriesInstanceUID=list(series_df['SeriesInstanceUID'].values),
     dirTemplate=""
 )
 # Results in: ./data/flat/*.dcm
@@ -436,69 +507,14 @@ To identify files, use the `crdc_instance_uuid` column in queries or read DICOM 
 
 ### Command-Line Download
 
-The `idc download` command provides command-line access to download functionality without writing Python code. Available after installing `idc-index`.
-
-**Auto-detects input type:** manifest file path, or identifiers (collection_id, PatientID, StudyInstanceUID, SeriesInstanceUID, crdc_series_uuid).
+`idc download` is available after installing `idc-index`. Auto-detects input type: collection ID, series UID, or manifest file path.
 
 ```bash
-# Download entire collection
 idc download rider_pilot --download-dir ./data
-
-# Download specific series by UID
-idc download "1.3.6.1.4.1.9328.50.1.69736" --download-dir ./data
-
-# Download multiple items (comma-separated)
-idc download "tcga_luad,tcga_lusc" --download-dir ./data
-
-# Download from manifest file (auto-detected)
 idc download manifest.txt --download-dir ./data
 ```
 
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `--download-dir` | Output directory (default: current directory) |
-| `--dir-template` | Directory hierarchy template (default: `%collection_id/%PatientID/%StudyInstanceUID/%Modality_%SeriesInstanceUID`) |
-| `--log-level` | Verbosity: debug, info, warning, error, critical |
-
-**Manifest files:**
-
-Manifest files contain S3 URLs (one per line) and can be:
-- Exported from the IDC Portal after cohort selection
-- Shared by collaborators for reproducible data access
-- Generated programmatically from query results
-
-Format (one S3 URL per line):
-```
-s3://idc-open-data/cb09464a-c5cc-4428-9339-d7fa87cfe837/*
-s3://idc-open-data/88f3990d-bdef-49cd-9b2b-4787767240f2/*
-```
-
-**Example: Generate manifest from Python query:**
-
-```python
-from idc_index import IDCClient
-
-client = IDCClient()
-
-# Query for series URLs
-results = client.sql_query("""
-    SELECT series_aws_url
-    FROM index
-    WHERE collection_id = 'rider_pilot' AND Modality = 'CT'
-""")
-
-# Save as manifest file
-with open('ct_manifest.txt', 'w') as f:
-    for url in results['series_aws_url']:
-        f.write(url + '\n')
-```
-
-Then download:
-```bash
-idc download ct_manifest.txt --download-dir ./ct_data
-```
+See `references/cli_guide.md` for full options, `idc download-from-manifest` (resume support), and `idc download-from-selection` (filter-based).
 
 ### 4. Visualizing IDC Images
 
@@ -603,47 +619,7 @@ bibtex_citations = client.citations_from_selection(
 
 **Best practice:** When publishing results using IDC data, include the generated citations to properly attribute the data sources and satisfy license requirements.
 
-### 6. Batch Processing and Filtering
-
-Process large datasets efficiently with filtering:
-
-```python
-from idc_index import IDCClient
-import pandas as pd
-
-client = IDCClient()
-
-# Find chest CT scans from GE scanners
-query = """
-SELECT
-  SeriesInstanceUID,
-  PatientID,
-  collection_id,
-  ManufacturerModelName
-FROM index
-WHERE Modality = 'CT'
-  AND BodyPartExamined = 'CHEST'
-  AND Manufacturer = 'GE MEDICAL SYSTEMS'
-  AND license_short_name = 'CC BY 4.0'
-LIMIT 100
-"""
-
-results = client.sql_query(query)
-
-# Save manifest for later
-results.to_csv('lung_ct_manifest.csv', index=False)
-
-# Download in batches to avoid timeout
-batch_size = 10
-for i in range(0, len(results), batch_size):
-    batch = results.iloc[i:i+batch_size]
-    client.download_from_selection(
-        seriesInstanceUID=list(batch['SeriesInstanceUID'].values),
-        downloadDir=f"./data/batch_{i//batch_size}"
-    )
-```
-
-### 7. Advanced Queries with BigQuery
+### 6. Advanced Queries with BigQuery
 
 For queries requiring full DICOM metadata, complex JOINs, clinical data tables, or private DICOM elements, use Google BigQuery. Requires GCP account with billing enabled.
 
@@ -669,7 +645,7 @@ Common specialized indices: `seg_index` (segmentations), `ann_index` / `ann_grou
 
 See `references/bigquery_guide.md` for schemas, column descriptions, and query examples for these tables.
 
-### 8. Tool Selection Guide
+### 7. Tool Selection Guide
 
 | Task | Tool | Reference |
 |------|------|-----------|
@@ -680,97 +656,24 @@ See `references/bigquery_guide.md` for schemas, column descriptions, and query e
 
 **Default choice:** Use `idc-index` for most tasks (no auth, easy API, batch downloads).
 
-### 9. Integration with Analysis Pipelines
-
-Integrate IDC data into imaging analysis workflows:
-
-**Read downloaded DICOM files:**
-```python
-import pydicom
-import os
-
-# Read DICOM files from downloaded series
-series_dir = "./data/rider/rider_pilot/RIDER-1007893286/CT_1.3.6.1..."
-
-dicom_files = [os.path.join(series_dir, f) for f in os.listdir(series_dir)
-               if f.endswith('.dcm')]
-
-# Load first image
-ds = pydicom.dcmread(dicom_files[0])
-print(f"Patient ID: {ds.PatientID}")
-print(f"Modality: {ds.Modality}")
-print(f"Image shape: {ds.pixel_array.shape}")
-```
-
-**Build 3D volume from CT series:**
-```python
-import pydicom
-import numpy as np
-from pathlib import Path
-
-def load_ct_series(series_path):
-    """Load CT series as 3D numpy array"""
-    files = sorted(Path(series_path).glob('*.dcm'))
-    slices = [pydicom.dcmread(str(f)) for f in files]
-
-    # Sort by slice location
-    slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
-
-    # Stack into 3D array
-    volume = np.stack([s.pixel_array for s in slices])
-
-    return volume, slices[0]  # Return volume and first slice for metadata
-
-volume, metadata = load_ct_series("./data/lung_ct/series_dir")
-print(f"Volume shape: {volume.shape}")  # (z, y, x)
-```
-
-**Integrate with SimpleITK:**
-```python
-import SimpleITK as sitk
-from pathlib import Path
-
-# Read DICOM series
-series_path = "./data/ct_series"
-reader = sitk.ImageSeriesReader()
-dicom_names = reader.GetGDCMSeriesFileNames(series_path)
-reader.SetFileNames(dicom_names)
-image = reader.Execute()
-
-# Apply processing
-smoothed = sitk.CurvatureFlow(image1=image, timeStep=0.125, numberOfIterations=5)
-
-# Save as NIfTI
-sitk.WriteImage(smoothed, "processed_volume.nii.gz")
-```
-
-## Common Use Cases
-
-See `references/use_cases.md` for complete end-to-end workflow examples including:
-- Building deep learning training datasets from lung CT scans
-- Comparing image quality across scanner manufacturers
-- Previewing data in browser before downloading
-- License-aware batch downloads for commercial use
-
 ## Best Practices
 
-- **Verify IDC version before generating responses** - Always call `client.get_idc_version()` at the start of a session to confirm you're using the expected data version (currently v23). If using an older version, recommend `pip install --upgrade idc-index`
+- **Check schema before writing queries** — Use `client.get_index_schema('index')` (reads cached metadata, no SQL executed) or `client.indices_overview` to see all available columns and their descriptions. The version-tracking columns `series_init_idc_version` and `series_revised_idc_version` in the main `index` table directly answer "what's new / when was this added" questions without touching `prior_versions_index`.
+- **Never use web search for IDC data content questions** - Always query the idc-index directly using `client.sql_query()`. Web sources (release notes, blog posts, documentation pages) are frequently out of date and will produce incorrect answers. The local DuckDB index is the authoritative source; use it even when web search is available.
+- **Verify IDC version before generating responses** - Always call `client.get_idc_version()` at the start of a session to confirm you're using the expected data version (currently v24). If using an older version, recommend `pip install --upgrade idc-index`
 - **Check licenses before use** - Always query the `license_short_name` field and respect licensing terms (CC BY vs CC BY-NC)
 - **Generate citations for attribution** - Use `citations_from_selection()` to get properly formatted citations from `source_DOI` values; include these in publications
 - **Start with small queries** - Use `LIMIT` clause when exploring to avoid long downloads and understand data structure
 - **Use mini-index for simple queries** - Only use BigQuery when you need comprehensive metadata or complex JOINs
 - **Organize downloads with dirTemplate** - Use meaningful directory structures like `%collection_id/%PatientID/%Modality`
-- **Cache query results** - Save DataFrames to CSV files to avoid re-querying and ensure reproducibility
 - **Estimate size first** - Check collection size before downloading - some collection sizes are in terabytes!
 - **Save manifests** - Always save query results with Series UIDs for reproducibility and data provenance
-- **Read documentation** - IDC data structure and metadata fields are documented at https://learn.canceridc.dev/
-- **Use IDC forum** - Search for questons/answers and ask your questions to the IDC maintainers and users at https://discourse.canceridc.dev/
 
 ## Troubleshooting
 
 **Issue: `ModuleNotFoundError: No module named 'idc_index'`**
 - **Cause:** idc-index package not installed
-- **Solution:** Install with `pip install --upgrade idc-index`
+- **Solution:** Install with `pip install --upgrade idc-index`; for data analysis also install `pip install pandas numpy pydicom` (tested with pandas>=1.5, numpy>=1.23, pydicom>=2.3)
 
 **Issue: Download fails with connection timeout**
 - **Cause:** Network instability or large download size
@@ -791,6 +694,25 @@ See `references/use_cases.md` for complete end-to-end workflow examples includin
   - Use `LIMIT 5` to test query first
   - Check field names against metadata schema documentation
 
+**Issue: Column not found in `index` table (e.g., `SliceThickness`, `PixelSpacing`, `KVP`, `EchoTime`, `InjectedDose`)**
+- **Cause:** The `index` table contains series-level metadata only; modality-specific acquisition and reconstruction parameters live in dedicated tables (`ct_index`, `mr_index`, `pt_index`)
+- **Solution:** Search `client.indices_overview` to find the right table, then fetch and join on `SeriesInstanceUID`:
+  ```python
+  target = "SliceThickness"
+  for table_name, info in client.indices_overview.items():
+      if any(c["name"] == target for c in info["schema"]["columns"]):
+          print(f"Found in: {table_name}")
+  # → Found in: ct_index
+
+  client.fetch_index("ct_index")
+  result = client.sql_query("""
+      SELECT i.SeriesInstanceUID, i.Modality, c.SliceThickness, c.KVP, c.PixelSpacing_row_mm
+      FROM index i
+      JOIN ct_index c USING (SeriesInstanceUID)
+      WHERE i.collection_id = 'your_collection'
+  """)
+  ```
+
 **Issue: Downloaded DICOM files won't open**
 - **Cause:** Corrupted download or incompatible viewer
 - **Solution:**
@@ -809,37 +731,9 @@ See `references/sql_patterns.md` for quick-reference SQL patterns including:
 - Download size estimation
 - Clinical data linking
 
-For segmentation and annotation details, also see `references/digital_pathology_guide.md`.
-
-## Related Skills
-
-The following skills complement IDC workflows for downstream analysis and visualization:
-
-### DICOM Processing
-- **pydicom** - Read, write, and manipulate downloaded DICOM files. Use for extracting pixel data, reading metadata, anonymization, and format conversion. Essential for working with IDC radiology data (CT, MR, PET).
-
-### Pathology and Slide Microscopy
-See `references/digital_pathology_guide.md` for DICOM-compatible tools (highdicom, wsidicom, TIA-Toolbox, Slim viewer).
-
-### Metadata Visualization
-- **matplotlib** - Low-level plotting for full customization. Use for creating static figures summarizing IDC query results (bar charts of modalities, histograms of series counts, etc.).
-- **seaborn** - Statistical visualization with pandas integration. Use for quick exploration of IDC metadata distributions, relationships between variables, and categorical comparisons with attractive defaults.
-- **plotly** - Interactive visualization. Use when you need hover info, zoom, and pan for exploring IDC metadata, or for creating web-embeddable dashboards of collection statistics.
-
-### Data Exploration
-- **exploratory-data-analysis** - Comprehensive EDA on scientific data files. Use after downloading IDC data to understand file structure, quality, and characteristics before analysis.
+For digital pathology related see `references/digital_pathology_guide.md`.
 
 ## Resources
-
-### Schema Reference (Primary Source)
-
-**Always use `client.indices_overview` for current column schemas.** This ensures accuracy with the installed idc-index version:
-
-```python
-# Get all column names and types for any table
-schema = client.indices_overview["index"]["schema"]
-columns = [(c['name'], c['type'], c.get('description', '')) for c in schema['columns']]
-```
 
 ### Reference Documentation
 

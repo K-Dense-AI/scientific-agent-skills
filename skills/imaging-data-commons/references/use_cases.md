@@ -1,6 +1,6 @@
 # Common Use Cases for IDC
 
-**Tested with:** idc-index 0.11.9 (IDC data version v23)
+**Tested with:** idc-index 0.12.1 (IDC data version v24)
 
 This guide provides complete end-to-end workflow examples for common IDC use cases. Each use case demonstrates the full workflow from query to download with best practices.
 
@@ -176,6 +176,98 @@ client.download_from_selection(
 
 # Save license information
 cc_by_data.to_csv('commercial_dataset_manifest_CC-BY_ONLY.csv', index=False)
+```
+
+## Use Case 5: Batch Download with Filtering
+
+**Objective:** Download a large filtered dataset in batches to avoid timeouts
+
+**Steps:**
+```python
+from idc_index import IDCClient
+import pandas as pd
+
+client = IDCClient()
+
+# Find chest CT scans from GE scanners with a permissive license
+query = """
+SELECT
+  SeriesInstanceUID,
+  PatientID,
+  collection_id,
+  ManufacturerModelName
+FROM index
+WHERE Modality = 'CT'
+  AND BodyPartExamined = 'CHEST'
+  AND Manufacturer = 'GE MEDICAL SYSTEMS'
+  AND license_short_name = 'CC BY 4.0'
+LIMIT 100
+"""
+
+results = client.sql_query(query)
+
+# Save manifest for reproducibility
+results.to_csv('lung_ct_manifest.csv', index=False)
+
+# Download in batches to avoid timeout
+batch_size = 10
+for i in range(0, len(results), batch_size):
+    batch = results.iloc[i:i+batch_size]
+    client.download_from_selection(
+        seriesInstanceUID=list(batch['SeriesInstanceUID'].values),
+        downloadDir=f"./data/batch_{i//batch_size}"
+    )
+```
+
+## Use Case 6: Integration with Analysis Pipelines
+
+**Objective:** Load downloaded DICOM files into Python for processing
+
+**Read individual DICOM files with pydicom:**
+```python
+import pydicom
+import os
+
+series_dir = "./data/rider/rider_pilot/RIDER-1007893286/CT_1.3.6.1..."
+
+dicom_files = [os.path.join(series_dir, f) for f in os.listdir(series_dir)
+               if f.endswith('.dcm')]
+
+ds = pydicom.dcmread(dicom_files[0])
+print(f"Patient ID: {ds.PatientID}")
+print(f"Modality: {ds.Modality}")
+print(f"Image shape: {ds.pixel_array.shape}")
+```
+
+**Build 3D volume from CT series:**
+```python
+import pydicom
+import numpy as np
+from pathlib import Path
+
+def load_ct_series(series_path):
+    files = sorted(Path(series_path).glob('*.dcm'))
+    slices = [pydicom.dcmread(str(f)) for f in files]
+    slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
+    volume = np.stack([s.pixel_array for s in slices])
+    return volume, slices[0]
+
+volume, metadata = load_ct_series("./data/lung_ct/series_dir")
+print(f"Volume shape: {volume.shape}")  # (z, y, x)
+```
+
+**Load DICOM series with SimpleITK (recommended for correct geometry):**
+```python
+import SimpleITK as sitk
+
+series_path = "./data/ct_series"
+reader = sitk.ImageSeriesReader()
+dicom_names = reader.GetGDCMSeriesFileNames(series_path)
+reader.SetFileNames(dicom_names)
+image = reader.Execute()
+
+smoothed = sitk.CurvatureFlow(image1=image, timeStep=0.125, numberOfIterations=5)
+sitk.WriteImage(smoothed, "processed_volume.nii.gz")
 ```
 
 ## Resources
