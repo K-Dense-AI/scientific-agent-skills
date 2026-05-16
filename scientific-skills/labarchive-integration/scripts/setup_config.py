@@ -113,7 +113,7 @@ def test_authentication(config_path='config.yaml'):
     try:
         # Try to import labarchives-py
         from labarchivespy.client import Client
-        import xml.etree.ElementTree as ET
+        import defusedxml.ElementTree as ET
 
         # Load config
         with open(config_path, 'r') as f:

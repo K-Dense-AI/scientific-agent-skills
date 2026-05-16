@@ -11,7 +11,8 @@ import argparse
 import time
 import re
 import json
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
+from xml.etree.ElementTree import Element  # nosemgrep: use-defused-xml -- Element is a data class, not a parser; defusedxml.ElementTree does not re-export it
 from typing import Optional, Dict, List, Tuple
 from urllib.parse import urlparse
 
@@ -400,7 +401,7 @@ class MetadataExtractor:
             return str(date_parts[0][0])
         return ''
     
-    def _extract_year_pubmed(self, article: ET.Element) -> str:
+    def _extract_year_pubmed(self, article: Element) -> str:
         """Extract year from PubMed XML."""
         year = article.findtext('.//Journal/JournalIssue/PubDate/Year', '')
         if not year:

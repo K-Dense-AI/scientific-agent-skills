@@ -166,7 +166,7 @@ df = pd.read_csv(io.StringIO(resp.text))
 When `format=xml` is specified, the response body is XML:
 
 ```python
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny",

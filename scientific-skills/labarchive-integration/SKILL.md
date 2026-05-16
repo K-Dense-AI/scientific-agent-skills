@@ -80,7 +80,7 @@ login_params = {'login_or_email': user_email, 'password': auth_token}
 response = client.make_call('users', 'user_access_info', params=login_params)
 
 # Extract UID from response
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 uid = ET.fromstring(response.content)[0].text
 
 # Get detailed user info

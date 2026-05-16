@@ -10,7 +10,8 @@ import requests
 import argparse
 import json
 import time
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
+from xml.etree.ElementTree import Element  # nosemgrep: use-defused-xml -- Element is a data class, not a parser; defusedxml.ElementTree does not re-export it
 from typing import List, Dict, Optional
 from datetime import datetime
 
@@ -151,7 +152,7 @@ class PubMedSearcher:
         
         return metadata_list
     
-    def _extract_metadata_from_xml(self, article: ET.Element) -> Optional[Dict]:
+    def _extract_metadata_from_xml(self, article: Element) -> Optional[Dict]:
         """Extract metadata from PubmedArticle XML element."""
         try:
             medline_citation = article.find('.//MedlineCitation')

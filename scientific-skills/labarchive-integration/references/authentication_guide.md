@@ -105,7 +105,7 @@ login_params = {
 response = client.make_call('users', 'user_access_info', params=login_params)
 
 # Parse response to extract UID
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 uid = ET.fromstring(response.content)[0].text
 print(f"Authenticated as user ID: {uid}")
 ```
@@ -312,7 +312,7 @@ def test_authentication():
             print("✅ Authentication successful!")
 
             # Extract UID
-            import xml.etree.ElementTree as ET
+            import defusedxml.ElementTree as ET
             uid = ET.fromstring(response.content)[0].text
             print(f"User ID: {uid}")
 
