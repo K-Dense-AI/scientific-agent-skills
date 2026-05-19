@@ -193,7 +193,7 @@ All skills are scanned on an approximately weekly basis, and [SECURITY.md](SECUR
 
 ## ❤️ Support the Open Source Community
 
-Scientific Agent Skills is powered by **50+ incredible open source projects** maintained by dedicated developers and research communities worldwide. Projects like Biopython, Scanpy, RDKit, scikit-learn, PyTorch Lightning, and many others form the foundation of these skills.
+Scientific Agent Skills is powered by **50+ incredible open-source projects** maintained by dedicated developers and research communities worldwide. Projects like Biopython, Scanpy, RDKit, scikit-learn, PyTorch Lightning, and many others form the foundation of these skills.
 
 **If you find value in this repository, please consider supporting the projects that make it possible:**
 
