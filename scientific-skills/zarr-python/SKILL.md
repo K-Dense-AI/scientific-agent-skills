@@ -1,16 +1,17 @@
 ---
 name: zarr-python
-description: Chunked N-D arrays for cloud storage. Compressed arrays, parallel I/O, S3/GCS integration, NumPy/Dask/Xarray compatible, for large-scale scientific computing pipelines.
+description: >
+  Read, write, and optimise chunked N-dimensional arrays with Zarr. Guides
+  array creation, compression codec selection, cloud storage (S3/GCS),
+  sharding, and integration with NumPy, Dask, and Xarray. Use when the user
+  mentions "Zarr", ".zarr files", "chunked arrays", "array storage",
+  "cloud-based array data", or needs to store large multidimensional datasets.
 license: MIT license
 metadata:
     skill-author: K-Dense Inc.
 ---
 
 # Zarr Python
-
-## Overview
-
-Zarr is a Python library for storing large N-dimensional arrays with chunking and compression. Apply this skill for efficient parallel I/O, cloud-native workflows, and seamless integration with NumPy, Dask, and Xarray.
 
 ## Quick Start
 
@@ -117,13 +118,9 @@ z.append(np.random.random((1000, 10000)), axis=0)  # Adds rows
 
 ## Chunking Strategies
 
-Chunking is critical for performance. Choose chunk sizes and shapes based on access patterns.
-
 ### Chunk Size Guidelines
 
-- **Minimum chunk size**: 1 MB recommended for optimal performance
-- **Balance**: Larger chunks = fewer metadata operations; smaller chunks = better parallel access
-- **Memory consideration**: Entire chunks must fit in memory during compression
+Target 1-10 MB per chunk. Entire chunks must fit in memory during compression.
 
 ```python
 # Configure chunk size (aim for ~1MB per chunk)
@@ -172,16 +169,9 @@ z = zarr.create_array(
 )
 ```
 
-**Benefits**:
-- Reduces file system overhead from millions of small files
-- Improves cloud storage performance (fewer object requests)
-- Prevents filesystem block size waste
-
 **Important**: Entire shards must fit in memory before writing.
 
 ## Compression
-
-Zarr applies compression per chunk to reduce storage while maintaining fast access.
 
 ### Configuring Compression
 
@@ -441,11 +431,6 @@ large_array = da.random.random((100000, 100000), chunks=(1000, 1000))
 da.to_zarr(large_array, 'output.zarr')
 ```
 
-**Benefits**:
-- Process datasets larger than memory
-- Automatic parallel computation across chunks
-- Efficient I/O with chunked storage
-
 ### Xarray Integration
 
 Xarray provides labeled, multidimensional arrays with Zarr backend:
@@ -483,12 +468,6 @@ ds = xr.Dataset(
 )
 ds.to_zarr('climate_data.zarr')
 ```
-
-**Benefits**:
-- Named dimensions and coordinates
-- Label-based indexing and selection
-- Integration with pandas for time series
-- NetCDF-like interface familiar to climate/geospatial scientists
 
 ## Parallel Computing and Synchronization
 
@@ -669,9 +648,10 @@ z[:] = data
 # Consolidate metadata for faster reads
 zarr.consolidate_metadata(store)
 
-# Read from S3 (anywhere, anytime)
+# Read back and verify
 store_read = s3fs.S3Map(root='s3://my-bucket/data.zarr', s3=s3)
 z_read = zarr.open_consolidated(store_read)
+assert z_read.shape == z.shape, f"Shape mismatch: {z_read.shape} != {z.shape}"
 subset = z_read[0:100, 0:100]
 ```
 
