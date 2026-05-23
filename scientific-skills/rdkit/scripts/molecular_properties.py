@@ -16,7 +16,7 @@ from pathlib import Path
 
 try:
     from rdkit import Chem
-    from rdkit.Chem import Descriptors, Lipinski
+    from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
 except ImportError:
     print("Error: RDKit not installed. Install with: conda install -c conda-forge rdkit")
     sys.exit(1)
@@ -42,7 +42,7 @@ def calculate_properties(mol):
 
         # Polar surface area
         'TPSA': Descriptors.TPSA(mol),
-        'LabuteASA': Descriptors.LabuteASA(mol),
+        'LabuteASA': rdMolDescriptors.CalcLabuteASA(mol),
 
         # Hydrogen bonding
         'HBD': Descriptors.NumHDonors(mol),
