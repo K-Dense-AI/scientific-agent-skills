@@ -62,7 +62,7 @@ def calculate_properties(mol):
 
         # Flexibility
         'Rotatable_Bonds': Descriptors.NumRotatableBonds(mol),
-        'Fraction_Csp3': Descriptors.FractionCsp3(mol),
+        'Fraction_Csp3': Lipinski.FractionCSP3(mol),
 
         # Complexity
         'BertzCT': Descriptors.BertzCT(mol),
