@@ -1,0 +1,8 @@
+[codespell]
+# Ref: https://github.com/codespell-project/codespell#using-a-config-file
+skip = .git,.gitignore,.gitattributes,.codespellrc,*/scripts/office/schemas/*
+check-hidden = true
+# Ignore camelCase/PascalCase identifiers, bold-letter markdown/LaTeX, regex char classes, and URLs
+ignore-regex = \b[a-z]+[A-Z]\w*\b|\b[A-Z][a-z]+[A-Z]\w*\b|\*\*\w\*\*\w+|\\textbf\{\w\}\w+|\[\w+\]\w+|https?://\S+
+# Domain-specific terms: scientific abbreviations, tool/library names, medical terms
+ignore-words-list = simpy,som,ehr,hsa,braket,strat,infarction,caf,cafs,trough,mape,ket,fallow,ttest,cna,anc,fpr,namd,reacher,aer,ot,stard,commun,rouge,ois,als,blosum,recuse,theses,gage,coo,childs,ser,nd,inh,acn,toi,edn,whos,checkin,sortings,requestor,vermillion,pres,promis,abd,lod,varian,vor,bu,technik,gard,sav,magent,te,ontop,atomate,formate,slac,theis,sems,otu,scarches,whis,re-use
