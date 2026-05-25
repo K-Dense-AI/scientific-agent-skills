@@ -17,9 +17,9 @@ Adaptyv Bio is a cloud lab that turns protein sequences into experimental data. 
 When writing code, always read the API key from the environment variable `ADAPTYV_API_KEY` or from a `.env` file — never hardcode tokens. Check for a `.env` file in the project root first; if one exists, use a library like `python-dotenv` to load it.
 
 ```bash
-export FOUNDRY_API_TOKEN="abs0_..."
+export ADAPTYV_API_KEY="abs0_..."
 curl https://foundry-api-public.adaptyvbio.com/api/v1/targets?limit=3 \
-  -H "Authorization: Bearer $FOUNDRY_API_TOKEN"
+  -H "Authorization: Bearer $ADAPTYV_API_KEY"
 ```
 
 Every request except `GET /openapi.json` requires authentication. Store tokens in environment variables or `.env` files — never commit them to source control.
@@ -50,9 +50,16 @@ print(f"Experiment: {result.experiment_url}")
 ### Client Pattern
 
 ```python
+import os
 from adaptyv import FoundryClient
 
-client = FoundryClient(api_key="...", base_url="https://foundry-api-public.adaptyvbio.com/api/v1")
+client = FoundryClient(
+    api_key=os.environ["ADAPTYV_API_KEY"],
+    base_url=os.environ.get(
+        "ADAPTYV_API_URL",
+        "https://foundry-api-public.adaptyvbio.com/api/v1",
+    ),
+)
 
 # Browse targets
 targets = client.targets.list(search="EGFR", selfservice_only=True)
