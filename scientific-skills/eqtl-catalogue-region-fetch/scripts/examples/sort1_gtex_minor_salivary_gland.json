@@ -1,0 +1,8 @@
+{
+  "_description": "SORT1 ge-eQTL in GTEx minor salivary gland — the canonical 1p13.3 LDL/CHD locus (Musunuru 2010). Pairs with cholesterol-VLDL on the GWAS side.",
+  "dataset_id": "QTD000276",
+  "molecular_trait_id": "ENSG00000134243",
+  "chromosome": "1",
+  "start_bp": 108774968,
+  "end_bp": 109774968
+}

@@ -1,0 +1,13 @@
+# pysam writes tabix index files to cwd during remote fetches; never tracked.
+*.tbi
+*.tsv.gz
+*.tsv.gz.tbi
+
+# Run outputs (skill writes manifest/variants/report to --output dir, not here).
+runs/
+output/
+out/
+
+# Python bytecode
+__pycache__/
+*.pyc
