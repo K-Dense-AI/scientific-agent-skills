@@ -11,6 +11,10 @@
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-K--Dense_Inc.-0A66C2?logo=linkedin)](https://www.linkedin.com/company/k-dense-inc)
 [![YouTube](https://img.shields.io/badge/YouTube-K--Dense_Inc.-FF0000?logo=youtube)](https://www.youtube.com/@K-Dense-Inc)
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=K-Dense-AI/scientific-agent-skills&type=date&legend=top-left)](https://www.star-history.com/#K-Dense-AI/scientific-agent-skills&type=date&legend=top-left)
+
 > **🔔 Claude Scientific Skills is now Scientific Agent Skills.** Same skills, broader compatibility — now works with any AI agent that supports the open [Agent Skills](https://agentskills.io/) standard, not just Claude.
 
 > **New: [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)** — A free, open-source AI co-scientist that runs on your desktop, powered by Scientific Agent Skills. Bring your own API keys, pick from 40+ models, and get a full research workspace with web search, file handling, 100+ scientific databases, and access to all 140 skills in this repo. Your data stays on your computer, and you can optionally scale to cloud compute via [Modal](https://modal.com/) for heavy workloads. [Get started here.](https://github.com/K-Dense-AI/k-dense-byok)
@@ -261,7 +265,7 @@ against AlphaFold EGFR structure, search PubMed for resistance mechanisms, check
 mutations, and create visualizations and a comprehensive report.
 ```
 
-**Skills Used**: ChEMBL, RDKit, datamol, DiffDock, AlphaFold DB, PubMed, COSMIC, scientific visualization
+**Skills Used**: database-lookup, rdkit, datamol, diffdock, paper-lookup, scientific-visualization
 
 ---
 
@@ -276,7 +280,7 @@ PyDESeq2, infer gene regulatory networks with Arboreto, enrich pathways via Reac
 and identify therapeutic targets with Open Targets.
 ```
 
-**Skills Used**: Scanpy, Cellxgene Census, NCBI Gene, PyDESeq2, Arboreto, Reactome, KEGG, Open Targets
+**Skills Used**: scanpy, cellxgene-census, database-lookup, pydeseq2, arboreto
 
 ---
 
@@ -291,7 +295,7 @@ STRING, correlate omics layers with statsmodels, build predictive model with sci
 and search ClinicalTrials.gov for relevant trials.
 ```
 
-**Skills Used**: PyDESeq2, pyOpenMS, HMDB, Metabolomics Workbench, UniProt, KEGG, STRING, statsmodels, scikit-learn, ClinicalTrials.gov
+**Skills Used**: pydeseq2, pyopenms, database-lookup, statsmodels, scikit-learn
 
 ---
 
@@ -306,7 +310,7 @@ rank with DeepChem, check PubChem suppliers, search USPTO patents, and optimize 
 MedChem/molfeat.
 ```
 
-**Skills Used**: AlphaFold DB, BioPython, ZINC, RDKit, DiffDock, DeepChem, PubChem, USPTO, MedChem, molfeat
+**Skills Used**: database-lookup, biopython, rdkit, diffdock, deepchem, medchem, molfeat
 
 ---
 
@@ -321,7 +325,7 @@ with UniProt, search PubMed for case reports, check ClinPGx for pharmacogenomics
 clinical report with document processing tools, and find matching trials on ClinicalTrials.gov.
 ```
 
-**Skills Used**: pysam, Ensembl, ClinVar, COSMIC, NCBI Gene, UniProt, PubMed, ClinPGx, PDF/DOCX document skills, ClinicalTrials.gov
+**Skills Used**: pysam, database-lookup, paper-lookup, clinical-reports, docx, pdf
 
 ---
 
@@ -336,7 +340,7 @@ GRNs with Arboreto, assess druggability with Open Targets, model with PyMC, visu
 networks, and search GEO for similar patterns.
 ```
 
-**Skills Used**: NCBI Gene, UniProt, STRING, Reactome, KEGG, Torch Geometric, Arboreto, Open Targets, PyMC, GEO
+**Skills Used**: database-lookup, torch-geometric, arboreto, pymc, networkx, scientific-visualization
 
 > 📖 **Want more examples?** Check out [docs/examples.md](docs/examples.md) for comprehensive workflow examples and detailed use cases across all scientific domains.
 
@@ -770,7 +774,3 @@ See [LICENSE.md](LICENSE.md) for full terms.
 ### Individual Skill Licenses
 
 > ⚠️ **Important**: Each skill has its own license specified in the `license` metadata field within its `SKILL.md` file. These licenses may differ from the repository's MIT License and may include additional terms or restrictions. **Users are responsible for reviewing and adhering to the license terms of each individual skill they use.**
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=K-Dense-AI/scientific-agent-skills&type=date&legend=top-left)](https://www.star-history.com/#K-Dense-AI/scientific-agent-skills&type=date&legend=top-left)
