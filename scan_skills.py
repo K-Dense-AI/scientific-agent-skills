@@ -19,7 +19,7 @@ from skill_scanner.core.scan_policy import ScanPolicy
 
 load_dotenv()
 
-SKILLS_DIR = "scientific-skills"
+SKILLS_DIR = "skills"
 OUTPUT_FILE = "SECURITY.md"
 
 

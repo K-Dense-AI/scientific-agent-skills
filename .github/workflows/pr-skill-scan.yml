@@ -3,7 +3,7 @@ name: PR Skill Scan
 on:
   pull_request:
     paths:
-      - "scientific-skills/**"
+      - "skills/**"
       - "scan_skills.py"
       - "scan_pr_skills.py"
       - "pyproject.toml"
@@ -40,14 +40,14 @@ jobs:
           echo "Base: $BASE_SHA"
           echo "Head: $HEAD_SHA"
 
-          # Files added/copied/modified/renamed under scientific-skills/<skill>/...
-          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'scientific-skills/**' || true)
-          echo "Changed files under scientific-skills/:"
+          # Files added/copied/modified/renamed under skills/<skill>/...
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" -- 'skills/**' || true)
+          echo "Changed files under skills/:"
           echo "$CHANGED_FILES"
 
           # Derive unique top-level skill directories and keep only those that still exist with a SKILL.md
           SKILL_DIRS=$(echo "$CHANGED_FILES" \
-            | awk -F/ 'NF>=2 && $1=="scientific-skills" {print $1 "/" $2}' \
+            | awk -F/ 'NF>=2 && $1=="skills" {print $1 "/" $2}' \
             | sort -u)
 
           EXISTING=""

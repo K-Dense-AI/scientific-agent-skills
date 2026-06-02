@@ -1,6 +1,6 @@
 [project]
 name = "scientific-agent-skills"
-version = "2.39.0"
+version = "2.45.0"
 description = "A set of ready to use Agent Skills for research, science, engineering, analysis, finance and writing."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -8,4 +8,9 @@ dependencies = [
     "cisco-ai-skill-scanner>=2.0.8",
     "firecrawl-py>=4.9.0",
     "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "skills-ref @ git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref",
 ]

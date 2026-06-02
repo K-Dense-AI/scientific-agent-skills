@@ -11,3 +11,9 @@ __pycache__/
 
 # Project
 temp/
+research/
+
+.agents/
+AGENTS.md
+
+skills-lock.json

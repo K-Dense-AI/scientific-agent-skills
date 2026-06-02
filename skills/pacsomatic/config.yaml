@@ -1,0 +1,42 @@
+# Baseline configuration for nf-core/pacsomatic skill usage.
+# These values are intended as defaults for operators and agents.
+
+pipeline:
+  name: nf-core/pacsomatic
+  repo_url: https://github.com/nf-core/pacsomatic.git
+  default_version: ""
+
+runtime:
+  conda_env: pacsomatic-nextflow
+  use_current_path: false
+  create_conda_env: false
+  conda_env_file: ""
+
+execution:
+  profile: singularity,sanger
+  executor: local  # local | none | lsf | slurm | pbs | sge
+  cpus: 16
+  memory_gb: 64
+  walltime: "48:00"
+  queue: ""
+  project: ""
+  job_name: pacsomatic
+
+outputs:
+  samplesheet_name: samplesheet.csv
+  generated_params_name: pacsomatic.params.generated.yaml
+  launch_script_suffix_local: local
+  default_workdir_name: work
+
+validation:
+  enforce_no_spaces_in_ids: true
+  require_exactly_one_reference_mode: true
+  warn_if_bam_index_missing: true
+  min_java_major: 17
+
+agent_response:
+  include_command_or_script_path: true
+  include_validation_confirmation: true
+  include_run_type: true
+  include_job_id_if_available: true
+  include_next_triage_step: true
