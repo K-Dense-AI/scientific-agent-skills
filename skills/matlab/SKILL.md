@@ -1,6 +1,11 @@
 ---
 name: matlab
-description: MATLAB and GNU Octave numerical computing for matrix operations, data analysis, visualization, and scientific computing. Use when writing MATLAB/Octave scripts for linear algebra, signal processing, image processing, differential equations, optimization, statistics, or creating scientific visualizations. Also use when the user needs help with MATLAB syntax, functions, or wants to convert between MATLAB and Python code. Scripts can be executed with MATLAB or the open-source GNU Octave interpreter.
+description: >-
+  This skill should be used when the user asks to "write a MATLAB script", "run MATLAB", "plot
+  data in MATLAB", "debug MATLAB code", "convert MATLAB to Python", "solve ODE in MATLAB", "do
+  signal processing", "image processing in MATLAB", "create a figure", "Simulink simulation",
+  or mentions .m files, .mat files, MATLAB toolboxes, GNU Octave, or numerical computing
+  scripts.
 license: For MATLAB (https://www.mathworks.com/pricing-licensing.html) and for Octave (GNU General Public License version 3)
 compatibility: Requires either MATLAB or Octave to be installed for testing, but not required for just generating scripts.
 metadata:
