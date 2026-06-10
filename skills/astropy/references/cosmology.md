@@ -2,6 +2,8 @@
 
 The `astropy.cosmology` subpackage provides tools for cosmological calculations based on various cosmological models.
 
+> **Import paths:** Always import classes and functions directly from `astropy.cosmology` (as shown in all examples below). The old submodule import paths (`astropy.cosmology.flrw`, `.core`, `.funcs`, `.connect`, `.parameter`) were deprecated in v7.1 and removed in Astropy 8.0.
+
 ## Using Built-in Cosmologies
 
 Preloaded cosmologies based on WMAP and Planck observations:

@@ -242,6 +242,8 @@ plt.imshow(data, vmin=vmin, vmax=vmax, cmap='gray', origin='lower')
 
 Physical and astronomical constants with units.
 
+Note: through Astropy 7.x the default constants are CODATA 2018 + IAU 2015; Astropy 8.0 switches the default to CODATA 2022. For reproducible results across versions, select an explicit constants version via the science state (e.g., `astropy.physical_constants.set('codata2018')` before other astropy imports).
+
 ```python
 from astropy import constants as const
 
