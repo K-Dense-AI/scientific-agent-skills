@@ -4,7 +4,7 @@ description: Conduct comprehensive, systematic literature reviews using multiple
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
 ---
 
@@ -618,6 +618,17 @@ This skill works seamlessly with other scientific skills:
 ### Writing Skills
 - **brand-guidelines**: Apply institutional branding to PDF
 - **internal-comms**: Adapt review for different audiences
+- **venue-templates**: Access venue-specific writing style guides when preparing reviews for publication
+
+### Venue-Specific Writing Styles
+
+When preparing a literature review for a specific journal, consult the **venue-templates** skill for writing style guidance:
+- `venue_writing_styles.md`: Master style comparison across venues
+- `nature_science_style.md`: Nature/Science flowing abstract style, story-driven structure
+- `cell_press_style.md`: Cell Press graphical abstracts, Highlights format
+- `medical_journal_styles.md`: NEJM/Lancet/JAMA structured abstracts, PRISMA compliance
+
+These guides help adapt your review's tone, abstract format, and structure to match the target venue's expectations.
 
 ## Resources
 

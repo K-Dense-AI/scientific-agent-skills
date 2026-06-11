@@ -4,7 +4,7 @@ description: Structured manuscript/grant review with checklist-based evaluation.
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
 ---
 
@@ -24,6 +24,8 @@ This skill should be used when:
 - Evaluating reproducibility and data availability
 - Checking compliance with reporting guidelines (CONSORT, STROBE, PRISMA)
 - Providing constructive feedback on scientific writing
+
+**Related Resource:** The **venue-templates** skill provides `reviewer_expectations.md` with detailed guidance on what reviewers look for at different venues (Nature/Science, Cell Press, medical journals, ML conferences). Use this to calibrate your review standards to the target venue.
 
 ## Visual Enhancement with Scientific Schematics
 
