@@ -1,6 +1,6 @@
 # Index Tables Guide for IDC
 
-**Tested with:** idc-index 0.11.14 (IDC data version v23)
+**Tested with:** idc-index 0.12.3 (IDC data version v24)
 
 This guide covers the structure and access patterns for IDC index tables: programmatic schema discovery, DataFrame access, and join column references. For the overview of available tables and their purposes, see the "Index Tables" section in the main SKILL.md.
 
@@ -34,7 +34,7 @@ results = client.sql_query("SELECT * FROM index WHERE Modality = 'CT' LIMIT 10")
 
 # Fetch and query additional indices
 client.fetch_index("collections_index")
-collections = client.sql_query("SELECT collection_id, CancerTypes, TumorLocations FROM collections_index")
+collections = client.sql_query("SELECT collection_id, cancer_types, tumor_locations FROM collections_index")
 
 client.fetch_index("analysis_results_index")
 analysis = client.sql_query("SELECT * FROM analysis_results_index LIMIT 5")
@@ -130,6 +130,9 @@ Use this table to identify join columns between index tables. Always call `clien
 | `index` | `volume_geometry_index` | `index.SeriesInstanceUID = volume_geometry_index.SeriesInstanceUID` |
 | `index` | `rtstruct_index` | `index.SeriesInstanceUID = rtstruct_index.SeriesInstanceUID` |
 | `rtstruct_index` | `index` (source images) | `rtstruct_index.referenced_SeriesInstanceUID = index.SeriesInstanceUID` |
+| `index` | `ct_index` | `index.SeriesInstanceUID = ct_index.SeriesInstanceUID` |
+| `index` | `mr_index` | `index.SeriesInstanceUID = mr_index.SeriesInstanceUID` |
+| `index` | `pt_index` | `index.SeriesInstanceUID = pt_index.SeriesInstanceUID` |
 
 For complete query examples using these joins, see `references/sql_patterns.md`.
 

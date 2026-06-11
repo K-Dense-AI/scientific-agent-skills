@@ -1,6 +1,6 @@
 # BigQuery Guide for IDC
 
-**Tested with:** IDC data version v23
+**Tested with:** idc-index 0.12.1 (IDC data version v24)
 
 For most queries and downloads, use `idc-index` (see main SKILL.md). This guide covers BigQuery for advanced use cases requiring full DICOM metadata or complex joins.
 

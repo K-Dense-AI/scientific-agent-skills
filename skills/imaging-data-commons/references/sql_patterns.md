@@ -1,6 +1,6 @@
 # SQL Query Patterns for IDC
 
-**Tested with:** idc-index 0.11.14 (IDC data version v23)
+**Tested with:** idc-index 0.12.3 (IDC data version v24)
 
 Quick reference for common SQL query patterns when working with IDC data. For detailed examples with context, see the "Core Capabilities" section in the main SKILL.md.
 
@@ -14,6 +14,7 @@ Load this guide when you need quick-reference SQL patterns for:
 - Linking imaging data to clinical data
 - Filtering by 3D volume geometry validity (volume_geometry_index)
 - Finding RT Structure Set series and ROI metadata (rtstruct_index)
+- Filtering by CT/MR/PET acquisition parameters (ct_index, mr_index, pt_index)
 
 For table schemas, DataFrame access, and join column references, see `references/index_tables_guide.md`.
 
@@ -74,7 +75,7 @@ client.sql_query("""
 # List analysis result collections (curated derived datasets)
 client.fetch_index("analysis_results_index")
 client.sql_query("""
-    SELECT analysis_result_id, analysis_result_title, Collections, Modalities
+    SELECT analysis_result_id, analysis_result_title, collections, modalities
     FROM analysis_results_index
 """)
 
@@ -276,6 +277,84 @@ client.sql_query("""
     LIMIT 10
 """)
 ```
+
+## Modality Acquisition Parameters
+
+`ct_index`, `mr_index`, and `pt_index` (added in idc-index 0.12.3) expose acquisition and reconstruction parameters for CT, MR, and PET series. All join on `SeriesInstanceUID`. Dose-modulated CT acquisitions have `_min`/`_max` columns for tube current, exposure, and exposure time.
+
+```python
+client.fetch_index("ct_index")
+client.fetch_index("mr_index")
+client.fetch_index("pt_index")
+
+# CT: thin-slice series (≤2mm) with standard reconstruction
+client.sql_query("""
+    SELECT i.collection_id, i.SeriesInstanceUID, i.BodyPartExamined,
+           c.SliceThickness, c.ConvolutionKernel, c.KVP
+    FROM index i
+    JOIN ct_index c ON i.SeriesInstanceUID = c.SeriesInstanceUID
+    WHERE c.SliceThickness <= 2.0
+      AND c.ConvolutionKernel IS NOT NULL
+    LIMIT 10
+""")
+
+# CT: dose-modulated acquisitions (tube current varies across slices)
+client.sql_query("""
+    SELECT i.collection_id, c.SeriesInstanceUID,
+           c.XRayTubeCurrent_min, c.XRayTubeCurrent_max, c.SliceThickness
+    FROM ct_index c
+    JOIN index i ON c.SeriesInstanceUID = i.SeriesInstanceUID
+    WHERE c.XRayTubeCurrent_min != c.XRayTubeCurrent_max
+    LIMIT 10
+""")
+
+# MR: DWI series (have non-null DiffusionBValue) at 3T
+client.sql_query("""
+    SELECT i.collection_id, i.SeriesInstanceUID, i.SeriesDescription,
+           m.MagneticFieldStrength, m.DiffusionBValue
+    FROM index i
+    JOIN mr_index m ON i.SeriesInstanceUID = m.SeriesInstanceUID
+    WHERE m.DiffusionBValue IS NOT NULL
+      AND m.MagneticFieldStrength >= 2.9
+    LIMIT 10
+""")
+
+# MR: multi-echo series (EchoTime stored as array with multiple values)
+client.sql_query("""
+    SELECT i.collection_id, i.SeriesInstanceUID,
+           m.EchoTime, m.EchoTrainLength, m.ScanningSequence
+    FROM index i
+    JOIN mr_index m ON i.SeriesInstanceUID = m.SeriesInstanceUID
+    WHERE m.EchoTrainLength > 1
+    LIMIT 10
+""")
+
+# PET: FDG studies with specific reconstruction method
+client.sql_query("""
+    SELECT i.collection_id, i.SeriesInstanceUID,
+           p.RadionuclideCodeMeaning, p.ReconstructionMethod,
+           p.Units, p.DecayCorrection
+    FROM index i
+    JOIN pt_index p ON i.SeriesInstanceUID = p.SeriesInstanceUID
+    WHERE p.RadionuclideCodeMeaning LIKE '%fluorodeoxyglucose%'
+    LIMIT 10
+""")
+
+# PET: dynamic acquisitions (ActualFrameDuration is array with multiple values)
+client.sql_query("""
+    SELECT i.collection_id, i.SeriesInstanceUID,
+           p.NumberOfTimeSlices, p.ActualFrameDuration
+    FROM index i
+    JOIN pt_index p ON i.SeriesInstanceUID = p.SeriesInstanceUID
+    WHERE p.NumberOfTimeSlices > 1
+    LIMIT 10
+""")
+```
+
+Key columns by table (use `client.indices_overview["ct_index"]["schema"]` for the full list):
+- **ct_index**: `SliceThickness`, `KVP`, `ConvolutionKernel`, `SpiralPitchFactor`, `XRayTubeCurrent_min/max`, `Exposure_min/max`, `PixelSpacing_row_mm/col_mm`, `Rows`, `Columns`
+- **mr_index**: `MagneticFieldStrength`, `ScanningSequence`, `SequenceVariant`, `MRAcquisitionType`, `EchoTime` (array), `RepetitionTime`, `FlipAngle`, `DiffusionBValue` (array), `NumberOfTemporalPositions`, `ReceiveCoilName`
+- **pt_index**: `RadionuclideCodeMeaning`, `Radiopharmaceutical`, `RadionuclideTotalDose`, `ReconstructionMethod`, `DecayCorrection`, `AttenuationCorrectionMethod`, `ActualFrameDuration` (array), `NumberOfTimeSlices`
 
 ## Resources
 

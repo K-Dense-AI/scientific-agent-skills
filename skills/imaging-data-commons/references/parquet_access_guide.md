@@ -38,6 +38,9 @@ https://storage.googleapis.com/idc-index-data-artifacts/current/release_artifact
 | `collections_index.parquet` | — | Collection-level metadata |
 | `analysis_results_index.parquet` | — | Derived dataset metadata |
 | `clinical_index.parquet` | ~0.2 MB | Clinical data column dictionary |
+| `ct_index.parquet` | — | CT acquisition/reconstruction parameters |
+| `mr_index.parquet` | — | MR sequence/acquisition parameters |
+| `pt_index.parquet` | — | PET acquisition/radiopharmaceutical parameters |
 | `prior_versions_index.parquet` | — | Series from previous IDC releases |
 
 **Note:** the main index file is named `idc_index.parquet`, not `index.parquet`. Reference it with an alias in SQL queries (e.g., `FROM read_parquet(...) AS index`).
