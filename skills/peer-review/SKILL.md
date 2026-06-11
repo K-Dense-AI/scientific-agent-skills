@@ -25,6 +25,8 @@ This skill should be used when:
 - Checking compliance with reporting guidelines (CONSORT, STROBE, PRISMA)
 - Providing constructive feedback on scientific writing
 
+**Related Resource:** The **venue-templates** skill provides `reviewer_expectations.md` with detailed guidance on what reviewers look for at different venues (Nature/Science, Cell Press, medical journals, ML conferences). Use this to calibrate your review standards to the target venue.
+
 ## Visual Enhancement with Scientific Schematics
 
 **When creating documents with this skill, always consider adding scientific diagrams and schematics to enhance visual communication.**
