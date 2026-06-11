@@ -4,7 +4,7 @@ description: Conduct comprehensive, systematic literature reviews using multiple
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
 ---
 
