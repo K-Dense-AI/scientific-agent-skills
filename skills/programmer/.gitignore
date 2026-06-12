@@ -1,0 +1,8 @@
+# Book PDFs are user-supplied, not committed. See assets/README.md.
+assets/*.pdf
+*.pdf.part
+
+# Python
+__pycache__/
+*.pyc
+.venv/
