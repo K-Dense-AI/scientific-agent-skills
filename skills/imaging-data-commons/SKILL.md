@@ -4,11 +4,11 @@ description: Query and download public cancer imaging data from NCI Imaging Data
 license: This skill is provided under the MIT License. IDC data itself has individual licensing (mostly CC-BY, some CC-NC) that must be respected when using the data.
 metadata:
     version: "1.2"
-    source-skill-version: "1.6.4"
+    source-skill-version: "1.6.5"
     skill-author: Andrey Fedorov, @fedorov
     idc-index: "0.12.3"
     idc-data-version: "v24"
-    repository: https://github.com/ImagingDataCommons/idc-claude-skill
+    repository: https://github.com/ImagingDataCommons/imaging-data-commons-skill
 ---
 
 # Imaging Data Commons
@@ -23,22 +23,16 @@ Use the `idc-index` Python package to query and download public cancer imaging d
 
 **Primary tool:** `idc-index` ([GitHub](https://github.com/imagingdatacommons/idc-index))
 
-**CRITICAL - Check package version and upgrade if needed (run this FIRST):**
+**CRITICAL - run this FIRST**, before any IDC query:
 
-```python
-import idc_index
-
-REQUIRED_VERSION = "0.12.2"  # Must match metadata.idc-index in this file
-installed = idc_index.__version__
-
-if installed < REQUIRED_VERSION:
-    print(f"Upgrading idc-index from {installed} to {REQUIRED_VERSION}...")
-    import subprocess
-    subprocess.run(["pip3", "install", "--upgrade", "--break-system-packages", f"idc-index=={REQUIRED_VERSION}"], check=True)
-    print("Upgrade complete. Restart Python to use new version.")
-else:
-    print(f"idc-index {installed} meets requirement ({REQUIRED_VERSION})")
+```bash
+python scripts/check_version.py
 ```
+
+It installs the pinned `idc-index` minimum if needed and prints a notice when a newer
+`idc-index` release (which may carry a newer IDC data version) or a newer skill version is
+available, along with the link to update. If it reports an upgrade, restart Python before
+continuing.
 
 **Verify IDC data version and check current data scale:**
 
@@ -753,5 +747,5 @@ See the Quick Navigation section at the top for the full list of reference guide
 ### Skill Updates
 
 This skill version is available in skill metadata. To check for updates:
-- Visit the [releases page](https://github.com/ImagingDataCommons/idc-claude-skill/releases)
+- Visit the [releases page](https://github.com/ImagingDataCommons/imaging-data-commons-skill/releases)
 - Watch the repository on GitHub (Watch → Custom → Releases)

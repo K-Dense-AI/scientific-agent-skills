@@ -648,7 +648,7 @@ ORDER BY collection_id
 - [Part 15 Appendix E - De-identification Profiles](https://dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html)
 
 **Community Resources:**
-- [NAMIC Wiki: DWI/DTI DICOM](https://www.na-mic.org/wiki/NAMIC_Wiki:DTI:DICOM_for_DWI_and_DTI) - comprehensive vendor comparison for diffusion imaging
+- [NAMIC Wiki: DWI/DTI DICOM](https://web.archive.org/web/20260520044207/https://www.na-mic.org/wiki/NAMIC_Wiki:DTI:DICOM_for_DWI_and_DTI) - comprehensive vendor comparison for diffusion imaging (archived; original NA-MIC wiki retired)
 - [StandardizeBValue](https://github.com/nslay/StandardizeBValue) - tool to extract vendor b-values to standard tags
 
 ## Using Query Results with idc-index
