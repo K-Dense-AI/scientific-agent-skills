@@ -111,11 +111,11 @@ import anndata
 
 # Default is Zarr v2; opt into v3 for cloud workflows (anndata 0.12+)
 anndata.settings.zarr_write_format = 3
-anndata.settings.auto_shard_zarr_v3 = True
+anndata.settings.auto_shard_zarr_v3 = True  # experimental; independent of zarr_write_format
 adata.write_zarr('data.zarr', chunks=(100, 100))
 ```
 - Excellent for cloud storage (S3, GCS)
-- Supports parallel I/O and Zarr v3 sharding (0.12+)
+- Supports parallel I/O and opt-in Zarr v3 sharding (0.12+)
 - Good compression
 - Best for: Large datasets, cloud workflows, parallel processing
 
@@ -167,10 +167,13 @@ adata_filtered = high_quality.to_memory()
 # Open in read-write backed mode
 adata = ad.read_h5ad('data.h5ad', backed='r+')
 
-# Modify metadata (written to disk)
-adata.obs['new_annotation'] = values
+# Modify X (persisted to disk)
+adata.X[0, 0] = 0
 
-# X remains on disk, modifications saved immediately
+# Metadata changes are not persisted from backed mode; load and write a new file
+adata_memory = adata.to_memory()
+adata_memory.obs['new_annotation'] = values
+adata_memory.write_h5ad('data_with_annotations.h5ad')
 ```
 
 ### Chunked processing

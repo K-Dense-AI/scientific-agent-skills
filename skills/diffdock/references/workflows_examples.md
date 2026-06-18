@@ -40,19 +40,22 @@ The first execution pre-computes SO(2) and SO(3) lookup tables, taking a few min
 python -m inference \
   --config default_inference_args.yaml \
   --protein_path examples/protein.pdb \
-  --ligand "COc1ccc(C(=O)Nc2ccccc2)cc1" \
+  --ligand_description "COc1ccc(C(=O)Nc2ccccc2)cc1" \
   --out_dir results/single_docking/
 ```
 
 **Output Structure**:
 ```
 results/single_docking/
-├── index_0_rank_1.sdf       # Top-ranked prediction
-├── index_0_rank_2.sdf       # Second-ranked prediction
-├── ...
-├── index_0_rank_10.sdf      # 10th prediction (if samples_per_complex=10)
-└── confidence_scores.txt    # Scores for all predictions
+└── complex_0/
+    ├── rank1.sdf                    # Convenience copy of top-ranked prediction
+    ├── rank1_confidence0.87.sdf     # Top-ranked prediction with confidence
+    ├── rank2_confidence0.42.sdf     # Second-ranked prediction
+    ├── ...
+    └── rank10_confidence-1.23.sdf   # 10th prediction (if samples_per_complex=10)
 ```
+
+Current upstream `inference.py` uses `--ligand_description`; avoid the older `--ligand` spelling unless your local checkout has added an alias.
 
 ### Using Ligand Structure File
 
@@ -60,7 +63,7 @@ results/single_docking/
 python -m inference \
   --config default_inference_args.yaml \
   --protein_path protein.pdb \
-  --ligand ligand.sdf \
+  --ligand_description ligand.sdf \
   --out_dir results/ligand_file/
 ```
 
@@ -74,7 +77,7 @@ python -m inference \
 python -m inference \
   --config default_inference_args.yaml \
   --protein_sequence "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK" \
-  --ligand "CC(C)Cc1ccc(cc1)C(C)C(=O)O" \
+  --ligand_description "CC(C)Cc1ccc(cc1)C(C)C(=O)O" \
   --out_dir results/sequence_docking/
 ```
 
@@ -118,11 +121,12 @@ python -m inference \
 ```
 results/batch_predictions/
 ├── complex1/
-│   ├── rank_1.sdf
-│   ├── rank_2.sdf
+│   ├── rank1.sdf
+│   ├── rank1_confidence0.87.sdf
+│   ├── rank2_confidence0.42.sdf
 │   └── ...
 ├── complex2/
-│   ├── rank_1.sdf
+│   ├── rank1.sdf
 │   └── ...
 └── complex3/
     └── ...
@@ -172,19 +176,25 @@ python -m inference \
 
 ```python
 # analyze_screening_results.py
-import os
 import pandas as pd
+import re
+from pathlib import Path
 
 results = []
-results_dir = "results/virtual_screening/"
+results_dir = Path("results/virtual_screening/")
 
-for complex_dir in os.listdir(results_dir):
-    confidence_file = os.path.join(results_dir, complex_dir, "confidence_scores.txt")
-    if os.path.exists(confidence_file):
-        with open(confidence_file) as f:
-            scores = [float(line.strip()) for line in f]
-            top_score = max(scores)
-            results.append({"complex": complex_dir, "top_confidence": top_score})
+for complex_dir in results_dir.iterdir():
+    if not complex_dir.is_dir():
+        continue
+
+    scores = []
+    for sdf_file in complex_dir.glob("rank*_confidence*.sdf"):
+        match = re.search(r"confidence(-?\d+(?:\.\d+)?)", sdf_file.name)
+        if match:
+            scores.append(float(match.group(1)))
+
+    if scores:
+        results.append({"complex": complex_dir.name, "top_confidence": max(scores)})
 
 # Sort by confidence
 df = pd.DataFrame(results)
@@ -244,12 +254,12 @@ python -m inference \
 python -m inference \
   --config default_inference_args.yaml \
   --protein_path protein.pdb \
-  --ligand "CC(=O)OC1=CC=CC=C1C(=O)O" \
+  --ligand_description "CC(=O)OC1=CC=CC=C1C(=O)O" \
   --out_dir results/diffdock_poses/ \
   --save_visualisation
 
 # 2. Rescore with GNINA
-for pose in results/diffdock_poses/*.sdf; do
+for pose in results/diffdock_poses/complex_0/*confidence*.sdf; do
     gnina -r protein.pdb -l "$pose" --score_only -o "${pose%.sdf}_gnina.sdf"
 done
 ```
@@ -261,33 +271,32 @@ done
 from openmm import app, LangevinIntegrator, Platform
 from openmm.app import ForceField, Modeller, PDBFile
 from rdkit import Chem
-import os
+from pathlib import Path
 
 # Load protein
 protein = PDBFile('protein.pdb')
 forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
 
 # Process each DiffDock pose
-pose_dir = 'results/diffdock_poses/'
-for pose_file in os.listdir(pose_dir):
-    if pose_file.endswith('.sdf'):
-        # Load ligand
-        mol = Chem.SDMolSupplier(os.path.join(pose_dir, pose_file))[0]
+pose_dir = Path('results/diffdock_poses/complex_0')
+for pose_path in pose_dir.glob('*confidence*.sdf'):
+    # Load ligand
+    mol = Chem.SDMolSupplier(str(pose_path))[0]
 
-        # Combine protein + ligand
-        modeller = Modeller(protein.topology, protein.positions)
-        # ... add ligand to modeller ...
+    # Combine protein + ligand
+    modeller = Modeller(protein.topology, protein.positions)
+    # ... add ligand to modeller ...
 
-        # Create system and minimize
-        system = forcefield.createSystem(modeller.topology)
-        integrator = LangevinIntegrator(300, 1.0, 0.002)
-        simulation = app.Simulation(modeller.topology, system, integrator)
-        simulation.minimizeEnergy(maxIterations=1000)
+    # Create system and minimize
+    system = forcefield.createSystem(modeller.topology)
+    integrator = LangevinIntegrator(300, 1.0, 0.002)
+    simulation = app.Simulation(modeller.topology, system, integrator)
+    simulation.minimizeEnergy(maxIterations=1000)
 
-        # Save minimized structure
-        positions = simulation.context.getState(getPositions=True).getPositions()
-        PDBFile.writeFile(simulation.topology, positions,
-                         open(f"minimized_{pose_file}.pdb", 'w'))
+    # Save minimized structure
+    positions = simulation.context.getState(getPositions=True).getPositions()
+    PDBFile.writeFile(simulation.topology, positions,
+                      open(f"minimized_{pose_path.stem}.pdb", 'w'))
 ```
 
 ## Workflow 7: Using the Graphical Interface
@@ -343,7 +352,7 @@ Use custom configuration:
 python -m inference \
   --config custom_inference.yaml \
   --protein_path protein.pdb \
-  --ligand "CC(=O)OC1=CC=CC=C1C(=O)O" \
+  --ligand_description "CC(=O)OC1=CC=CC=C1C(=O)O" \
   --out_dir results/custom_config/
 ```
 

@@ -254,7 +254,7 @@ si.plot_unit_summary(analyzer, unit_id=0)
 
 ### Load LFP Data
 ```python
-lfp = si.read_spikeglx('/path/to/data', stream_id='imec0.lf')
+lfp = si.read_spikeglx('/path/to/data', stream_name='imec0.lf')
 print(f"LFP: {lfp.get_sampling_frequency()} Hz")
 ```
 

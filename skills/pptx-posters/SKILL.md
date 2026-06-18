@@ -3,9 +3,8 @@ name: pptx-posters
 description: Create research posters using HTML/CSS that can be exported to PDF or PPTX. Use this skill ONLY when the user explicitly requests PowerPoint/PPTX poster format. For standard research posters, use latex-posters instead. This skill provides modern web-based poster design with responsive layouts and easy visual integration.
 allowed-tools: Read Write Edit Bash
 license: MIT license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key for the skill's LLM-powered steps.", "required_for": "optional features"}]
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc.", "openclaw": {"primaryEnv": "OPENROUTER_API_KEY", "envVars": [{"name": "OPENROUTER_API_KEY", "required": false, "description": "OpenRouter API key for the skill's LLM-powered steps."}]}}
 ---
 
 # PPTX Research Posters (HTML-Based)

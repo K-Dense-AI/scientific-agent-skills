@@ -1,6 +1,6 @@
 # Seaborn Objects Interface
 
-The `seaborn.objects` interface provides a modern, declarative API for building visualizations through composition. This guide covers the complete objects interface introduced in seaborn 0.12+.
+The `seaborn.objects` interface provides a modern, declarative API for building visualizations through composition. This guide covers the objects interface introduced in seaborn 0.12+ and checked against seaborn 0.13.2. Upstream still labels this interface experimental and incomplete, so prefer it when composition helps and keep conservative production workflows on the function API when needed.
 
 ## Core Concept
 
@@ -14,7 +14,7 @@ The objects interface separates **what you want to show** (data and mappings) fr
 ## Basic Usage
 
 ```python
-from seaborn import objects as so
+import seaborn.objects as so
 import pandas as pd
 
 # Create plot with data and mappings
@@ -36,7 +36,8 @@ The `Plot` class is the foundation of the objects interface.
 ```python
 so.Plot(data=None, x=None, y=None, color=None, alpha=None,
         fill=None, fillalpha=None, fillcolor=None, marker=None,
-        pointsize=None, stroke=None, text=None, **variables)
+        pointsize=None, stroke=None, linewidth=None, linestyle=None,
+        edgewidth=None, edgecolor=None, text=None, group=None)
 ```
 
 **Parameters:**
@@ -47,8 +48,10 @@ so.Plot(data=None, x=None, y=None, color=None, alpha=None,
 - `marker` - Variable for marker shape
 - `pointsize` - Variable for point size
 - `stroke` - Variable for line width
+- `linewidth`, `linestyle` - Variables for line appearance
+- `edgewidth`, `edgecolor` - Variables for mark edge appearance
 - `text` - Variable for text labels
-- `**variables` - Additional mappings using property names
+- `group` - Variable for grouping observations
 
 **Examples:**
 ```python
@@ -214,12 +217,11 @@ p.label(
 Apply matplotlib style settings.
 
 ```python
-Plot.theme(config, **kwargs)
+Plot.theme(config, /)
 ```
 
 **Parameters:**
-- `config` - Dict of rcParams or seaborn theme dict
-- `**kwargs` - Individual rcParams
+- `config` - Dict of matplotlib rcParams, passed positionally
 
 **Example:**
 ```python
@@ -228,9 +230,6 @@ p.theme({**sns.axes_style('whitegrid'), **sns.plotting_context('talk')})
 
 # Custom rcParams
 p.theme({'axes.facecolor': 'white', 'axes.grid': True})
-
-# Individual parameters
-p.theme(axes_facecolor='white', font_scale=1.2)
 ```
 
 #### layout()

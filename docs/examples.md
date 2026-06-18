@@ -29,6 +29,17 @@ This document provides comprehensive, practical examples demonstrating how to co
 21. [Quantum Computing for Chemistry](#quantum-computing-for-chemistry)
 22. [Research Grant Writing](#research-grant-writing)
 23. [Flow Cytometry & Immunophenotyping](#flow-cytometry--immunophenotyping)
+24. [Geospatial & Earth Observation](#geospatial--earth-observation)
+25. [Time-Series Forecasting & Sensor Analytics](#time-series-forecasting--sensor-analytics)
+26. [Cloud-Scale Bioinformatics](#cloud-scale-bioinformatics)
+27. [Functional Genomics & Knowledge Graphs](#functional-genomics--knowledge-graphs)
+28. [Molecular Modeling & Simulation](#molecular-modeling--simulation)
+29. [Protein Engineering & Cloud Wet-Lab](#protein-engineering--cloud-wet-lab)
+30. [Medical Imaging & Clinical AI](#medical-imaging--clinical-ai)
+31. [Research Ideation & Study Planning](#research-ideation--study-planning)
+32. [Literature & Knowledge Management](#literature--knowledge-management)
+33. [Regulatory & Quality Management](#regulatory--quality-management)
+34. [Scientific Communication & Tooling](#scientific-communication--tooling)
 
 ---
 
@@ -96,7 +107,7 @@ Step 6: Predict properties with DeepChem
 Step 7: Virtual screening with DiffDock
 - Perform molecular docking on top 50 candidates
 - Dock into wild-type EGFR and T790M mutant
-- Calculate binding energies and interaction patterns
+- Rank generated poses by DiffDock confidence, then rescore with GNINA/MM-GBSA for affinity-oriented prioritization
 - Identify compounds with favorable binding to both forms
 
 Step 8: Search PubChem for commercial availability
@@ -316,8 +327,9 @@ Expected Output:
 - `gget` - Gene data retrieval
 - `matplotlib` - Visualization
 - `seaborn` - Heatmaps
-- `plotly` - Interactive visualization
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `scikit-survival` - Survival analysis
+- `pathway-enrichment` - Gene-set and pathway enrichment analysis
 
 **Workflow**:
 
@@ -406,13 +418,15 @@ Expected Output:
 - `database-lookup` - Query NCBI Gene for cell type markers
 - `scanpy` - Single-cell analysis
 - `scvi-tools` - Batch correction and integration
+- `scvelo` - RNA velocity and cell-state transitions
 - `cellxgene-census` - Reference data
+- `lamindb` - Dataset registration and lineage tracking
 - `gget` - Gene data retrieval
 - `anndata` - Data structure
 - `arboreto` - Gene regulatory networks
 - `pytorch-lightning` - Deep learning
 - `matplotlib` - Visualization
-- `plotly` - Interactive visualization
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `statistical-analysis` - Hypothesis testing
 - `geniml` - Genomic ML embeddings
 
@@ -568,7 +582,7 @@ Step 5: Search ZINC15 for fragment library
 
 Step 6: Virtual screening with fragment library
 - Use DiffDock to dock fragments into interface pocket
-- Rank by predicted binding affinity
+- Rank by pose confidence, then rescore promising poses with an affinity-oriented method
 - Identify fragments binding to hot spot residues
 - Select top 50 fragments for elaboration
 
@@ -582,7 +596,7 @@ Step 7: Fragment elaboration with RDKit
 
 Step 8: Second round of virtual screening
 - Dock elaborated molecules with DiffDock
-- Calculate binding energies and interaction patterns
+- Analyze interaction patterns and rescore poses with GNINA/MM-GBSA or another affinity-oriented method
 - Prioritize molecules with:
   * Strong binding to hot spot residues
   * Multiple H-bonds and hydrophobic contacts
@@ -767,9 +781,10 @@ Expected Output:
 - `polars` - Data manipulation
 - `matplotlib` - Visualization
 - `seaborn` - Statistical plots
-- `plotly` - Interactive plots
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `clinical-reports` - Report generation
 - `market-research-reports` - Competitive intelligence
+- `usfiscaldata` - U.S. federal R&D and economic context data
 
 **Workflow**:
 
@@ -892,10 +907,11 @@ Expected Output:
 - `pyopenms` - Mass spectrometry
 - `matchms` - Mass spectra matching
 - `cobrapy` - Constraint-based metabolic modeling
+- `pathway-enrichment` - Multi-omics pathway/gene-set enrichment
 - `statsmodels` - Multi-omics correlation
 - `networkx` - Network analysis
 - `pymc` - Bayesian modeling
-- `plotly` - Interactive network visualization
+- `scientific-visualization` - Publication-quality & interactive visualization
 
 **Workflow**:
 
@@ -1012,7 +1028,6 @@ Expected Output:
 - `vaex` - Large dataset handling
 - `dask` - Parallel computing
 - `matplotlib` - Visualization
-- `plotly` - Interactive visualization
 - `scientific-writing` - Report generation
 - `scientific-visualization` - Publication figures
 
@@ -1142,7 +1157,7 @@ Expected Output:
 - `pydicom` - DICOM handling
 - `omero-integration` - Image management
 - `matplotlib` - Visualization
-- `plotly` - Interactive visualization
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `shap` - Model interpretability
 - `clinical-reports` - Clinical validation reports
 
@@ -1265,7 +1280,7 @@ Expected Output:
 - `simpy` - Process simulation
 - `polars` - Data processing
 - `matplotlib` - Plate visualization
-- `plotly` - Interactive plate heatmaps
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `rdkit` - PAINS filtering for hits
 - `clinical-reports` - Screening report generation
 
@@ -1410,7 +1425,7 @@ Expected Output:
 - `statistical-analysis` - Hypothesis testing
 - `matplotlib` - Manhattan plots
 - `seaborn` - Visualization
-- `plotly` - Interactive visualizations
+- `scientific-visualization` - Publication-quality & interactive visualization
 
 **Workflow**:
 
@@ -1534,6 +1549,7 @@ Expected Output:
 **Objective**: Analyze resting-state fMRI data to identify altered brain connectivity patterns in disease.
 
 **Skills Used**:
+- `bids` - Organize/validate neuroimaging data in BIDS format
 - `neurokit2` - Neurophysiological signal processing
 - `neuropixels-analysis` - Neural data analysis
 - `scikit-learn` - Classification and clustering
@@ -1544,13 +1560,15 @@ Expected Output:
 - `pymc` - Bayesian modeling
 - `matplotlib` - Brain visualization
 - `seaborn` - Connectivity matrices
-- `plotly` - Interactive brain networks
+- `scientific-visualization` - Publication-quality & interactive visualization
 
 **Workflow**:
 
 ```bash
 Step 1: Load and preprocess fMRI data
 # Note: Use nilearn or similar for fMRI-specific preprocessing
+- Organize and validate the dataset in BIDS layout using the bids skill
+  (standardized sub-*/func/ structure, JSON sidecars, participants.tsv)
 - Load 4D fMRI images (BOLD signal)
 - Preprocessing:
   * Motion correction (realignment)
@@ -1677,13 +1695,14 @@ Expected Output:
 - `database-lookup` - Query ENA, GEO, UniProt, KEGG
 - `biopython` - Sequence processing
 - `pysam` - BAM file handling
+- `phylogenetics` - MAFFT/IQ-TREE/FastTree tree building
 - `etetoolkit` - Phylogenetic trees
 - `scikit-bio` - Microbial ecology
 - `networkx` - Co-occurrence networks
 - `statsmodels` - Diversity statistics
 - `statistical-analysis` - Hypothesis testing
 - `matplotlib` - Visualization
-- `plotly` - Interactive plots
+- `scientific-visualization` - Publication-quality & interactive visualization
 
 **Workflow**:
 
@@ -1822,13 +1841,15 @@ Expected Output:
 - `database-lookup` - Query ENA, UniProt, NCBI Gene
 - `biopython` - Sequence analysis
 - `pysam` - Genome assembly analysis
+- `phylogenetics` - Core-genome alignment and ML phylogenies
 - `etetoolkit` - Phylogenetic analysis
+- `polars-bio` - Fast genomic interval operations on assemblies
 - `scikit-learn` - Resistance prediction
 - `networkx` - Transmission networks
 - `statsmodels` - Trend analysis
 - `statistical-analysis` - Hypothesis testing
 - `matplotlib` - Epidemiological plots
-- `plotly` - Interactive dashboards
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `clinical-reports` - Surveillance reports
 
 **Workflow**:
@@ -2150,6 +2171,7 @@ Expected Output:
 **Skills Used**:
 - `astropy` - Units and constants
 - `sympy` - Symbolic mathematics
+- `matlab` - Matrix/numerical computing and signal processing
 - `statistical-analysis` - Statistical analysis
 - `scikit-learn` - Classification
 - `stable-baselines3` - Reinforcement learning for optimization
@@ -2158,7 +2180,7 @@ Expected Output:
 - `statsmodels` - Hypothesis testing
 - `dask` - Large-scale data processing
 - `vaex` - Out-of-core dataframes
-- `plotly` - Interactive visualization
+- `scientific-visualization` - Publication-quality & interactive visualization
 
 **Workflow**:
 
@@ -2306,8 +2328,9 @@ Expected Output:
 - `pymc` - Bayesian parameter estimation
 - `scikit-learn` - Process modeling
 - `stable-baselines3` - Real-time control optimization
+- `pufferlib` - High-throughput vectorized RL training for control policies
 - `matplotlib` - Process diagrams
-- `plotly` - Interactive process visualization
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `fluidsim` - Fluid dynamics simulation
 - `scientific-writing` - Engineering reports
 - `pdf` - Technical documentation
@@ -2507,7 +2530,6 @@ Expected Output:
 **Skills Used**:
 - `generate-image` - AI image generation and editing
 - `matplotlib` - Data visualization
-- `plotly` - Interactive visualization
 - `scientific-visualization` - Best practices
 - `scientific-schematics` - Scientific diagrams
 - `scientific-writing` - Figure caption creation
@@ -2867,7 +2889,7 @@ Expected Output:
 - `umap-learn` - Dimensionality reduction
 - `statistical-analysis` - Population statistics
 - `matplotlib` - Flow cytometry plots
-- `plotly` - Interactive gating
+- `scientific-visualization` - Publication-quality & interactive visualization
 - `clinical-reports` - Clinical flow reports
 - `exploratory-data-analysis` - Data exploration
 
@@ -2974,6 +2996,627 @@ Expected Output:
 
 ---
 
+## Geospatial & Earth Observation
+
+### Example 24: Remote Sensing for Environmental Monitoring
+
+**Objective**: Combine satellite imagery and vector data to map land-cover change and quantify environmental drivers across a watershed.
+
+**Skills Used**:
+- `geomaster` - Remote sensing, GIS, and earth-observation workflows
+- `geopandas` - Vector data (shapefiles, GeoJSON) and spatial joins
+- `zarr-python` - Chunked N-D arrays for large raster/time stacks
+- `dask` - Parallel/out-of-core processing of image cubes
+- `scikit-learn` - Land-cover classification
+- `statistical-analysis` - Trend and correlation testing
+- `matplotlib` - Mapping and charts
+- `scientific-visualization` - Publication-quality & interactive visualization
+
+**Workflow**:
+
+```bash
+Step 1: Acquire and stack imagery
+- Use geomaster to pull Sentinel-2/Landsat scenes for the area and time range
+- Compute spectral indices (NDVI, NDWI, NBR) per scene
+- Store the multi-date raster cube as a chunked Zarr array (zarr-python)
+
+Step 2: Prepare vector layers with GeoPandas
+- Load watershed boundaries, land parcels, and road networks
+- Reproject all layers to a common CRS
+- Clip rasters to the area of interest and rasterize key vector masks
+
+Step 3: Scale processing with Dask
+- Lazily load the Zarr cube as Dask arrays
+- Map index calculations and cloud masking across chunks in parallel
+
+Step 4: Land-cover classification
+- Sample labeled training pixels (forest, cropland, water, urban)
+- Train a Random Forest classifier with scikit-learn on spectral + index features
+- Produce per-date land-cover maps and accuracy metrics (confusion matrix, kappa)
+
+Step 5: Change detection and zonal statistics
+- Compute land-cover transitions between years
+- Use GeoPandas zonal stats to summarize change per sub-catchment
+- Correlate change with covariates (slope, precipitation) via statistical-analysis
+
+Step 6: Generate report
+- Time-series maps, change matrices, and trend plots
+- Per-zone summary tables and interpretation
+- Export publication-quality figures and a PDF report
+
+Expected Output:
+- Analysis-ready Zarr raster cube and classified land-cover maps
+- Quantified land-cover change with per-zone statistics
+- Environmental driver analysis and geospatial report
+```
+
+---
+
+## Time-Series Forecasting & Sensor Analytics
+
+### Example 25: Forecasting Clinical Vitals and Wearable Sensor Streams
+
+**Objective**: Forecast physiological time series and detect anomalies from wearable/ICU sensor data to support early-warning systems.
+
+**Skills Used**:
+- `timesfm-forecasting` - Zero-shot foundation-model forecasting
+- `aeon` - Time-series classification, clustering, and anomaly detection
+- `neurokit2` - Physiological signal processing (ECG, PPG, EDA)
+- `pyhealth` - Healthcare ML models and clinical pipelines
+- `statistical-analysis` - Evaluation and hypothesis testing
+- `matplotlib` - Visualization
+
+**Workflow**:
+
+```bash
+Step 1: Ingest and clean signals
+- Load multi-channel sensor streams (heart rate, SpO2, ECG, activity)
+- Use NeuroKit2 to clean ECG/PPG, detect R-peaks, and derive HRV features
+- Resample to a common cadence and handle gaps/outliers
+
+Step 2: Feature extraction and segmentation with aeon
+- Extract time-series features and segment into windows
+- Cluster typical vs atypical patterns
+- Flag anomalous windows with aeon anomaly detectors
+
+Step 3: Zero-shot forecasting with TimesFM
+- Forecast each vital sign ahead (e.g., next 30-60 min) with timesfm-forecasting
+- Produce point forecasts and quantile/uncertainty bands
+- No per-series training required (foundation model)
+
+Step 4: Clinical risk modeling with PyHealth
+- Build a deterioration/early-warning model from forecasts + EHR features
+- Evaluate with appropriate clinical metrics (AUROC, AUPRC, calibration)
+
+Step 5: Statistical evaluation
+- Backtest forecasts (MAE, MASE, coverage) with statistical-analysis
+- Compare TimesFM vs aeon baselines and test for significant differences
+
+Step 6: Generate monitoring report
+- Forecast vs actual overlays with uncertainty bands
+- Anomaly timelines and alert thresholds
+- Model performance summary and deployment recommendations
+
+Expected Output:
+- Cleaned, feature-rich physiological time series
+- Multi-horizon forecasts with uncertainty
+- Anomaly detection and early-warning model with validation
+```
+
+---
+
+## Cloud-Scale Bioinformatics
+
+### Example 26: Reproducible, Cloud-Scale Genomics Pipelines
+
+**Objective**: Run a reproducible tumor-normal and bulk RNA-seq analysis at population scale across cloud platforms, with lineage tracking and efficient variant storage.
+
+**Skills Used**:
+- `get-available-resources` - Detect CPU/GPU/memory and plan execution
+- `bulk-rnaseq` - End-to-end bulk RNA-seq orchestration
+- `nextflow` - Build/run Nextflow & nf-core pipelines
+- `pacsomatic` - nf-core/pacsomatic matched tumor-normal workflow
+- `dnanexus-integration` - DNAnexus cloud execution and data management
+- `latchbio-integration` - LatchBio SDK workflows and deployment
+- `modal` - Serverless GPU/CPU compute for custom steps
+- `optimize-for-gpu` - GPU-accelerate alignment/quantification steps
+- `tiledbvcf` - Scalable VCF ingestion and querying
+- `polars-bio` - Fast genomic interval operations
+- `gtars` - High-performance genomic interval/BED analysis
+- `lamindb` - Dataset registration and lineage tracking
+- `pydeseq2` - Differential expression
+- `pathway-enrichment` - Downstream gene-set enrichment
+
+**Workflow**:
+
+```bash
+Step 1: Plan resources
+- Run get-available-resources to detect cores/GPUs/RAM/disk
+- Choose local vs cloud execution and parallelism strategy
+
+Step 2: RNA-seq quantification
+- Use the bulk-rnaseq skill to take FASTQ -> QC (FastQC/fastp) -> STAR/Salmon -> counts
+- Register raw inputs and outputs in LaminDB for lineage
+
+Step 3: Somatic variant calling at scale
+- Prepare a pacsomatic-compliant samplesheet for matched tumor-normal BAMs
+- Launch the nf-core/pacsomatic Nextflow workflow
+- Offload heavy steps to DNAnexus or LatchBio; use Modal for custom GPU steps
+- Apply optimize-for-gpu to accelerate alignment/variant steps where supported
+
+Step 4: Variant storage and interval analysis
+- Ingest resulting VCFs into a TileDB-VCF store for incremental, queryable storage
+- Use polars-bio and gtars for overlaps, coverage, and region annotation
+
+Step 5: Differential expression and enrichment
+- Run PyDESeq2 on the counts matrix (tumor vs normal / subtype contrasts)
+- Pass ranked/DE gene lists to the pathway-enrichment skill
+
+Step 6: Track lineage and report
+- Record every artifact, transform, and parameter set in LaminDB
+- Export a reproducible pipeline report with provenance graph
+
+Expected Output:
+- Reproducible, cloud-portable RNA-seq + somatic pipelines
+- Queryable TileDB-VCF variant store
+- DE + pathway results with full data lineage
+```
+
+---
+
+## Functional Genomics & Knowledge Graphs
+
+### Example 27: Cancer Dependency Mapping and Knowledge-Graph Target Discovery
+
+**Objective**: Identify cancer-specific vulnerabilities and synthetic-lethal targets by combining dependency screens with biomedical knowledge graphs.
+
+**Skills Used**:
+- `depmap` - DepMap CRISPR dependency, drug sensitivity, gene-effect data
+- `primekg` - Precision Medicine Knowledge Graph queries
+- `database-lookup` - Cross-reference Open Targets, DrugBank, COSMIC
+- `networkx` - Graph analysis over knowledge subnetworks
+- `pathway-enrichment` - Enrichment of dependency hit sets
+- `what-if-oracle` - Structured scenario analysis of target hypotheses
+- `scikit-learn` - Predictive modeling of dependency
+- `scientific-visualization` - Publication-quality & interactive visualization
+
+**Workflow**:
+
+```bash
+Step 1: Pull dependency profiles
+- Query DepMap for gene-effect (CRISPR Chronos) scores across cell lines
+- Filter for strong, selective dependencies in the lineage of interest
+- Retrieve drug-sensitivity profiles for candidate vulnerabilities
+
+Step 2: Define context and synthetic lethality
+- Stratify cell lines by mutation/expression context
+- Identify genes essential only in a given context (synthetic-lethal candidates)
+
+Step 3: Knowledge-graph expansion with PrimeKG
+- For each candidate, query PrimeKG for connected genes, drugs, diseases, phenotypes
+- Extract relevant subgraphs and analyze with NetworkX (centrality, shortest paths)
+- Cross-reference with Open Targets/DrugBank via database-lookup
+
+Step 4: Enrichment and mechanism
+- Run pathway-enrichment on the dependency hit set
+- Map hits to pathways and protein complexes for mechanistic hypotheses
+
+Step 5: Predictive modeling
+- Train scikit-learn models predicting dependency from omics features
+- Identify biomarkers of vulnerability and validate via cross-validation
+
+Step 6: Scenario analysis and prioritization
+- Use what-if-oracle to explore best/likely/worst-case target hypotheses
+  (resistance, toxicity, tractability, competition)
+- Rank targets by selectivity, druggability, and KG support
+
+Step 7: Report
+- Dependency heatmaps, KG subnetwork diagrams, enrichment plots
+- Prioritized target list with supporting evidence and risks
+
+Expected Output:
+- Context-specific dependency and synthetic-lethal candidates
+- Knowledge-graph-supported mechanisms and drug links
+- Prioritized, de-risked target list with visualizations
+```
+
+---
+
+## Molecular Modeling & Simulation
+
+### Example 28: Molecular Dynamics and Binding Free Energy for Lead Optimization
+
+**Objective**: Refine a protein-ligand complex with molecular dynamics and estimate binding affinity to guide lead optimization.
+
+**Skills Used**:
+- `molecular-dynamics` - OpenMM/MDAnalysis simulation and trajectory analysis
+- `rowan` - Cloud molecular modeling (pKa, conformers, docking, cofolding)
+- `rdkit` - Ligand preparation and cheminformatics
+- `biopython` - Protein structure handling
+- `optimize-for-gpu` - GPU acceleration of MD and analysis
+- `matplotlib` - Plots
+- `scientific-visualization` - Publication-quality & interactive visualization
+
+**Workflow**:
+
+```bash
+Step 1: Prepare structures
+- Load the protein with BioPython; clean, protonate, and assign chains
+- Prepare ligand 3D conformers/tautomers and protonation states with RDKit
+- Use rowan for pKa/macropKa and conformer/tautomer ensembles, and to refine
+  docked or cofolded protein-ligand poses
+
+Step 2: System setup (molecular-dynamics skill)
+- Define force field, solvate, add ions, and parameterize the ligand
+- Energy minimize, then equilibrate (NVT, NPT)
+
+Step 3: Production MD
+- Run production simulations on GPU (optimize-for-gpu)
+- Save trajectories for multiple replicas
+
+Step 4: Trajectory analysis
+- Compute RMSD/RMSF, contact maps, H-bond occupancy, and pocket stability
+- Identify key interactions and conformational changes
+
+Step 5: Binding free energy
+- Estimate relative/absolute binding free energies (MM-GBSA / alchemical methods)
+- Rank analogs by predicted affinity and stability
+
+Step 6: Report
+- Trajectory plots, interaction fingerprints, and free-energy rankings
+- Recommendations for the next round of analogs
+
+Expected Output:
+- Equilibrated protein-ligand MD trajectories
+- Interaction and stability analysis
+- Binding free-energy rankings to guide optimization
+```
+
+---
+
+## Protein Engineering & Cloud Wet-Lab
+
+### Example 29: Designing and Validating an Engineered Binder
+
+**Objective**: Design a protein binder, engineer its glycosylation and stability, and validate candidates through cloud wet-lab assays.
+
+**Skills Used**:
+- `esm` - Protein language model embeddings and variant scoring
+- `hugging-science` - Scientific ML models for design/screening
+- `phylogenetics` - Homolog alignment and evolutionary context
+- `glycoengineering` - N/O-glycosylation analysis and engineering
+- `biopython` - Sequence/structure manipulation
+- `adaptyv` - Adaptyv Bio Foundry protein binding assays
+- `ginkgo-cloud-lab` - Ginkgo Cloud Lab protocol execution
+
+**Workflow**:
+
+```bash
+Step 1: Establish evolutionary context
+- Collect homologs and build an alignment/tree with the phylogenetics skill
+- Identify conserved and variable positions to guide design
+
+Step 2: Generate and score variants
+- Use ESM embeddings and variant effect scores to propose stabilizing/affinity mutations
+- Screen designs with hugging-science models (structure/function predictors)
+- Manipulate sequences and models with BioPython
+
+Step 3: Glycoengineering
+- Scan for N-glycosylation sequons (N-X-S/T) and predict O-glyco hotspots
+- Add/remove sequons to tune stability, half-life, or immunogenicity (glycoengineering)
+
+Step 4: Submit binding assays to Adaptyv
+- Design a protein binding experiment and submit via the Adaptyv Foundry API
+- Retrieve and parse measured affinities/binding results
+
+Step 5: Cloud wet-lab expression with Ginkgo
+- Submit cell-free expression / validation protocols to Ginkgo Cloud Lab
+- Track RAC execution and collect results
+
+Step 6: Iterate and report
+- Correlate predicted vs measured performance; pick the next design round
+- Report designs, glyco profiles, and assay results
+
+Expected Output:
+- Ranked, evolution- and ML-informed binder designs
+- Engineered glycosylation profiles
+- Experimental binding/expression results from Adaptyv and Ginkgo
+```
+
+---
+
+## Medical Imaging & Clinical AI
+
+### Example 30: AI-Assisted Radiology on Public Imaging Cohorts
+
+**Objective**: Train and interpret a deep learning model on public cancer imaging data and generate a clinically oriented summary.
+
+**Skills Used**:
+- `imaging-data-commons` - Query/download NCI Imaging Data Commons (CT/MR/PET)
+- `pydicom` - DICOM parsing and handling
+- `hugging-science` - Pretrained medical imaging models
+- `pytorch-lightning` - Model training
+- `optimize-for-gpu` - GPU acceleration
+- `shap` - Interpretability
+- `clinical-decision-support` - Evidence-based decision support
+- `treatment-plans` - Generate structured treatment plan documents
+
+**Workflow**:
+
+```bash
+Step 1: Acquire imaging cohort
+- Use idc-index via the imaging-data-commons skill to query CT/MR/PET by modality,
+  collection, and metadata (no authentication required)
+- Download and organize series for the task
+
+Step 2: Load and preprocess DICOM
+- Parse pixel data and metadata with pydicom
+- Resample, window, and normalize; build train/val/test splits
+
+Step 3: Model training
+- Start from a hugging-science pretrained medical imaging backbone
+- Fine-tune with PyTorch Lightning; accelerate with optimize-for-gpu
+- Track metrics (AUC, Dice/IoU for segmentation)
+
+Step 4: Evaluation and interpretability
+- Evaluate on the held-out set with confidence intervals
+- Use SHAP/saliency to explain predictions and verify clinically relevant focus
+
+Step 5: Clinical synthesis
+- Map model findings to guidance with clinical-decision-support
+- Generate a concise treatment plan document with the treatment-plans skill
+
+Step 6: Report
+- Performance metrics, example predictions with heatmaps
+- Interpretability summary and clinical caveats
+
+Expected Output:
+- Trained, interpreted imaging model on IDC data
+- Decision-support mapping and a structured treatment plan
+- Validation report with explainability
+```
+
+---
+
+## Research Ideation & Study Planning
+
+### Example 31: From Idea to a Powered, Well-Designed Study
+
+**Objective**: Move from open-ended ideation to concrete, testable hypotheses and a statistically powered, well-designed study.
+
+**Skills Used**:
+- `scientific-brainstorming` - Open-ended ideation and gap-finding
+- `consciousness-council` - Multi-perspective deliberation on directions
+- `what-if-oracle` - Structured scenario/branch analysis
+- `hypothesis-generation` - Formalize testable hypotheses
+- `hypogenic` - Data-driven hypothesis generation on tabular data
+- `experimental-design` - Choose design, randomization, and blocking
+- `statistical-power` - Sample size, MDE, and power curves
+
+**Workflow**:
+
+```bash
+Step 1: Diverge — generate ideas
+- Use scientific-brainstorming to explore the problem space and interdisciplinary links
+- Run a consciousness-council deliberation to weigh competing research directions
+
+Step 2: Stress-test directions
+- Use what-if-oracle to explore best/likely/worst/contrarian scenarios for top ideas
+- Eliminate fragile or untestable directions
+
+Step 3: Formalize hypotheses
+- Convert the chosen direction into testable hypotheses with hypothesis-generation
+- If pilot/tabular data exist, use hypogenic to mine and rank candidate hypotheses
+
+Step 4: Design the study
+- Use experimental-design to select a design (factorial, RCT, block, crossover),
+  define randomization, blocking, and treatment combinations
+
+Step 5: Power and sample size
+- Use statistical-power for a priori power analysis, minimum detectable effect,
+  and power curves across plausible effect sizes
+
+Step 6: Deliverable
+- A pre-registration-ready plan: hypotheses, design diagram, analysis plan, and
+  justified sample size
+
+Expected Output:
+- A prioritized set of testable hypotheses
+- A concrete experimental design with randomization/blocking
+- Power analysis and sample-size justification
+```
+
+---
+
+## Literature & Knowledge Management
+
+### Example 32: Systematic Literature Review and Research Knowledge Base
+
+**Objective**: Run a multi-source literature search, ingest and organize sources, and synthesize a cited, well-managed review.
+
+**Skills Used**:
+- `research-lookup` - Routed current-research search (web/deep/academic)
+- `exa-search` - Semantic web search tuned for technical content
+- `parallel-web` - Academic-focused web search/fetch and enrichment
+- `bgpt-paper-search` - Structured experimental data extracted from papers
+- `paperzilla` - Canonical papers and project recommendations
+- `liteparse` - Local PDF/Office parsing with layout/bounding boxes
+- `markitdown` - Convert documents to Markdown
+- `open-notebook` - Organize sources into AI research notebooks
+- `pyzotero` - Manage a Zotero reference library
+- `scholar-evaluation` - ScholarEval structured quality assessment
+- `dhdna-profiler` - Profile authors'/reviewers' thinking patterns
+- `citation-management` - Reference formatting
+- `literature-review` - Systematic synthesis
+
+**Workflow**:
+
+```bash
+Step 1: Multi-source search
+- Use research-lookup to route queries; broaden with exa-search and parallel-web
+- Pull structured study fields (sample sizes, methods, outcomes) via bgpt-paper-search
+- Surface canonical references and recommendations with paperzilla
+
+Step 2: Ingest and normalize sources
+- Parse local PDFs/Office files with liteparse (layout + bounding boxes)
+- Convert mixed documents to clean Markdown with markitdown
+- Organize everything into an open-notebook research notebook
+
+Step 3: Reference management
+- Store and de-duplicate references in Zotero via pyzotero
+- Tag by theme, method, and evidence level
+
+Step 4: Critical appraisal
+- Use scholar-evaluation (ScholarEval) to score methodology, analysis, and writing
+- Optionally profile argumentation/thinking style with dhdna-profiler
+
+Step 5: Synthesize
+- Use the literature-review skill to synthesize themes, gaps, and consensus/conflicts
+- Format citations with citation-management
+
+Step 6: Deliverable
+- A cited systematic review with evidence tables and a managed reference library
+
+Expected Output:
+- Comprehensive multi-source search results
+- Organized, parsed, and reference-managed corpus
+- Appraised, synthesized, fully cited literature review
+```
+
+---
+
+## Regulatory & Quality Management
+
+### Example 33: ISO 13485 Documentation for an AI Diagnostic Device
+
+**Objective**: Prepare a Quality Management System documentation package for a medical-device software product.
+
+**Skills Used**:
+- `iso-13485-certification` - Gap analysis and QMS documentation
+- `clinical-decision-support` - Clinical evidence and intended-use framing
+- `treatment-plans` - Care-pathway documentation where applicable
+- `markdown-mermaid-writing` - Process diagrams and SOP flowcharts
+- `docx` - Formatted Word deliverables
+- `pdf` - Final controlled documents
+
+**Workflow**:
+
+```bash
+Step 1: Gap analysis
+- Use the iso-13485-certification skill to assess existing documentation vs the standard
+- Identify missing procedures, records, and controls
+
+Step 2: Define scope and intended use
+- Frame intended use and clinical claims with clinical-decision-support inputs
+- Document care pathways/treatment context with treatment-plans where relevant
+
+Step 3: Author QMS documents
+- Draft required SOPs, work instructions, and quality manual sections
+- Diagram processes (design controls, CAPA, risk management) with markdown-mermaid-writing
+
+Step 4: Produce controlled deliverables
+- Export procedures and the quality manual to DOCX
+- Generate signed, version-controlled PDFs
+
+Step 5: Traceability
+- Build a requirements/records traceability matrix
+- Map each clause to its evidence
+
+Expected Output:
+- Gap-analysis report against ISO 13485
+- Complete QMS document set (SOPs, manual, diagrams)
+- Controlled DOCX/PDF deliverables with traceability
+```
+
+---
+
+## Scientific Communication & Tooling
+
+### Example 34: Publication Packaging — Diagrams, Infographics, and Venue Formatting
+
+**Objective**: Turn results into a venue-ready manuscript package with diagrams, an infographic summary, and correct formatting.
+
+**Skills Used**:
+- `markdown-mermaid-writing` - Text-based diagrams and structured docs
+- `scientific-schematics` - Scientific diagrams
+- `infographics` - AI-generated infographics with data accuracy checks
+- `venue-templates` - LaTeX templates and submission guidelines
+- `markitdown` - Convert drafts/sources to Markdown
+- `docx` - Word manuscript output
+- `latex-posters` - Conference poster
+- `pdf` - Final compiled outputs
+
+**Workflow**:
+
+```bash
+Step 1: Structure the manuscript
+- Draft the document in Markdown; add Mermaid flowcharts/diagrams (markdown-mermaid-writing)
+- Convert existing source materials to Markdown with markitdown
+
+Step 2: Build figures and schematics
+- Create mechanism/workflow schematics with scientific-schematics
+- Produce a one-page infographic summary with the infographics skill (verified data)
+
+Step 3: Apply venue formatting
+- Use venue-templates to select the correct LaTeX template and follow submission rules
+  (Nature/Science/PLOS/IEEE/ACM or a target conference)
+
+Step 4: Generate outputs
+- Compile the manuscript to PDF and a DOCX version for collaborators
+- Build a conference poster with latex-posters
+
+Step 5: Final check
+- Verify formatting, figure resolution, and reference style against venue requirements
+
+Expected Output:
+- Venue-formatted manuscript (PDF + DOCX)
+- Diagrams, schematics, and an infographic summary
+- A matching conference poster
+```
+
+---
+
+### Example 35: Building and Automating Custom Scientific Tools
+
+**Objective**: Detect repeated research workflows, draft new automation, and deploy compute-heavy steps to the cloud.
+
+**Skills Used**:
+- `autoskill` - Detect repeated workflows and draft new skills/recipes
+- `pi-agent` - Build/use the Pi terminal coding harness and skills/extensions
+- `get-available-resources` - Detect local CPU/GPU/memory
+- `optimize-for-gpu` - GPU-accelerate Python (CuPy/Numba/cuDF/cuML, etc.)
+- `modal` - Serverless on-demand GPU/CPU deployment
+- `hugging-science` - Scientific ML models to wrap as tools
+
+**Workflow**:
+
+```bash
+Step 1: Discover repeated workflows
+- Use autoskill to observe recurring research steps and match them to existing skills
+- Draft new skills or composition recipes for gaps
+
+Step 2: Prototype a custom tool
+- Build the tool/harness with pi-agent (Pi skills, extensions, or SDK embedding)
+- Wrap a relevant hugging-science model as a callable component
+
+Step 3: Profile and accelerate
+- Run get-available-resources to size the job
+- Apply optimize-for-gpu to accelerate the hot numerical paths
+
+Step 4: Deploy to the cloud
+- Package the workload on Modal for on-demand GPU/CPU execution
+- Expose it as a scheduled job or web endpoint
+
+Step 5: Document
+- Document the new skill/recipe and usage for the team
+
+Expected Output:
+- New drafted skills/composition recipes for recurring work
+- A deployed, GPU-accelerated custom tool on Modal
+- Documentation for reuse
+
+---
+
 ## Summary
 
 These examples demonstrate:
@@ -2989,38 +3632,51 @@ These examples demonstrate:
 The examples in this document cover the following skill categories:
 
 **Databases & Data Sources:**
-- `database-lookup` — unified access to 78 databases including ChEMBL, PubChem, DrugBank, UniProt, NCBI Gene, Ensembl, ClinVar, COSMIC, STRING, KEGG, Reactome, HMDB, PDB, AlphaFold DB, ZINC, GWAS Catalog, GEO, ENA, ClinicalTrials.gov, FDA, Open Targets, ClinPGx, Metabolomics Workbench, and more
+- `database-lookup` — unified access to 78+ databases including ChEMBL, PubChem, DrugBank, UniProt, NCBI Gene, Ensembl, ClinVar, COSMIC, STRING, KEGG, Reactome, HMDB, PDB, AlphaFold DB, ZINC, GWAS Catalog, GEO, ENA, ClinicalTrials.gov, FDA, Open Targets, ClinPGx, Metabolomics Workbench, and more
 - `paper-lookup` — unified access to 10 academic paper databases including PubMed, PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall
 - `cellxgene-census` — CZ CELLxGENE single-cell reference data
+- `depmap` — Cancer Dependency Map (CRISPR/drug sensitivity)
+- `primekg` — Precision Medicine Knowledge Graph
+- `imaging-data-commons` — NCI Imaging Data Commons (CT/MR/PET)
+- `usfiscaldata` — U.S. Treasury Fiscal Data API
 
 **Analysis Packages:**
-- Chemistry: `rdkit`, `datamol`, `medchem`, `molfeat`, `deepchem`, `torchdrug`, `pytdc`, `diffdock`, `pyopenms`, `matchms`, `cobrapy`
-- Genomics: `biopython`, `pysam`, `pydeseq2`, `scanpy`, `scvi-tools`, `anndata`, `gget`, `geniml`, `deeptools`, `etetoolkit`, `scikit-bio`
-- Proteins: `esm`, `bioservices`
-- Machine Learning: `scikit-learn`, `pytorch-lightning`, `torch-geometric`, `transformers`, `stable-baselines3`, `shap`
-- Statistics: `statsmodels`, `statistical-analysis`, `pymc`, `scikit-survival`
-- Visualization: `matplotlib`, `seaborn`, `plotly`, `scientific-visualization`
-- Data Processing: `polars`, `dask`, `vaex`, `networkx`
+- Chemistry & Modeling: `rdkit`, `datamol`, `medchem`, `molfeat`, `deepchem`, `torchdrug`, `pytdc`, `diffdock`, `pyopenms`, `matchms`, `cobrapy`, `rowan`, `molecular-dynamics`
+- Genomics: `biopython`, `pysam`, `pydeseq2`, `bulk-rnaseq`, `scanpy`, `scvelo`, `scvi-tools`, `anndata`, `gget`, `geniml`, `deeptools`, `etetoolkit`, `phylogenetics`, `scikit-bio`, `gtars`, `polars-bio`, `tiledbvcf`, `pathway-enrichment`, `lamindb`
+- Proteins & Engineering: `esm`, `bioservices`, `glycoengineering`, `adaptyv`
+- Machine Learning: `scikit-learn`, `pytorch-lightning`, `torch-geometric`, `transformers`, `stable-baselines3`, `pufferlib`, `shap`, `hugging-science`, `hypogenic`
+- Statistics & Design: `statsmodels`, `statistical-analysis`, `pymc`, `scikit-survival`, `statistical-power`, `experimental-design`
+- Time Series: `aeon`, `timesfm-forecasting`
+- Visualization: `matplotlib`, `seaborn`, `scientific-visualization`
+- Data Processing: `polars`, `dask`, `vaex`, `networkx`, `zarr-python`
+- Geospatial: `geomaster`, `geopandas`
 - Materials: `pymatgen`
-- Physics: `astropy`, `sympy`, `fluidsim`
+- Physics & Math: `astropy`, `sympy`, `fluidsim`, `matlab`
 - Quantum: `qiskit`, `pennylane`, `cirq`, `qutip`
-- Neuroscience: `neurokit2`, `neuropixels-analysis`
-- Pathology: `histolab`, `pathml`, `pydicom`
+- Neuroscience: `neurokit2`, `neuropixels-analysis`, `bids`
+- Pathology & Imaging: `histolab`, `pathml`, `pydicom`
 - Flow Cytometry: `flowio`
 - Dimensionality Reduction: `umap-learn`, `arboreto`
-- Lab Automation: `pylabrobot`, `opentrons-integration`, `benchling-integration`, `labarchive-integration`, `protocolsio-integration`
-- Simulation: `simpy`, `pymoo`
+- Lab Automation & Cloud Labs: `pylabrobot`, `opentrons-integration`, `benchling-integration`, `labarchive-integration`, `protocolsio-integration`, `ginkgo-cloud-lab`
+- Simulation & Optimization: `simpy`, `pymoo`
+- Compute & Pipelines: `get-available-resources`, `optimize-for-gpu`, `modal`, `nextflow`, `pacsomatic`, `dnanexus-integration`, `latchbio-integration`
+
+**Ideation, Search & Knowledge:**
+- `scientific-brainstorming`, `consciousness-council`, `hypothesis-generation`, `what-if-oracle`
+- `research-lookup`, `exa-search`, `parallel-web`, `bgpt-paper-search`, `paperzilla`
+- `liteparse`, `markitdown`, `open-notebook`, `pyzotero`, `scholar-evaluation`, `dhdna-profiler`
 
 **Writing & Reporting:**
-- `scientific-writing`, `scientific-visualization`, `scientific-schematics`, `scientific-slides`
-- `clinical-reports`, `clinical-decision-support`
-- `literature-review`, `hypothesis-generation`, `scientific-critical-thinking`
-- `research-grants`, `peer-review`
+- `scientific-writing`, `scientific-visualization`, `scientific-schematics`, `scientific-slides`, `markdown-mermaid-writing`, `infographics`
+- `clinical-reports`, `clinical-decision-support`, `treatment-plans`
+- `literature-review`, `scientific-critical-thinking`
+- `research-grants`, `peer-review`, `venue-templates`, `iso-13485-certification`
 - `pdf`, `docx`, `pptx`, `xlsx`, `latex-posters`, `pptx-posters`
 - `citation-management`, `market-research-reports`
 
-**Image & Media:**
+**Image, Media & Tooling:**
 - `generate-image`, `omero-integration`
+- `autoskill`, `pi-agent`
 
 ### How to Use These Examples
 

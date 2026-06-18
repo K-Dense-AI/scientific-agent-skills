@@ -14,10 +14,10 @@ Presets:
 """
 
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import argparse
-import os
 
 
 # Predefined style presets
@@ -166,7 +166,7 @@ def create_style_preview(style_dict=None):
     bars = ax3.bar(data['categories'], data['bar_values'],
                    edgecolor='black', linewidth=1)
     # Color bars with gradient
-    colors = plt.cm.viridis(np.linspace(0.2, 0.8, len(bars)))
+    colors = mpl.colormaps['viridis'](np.linspace(0.2, 0.8, len(bars)))
     for bar, color in zip(bars, colors):
         bar.set_facecolor(color)
     ax3.set_xlabel('Categories')
@@ -299,7 +299,8 @@ def interactive_mode():
     print("  5. Color scheme")
     print("  6. Done, show preview")
 
-    while True:
+    max_customization_steps = 20
+    for _ in range(max_customization_steps):
         choice = input("\nSelect option (1-6): ").strip()
 
         if choice == '1':
@@ -332,6 +333,8 @@ def interactive_mode():
 
         elif choice == '6':
             break
+    else:
+        print("\nReached customization step limit; showing preview with current settings.")
 
     return style_dict
 

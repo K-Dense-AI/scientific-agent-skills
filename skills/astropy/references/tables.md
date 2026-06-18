@@ -373,6 +373,12 @@ row = t.loc[12345]  # Find row where id=12345
 
 # Range queries
 subset = t.loc[100:200]
+
+# With multiple indices, select which index to use explicitly.
+# t.loc["b", 2] (index name as first element) is deprecated since 7.2
+# and slated for removal in 9.0.
+t.add_index('name')
+row = t.loc.with_index('name')['M31']
 ```
 
 ## Table Metadata

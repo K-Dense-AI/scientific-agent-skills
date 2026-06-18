@@ -1,17 +1,15 @@
 ---
 name: esm
-description: Comprehensive toolkit for EvolutionaryScale protein language models including ESM3 (generative multimodal design across sequence, structure, and function) and ESM C (efficient embeddings). Use for protein sequence/structure/function tasks, inverse folding, embeddings, variant design, and ESMFold2 structure prediction via Biohub. Supports local open weights (Python 3.12, esm on PyPI) and cloud Forge/Biohub APIs with ESM_API_KEY authentication.
+description: Use when working directly with the `esm` Python SDK, ESM3 or ESMC model IDs, Forge/Biohub inference clients, or ESMFold2 folding workflows.
 license: MIT license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # ESM: Evolutionary Scale Modeling
 
 ## Overview
 
-ESM provides state-of-the-art protein language models for understanding, generating, and designing proteins. This skill enables working with two model families: ESM3 for generative protein design across sequence, structure, and function, and ESM C for efficient protein representation learning and embeddings.
+ESM provides protein language models for understanding, generating, and designing proteins. Use this skill for current EvolutionaryScale/Biohub workflows: ESM3 for generative design, ESMC for representation learning and embeddings, hosted Forge/Biohub inference, and ESMFold2 all-atom structure prediction.
 
 ## Core Capabilities
 
@@ -31,8 +29,8 @@ Generate novel protein sequences with desired properties using multimodal genera
 from esm.models.esm3 import ESM3
 from esm.sdk.api import ESM3InferenceClient, ESMProtein, GenerationConfig
 
-# Load model locally
-model: ESM3InferenceClient = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda")
+# Load local open weights after accepting the license on Hugging Face.
+model: ESM3InferenceClient = ESM3.from_pretrained("esm3-open").to("cuda")
 
 # Create protein prompt
 protein = ESMProtein(sequence="MPRT___KEND")  # '_' represents masked positions
@@ -49,7 +47,7 @@ import os
 import esm
 from esm.sdk.api import ESMProtein, GenerationConfig
 
-# Same interface as local ESM3 — token from ESM_API_KEY (see Authentication)
+# Same interface as local ESM3; token from ESM_API_KEY (see Authentication)
 model = esm.sdk.client("esm3-medium-2024-08", token=os.environ["ESM_API_KEY"])
 
 # Generate
@@ -107,17 +105,19 @@ Generate high-quality embeddings for downstream tasks like function prediction, 
 
 ```python
 from esm.models.esmc import ESMC
-from esm.sdk.api import ESMProtein
+from esm.sdk.api import ESMProtein, LogitsConfig
 
 # Load ESM C model
-model = ESMC.from_pretrained("esmc-300m").to("cuda")
+model = ESMC.from_pretrained("esmc_300m").to("cuda")
 
 # Get embeddings
 protein = ESMProtein(sequence="MPRTKEINDAGLIVHSP...")
 protein_tensor = model.encode(protein)
-
-# Generate embeddings
-embeddings = model.forward(protein_tensor)
+logits_output = model.logits(
+    protein_tensor,
+    LogitsConfig(sequence=True, return_embeddings=True),
+)
+embeddings = logits_output.embeddings
 ```
 
 **Batch processing:**
@@ -130,7 +130,13 @@ proteins = [
     ESMProtein(sequence="KTEFLNDGR...")
 ]
 
-embeddings_list = [model.logits(model.forward(model.encode(p))) for p in proteins]
+embeddings_list = [
+    model.logits(
+        model.encode(p),
+        LogitsConfig(sequence=True, return_embeddings=True),
+    ).embeddings
+    for p in proteins
+]
 ```
 
 See `references/esm-c-api.md` for ESM C model details, efficiency comparisons, and advanced embedding strategies.
@@ -184,12 +190,13 @@ protein = model.generate(protein, config)
 
 ### 6. Batch Processing with Forge API
 
-Process multiple proteins efficiently using Forge's async executor.
+Process multiple proteins efficiently using Forge's async methods.
 
 ```python
 import os
 import asyncio
 import esm
+from esm.sdk.api import ESMProtein, GenerationConfig
 
 client = esm.sdk.client("esm3-medium-2024-08", token=os.environ["ESM_API_KEY"])
 
@@ -211,25 +218,27 @@ See `references/forge-api.md` for detailed Forge API documentation, authenticati
 ## Model Selection Guide
 
 **ESM3 Models (Generative):**
-- `esm3-sm-open-v1` (1.4B) - Open weights, local usage, good for experimentation
+- `esm3-open` (1.4B) - Open weights, local usage after accepting the Hugging Face license
 - `esm3-medium-2024-08` (7B) - Best balance of quality and speed (Forge only)
 - `esm3-large-2024-03` (98B) - Highest quality, slower (Forge only)
 
 **ESM C Models (Embeddings):**
-- `esmc-300m` (30 layers) - Lightweight, fast inference (open weights, local)
-- `esmc-600m` (36 layers) - Balanced performance (open weights, local)
+- `esmc_300m` / `esmc-300m-2024-12` (30 layers) - Lightweight, fast inference (open weights, local)
+- `esmc_600m` / `esmc-600m-2024-12` (36 layers) - Balanced performance (open weights, local)
 - `esmc-6b-2024-12` (80 layers) - Maximum quality (Forge API; local 6B weights require Forge or SageMaker)
 
+Local `ESMC.from_pretrained()` examples use underscore aliases (`esmc_300m`, `esmc_600m`). Hosted API clients use dated model IDs such as `esmc-600m-2024-12`.
+
 **Selection criteria:**
-- **Local development/testing:** Use `esm3-sm-open-v1` or `esmc-300m`
+- **Local development/testing:** Use `esm3-open` or `esmc_300m`
 - **Production quality:** Use `esm3-medium-2024-08` via Forge
 - **Maximum accuracy:** Use `esm3-large-2024-03` or `esmc-6b-2024-12` via Forge
-- **High throughput:** Use Forge API with batch executor
+- **High throughput:** Use Forge or Biohub APIs with explicit async concurrency limits
 - **Cost optimization:** Use smaller models, implement caching strategies
 
 ## Installation
 
-Install from PyPI ([`esm` on PyPI](https://pypi.org/project/esm/) by EvolutionaryScale). Requires **Python 3.12** (`>=3.12,<3.13` for current releases).
+Install from PyPI ([`esm` on PyPI](https://pypi.org/project/esm/) by EvolutionaryScale). Current PyPI release: **3.2.3** (Oct 14, 2025). Requires **Python >=3.12,<3.13**.
 
 **Basic installation:**
 
@@ -244,7 +253,7 @@ uv pip install "esm==3.2.3"
 uv pip install flash-attn --no-build-isolation
 ```
 
-The Forge client ships with the `esm` package — no extra install for cloud inference.
+The Forge client ships with the `esm` package - no extra install for ESM3 or ESMC Forge inference.
 
 ## Authentication
 
@@ -252,7 +261,7 @@ Forge API access requires an API key. Never hardcode tokens in scripts or commit
 
 1. Check whether `ESM_API_KEY` is already set in the environment.
 2. If not, check a local `.env` for `ESM_API_KEY` only (do not load unrelated secrets).
-3. If still missing, create a key at [Forge](https://forge.evolutionaryscale.ai) (or [Biohub developer console](https://biohub.ai/developer-console/api-keys) for newer ESMFold2 endpoints).
+3. If still missing, create a key in the [Biohub developer console](https://biohub.ai/developer-console/api-keys) for Biohub APIs or [Forge](https://forge.evolutionaryscale.ai) for legacy Forge-hosted ESM3/ESMC access.
 
 ```python
 import os
@@ -260,9 +269,9 @@ import os
 token = os.environ["ESM_API_KEY"]  # raises KeyError if unset
 ```
 
-`esm.sdk.client()` reads `ESM_API_KEY` automatically when `token` is omitted.
+`esm.sdk.client()` reads `ESM_API_KEY` automatically when `token` is omitted. Keep endpoint URLs fixed to trusted hosts such as `https://forge.evolutionaryscale.ai` or `https://biohub.ai`; do not take API hosts from untrusted user input.
 
-**Biohub platform:** EvolutionaryScale is migrating some services (including ESMFold2 structure prediction) to [biohub.ai](https://biohub.ai). SDK class names may still reference "Forge". See `references/biohub-platform.md` for ESMFold2 and Biohub-specific setup.
+**Biohub platform:** EvolutionaryScale and Forge now surface current hosted models through [biohub.ai](https://biohub.ai). SDK class names may still reference "Forge". See `references/biohub-platform.md` for ESMFold2 and Biohub-specific setup.
 
 ## Common Workflows
 
@@ -288,7 +297,7 @@ These references contain detailed API specifications, parameter descriptions, an
 ## Best Practices
 
 **For generation tasks:**
-- Start with smaller models for prototyping (`esm3-sm-open-v1`)
+- Start with smaller models for prototyping (`esm3-open`)
 - Use temperature parameter to control diversity (0.0 = deterministic, 1.0 = diverse)
 - Implement iterative refinement with chain-of-thought for complex designs
 - Validate generated sequences with structure prediction or wet-lab experiments
@@ -307,7 +316,7 @@ These references contain detailed API specifications, parameter descriptions, an
 
 ## Resources and Documentation
 
-- **GitHub Repository:** https://github.com/evolutionaryscale/esm (releases through v3.2.x; see also [Biohub/esm](https://github.com/Biohub/esm) for ESMFold2)
+- **GitHub Repository:** https://github.com/Biohub/esm (current ESMC/ESMFold2/Biohub docs; ESM3 docs remain linked from the repository)
 - **Forge Platform:** https://forge.evolutionaryscale.ai
 - **Biohub Platform:** https://biohub.ai
 - **Scientific Paper:** Hayes et al., Science (2025) - https://www.science.org/doi/10.1126/science.ads0018
@@ -315,9 +324,9 @@ These references contain detailed API specifications, parameter descriptions, an
   - ESM3 Release: https://www.evolutionaryscale.ai/blog/esm3-release
   - ESM C Launch: https://www.evolutionaryscale.ai/blog/esm-cambrian
 - **Community:** Slack community at https://bit.ly/3FKwcWd
-- **Model Weights:** HuggingFace EvolutionaryScale organization
+- **Model Weights:** Hugging Face EvolutionaryScale and Biohub organizations
 
 ## Responsible Use
 
-ESM is designed for beneficial applications in protein engineering, drug discovery, and scientific research. Follow the Responsible Biodesign Framework (https://responsiblebiodesign.ai/) when designing novel proteins. Consider biosafety and ethical implications of protein designs before experimental validation.
+ESM is designed for beneficial applications in protein engineering, drug discovery, and scientific research. Follow the Responsible Biodesign Framework (https://responsiblebiodesign.ai/) and Biohub Acceptable Use Policy (https://biohub.org/acceptable-use-policy/) when designing novel proteins. Consider biosafety and ethical implications of protein designs before experimental validation.
 

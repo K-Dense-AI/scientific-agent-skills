@@ -1,10 +1,10 @@
 # UMAP API Reference
 
-Reference for **umap-learn 0.5.12** (Python >=3.9). See [official API guide](https://umap-learn.readthedocs.io/en/latest/api.html) for the full upstream reference.
+Reference for **umap-learn 0.5.12** (Python >=3.9; `scikit-learn>=1.6`). See [official API guide](https://umap-learn.readthedocs.io/en/latest/api.html) and the 0.5.12 GitHub tag for the full upstream reference.
 
 ## UMAP Class
 
-`umap.UMAP(n_neighbors=15, n_components=2, metric='euclidean', n_epochs=None, learning_rate=1.0, init='spectral', min_dist=0.1, spread=1.0, low_memory=True, set_op_mix_ratio=1.0, local_connectivity=1.0, repulsion_strength=1.0, negative_sample_rate=5, transform_queue_size=4.0, a=None, b=None, random_state=None, metric_kwds=None, angular_rp_forest=False, target_n_neighbors=-1, target_metric='categorical', target_metric_kwds=None, target_weight=0.5, transform_seed=42, transform_mode='embedding', force_approximation_algorithm=False, verbose=False, unique=False, densmap=False, dens_lambda=2.0, dens_frac=0.3, dens_var_shift=0.1, output_dens=False, disconnection_distance=None, precomputed_knn=(None, None, None))`
+`umap.UMAP(n_neighbors=15, n_components=2, metric='euclidean', metric_kwds=None, output_metric='euclidean', output_metric_kwds=None, n_epochs=None, learning_rate=1.0, init='spectral', min_dist=0.1, spread=1.0, low_memory=True, n_jobs=-1, set_op_mix_ratio=1.0, local_connectivity=1.0, repulsion_strength=1.0, negative_sample_rate=5, transform_queue_size=4.0, a=None, b=None, random_state=None, angular_rp_forest=False, target_n_neighbors=-1, target_metric='categorical', target_metric_kwds=None, target_weight=0.5, transform_seed=42, transform_mode='embedding', force_approximation_algorithm=False, verbose=False, tqdm_kwds=None, unique=False, densmap=False, dens_lambda=2.0, dens_frac=0.3, dens_var_shift=0.1, output_dens=False, disconnection_distance=None, precomputed_knn=(None, None, None))`
 
 Find low-dimensional embedding that approximates the underlying manifold of the data.
 
@@ -45,6 +45,9 @@ Distance metric to use. Accepts:
 - `'chebyshev'`: Chebyshev distance
 - `'minkowski'`: Minkowski distance (specify p with metric_kwds)
 - `'precomputed'`: Use precomputed distance matrix
+
+#### output_metric (str or callable, default: 'euclidean')
+Distance metric for the embedding space. Most workflows should keep the Euclidean default; advanced workflows can use a supported output metric with `output_metric_kwds`.
 
 #### min_dist (float, default: 0.1)
 Effective minimum distance between embedded points. Controls how tightly points are packed together. Smaller values result in clumpier embeddings.
@@ -125,8 +128,14 @@ Method for transforming new data:
 #### low_memory (bool, default: True)
 Whether to use a memory-efficient implementation. Set to False only if memory is not a constraint and you want faster performance.
 
+#### n_jobs (int, default: -1)
+Number of parallel jobs to use where supported. `-1` uses all available processors. Setting `random_state` can limit parallel optimization in favor of reproducibility.
+
 #### verbose (bool, default: False)
 Whether to print progress messages during fitting.
+
+#### tqdm_kwds (dict, default: None)
+Keyword arguments passed to the tqdm progress bar when progress reporting is enabled.
 
 #### unique (bool, default: False)
 Whether to consider only unique data points. Set to True if you know your data contains many duplicates to improve performance.
@@ -154,7 +163,7 @@ Fraction of dataset used for density estimation in DensMAP.
 Regularization parameter for density estimation in DensMAP.
 
 #### output_dens (bool, default: False)
-Whether to output local density estimates in addition to the embedding. Results stored in `rad_orig_` and `rad_emb_` attributes.
+Whether to output local density estimates in addition to the embedding. When enabled, `fit_transform()` returns `(embedding, original_local_radii, embedded_local_radii)` and fitted objects expose density-related attributes such as `rad_orig_` and `rad_emb_`.
 
 ### Other Parameters
 
@@ -178,12 +187,13 @@ Precomputed k-nearest neighbors as (knn_indices, knn_dists, knn_search_index). U
 
 ## Methods
 
-### fit(X, y=None)
+### fit(X, y=None, ensure_all_finite=True, **kwargs)
 Fit the UMAP model to the data.
 
 **Parameters:**
 - `X`: array-like, shape (n_samples, n_features) - Training data
 - `y`: array-like, shape (n_samples,), optional - Target values for supervised dimension reduction
+- `ensure_all_finite`: bool or sklearn-compatible option - Controls finite-value validation during fitting
 
 **Returns:**
 - `self`: Fitted UMAP object
@@ -236,11 +246,12 @@ Transform data from the embedded space back to the original data space.
 - Works poorly outside the convex hull of the training embedding
 - Reconstruction quality varies by region
 
-### update(X)
+### update(X, ensure_all_finite=True)
 Update the model with new data. Allows incremental fitting.
 
 **Parameters:**
 - `X`: array-like, shape (n_samples, n_features) - New data to incorporate
+- `ensure_all_finite`: bool or sklearn-compatible option - Controls finite-value validation during update
 
 **Returns:**
 - `self`: Updated UMAP object
@@ -287,7 +298,7 @@ list - Random projection forest used for approximate nearest neighbor search.
 
 ## ParametricUMAP Class
 
-`umap.parametric_umap.ParametricUMAP(encoder=None, decoder=None, parametric_reconstruction=False, autoencoder_loss=False, reconstruction_validation=None, dims=None, batch_size=None, n_training_epochs=1, loss_report_frequency=10, optimizer=None, keras_fit_kwargs={}, **kwargs)`
+`umap.parametric_umap.ParametricUMAP(batch_size=None, dims=None, encoder=None, decoder=None, parametric_reconstruction=False, parametric_reconstruction_loss_fcn=None, parametric_reconstruction_loss_weight=1.0, autoencoder_loss=False, reconstruction_validation=None, global_correlation_loss_weight=0, landmark_loss_fn=None, landmark_loss_weight=1.0, keras_fit_kwargs={}, **kwargs)`
 
 Install with `uv pip install "umap-learn[parametric-umap]==0.5.12"`. Parametric UMAP uses neural networks to learn the embedding function.
 
@@ -302,8 +313,17 @@ Keras model for decoding embeddings back to data space. Only used if parametric_
 #### parametric_reconstruction (bool, default: False)
 Whether to use parametric reconstruction. Requires decoder model.
 
+#### parametric_reconstruction_loss_fcn (callable, default: None)
+Custom reconstruction loss function for decoder training.
+
+#### parametric_reconstruction_loss_weight (float, default: 1.0)
+Weight applied to the parametric reconstruction loss.
+
 #### autoencoder_loss (bool, default: False)
 Whether to include reconstruction loss in the optimization. Requires decoder model.
+
+#### global_correlation_loss_weight (float, default: 0)
+Weight for global correlation loss, used to encourage preservation of broad distance relationships.
 
 #### reconstruction_validation (tuple, default: None)
 Validation data (X_val, y_val) for monitoring reconstruction loss during training.
@@ -314,21 +334,27 @@ Input dimensions for the encoder network. Required if providing custom encoder.
 #### batch_size (int, default: None)
 Batch size for neural network training. If None, determined automatically.
 
-#### n_training_epochs (int, default: 1)
-Number of training epochs for the neural networks. More epochs improve quality but increase training time.
+#### landmark_loss_fn (callable, default: None)
+Loss function used when retraining with landmark positions.
 
-#### loss_report_frequency (int, default: 10)
-How often to report loss during training.
-
-#### optimizer (tensorflow.keras.optimizers.Optimizer, default: None)
-Keras optimizer for training. If None, uses Adam with learning_rate parameter.
+#### landmark_loss_weight (float, default: 1.0)
+Weight applied to landmark loss relative to the UMAP loss.
 
 #### keras_fit_kwargs (dict, default: {})
 Additional keyword arguments passed to the Keras fit() method.
 
+#### Training epoch attributes
+`ParametricUMAP` initializes `n_training_epochs=1` and `loss_report_frequency=10` internally. Set these attributes after construction when you need longer neural-network training.
+
 ### Methods
 
 Same as UMAP class, but transform() and inverse_transform() use learned neural networks for faster inference.
+
+#### fit(X, y=None, precomputed_distances=None, landmark_positions=None)
+Fit the parametric model. `landmark_positions` can be used for landmarked retraining workflows.
+
+#### save(save_location, verbose=True, exclude_raw_data=False)
+Save the Parametric UMAP object and Keras networks. Use `load_ParametricUMAP(save_location)` to load it again; plain pickle is not sufficient for models that contain Keras networks.
 
 ## Utility Functions
 
@@ -354,7 +380,7 @@ Fit a, b params for the UMAP curve from spread and min_dist.
 
 ## AlignedUMAP Class
 
-`umap.AlignedUMAP(n_neighbors=15, n_components=2, metric='euclidean', alignment_regularisation=1e-2, alignment_window_size=3, **kwargs)`
+`umap.AlignedUMAP(n_neighbors=15, n_components=2, metric='euclidean', metric_kwds=None, n_epochs=None, learning_rate=1.0, init='spectral', alignment_regularisation=0.01, alignment_window_size=3, min_dist=0.1, spread=1.0, low_memory=False, set_op_mix_ratio=1.0, local_connectivity=1.0, repulsion_strength=1.0, negative_sample_rate=5, transform_queue_size=4.0, a=None, b=None, random_state=None, angular_rp_forest=False, target_n_neighbors=-1, target_metric='categorical', target_metric_kwds=None, target_weight=0.5, transform_seed=42, force_approximation_algorithm=False, verbose=False, unique=False)`
 
 UMAP variant for aligning multiple related datasets.
 
@@ -368,11 +394,15 @@ Number of adjacent datasets to align.
 
 ### Methods
 
-#### fit(X)
+#### fit(X, relations=..., y=None)
 Fit model to multiple datasets.
 
 **Parameters:**
 - `X`: list of arrays - List of datasets to align
+- `relations`: list of dictionaries - Mappings between sample indices in consecutive datasets; required for meaningful alignment
+
+#### update(X, relations=..., y=None)
+Append a new dataset to an existing aligned model. Use backward-looking relation mappings from the new dataset to the prior window.
 
 **Returns:**
 - `self`: Fitted model
@@ -461,7 +491,7 @@ from umap.parametric_umap import ParametricUMAP
 
 # Define custom encoder
 encoder = tf.keras.Sequential([
-    tf.keras.layers.InputLayer(input_shape=(input_dim,)),
+    tf.keras.layers.InputLayer(shape=(input_dim,)),
     tf.keras.layers.Dense(256, activation='relu'),
     tf.keras.layers.Dropout(0.3),
     tf.keras.layers.Dense(128, activation='relu'),
@@ -471,7 +501,7 @@ encoder = tf.keras.Sequential([
 
 # Define decoder for reconstruction
 decoder = tf.keras.Sequential([
-    tf.keras.layers.InputLayer(input_shape=(2,)),
+    tf.keras.layers.InputLayer(shape=(2,)),
     tf.keras.layers.Dense(128, activation='relu'),
     tf.keras.layers.Dense(256, activation='relu'),
     tf.keras.layers.Dense(input_dim)
@@ -484,12 +514,12 @@ embedder = ParametricUMAP(
     dims=(input_dim,),
     parametric_reconstruction=True,
     autoencoder_loss=True,
-    n_training_epochs=10,
     batch_size=128,
     n_neighbors=15,
     min_dist=0.1,
     random_state=42
 )
+embedder.n_training_epochs = 10
 
 embedding = embedder.fit_transform(data)
 new_embedding = embedder.transform(new_data)
@@ -510,11 +540,7 @@ reducer = umap.UMAP(
     random_state=42
 )
 
-embedding = reducer.fit_transform(data)
-
-# Access density estimates
-original_density = reducer.rad_orig_  # Density in original space
-embedded_density = reducer.rad_emb_   # Density in embedded space
+embedding, original_density, embedded_density = reducer.fit_transform(data)
 ```
 
 ### Aligned UMAP for Time Series
@@ -524,6 +550,11 @@ from umap import AlignedUMAP
 
 # Multiple related datasets (e.g., different time points)
 datasets = [day1_data, day2_data, day3_data, day4_data]
+relations = [
+    {day1_idx: day2_idx for day1_idx, day2_idx in matched_day1_to_day2},
+    {day2_idx: day3_idx for day2_idx, day3_idx in matched_day2_to_day3},
+    {day3_idx: day4_idx for day3_idx, day4_idx in matched_day3_to_day4},
+]
 
 # Align embeddings
 mapper = AlignedUMAP(
@@ -534,7 +565,7 @@ mapper = AlignedUMAP(
     random_state=42
 )
 
-mapper.fit(datasets)
+mapper.fit(datasets, relations=relations)
 
 # Access aligned embeddings
 aligned_embeddings = mapper.embeddings_

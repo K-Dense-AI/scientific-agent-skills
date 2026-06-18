@@ -3,9 +3,7 @@ name: histolab
 description: Lightweight WSI tile extraction and preprocessing. Use for basic slide processing, tissue detection, tile extraction, and stain normalization for H&E images. Best for simple pipelines, dataset preparation, and quick tile-based analysis. For advanced spatial proteomics, multiplexed imaging, or deep learning pipelines use pathml.
 license: Apache-2.0 license
 compatibility: Requires Python 3.8–3.11 (histolab 0.7.0), OpenSlide system libraries, and Linux or macOS. Sample data via histolab.data requires pooch.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Histolab

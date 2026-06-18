@@ -78,11 +78,13 @@ df.select(pl.all() * 2)
 
 **Pattern matching:**
 ```python
+import polars.selectors as cs
+
 # All columns ending with "_value"
 df.select(pl.col("^.*_value$") * 100)
 
 # All numeric columns
-df.select(pl.col(pl.NUMERIC_DTYPES) + 1)
+df.select(cs.numeric() + 1)
 ```
 
 **Exclude patterns:**
@@ -148,7 +150,7 @@ Convert between types explicitly:
 df.select(
     pl.col("age").cast(pl.Float64),
     pl.col("date_string").str.strptime(pl.Date, "%Y-%m-%d"),
-    pl.col("id").cast(pl.Utf8)
+    pl.col("id").cast(pl.String)
 )
 ```
 
@@ -271,7 +273,7 @@ Process data larger than memory:
 ```python
 # Enable streaming for very large datasets
 lf = pl.scan_csv("very_large.csv")
-result = lf.filter(pl.col("age") > 25).collect(streaming=True)
+result = lf.filter(pl.col("age") > 25).collect(engine="streaming")
 ```
 
 **Streaming benefits:**
@@ -358,7 +360,7 @@ Polars enforces strict typing:
 
 # Must cast explicitly
 df.with_columns(
-    pl.col("int_col").cast(pl.Utf8) + "_suffix"
+    pl.col("int_col").cast(pl.String) + "_suffix"
 )
 ```
 

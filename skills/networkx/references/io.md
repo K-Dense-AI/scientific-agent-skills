@@ -105,11 +105,8 @@ nx.write_pajek(G, 'graph.net')
 
 ### LEDA Format
 ```python
-# Read LEDA format
+# Read LEDA format (read-only; NetworkX has no LEDA writer)
 G = nx.read_leda('graph.leda')
-
-# Write LEDA format
-nx.write_leda(G, 'graph.leda')
 ```
 
 ## Working with Pandas
@@ -214,6 +211,12 @@ with open('graph.json', 'w') as f:
 with open('graph.json', 'r') as f:
     data = json.load(f)
 G = nx.node_link_graph(data)
+
+# Since NetworkX 3.6 the edge list is stored under the "edges" key.
+# Older files (and some d3.js examples) use "links" — pass edges="links"
+# to read or write that layout:
+G = nx.node_link_graph(data, edges="links")
+data = nx.node_link_data(G, edges="links")
 ```
 
 ### Adjacency Data Format
@@ -255,11 +258,9 @@ with open('graph.pkl', 'wb') as f:
 # Read pickle
 with open('graph.pkl', 'rb') as f:
     G = pickle.load(f)
-
-# NetworkX convenience functions
-nx.write_gpickle(G, 'graph.gpickle')
-G = nx.read_gpickle('graph.gpickle')
 ```
+
+Note: `nx.write_gpickle` / `nx.read_gpickle` were removed in NetworkX 3.0 — use the standard `pickle` module as shown above. Only unpickle files from trusted sources; pickle can execute arbitrary code on load.
 
 ## CSV Files
 
@@ -293,6 +294,15 @@ import pandas as pd
 conn = sqlite3.connect('network.db')
 df = pd.read_sql_query("SELECT source, target, weight FROM edges", conn)
 G = nx.from_pandas_edgelist(df, 'source', 'target', edge_attr='weight')
+conn.close()
+
+# When filtering on user-supplied values, always use parameterized queries —
+# never interpolate user input into the SQL string:
+conn = sqlite3.connect('network.db')
+df = pd.read_sql_query(
+    "SELECT source, target, weight FROM edges WHERE weight > ?",
+    conn, params=(min_weight,)
+)
 conn.close()
 
 # Write to SQL database
@@ -348,14 +358,19 @@ A = nx.to_scipy_sparse_array(G)
 mmwrite('graph.mtx', A)
 ```
 
-### Shapefile (for Geographic Networks)
+### Geographic Networks (Shapefiles, GeoDataFrames)
+`nx.read_shp` / `nx.write_shp` were removed in NetworkX 3.0. Use GeoPandas with momepy (or osmnx for street networks) instead:
 ```python
-# Requires pyshp library
-# Read geographic network from shapefile
-G = nx.read_shp('roads.shp')
+# uv pip install geopandas momepy
+import geopandas as gpd
+import momepy
 
-# Write to shapefile
-nx.write_shp(G, 'network')
+# Read line geometries from a shapefile and convert to a graph
+gdf = gpd.read_file('roads.shp')
+G = momepy.gdf_to_nx(gdf, approach='primal')
+
+# Convert back to GeoDataFrames
+nodes_gdf, edges_gdf = momepy.nx_to_gdf(G)
 ```
 
 ## Format Selection Guidelines
@@ -399,8 +414,9 @@ with gzip.open('graph.adjlist.gz', 'wt') as f:
 with gzip.open('graph.adjlist.gz', 'rt') as f:
     G = nx.read_adjlist(f)
 
-# Use binary formats (faster)
-nx.write_gpickle(G, 'graph.gpickle')  # Faster than text formats
+# Use binary formats (faster than text formats)
+with open('graph.pkl', 'wb') as f:
+    pickle.dump(G, f)
 
 # Use sparse matrices for adjacency
 A = nx.to_scipy_sparse_array(G, format='csr')  # Memory efficient

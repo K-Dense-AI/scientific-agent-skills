@@ -18,7 +18,7 @@ try:
     from rdkit import Chem
     from rdkit.Chem import Descriptors, Lipinski
 except ImportError:
-    print("Error: RDKit not installed. Install with: conda install -c conda-forge rdkit")
+    print("Error: RDKit not installed. Install with: uv pip install rdkit")
     sys.exit(1)
 
 

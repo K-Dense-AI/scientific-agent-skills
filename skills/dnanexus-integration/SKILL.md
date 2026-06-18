@@ -3,9 +3,8 @@ name: dnanexus-integration
 description: DNAnexus cloud genomics platform. Build apps/applets, manage data (upload/download), dxpy Python SDK, run workflows, FASTQ/BAM/VCF, for genomics pipeline development and execution.
 license: Unknown
 compatibility: Requires a DNAnexus account
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "DX_SECURITY_CONTEXT", "prompt": "DNAnexus auth token context (normally set by `dx login`).", "required_for": "optional features"}, {"name": "DX_ASSET_BWA", "prompt": "Optional asset id for the BWA example.", "required_for": "optional features"}]
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc.", "openclaw": {"envVars": [{"name": "DX_SECURITY_CONTEXT", "required": false, "description": "DNAnexus auth token context (normally set by `dx login`)."}, {"name": "DX_ASSET_BWA", "required": false, "description": "Optional asset id for the BWA example."}]}}
 ---
 
 # DNAnexus Integration

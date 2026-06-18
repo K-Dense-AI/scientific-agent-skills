@@ -4,9 +4,7 @@ description: Deep learning framework (PyTorch Lightning / lightning package). Or
 allowed-tools: Read Write Edit Bash
 license: Apache-2.0 license
 compatibility: Requires Python 3.10+ and lightning 2.6+ (or pytorch-lightning 2.6+). GPU training needs CUDA-capable PyTorch. Optional loggers (wandb, mlflow, comet-ml) and DeepSpeed require separate installs.
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
 ---
 
 # PyTorch Lightning

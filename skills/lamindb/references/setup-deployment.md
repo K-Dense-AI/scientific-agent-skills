@@ -7,11 +7,11 @@ This document covers installation, configuration, instance management, storage o
 ### Basic Installation
 
 ```bash
-# Install LaminDB
-pip install lamindb
+# Install the current validated baseline
+uv pip install 'lamindb==2.5.1'
 
-# Or with pip3
-pip3 install lamindb
+# Minimal namespace-only package for lightweight clients
+uv pip install 'lamindb-core==2.5.1'
 ```
 
 ### Installation with Extras
@@ -20,33 +20,35 @@ Install optional dependencies for specific functionality:
 
 ```bash
 # Google Cloud Platform support
-pip install 'lamindb[gcp]'
+uv pip install 'lamindb[gcp]==2.5.1'
 
 # Flow cytometry formats
-pip install 'lamindb[fcs]'
+uv pip install 'lamindb[fcs]==2.5.1'
 
-# Array storage and streaming (Zarr support)
-pip install 'lamindb[zarr]'
+# Array storage and streaming (Zarr v2 support)
+uv pip install 'lamindb[zarr-v2]==2.5.1'
 
 # AWS S3 support (usually included by default)
-pip install 'lamindb[aws]'
+uv pip install 'lamindb==2.5.1'
 
 # Multiple extras
-pip install 'lamindb[gcp,zarr,fcs]'
+uv pip install 'lamindb[gcp,zarr-v2,fcs]==2.5.1'
 ```
 
 ### Module Plugins
 
 ```bash
 # Biological ontologies (Bionty)
-pip install bionty
+uv pip install 'bionty==2.4.0'
 
 # Wet lab functionality
-pip install lamindb-wetlab
+uv pip install 'lamindb-wetlab==<reviewed-version>'
 
-# Clinical data (OMOP CDM)
-pip install lamindb-clinical
+# Clinical schemas, such as clinicore or OMOP-focused modules
+uv pip install '<clinical-module>==<reviewed-version>'
 ```
+
+Use a project lock file for production deployments. The pinned LaminDB and Bionty versions above reflect the current refresh baseline; for optional modules, look up the current official package and pin the reviewed version rather than installing a floating latest release.
 
 ### Verify Installation
 
@@ -81,7 +83,9 @@ lamin login
 
 **Data Privacy:** LaminDB authentication only collects basic metadata (email, user information). Your actual data remains private and is not sent to LaminDB servers.
 
-**Local vs Cloud:** Authentication is required even for local-only usage to enable collaboration features and instance management.
+**Local vs Cloud:** Local `lamin init` instances do not require LaminHub login. Login is required for LaminHub-managed collaboration and cloud-hosted metadata.
+
+**Credential handling:** Never ask the agent to print API keys, cloud secrets, or database URLs containing passwords. When debugging, check only whether named variables exist and redact values in terminal output and logs.
 
 ## Instance Initialization
 
@@ -124,15 +128,19 @@ For production deployments:
 
 ```bash
 # S3 + PostgreSQL
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage s3://my-bucket/path \
-  --db postgresql://user:password@hostname:5432/dbname \
+  --db "$LAMIN_DB_URL" \
   --modules bionty
 
 # GCS + PostgreSQL
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage gs://my-bucket/path \
-  --db postgresql://user:password@hostname:5432/dbname \
+  --db "$LAMIN_DB_URL" \
   --modules bionty
 ```
+
+Set `LAMIN_DB_URL` through a secret manager or secure shell session. Do not commit it to configuration files, notebooks, or chat transcripts.
 
 ### Instance Naming
 
@@ -201,14 +209,16 @@ lamin init --storage ./data
 
 **Setup:**
 ```bash
-# Set credentials
-export AWS_ACCESS_KEY_ID=your_key_id
-export AWS_SECRET_ACCESS_KEY=your_secret_key
-export AWS_DEFAULT_REGION=us-east-1
+# Prefer IAM roles or workload identity. If local variables are needed,
+# set them outside shared scripts and never echo their values.
+export AWS_ACCESS_KEY_ID='<redacted>'
+export AWS_SECRET_ACCESS_KEY='<redacted>'
+export AWS_DEFAULT_REGION='us-east-1'
 
 # Initialize
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage s3://my-bucket/project-data \
-  --db postgresql://user:pwd@host:5432/db
+  --db "$LAMIN_DB_URL"
 ```
 
 **S3 Permissions Required:**
@@ -241,11 +251,12 @@ lamin init --storage s3://my-bucket/project-data \
 gcloud auth application-default login
 
 # Or use service account
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+export GOOGLE_APPLICATION_CREDENTIALS=/secure/path/to/service-account.json
 
 # Initialize
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage gs://my-bucket/project-data \
-  --db postgresql://user:pwd@host:5432/db
+  --db "$LAMIN_DB_URL"
 ```
 
 ### S3-Compatible Storage
@@ -254,14 +265,14 @@ For MinIO, Cloudflare R2, or other S3-compatible services:
 
 ```bash
 # MinIO example
-export AWS_ACCESS_KEY_ID=minioadmin
-export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ACCESS_KEY_ID='<redacted>'
+export AWS_SECRET_ACCESS_KEY='<redacted>'
 
 lamin init --storage 's3://my-bucket?endpoint_url=http://minio.example.com:9000'
 
 # Cloudflare R2 example
-export AWS_ACCESS_KEY_ID=your_r2_access_key
-export AWS_SECRET_ACCESS_KEY=your_r2_secret_key
+export AWS_ACCESS_KEY_ID='<redacted>'
+export AWS_SECRET_ACCESS_KEY='<redacted>'
 
 lamin init --storage 's3://bucket?endpoint_url=https://account-id.r2.cloudflarestorage.com'
 ```
@@ -295,13 +306,15 @@ lamin init --storage ./data
 
 **Setup:**
 ```bash
-# Full connection string
+# Full connection string stored in a named secret
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage s3://bucket/path \
-  --db postgresql://username:password@hostname:5432/database
+  --db "$LAMIN_DB_URL"
 
 # With SSL
+export LAMIN_DB_URL='<set-in-secret-manager-with-ssl>'
 lamin init --storage s3://bucket/path \
-  --db "postgresql://user:pwd@host:5432/db?sslmode=require"
+  --db "$LAMIN_DB_URL"
 ```
 
 **PostgreSQL Versions:** Compatible with PostgreSQL 12+
@@ -421,6 +434,9 @@ export LAMIN_SETTINGS_DIR=/path/to/settings
 
 # Git sync
 export LAMINDB_SYNC_GIT_REPO=https://github.com/user/repo.git
+
+# Database URL for setup examples; keep the value secret
+export LAMIN_DB_URL='<set-in-secret-manager>'
 ```
 
 ## Instance Management
@@ -485,8 +501,9 @@ lamin init --storage ./dev-data --modules bionty
 **Production:**
 ```bash
 # Cloud production
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage s3://prod-bucket/data \
-  --db postgresql://user:pwd@db-host:5432/prod-db \
+  --db "$LAMIN_DB_URL" \
   --modules bionty \
   --name production
 ```
@@ -512,13 +529,15 @@ Deploy instances in multiple regions for data sovereignty:
 
 ```bash
 # US instance
+export LAMIN_DB_URL_US='<set-in-secret-manager>'
 lamin init --storage s3://us-bucket/data \
-  --db postgresql://user:pwd@us-db:5432/db \
+  --db "$LAMIN_DB_URL_US" \
   --name us-production
 
 # EU instance
+export LAMIN_DB_URL_EU='<set-in-secret-manager>'
 lamin init --storage s3://eu-bucket/data \
-  --db postgresql://user:pwd@eu-db:5432/db \
+  --db "$LAMIN_DB_URL_EU" \
   --name eu-production
 ```
 
@@ -528,12 +547,14 @@ Multiple users, shared data:
 
 ```bash
 # Shared storage with user-specific DB
+export LAMIN_DB_URL_USER1='<set-in-secret-manager>'
 lamin init --storage s3://shared-bucket/data \
-  --db postgresql://user1:pwd@host:5432/user1_db \
+  --db "$LAMIN_DB_URL_USER1" \
   --name user1-workspace
 
+export LAMIN_DB_URL_USER2='<set-in-secret-manager>'
 lamin init --storage s3://shared-bucket/data \
-  --db postgresql://user2:pwd@host:5432/user2_db \
+  --db "$LAMIN_DB_URL_USER2" \
   --name user2-workspace
 ```
 
@@ -577,6 +598,7 @@ adata = artifact.backed()  # Don't load into memory
    - Use environment variables, not hardcoded credentials
    - Use IAM roles on AWS/GCP instead of access keys
    - Rotate credentials regularly
+   - Never print, paste, or commit actual database URLs, API keys, or cloud secret values
 
 2. **Access Control:**
    - Use PostgreSQL for multi-user access control
@@ -671,7 +693,7 @@ gsutil ls gs://your-bucket/
 **Issue: Database connection error**
 ```bash
 # Test PostgreSQL connection
-psql postgresql://user:pwd@host:5432/db
+psql "$LAMIN_DB_URL"
 
 # Check database version compatibility
 lamin migrate check
@@ -693,8 +715,8 @@ lamin cache set /larger/disk/cache
 ### Upgrading LaminDB
 
 ```bash
-# Upgrade to latest version
-pip install --upgrade lamindb
+# Upgrade after reviewing changelog and compatibility matrix
+uv pip install --upgrade 'lamindb==2.5.1'
 
 # Upgrade database schema
 lamin migrate deploy

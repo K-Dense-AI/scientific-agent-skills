@@ -223,8 +223,9 @@ mst = nx.minimum_spanning_tree(G, weight='weight')
 # Maximum spanning tree
 mst_max = nx.maximum_spanning_tree(G, weight='weight')
 
-# Enumerate all spanning trees
-all_spanning = nx.all_spanning_trees(G)
+# Iterate over spanning trees in order of increasing total weight
+for tree in nx.SpanningTreeIterator(G):
+    process(tree)
 ```
 
 ### Tree Properties
@@ -277,7 +278,7 @@ is_dag = nx.is_directed_acyclic_graph(G)
 # Only for DAGs
 try:
     topo_order = list(nx.topological_sort(G))
-except nx.NetworkXError:
+except nx.NetworkXUnfeasible:
     print("Graph has cycles")
 
 # All topological sorts
@@ -294,11 +295,11 @@ cliques = list(nx.find_cliques(G))
 # Maximum clique (NP-complete, approximate)
 max_clique = nx.approximation.max_clique(G)
 
-# Clique number
-clique_number = nx.graph_clique_number(G)
+# Clique number (nx.graph_clique_number was removed in NetworkX 3.0)
+clique_number = max(len(c) for c in nx.find_cliques(G))
 
-# Number of maximal cliques containing each node
-clique_counts = nx.node_clique_number(G)
+# Size of the largest maximal clique containing each node
+clique_sizes = nx.node_clique_number(G)
 ```
 
 ## Graph Coloring

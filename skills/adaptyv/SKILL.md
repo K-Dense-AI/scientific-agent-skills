@@ -4,9 +4,7 @@ author: "K-Dense, Inc."
 description: "How to use the Adaptyv Bio Foundry API and Python SDK for protein experiment design, submission, and results retrieval. Use this skill whenever the user mentions Adaptyv, Foundry API, protein binding assays, protein screening experiments, BLI/SPR assays, thermostability assays, or wants to submit protein sequences for experimental characterization. Also trigger when code imports `adaptyv`, `adaptyv_sdk`, or `FoundryClient`, or references `foundry-api-public.adaptyvbio.com`."
 license: MIT
 compatibility: Requires Python 3.10+, an Adaptyv Foundry account, and an API key from foundry.adaptyvbio.com. Install adaptyv-sdk from GitHub with uv pip install.
-metadata:
-  version: "1.2"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.2", "skill-author": "K-Dense Inc."}
 ---
 
 # Adaptyv Bio Foundry API

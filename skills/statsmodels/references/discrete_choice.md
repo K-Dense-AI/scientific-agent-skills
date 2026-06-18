@@ -226,7 +226,7 @@ Standard model for count data.
 **Model**: P(Y=k|X) = exp(-λ) λᵏ / k!, where log(λ) = Xβ
 
 ```python
-from statsmodels.discrete.count_model import Poisson
+from statsmodels.discrete.discrete_model import Poisson
 
 model = Poisson(y_counts, X)
 results = model.fit()
@@ -282,7 +282,7 @@ For overdispersed count data (variance > mean).
 **Model**: Adds dispersion parameter α to account for overdispersion
 
 ```python
-from statsmodels.discrete.count_model import NegativeBinomial
+from statsmodels.discrete.discrete_model import NegativeBinomial
 
 model = NegativeBinomial(y_counts, X)
 results = model.fit()
@@ -361,12 +361,12 @@ Two-stage model: whether any counts, then how many.
 - Zeros structurally different from positive values
 
 ```python
-from statsmodels.discrete.count_model import HurdleCountModel
+from statsmodels.discrete.truncated_model import HurdleCountModel
 
-# Specify count distribution and zero inflation
+# Poisson-Poisson hurdle model; use `zerodist` for the zero hurdle process
 model = HurdleCountModel(y_counts, X,
-                         exog_infl=X_hurdle,
-                         dist='poisson')  # or 'negbin'
+                         dist='poisson',
+                         zerodist='poisson')
 results = model.fit()
 
 print(results.summary())

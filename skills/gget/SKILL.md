@@ -1,30 +1,33 @@
 ---
 name: gget
-description: "Fast CLI/Python queries to 20+ bioinformatics databases. Use for quick lookups: gene info, BLAST searches, AlphaFold structures, enrichment analysis. Best for interactive exploration, simple queries. For batch processing or advanced BLAST use biopython; for multi-database Python workflows use bioservices."
+description: "Fast CLI/Python queries to 20+ bioinformatics databases. Use for quick lookups: gene info, BLAST/BLAT, viral sequence downloads, AlphaFold structures, enrichment analysis, OpenTargets, COSMIC, CELLxGENE, and 8cube mouse specificity/expression data. Best for interactive exploration and simple queries. For batch processing or advanced BLAST use biopython; for multi-database Python workflows use bioservices."
 license: BSD-2-Clause license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+compatibility: Requires Python >=3.8 and gget 0.30.5-compatible APIs. Optional setup modules may install scientific dependencies that lag the newest Python releases; use Python 3.9 or 3.10 if `gget setup cellxgene` or `gget setup alphafold` fails.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # gget
 
 ## Overview
 
-gget is a command-line bioinformatics tool and Python package providing unified access to 20+ genomic databases and analysis methods. Query gene information, sequence analysis, protein structures, expression data, and disease associations through a consistent interface. All gget modules work both as command-line tools and as Python functions.
+gget is a command-line bioinformatics tool and Python package providing unified access to 20+ genomic databases and analysis methods. Query gene information, sequence analysis, protein structures, viral sequences, expression data, disease associations, and mouse tissue/cell specificity metrics through a consistent interface. Most gget modules work both as command-line tools and as Python functions.
 
-**Important**: The databases queried by gget are continuously updated, which sometimes changes their structure. gget modules are tested automatically on a biweekly basis and updated to match new database structures when necessary.
+**Important**: The databases queried by gget are continuously updated, which sometimes changes their structure. Guidance here targets gget 0.30.5 (PyPI current as of 2026-06-07). For reproducible work, pin `gget==0.30.5`; for broken upstream database adapters, update gget after checking release notes.
 
 ## Installation
 
 Install gget in a clean virtual environment to avoid conflicts:
 
 ```bash
-# Using uv (recommended)
-uv uv pip install gget
-
-# Or using pip
-uv pip install --upgrade gget
+# Reproducible install targeting this skill
+uv venv .venv
+source .venv/bin/activate
+uv pip install "gget==0.30.5"
 
 # In Python/Jupyter
 import gget
@@ -51,6 +54,8 @@ Common flags across modules:
 - `-q/--quiet`: Suppress progress information
 - `-csv`: Return CSV format (command-line only)
 
+Python argument names generally match long CLI options without leading dashes. For example, `--census_version` becomes `census_version=...`. Use `gget <module> --help` for the exact current signature.
+
 ## Module Categories
 
 ### 1. Reference & Gene Information
@@ -61,8 +66,9 @@ Retrieve download links and metadata for Ensembl reference genomes.
 
 **Parameters**:
 - `species`: Genus_species format (e.g., 'homo_sapiens', 'mus_musculus'). Shortcuts: 'human', 'mouse'
-- `-w/--which`: Specify return types (gtf, cdna, dna, cds, cdrna, pep). Default: all
+- `-w/--which`: Specify return types as comma-separated CLI values or Python list (gtf, cdna, dna, cds, cdrna, pep). Default: all
 - `-r/--release`: Ensembl release number (default: latest)
+- `-od/--out_dir`: Directory for downloaded files
 - `-l/--list_species`: List available vertebrate species
 - `-liv/--list_iv_species`: List available invertebrate species
 - `-ftp`: Return only FTP links
@@ -76,19 +82,19 @@ gget ref --list_species
 # Get all reference files for human
 gget ref homo_sapiens
 
-# Download only GTF annotation for mouse
-gget ref -w gtf -d mouse
+# Download GTF and cDNA files for mouse
+gget ref -w gtf,cdna -d mouse
 ```
 
 ```python
 # Python
 gget.ref("homo_sapiens")
-gget.ref("mus_musculus", which="gtf", download=True)
+gget.ref("mus_musculus", which=["gtf", "cdna"], download=True)
 ```
 
 #### gget search - Gene Search
 
-Locate genes by name or description across species.
+Locate genes by name, description, and Ensembl synonyms across species.
 
 **Parameters**:
 - `searchwords`: One or more search terms (case-insensitive)
@@ -97,6 +103,7 @@ Locate genes by name or description across species.
 - `-t/--id_type`: Return 'gene' (default) or 'transcript'
 - `-ao/--andor`: 'or' (default) finds ANY searchword; 'and' requires ALL
 - `-l/--limit`: Maximum results to return
+- `wrap_text`: Python-only display helper for wide DataFrames
 
 **Returns**: ensembl_id, gene_name, ensembl_description, ext_ref_description, biotype, URL
 
@@ -247,30 +254,31 @@ gget.muscle("sequences.fasta", save=True)
 
 #### gget diamond - Local Sequence Alignment
 
-Perform fast local protein or translated DNA alignment using DIAMOND.
+Perform fast local protein alignment or translated nucleotide-to-protein alignment using DIAMOND.
 
 **Parameters**:
 - Query: Sequences (string/list) or FASTA file path
-- `--reference`: Reference sequences (string/list) or FASTA file path (required)
-- `--sensitivity`: fast, mid-sensitive, sensitive, more-sensitive, very-sensitive (default), ultra-sensitive
-- `--threads`: CPU threads (default: 1)
-- `--diamond_db`: Save database for reuse
-- `--translated`: Enable nucleotide-to-amino acid alignment
+- `-ref/--reference`: Reference sequences (string/list) or FASTA file path (required)
+- `-s/--sensitivity`: fast, mid-sensitive, sensitive, more-sensitive, very-sensitive (default), ultra-sensitive
+- `-t/--threads`: CPU threads (default: 1)
+- `-db/--diamond_db`: Save database for reuse
+- `-x/--translated`: Enable nucleotide query to amino acid reference alignment
 
 **Returns**: Identity percentage, sequence lengths, match positions, gap openings, E-values, bit scores
 
 **Examples**:
 ```bash
 # Align against reference
-gget diamond GGETISAWESQME -ref reference.fasta --threads 4
+gget diamond GGETISAWESQME -ref reference.fasta -t 4
 
-# Save database for reuse
-gget diamond query.fasta -ref ref.fasta --diamond_db my_db.dmnd
+# Translate nucleotide query against amino acid reference
+gget diamond query_nt.fasta -ref proteins.fasta --translated
 ```
 
 ```python
 # Python
 gget.diamond("GGETISAWESQME", reference="reference.fasta", threads=4)
+gget.diamond("ATGGGC...", reference="proteins.fasta", translated=True)
 ```
 
 ### 3. Structural & Protein Analysis
@@ -306,10 +314,7 @@ Predict 3D protein structures using simplified AlphaFold2.
 
 **Setup Required**:
 ```bash
-# Install OpenMM first
-uv pip install openmm
-
-# Then setup AlphaFold
+# Installs modified third-party dependencies and downloads model parameters
 gget setup alphafold
 ```
 
@@ -509,11 +514,12 @@ Retrieve disease and drug associations from OpenTargets.
 - Ensembl gene ID (required)
 - `-r/--resource`: diseases (default), drugs, tractability, pharmacogenetics, expression, depmap, interactions
 - `-l/--limit`: Cap results count
-- Filter arguments (vary by resource):
-  - drugs: `--filter_disease`
-  - pharmacogenetics: `--filter_drug`
-  - expression/depmap: `--filter_tissue`, `--filter_anat_sys`, `--filter_organ`
-  - interactions: `--filter_protein_a`, `--filter_protein_b`, `--filter_gene_b`
+- `--filters`: Exact-match filters using returned OpenTargets column names; repeat on the CLI or pass a Python dict
+- `-or/--or`: CLI-only; combine filters with OR logic instead of the default AND logic
+
+**Current notes**:
+- gget 0.30.5 rewrote this module for the newer OpenTargets API; some output column names differ from older releases.
+- The older `--filter_mode` argument was removed upstream.
 
 **Examples**:
 ```bash
@@ -523,13 +529,18 @@ gget opentargets ENSG00000169194 -r diseases -l 5
 # Get associated drugs
 gget opentargets ENSG00000169194 -r drugs -l 10
 
-# Get tissue expression
-gget opentargets ENSG00000169194 -r expression --filter_tissue brain
+# Filter interactions by returned column names
+gget opentargets ENSG00000169194 -r interactions --filters protein_a_id=P35225 --filters gene_b_id=ENSG00000077238
 ```
 
 ```python
 # Python
 gget.opentargets("ENSG00000169194", resource="diseases", limit=5)
+gget.opentargets(
+    "ENSG00000169194",
+    resource="interactions",
+    filters={"protein_a_id": "P35225", "gene_b_id": "ENSG00000077238"},
+)
 ```
 
 #### gget cbio - cBioPortal Cancer Genomics
@@ -577,6 +588,7 @@ gget.cbio_plot(["msk_impact_2017"], ["AKT1", "ALK"], stratification="tissue")
 Search COSMIC (Catalogue Of Somatic Mutations In Cancer) database.
 
 **Important**: License fees apply for commercial use. Requires COSMIC account credentials.
+Avoid passing COSMIC credentials directly as CLI arguments on shared systems because command-line arguments can be exposed in shell history, process listings, and logs. Prefer the interactive prompt (`gget cosmic --download_cosmic ...`) or named environment variables read inside Python.
 
 **Parameters**:
 - `searchterm`: Gene name, Ensembl ID, mutation notation, or sample ID
@@ -586,38 +598,117 @@ Search COSMIC (Catalogue Of Somatic Mutations In Cancer) database.
 **Database download flags**:
 - `-d/--download_cosmic`: Activate download mode
 - `-gm/--gget_mutate`: Create version for gget mutate
-- `-cp/--cosmic_project`: Database type (cancer, census, cell_line, resistance, genome_screen, targeted_screen)
+- `-cp/--cosmic_project`: Database type (cancer, cancer_example, census, cell_line, resistance, genome_screen, targeted_screen)
 - `-cv/--cosmic_version`: COSMIC version
 - `-gv/--grch_version`: Human reference genome (37 or 38)
-- `--email`, `--password`: COSMIC credentials
+- `--email`, `--password`: COSMIC credentials for non-interactive downloads; prefer prompt or Python env vars
 
 **Examples**:
 ```bash
-# First download database
-gget cosmic -d --email user@example.com --password xxx -cp cancer
+# First download database; gget prompts for COSMIC email/password
+gget cosmic --download_cosmic --cosmic_project cancer
 
 # Then query
-gget cosmic EGFR -ctp cosmic_data.tsv -l 10
+gget cosmic EGFR --cosmic_tsv_path "CancerMutationCensus_AllData_Tsv_v101_GRCh37/CancerMutationCensus_AllData_v101_GRCh37.tsv" -l 10
 ```
 
 ```python
 # Python
+import os
+
+gget.cosmic(
+    searchterm=None,
+    download_cosmic=True,
+    cosmic_project="cancer",
+    email=os.environ["COSMIC_EMAIL"],
+    password=os.environ["COSMIC_PASSWORD"],
+)
 gget.cosmic("EGFR", cosmic_tsv_path="cosmic_data.tsv", limit=10)
 ```
 
-### 5. Additional Tools
+### 5. Viral & Mouse Specificity Data
+
+#### gget virus - Viral Sequence Downloads
+
+Download viral nucleotide sequences plus linked metadata from INSDC sources via NCBI Virus, with optional GenBank metadata enrichment. Results are saved to an output folder as FASTA, CSV, JSONL, and a command summary file.
+
+**Parameters**:
+- `virus`: Virus taxon name, taxon ID, accession, space-separated accessions, or path to a text file of accessions
+- `-a/--is_accession`: Treat `virus` as accession input
+- `--is_sars_cov2`, `--is_alphainfluenza`: Use optimized cached NCBI datasets paths for SARS-CoV-2 or Influenza A
+- `--host`: Host organism name or NCBI taxonomy ID
+- `--nuc_completeness`: complete or partial
+- `--min_seq_length`, `--max_seq_length`: Sequence length filters
+- `-g/--genbank_metadata`: Fetch detailed GenBank metadata; auto-enabled by some annotation filters
+- `--segment`, `--vaccine_strain`, `--annotated`, `--lab_passaged`, `--source_database`: Common viral metadata filters
+- `--download_all_accessions`: Apply filters across all viral accessions
+- `--baseline`, `--merge-results`: Resume or merge with prior metadata from partial/previous runs
+
+**Important**: Do not use `--download_all_accessions` without restrictive filters; it can attempt to download the entire Viruses taxonomy and consume substantial time, bandwidth, and disk.
+
+**Examples**:
+```bash
+# Complete Zika genomes from human hosts
+gget virus "Zika virus" --nuc_completeness complete --host human --out zika_data
+
+# SARS-CoV-2 reference genome by accession
+gget virus NC_045512.2 --is_accession --is_sars_cov2
+```
+
+```python
+# Python
+gget.virus(
+    "SARS-CoV-2",
+    host="human",
+    nuc_completeness="complete",
+    min_seq_length=29000,
+    genbank_metadata=True,
+    is_sars_cov2=True,
+    outfolder="covid_data",
+)
+```
+
+#### gget 8cube - Mouse Specificity & Expression
+
+Query 8cubeDB for snRNA-seq gene specificity metrics and normalized expression values across mouse strains, tissues, sexes, and individuals.
+
+**Subcommands**:
+- `gget 8cube specificity <genes...>`: Return gene-level psi/zeta specificity statistics
+- `gget 8cube psi_block <genes...> --analysis_level <level> --analysis_type <type>`: Return block-level specificity
+- `gget 8cube expression <genes...> --analysis_level <level> --analysis_type <type>`: Return mean/variance normalized expression
+
+**Examples**:
+```bash
+gget 8cube specificity Acsm2 ENSMUSG00000046623.9
+gget 8cube psi_block Acsm2 --analysis_level Kidney --analysis_type "Sex:Celltype"
+gget 8cube expression Gjb4 --analysis_level Across_tissues --analysis_type Strain
+```
+
+```python
+# Python
+from gget import specificity, psi_block, gene_expression
+
+specificity(["Acsm2", "ENSMUSG00000046623.9"])
+psi_block(["Acsm2"], analysis_level="Kidney", analysis_type="Sex:Celltype")
+gene_expression(["Gjb4"], analysis_level="Across_tissues", analysis_type="Strain")
+```
+
+### 6. Additional Tools
 
 #### gget mutate - Generate Mutated Sequences
 
 Generate mutated nucleotide sequences from mutation annotations.
 
+**Current scope**: gget 0.29.1 simplified `mutate` to focus on applying standard mutation annotations to supplied nucleotide sequences and returning/saving mutated FASTA records. The broader variant-screening workflow moved upstream to the `kvar` project.
+
 **Parameters**:
-- `sequences`: FASTA file path or direct sequence input (string/list)
-- `-m/--mutations`: CSV/TSV file or DataFrame with mutation data (required)
+- `sequences`: FASTA file path or direct nucleotide sequence input (string/list)
+- `-m/--mutations`: Mutation string/list, CSV/TSV path, or DataFrame with mutation data (required)
 - `-mc/--mut_column`: Mutation column name (default: 'mutation')
 - `-sic/--seq_id_column`: Sequence ID column (default: 'seq_ID')
-- `-mic/--mut_id_column`: Mutation ID column
+- `-mic/--mut_id_column`: Mutation ID column (default: same as mut_column)
 - `-k/--k`: Length of flanking sequences (default: 30 nucleotides)
+- `-o/--out`: Output FASTA path; without it Python returns a list of mutated sequences
 
 **Returns**: Mutated sequences in FASTA format
 
@@ -626,15 +717,14 @@ Generate mutated nucleotide sequences from mutation annotations.
 # Single mutation
 gget mutate ATCGCTAAGCT -m "c.4G>T"
 
-# Multiple sequences with mutations from file
-gget mutate sequences.fasta -m mutations.csv -o mutated.fasta
+# Multiple sequences with one mutation per sequence
+gget mutate ATCGCTAAGCT TAGCTA -m "c.4G>T" "c.1_3inv" -o mutated.fasta
 ```
 
 ```python
 # Python
-import pandas as pd
-mutations_df = pd.DataFrame({"seq_ID": ["seq1"], "mutation": ["c.4G>T"]})
-gget.mutate(["ATCGCTAAGCT"], mutations=mutations_df)
+gget.mutate("ATCGCTAAGCT", "c.4G>T")
+gget.mutate(["ATCGCTAAGCT", "TAGCTA"], ["c.4G>T", "c.1_3inv"], out="mutated.fasta")
 ```
 
 #### gget gpt - OpenAI Text Generation
@@ -646,27 +736,29 @@ Generate natural language text using OpenAI's API.
 gget setup gpt
 ```
 
-**Important**: Free tier limited to 3 months after account creation. Set monthly billing limits.
+**Important**: Requires an OpenAI API key. Do not hard-code the key in notebooks, scripts, shell history, or committed files. Prefer a named environment variable such as `OPENAI_API_KEY`, and set monthly billing limits before use.
 
 **Parameters**:
 - `prompt`: Text input for generation (required)
-- `api_key`: OpenAI authentication (required)
-- Model configuration: temperature, top_p, max_tokens, frequency_penalty, presence_penalty
-- Default model: gpt-3.5-turbo (configurable)
+- `api_key`: OpenAI authentication (required by the upstream API)
+- Model configuration: model, temperature, top_p, stop, max_tokens, frequency_penalty, presence_penalty, logit_bias
+- Default model: gpt-3.5-turbo (upstream default; verify available models in your OpenAI account)
 
 **Examples**:
-```bash
-gget gpt "Explain CRISPR" --api_key your_key_here
-```
+For CLI usage, `gget gpt` expects the API key as an argument. Avoid this on shared systems because process arguments can be visible to other users.
 
 ```python
 # Python
-gget.gpt("Explain CRISPR", api_key="your_key_here")
+import os
+
+gget.gpt("Explain CRISPR", api_key=os.environ["OPENAI_API_KEY"])
 ```
 
 #### gget setup - Install Dependencies
 
 Install/download third-party dependencies for specific modules.
+
+As of gget 0.29.2, `gget setup` tries `uv pip install` first for Python dependencies and falls back to `pip install` if uv is unavailable or fails.
 
 **Parameters**:
 - `module`: Module name requiring dependency installation
@@ -674,9 +766,9 @@ Install/download third-party dependencies for specific modules.
 
 **Modules requiring setup**:
 - `alphafold` - Downloads ~4GB of model parameters
-- `cellxgene` - Installs cellxgene-census (may not support latest Python)
+- `cellxgene` - Installs cellxgene-census (may require Python 3.9/3.10 if the latest Python is unsupported)
 - `elm` - Downloads local ELM database
-- `gpt` - Configures OpenAI integration
+- `gpt` - Installs/configures OpenAI integration dependencies
 
 **Examples**:
 ```bash
@@ -826,6 +918,7 @@ gget ref -w dna -d homo_sapiens
 - Run `gget setup` before first use of alphafold, cellxgene, elm, gpt
 - For enrichment analysis, use database shortcuts for convenience
 - Cache cBioPortal data with `-dd` to avoid repeated downloads
+- For OpenTargets, inspect returned column names before writing filters; gget 0.30.5 follows the newer OpenTargets API schema
 
 ### Structure Prediction
 - AlphaFold multimer predictions: use `-mr 20` for higher accuracy
@@ -833,11 +926,18 @@ gget ref -w dna -d homo_sapiens
 - Visualize results in Python with `plot=True`
 - Check PDB database first before running AlphaFold predictions
 
+### Viral Data
+- Use restrictive filters with `gget virus` before requesting broad viral datasets
+- Keep `command_summary.txt` with downstream results for reproducibility and recovery after partial downloads
+- Use `--baseline` and `--merge-results` to resume interrupted viral metadata/sequence downloads
+
 ### Error Handling
-- Database structures change; update gget regularly: `uv pip install --upgrade gget`
+- Database structures change; when an adapter breaks, check upstream release notes and pin the newer fixed version explicitly
+- Pin the known-good version for reproducible environments: `uv pip install "gget==0.30.5"`
 - Process max ~1000 Ensembl IDs at once with gget info
 - For large-scale analyses, implement rate limiting for API queries
 - Use virtual environments to avoid dependency conflicts
+- Keep COSMIC and OpenAI credentials in named environment variables or interactive prompts; do not write real credentials into examples, notebooks, or logs
 
 ## Output Formats
 
@@ -847,12 +947,14 @@ gget ref -w dna -d homo_sapiens
 - FASTA: gget seq, gget mutate
 - PDB: gget pdb, gget alphafold
 - PNG: gget cbio plot
+- FASTA/CSV/JSONL folder: gget virus
 
 ### Python
 - Default: DataFrame or dictionary
 - JSON: Add `json=True` parameter
 - Save to file: Add `save=True` or specify `out="filename"`
 - AnnData: gget cellxgene
+- DataFrame/JSON: gget 8cube specificity, psi_block, expression
 
 ## Resources
 

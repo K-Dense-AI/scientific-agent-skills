@@ -15,11 +15,15 @@ from Bio import Entrez
 
 # Always set your email
 Entrez.email = "your.email@example.com"
+
+# For reusable software, set a stable tool name and register
+# the tool/email pair with NCBI.
+Entrez.tool = "your_tool_name"
 ```
 
 ### API Key (Recommended)
 
-Using an API key increases rate limits from 3 to 10 requests per second. Register at https://www.ncbi.nlm.nih.gov/account/settings/ and read the key from the environment — do not hardcode it:
+Using an API key increases E-utilities rate limits from 3 to 10 requests per second. Register at https://www.ncbi.nlm.nih.gov/account/settings/ and read only `NCBI_API_KEY` from the environment — do not hardcode it and do not load unrelated environment variables:
 
 ```python
 import os
@@ -35,7 +39,7 @@ Biopython automatically respects NCBI rate limits:
 - **Without API key**: 3 requests per second
 - **With API key**: 10 requests per second
 
-The module handles this automatically, so you don't need to add delays between requests.
+The module handles ordinary request pacing automatically and retries transient HTTP 5XX failures. For large jobs, use Entrez history (`usehistory="y"` / `WebEnv` / `query_key`) and batch requests rather than making one request per record. NCBI also recommends scheduling large jobs for weekends or between 9:00 PM and 5:00 AM Eastern time.
 
 ## Core Entrez Functions
 
@@ -396,15 +400,16 @@ handle.close()
 ## Best Practices
 
 1. **Always set Entrez.email** - Required by NCBI
-2. **Use `NCBI_API_KEY` from the environment** for higher rate limits (10 req/s vs 3 req/s); never hardcode keys
-3. **Close handles** after reading to free resources
-4. **Batch large requests** - Use retstart and retmax for pagination
-5. **Use WebEnv for large downloads** - Store results on server
-6. **Cache locally** - Download once and save to avoid repeated requests
-7. **Handle errors gracefully** - Network issues and API limits can occur
-8. **Respect NCBI guidelines** - Don't overwhelm the service
-9. **Use appropriate rettype** - Choose format that matches your needs
-10. **Parse XML carefully** - Structure varies by database and record type
+2. **Set Entrez.tool** for reusable software and register the tool/email pair with NCBI
+3. **Use `NCBI_API_KEY` from the environment** for higher rate limits (10 req/s vs 3 req/s); never hardcode keys
+4. **Close handles** after reading to free resources
+5. **Batch large requests** - Use retstart and retmax for pagination
+6. **Use WebEnv for large downloads** - Store results on server
+7. **Cache locally** - Download once and save to avoid repeated requests
+8. **Handle errors gracefully** - Network issues and API limits can occur
+9. **Respect NCBI guidelines** - Don't overwhelm the service
+10. **Use appropriate rettype** - Choose format that matches your needs
+11. **Parse XML carefully** - Structure varies by database and record type
 
 ## Error Handling
 

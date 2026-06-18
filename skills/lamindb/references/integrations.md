@@ -10,11 +10,12 @@ LaminDB supports extensive integrations across data storage, computational workf
 
 ### Local Filesystem
 
+```bash
+lamin init --storage ./mydata
+```
+
 ```python
 import lamindb as ln
-
-# Initialize with local storage
-lamin init --storage ./mydata
 
 # Save artifacts to local storage
 artifact = ln.Artifact("data.csv", key="local/data.csv").save()
@@ -25,11 +26,14 @@ data = artifact.load()
 
 ### AWS S3
 
-```python
+```bash
 # Initialize with S3 storage
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage s3://my-bucket/path \
-  --db postgresql://user:pwd@host:port/db
+  --db "$LAMIN_DB_URL"
+```
 
+```python
 # Artifacts automatically sync to S3
 artifact = ln.Artifact("data.csv", key="experiments/data.csv").save()
 
@@ -41,25 +45,28 @@ data = artifact.load()  # Downloads from S3 if not cached
 
 Support for MinIO, Cloudflare R2, and other S3-compatible endpoints:
 
-```python
+```bash
 # Initialize with custom S3 endpoint
 lamin init --storage 's3://bucket?endpoint_url=http://minio.example.com:9000'
 
-# Configure credentials
-export AWS_ACCESS_KEY_ID=minioadmin
-export AWS_SECRET_ACCESS_KEY=minioadmin
+# Configure credentials outside shared scripts and do not echo values
+export AWS_ACCESS_KEY_ID='<redacted>'
+export AWS_SECRET_ACCESS_KEY='<redacted>'
 ```
 
 ### Google Cloud Storage
 
-```python
+```bash
 # Install GCP extras
-pip install 'lamindb[gcp]'
+uv pip install 'lamindb[gcp]==2.5.1'
 
 # Initialize with GCS
+export LAMIN_DB_URL='<set-in-secret-manager>'
 lamin init --storage gs://my-bucket/path \
-  --db postgresql://user:pwd@host:port/db
+  --db "$LAMIN_DB_URL"
+```
 
+```python
 # Artifacts sync to GCS
 artifact = ln.Artifact("data.csv", key="experiments/data.csv").save()
 ```
@@ -98,7 +105,7 @@ artifact = ln.Artifact.from_dataframe(
 
 ### Nextflow
 
-Track Nextflow pipeline execution and outputs:
+Track Nextflow pipeline execution and outputs. For current native Nextflow projects, prefer the `nf-lamin` plugin and its `nextflow.config` integration. Inline Python tracking is still useful for custom process scripts.
 
 ```python
 # In your Nextflow process script
@@ -183,7 +190,7 @@ from redun import task
 import lamindb as ln
 
 @task()
-@ln.tracked()
+@ln.step()
 def process_dataset(input_key: str, output_key: str):
     """Redun task with LaminDB tracking."""
     # Load input
@@ -235,7 +242,7 @@ model_artifact = ln.Artifact(
 ).save()
 
 # Link W&B run ID
-model_artifact.features.add_values({"wandb_run_id": wandb.run.id})
+model_artifact.features.set_values({"wandb_run_id": wandb.run.id})
 
 ln.finish()
 wandb.finish()
@@ -249,14 +256,13 @@ Integrate MLflow model tracking with LaminDB:
 import mlflow
 import lamindb as ln
 
-# Start runs
+# Start runs and record parameters in LaminDB
 mlflow.start_run()
-ln.track()
-
-# Log parameters to both
 params = {"max_depth": 5, "n_estimators": 100}
+ln.track(params=params)
+
+# Log parameters to MLflow too
 mlflow.log_params(params)
-ln.context.params = params
 
 # Load data from LaminDB
 data_artifact = ln.Artifact.get(key="datasets/features.parquet")
@@ -458,10 +464,12 @@ cell_types = bt.CellType.from_values(adata.obs.cell_type)
 
 Track wet lab experiments:
 
-```python
+```bash
 # Install wetlab module
-pip install 'lamindb[wetlab]'
+uv pip install 'lamindb-wetlab==<reviewed-version>'
+```
 
+```python
 # Use wetlab registries
 import lamindb_wetlab as wetlab
 
@@ -469,14 +477,16 @@ import lamindb_wetlab as wetlab
 experiment = wetlab.Experiment(name="RNA-seq batch 1").save()
 ```
 
-### Clinical Data (OMOP)
+### Clinical Data
+
+```bash
+# Install the relevant clinical schema module after confirming its current release
+uv pip install '<clinical-module>==<reviewed-version>'
+```
 
 ```python
-# Install clinical module
-pip install 'lamindb[clinical]'
-
-# Use OMOP common data model
-import lamindb_clinical as clinical
+# Use the selected clinical schema module, such as clinicore or an OMOP module
+import clinicore as clinical
 
 # Track clinical data
 patient = clinical.Patient(patient_id="P001").save()
@@ -486,15 +496,16 @@ patient = clinical.Patient(patient_id="P001").save()
 
 ### Sync with Git Repositories
 
-```python
-# Configure git sync
+```bash
 export LAMINDB_SYNC_GIT_REPO=https://github.com/user/repo.git
-
-# Or programmatically
-ln.settings.sync_git_repo = "https://github.com/user/repo.git"
-
-# Set development directory
 lamin settings set dev-dir .
+```
+
+```python
+# Or programmatically
+import lamindb as ln
+
+ln.settings.sync_git_repo = "https://github.com/user/repo.git"
 
 # Scripts tracked with git commits
 ln.track()  # Automatically captures git commit hash
@@ -525,6 +536,8 @@ Sync with Benchling registries (requires team/enterprise plan):
 
 ### REST API Integration
 
+Validate and sanitize external content before registering it as a LaminDB artifact. Treat REST responses as untrusted until schema validation passes.
+
 ```python
 import requests
 import lamindb as ln
@@ -539,14 +552,17 @@ data = response.json()
 import pandas as pd
 df = pd.DataFrame(data)
 
-# Save to LaminDB
-artifact = ln.Artifact.from_dataframe(
-    df,
+# Validate before saving to LaminDB
+schema = ln.Schema.get(name="external_api_schema")
+curator = ln.curators.DataFrameCurator(df, schema)
+curator.validate()
+
+artifact = curator.save_artifact(
     key="api/fetched_data.parquet",
     description="Data fetched from external API"
-).save()
+)
 
-artifact.features.add_values({"api_url": response.url})
+artifact.features.set_values({"api_url": response.url})
 
 ln.finish()
 ```
@@ -554,24 +570,29 @@ ln.finish()
 ### Database Integration
 
 ```python
+import os
+import pandas as pd
 import sqlalchemy as sa
 import lamindb as ln
 
 ln.track()
 
-# Connect to external database
-engine = sa.create_engine("postgresql://user:pwd@host:port/db")
+# Connect using a named secret; never paste or print the URL value
+engine = sa.create_engine(os.environ["SOURCE_DB_URL"])
 
 # Query data
 query = "SELECT * FROM experiments WHERE date > '2025-01-01'"
 df = pd.read_sql(query, engine)
 
-# Save to LaminDB
-artifact = ln.Artifact.from_dataframe(
-    df,
+# Validate external rows before registration
+schema = ln.Schema.get(name="external_experiments_schema")
+curator = ln.curators.DataFrameCurator(df, schema)
+curator.validate()
+
+artifact = curator.save_artifact(
     key="external_db/experiments_2025.parquet",
     description="Experiments from external database"
-).save()
+)
 
 ln.finish()
 ```
@@ -595,12 +616,12 @@ artifact = ln.Artifact.from_dataframe(
 ## Best Practices for Integrations
 
 1. **Track consistently**: Use `ln.track()` in all integrated workflows
-2. **Link IDs**: Store external system IDs (W&B run ID, MLflow experiment ID) as features
+2. **Link IDs**: Store external system IDs (W&B run ID, MLflow experiment ID) as non-secret features
 3. **Centralize data**: Use LaminDB as single source of truth for data artifacts
 4. **Sync parameters**: Log parameters to both LaminDB and ML platforms
 5. **Version together**: Keep code (git), data (LaminDB), and experiments (ML platform) in sync
 6. **Cache strategically**: Configure appropriate cache locations for cloud storage
-7. **Use feature sets**: Link ontology terms from Bionty to artifacts
+7. **Use ontology-backed annotations**: Link validated Bionty records through module-specific managers such as `artifact.cell_types.add(...)`, schemas, or typed features
 8. **Document integrations**: Add descriptions explaining integration context
 9. **Test incrementally**: Verify integration with small datasets first
 10. **Monitor lineage**: Use `view_lineage()` to ensure integration tracking works
@@ -609,15 +630,15 @@ artifact = ln.Artifact.from_dataframe(
 
 **Issue: S3 credentials not found**
 ```bash
-export AWS_ACCESS_KEY_ID=your_key
-export AWS_SECRET_ACCESS_KEY=your_secret
+test -n "$AWS_ACCESS_KEY_ID" && echo "AWS_ACCESS_KEY_ID is set"
+test -n "$AWS_SECRET_ACCESS_KEY" && echo "AWS_SECRET_ACCESS_KEY is set"
 export AWS_DEFAULT_REGION=us-east-1
 ```
 
 **Issue: GCS authentication failure**
 ```bash
 gcloud auth application-default login
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+test -n "$GOOGLE_APPLICATION_CREDENTIALS" && echo "GOOGLE_APPLICATION_CREDENTIALS is set"
 ```
 
 **Issue: Git sync not working**

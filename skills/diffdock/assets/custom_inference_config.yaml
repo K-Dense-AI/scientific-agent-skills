@@ -19,6 +19,8 @@ no_final_step_noise: true
 # Sampling parameters
 samples_per_complex: 10  # Increase for difficult cases (e.g., 20-40)
 sigma_schedule: expbeta
+inf_sched_alpha: 1
+inf_sched_beta: 1
 initial_noise_std_proportion: 1.46
 
 # Temperature controls - Adjust these to balance exploration vs accuracy
@@ -42,6 +44,8 @@ temp_sigma_data_tor: 0.69
 # Feature flags
 no_model: false
 no_random: false
+no_random_pocket: false
+resample_rdkit: false
 ode: false  # Set to true to use ODE solver instead of SDE
 different_schedules: false
 limit_failures: 5

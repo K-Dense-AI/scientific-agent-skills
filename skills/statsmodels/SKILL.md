@@ -1,10 +1,10 @@
 ---
 name: statsmodels
 description: Statistical models library for Python. Use when you need specific model classes (OLS, GLM, mixed models, ARIMA) with detailed diagnostics, residuals, and inference. Best for econometrics, time series, rigorous inference with coefficient tables. For guided statistical test selection with APA reporting use statistical-analysis.
+allowed-tools: Read Write Edit Bash
+compatibility: Requires Python 3.9+ and statsmodels 0.14.6-compatible dependencies. Use `uv pip install statsmodels==0.14.6`; optional predictive-metric examples also need scikit-learn.
 license: BSD-3-Clause license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Statsmodels: Statistical Modeling and Econometrics
@@ -12,6 +12,16 @@ metadata:
 ## Overview
 
 Statsmodels is Python's premier library for statistical modeling, providing tools for estimation, inference, and diagnostics across a wide range of statistical methods. Apply this skill for rigorous statistical analysis, from simple linear regression to complex time series models and econometric analyses.
+
+## Current Compatibility
+
+Examples target statsmodels 0.14.6, released Dec 5, 2025. For reproducible environments, pin the primary package:
+
+```bash
+uv pip install statsmodels==0.14.6
+```
+
+Use `statsmodels.api` and `statsmodels.formula.api` for stable high-level imports, and direct module imports when examples require newer or specialized classes such as `HurdleCountModel`.
 
 ## When to Use This Skill
 
@@ -119,16 +129,20 @@ print(f"ADF p-value: {adf_result[1]:.4f}")
 
 if adf_result[1] > 0.05:
     # Series is non-stationary, difference it
-    y_diff = y_series.diff().dropna()
+    y_for_acf = y_series.diff().dropna()
+    d = 1
+else:
+    y_for_acf = y_series.dropna()
+    d = 0
 
 # Plot ACF/PACF to identify p, q
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-plot_acf(y_diff, lags=40, ax=ax1)
-plot_pacf(y_diff, lags=40, ax=ax2)
+plot_acf(y_for_acf, lags=40, ax=ax1)
+plot_pacf(y_for_acf, lags=40, ax=ax2)
 plt.show()
 
 # Fit ARIMA(p,d,q)
-model = ARIMA(y_series, order=(1, 1, 1))
+model = ARIMA(y_series, order=(1, d, 1))
 results = model.fit()
 
 print(results.summary())
@@ -167,7 +181,7 @@ print(f"Overdispersion: {overdispersion:.2f}")
 
 if overdispersion > 1.5:
     # Use Negative Binomial instead
-    from statsmodels.discrete.count_model import NegativeBinomial
+    from statsmodels.discrete.discrete_model import NegativeBinomial
     nb_model = NegativeBinomial(y_counts, X)
     nb_results = nb_model.fit()
     print(nb_results.summary())
@@ -576,13 +590,13 @@ Comprehensive statistical testing and diagnostics:
 **Search patterns:**
 ```bash
 # Find information about specific models
-grep -r "Quantile Regression" references/
+rg "Quantile Regression" references/
 
 # Find diagnostic tests
-grep -r "Breusch-Pagan" references/stats_diagnostics.md
+rg "Breusch-Pagan" references/stats_diagnostics.md
 
 # Find time series guidance
-grep -r "SARIMAX" references/time_series.md
+rg "SARIMAX" references/time_series.md
 ```
 
 ## Common Pitfalls to Avoid

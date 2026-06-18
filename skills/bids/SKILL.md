@@ -7,9 +7,7 @@ description: >
   validating compliance, converting DICOM to BIDS, writing metadata sidecars, or
   creating BIDS derivatives.
 license: https://creativecommons.org/licenses/by/4.0/
-metadata:
-  version: "1.0"
-  skill-author: Yaroslav Halchenko
+metadata: {"version": "1.0", "skill-author": "Yaroslav Halchenko"}
 ---
 
 # Brain Imaging Data Structure (BIDS)

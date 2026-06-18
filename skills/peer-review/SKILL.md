@@ -3,9 +3,8 @@ name: peer-review
 description: Structured manuscript/grant review with checklist-based evaluation. Use when writing formal peer reviews with specific criteria methodology assessment, statistical validity, reporting standards compliance (CONSORT/STROBE), and constructive feedback. Best for actual review writing, manuscript revision. For evaluating claims/evidence quality use scientific-critical-thinking; for quantitative scoring frameworks use scholar-evaluation.
 allowed-tools: Read Write Edit Bash
 license: MIT license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key for the skill's LLM-powered steps.", "required_for": "optional features"}]
+metadata: {"version": "1.2", "skill-author": "K-Dense Inc.", "openclaw": {"primaryEnv": "OPENROUTER_API_KEY", "envVars": [{"name": "OPENROUTER_API_KEY", "required": false, "description": "OpenRouter API key for the skill's LLM-powered steps."}]}}
 ---
 
 # Scientific Critical Evaluation and Peer Review
@@ -24,6 +23,8 @@ This skill should be used when:
 - Evaluating reproducibility and data availability
 - Checking compliance with reporting guidelines (CONSORT, STROBE, PRISMA)
 - Providing constructive feedback on scientific writing
+
+**Related Resource:** The **venue-templates** skill provides `reviewer_expectations.md` with detailed guidance on what reviewers look for at different venues (Nature/Science, Cell Press, medical journals, ML conferences). Use this to calibrate your review standards to the target venue.
 
 ## Visual Enhancement with Scientific Schematics
 

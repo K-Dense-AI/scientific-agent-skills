@@ -177,14 +177,14 @@ print(adata.obs['tissue'].dtype)     # category
 
 ### Sparse to dense and vice versa
 ```python
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse
 
 # Dense to sparse
-if not isinstance(adata.X, csr_matrix):
+if not issparse(adata.X):
     adata.X = csr_matrix(adata.X)
 
 # Sparse to dense
-if isinstance(adata.X, csr_matrix):
+if issparse(adata.X):
     adata.X = adata.X.toarray()
 
 # Convert layer

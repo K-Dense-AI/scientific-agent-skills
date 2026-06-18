@@ -1,17 +1,27 @@
 ---
 name: pymc
 description: Bayesian modeling with PyMC. Build hierarchical models, MCMC (NUTS), variational inference, LOO/WAIC comparison, posterior checks, for probabilistic programming and inference.
+allowed-tools: Read Write Edit Bash
+compatibility: Requires Python 3.12+ and PyMC 6.0.1-compatible dependencies. Install reproducible environments with `uv pip install "pymc[nutpie]==6.0.1"`; optional NumPyro or BlackJAX samplers require separately pinned JAX-compatible dependencies.
 license: Apache License, Version 2.0
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # PyMC Bayesian Modeling
 
 ## Overview
 
-PyMC is a Python library for Bayesian modeling and probabilistic programming. Build, fit, validate, and compare Bayesian models using PyMC's modern API (version 5.x+), including hierarchical models, MCMC sampling (NUTS), variational inference, and model comparison (LOO, WAIC).
+PyMC is a Python library for Bayesian modeling and probabilistic programming. Build, fit, validate, and compare Bayesian models using PyMC's modern API (version 6.x+), including hierarchical models, MCMC sampling (NUTS), variational inference, posterior predictive checks, and model comparison (LOO, WAIC).
+
+## Current Version and Setup
+
+PyMC 6.0.1 is the current stable release as of June 2026. It requires Python 3.12+, uses PyTensor 3 as the computational graph backend, and defaults to compiled backends such as Numba. For reproducible local environments, pin the version:
+
+```bash
+uv pip install "pymc[nutpie]==6.0.1"
+```
+
+The `nutpie` extra enables the faster Rust/Numba NUTS implementation. If using NumPyro or BlackJAX, install those optional sampler dependencies in the same environment and pin them in the project lockfile.
 
 ## When to Use This Skill
 
@@ -61,16 +71,19 @@ coords = {
 }
 
 with pm.Model(coords=coords) as model:
+    # Mutable data container so prediction data can be swapped later
+    X_data = pm.Data('X_scaled', X_scaled, dims=('obs_id', 'predictors'))
+
     # Priors
     alpha = pm.Normal('alpha', mu=0, sigma=1)
     beta = pm.Normal('beta', mu=0, sigma=1, dims='predictors')
     sigma = pm.HalfNormal('sigma', sigma=1)
 
     # Linear predictor
-    mu = alpha + pm.math.dot(X_scaled, beta)
+    mu = alpha + pm.math.dot(X_data, beta)
 
-    # Likelihood
-    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, dims='obs_id')
+    # Tie the observed variable's shape to X_data for out-of-sample prediction
+    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, shape=X_data.shape[0], dims='obs_id')
 ```
 
 **Key practices:**
@@ -85,7 +98,7 @@ with pm.Model(coords=coords) as model:
 
 ```python
 with model:
-    prior_pred = pm.sample_prior_predictive(samples=1000, random_seed=42)
+    prior_pred = pm.sample_prior_predictive(draws=1000, random_seed=42)
 
 # Visualize
 az.plot_ppc(prior_pred, group='prior')
@@ -120,6 +133,7 @@ with model:
 - `chains=4`: Run 4 chains for convergence checking
 - `target_accept=0.9`: Higher for difficult posteriors (0.95-0.99)
 - Include `log_likelihood=True` for model comparison
+- If using PyMC 6 sampler-specific kwargs, avoid deprecated `nuts_sampler_kwargs`; pass explicit NUTS kwargs through `nuts={...}` when needed
 
 ### 5. Check Diagnostics
 
@@ -179,16 +193,17 @@ X_new = ...  # New predictor values
 X_new_scaled = (X_new - X_mean) / X_std
 
 with model:
-    pm.set_data({'X_scaled': X_new_scaled})
+    pm.set_data({'X_scaled': X_new_scaled}, coords={'obs_id': np.arange(len(X_new_scaled))})
     post_pred = pm.sample_posterior_predictive(
-        idata.posterior,
+        idata,
         var_names=['y_obs'],
+        predictions=True,
         random_seed=42
     )
 
 # Extract prediction intervals
-y_pred_mean = post_pred.posterior_predictive['y_obs'].mean(dim=['chain', 'draw'])
-y_pred_hdi = az.hdi(post_pred.posterior_predictive, var_names=['y_obs'])
+y_pred_mean = post_pred.predictions['y_obs'].mean(dim=['chain', 'draw'])
+y_pred_hdi = az.hdi(post_pred.predictions, var_names=['y_obs'])
 ```
 
 ## Common Model Patterns
@@ -339,7 +354,8 @@ averaged_pred, weights = model_averaging(models, var_name='y_obs')
 - `pm.Uniform('p', lower=0, upper=1)` - Non-informative (use sparingly)
 
 **Correlation matrices**:
-- `pm.LKJCorr('corr', n=n_vars, eta=2)` - eta=1 uniform, eta>1 prefers identity
+- `pm.LKJCholeskyCov('chol', n=n_vars, eta=2, sd_dist=pm.HalfNormal.dist(1))` - Preferred covariance prior
+- `pm.LKJCorr('corr', n=n_vars, eta=2)` - Correlation-only prior; eta=1 uniform, eta>1 prefers identity
 
 ### For Likelihoods
 
@@ -351,6 +367,7 @@ averaged_pred, weights = model_averaging(models, var_name='y_obs')
 - `pm.Poisson('y', mu=lambda)` - Equidispersed counts
 - `pm.NegativeBinomial('y', mu=mu, alpha=alpha)` - Overdispersed counts
 - `pm.ZeroInflatedPoisson('y', psi=psi, mu=mu)` - Excess zeros
+- `pm.HurdleNegativeBinomial('y', psi=psi, mu=mu, alpha=alpha)` - Excess zeros plus overdispersion
 
 **Binary outcomes**:
 - `pm.Bernoulli('y', p=p)` or `pm.Bernoulli('y', logit_p=logit_p)`
@@ -390,8 +407,8 @@ with model:
     approx = pm.fit(n=20000, method='advi')
 
     # Use for initialization
-    start = approx.sample(return_inferencedata=False)[0]
-    idata = pm.sample(start=start)
+    initvals = approx.sample(return_inferencedata=False)[0]
+    idata = pm.sample(initvals=initvals)
 ```
 
 **Trade-offs:**
@@ -557,13 +574,13 @@ compare_models({'m1': idata1, 'm2': idata2}, ic='loo')
 ### Predictions
 ```python
 with model:
-    pm.set_data({'X': X_new})
-    pred = pm.sample_posterior_predictive(idata.posterior)
+    pm.set_data({'X_data': X_new})
+    pred = pm.sample_posterior_predictive(idata, predictions=True)
 ```
 
 ## Additional Notes
 
-- PyMC integrates with ArviZ for visualization and diagnostics
+- PyMC integrates with ArviZ for visualization and diagnostics; PyMC 6 / ArviZ 1 use xarray `DataTree` while retaining familiar groups such as `.posterior` and `.posterior_predictive`
 - Use `pm.model_to_graphviz(model)` to visualize model structure
 - Save results with `idata.to_netcdf('results.nc')`
 - Load with `az.from_netcdf('results.nc')`

@@ -1,0 +1,9 @@
+{
+  "T_cell": ["CD3D", "CD3E", "CD3G", "CD2"],
+  "B_cell": ["MS4A1", "CD79A", "CD79B", "CD19"],
+  "monocyte": ["CD14", "LYZ", "S100A8", "S100A9"],
+  "NK_cell": ["NKG7", "GNLY", "KLRD1", "NCAM1"],
+  "cytotoxic": ["GZMB", "GZMK", "PRF1", "NKG7"],
+  "dendritic": ["FCER1A", "CST3", "CLEC10A"],
+  "exhaustion": ["PDCD1", "HAVCR2", "LAG3", "TIGIT", "CTLA4"]
+}

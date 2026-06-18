@@ -33,6 +33,7 @@ A standard PyDESeq2 analysis consists of 12 main steps across two phases:
 ```python
 import pandas as pd
 from pydeseq2.dds import DeseqDataSet
+from pydeseq2.default_inference import DefaultInference
 from pydeseq2.ds import DeseqStats
 
 # Load data
@@ -49,11 +50,16 @@ counts_df = counts_df.loc[samples_to_keep]
 metadata = metadata.loc[samples_to_keep]
 
 # Initialize DeseqDataSet
+metadata["condition"] = pd.Categorical(
+    metadata["condition"], categories=["control", "treated"]
+)
+inference = DefaultInference(n_cpus=4)
 dds = DeseqDataSet(
     counts=counts_df,
     metadata=metadata,
     design="~condition",
-    refit_cooks=True
+    refit_cooks=True,
+    inference=inference,
 )
 
 # Run normalization and fitting
@@ -65,12 +71,13 @@ ds = DeseqStats(
     contrast=["condition", "treated", "control"],
     alpha=0.05,
     cooks_filter=True,
-    independent_filter=True
+    independent_filter=True,
+    inference=inference,
 )
 ds.summary()
 
 # Optional: Apply LFC shrinkage for visualization
-ds.lfc_shrink()
+ds.lfc_shrink(coeff="condition[T.treated]")
 
 # Access results
 results = ds.results_df
@@ -106,16 +113,16 @@ counts_df = pd.read_csv("counts.tsv", sep="\t", index_col=0).T
 metadata = pd.read_csv("metadata.tsv", sep="\t", index_col=0)
 ```
 
-**From saved pickle:**
+**From saved AnnData/H5AD:**
 ```python
-import pickle
+import anndata as ad
 
-with open("counts.pkl", "rb") as f:
-    counts_df = pickle.load(f)
-
-with open("metadata.pkl", "rb") as f:
-    metadata = pickle.load(f)
+adata = ad.read_h5ad("counts_and_metadata.h5ad")
+counts_df = pd.DataFrame(adata.X, index=adata.obs_names, columns=adata.var_names)
+metadata = adata.obs
 ```
+
+Do not load pickle files from untrusted sources. Use CSV/TSV or `.h5ad` for portable data exchange.
 
 **From AnnData:**
 ```python
@@ -184,13 +191,16 @@ Compare treated vs control samples:
 
 ```python
 from pydeseq2.dds import DeseqDataSet
+from pydeseq2.default_inference import DefaultInference
 from pydeseq2.ds import DeseqStats
 
 # Design: model expression as a function of condition
+inference = DefaultInference(n_cpus=4)
 dds = DeseqDataSet(
     counts=counts_df,
     metadata=metadata,
-    design="~condition"
+    design="~condition",
+    inference=inference,
 )
 
 dds.deseq2()
@@ -198,7 +208,8 @@ dds.deseq2()
 # Test treated vs control
 ds = DeseqStats(
     dds,
-    contrast=["condition", "treated", "control"]
+    contrast=["condition", "treated", "control"],
+    inference=inference,
 )
 ds.summary()
 
@@ -271,8 +282,10 @@ dds = DeseqDataSet(
 
 dds.deseq2()
 
-# Test the interaction term
-ds = DeseqStats(dds, contrast=["group:condition", ...])
+# Test interaction terms with an explicit numpy contrast vector matching the design matrix
+print(dds.obsm["design_matrix"].columns)
+interaction_contrast_vector = ...  # e.g., np.array([...]) with one value per design column
+ds = DeseqStats(dds, contrast=interaction_contrast_vector)
 ds.summary()
 ```
 
@@ -315,11 +328,8 @@ sorted_results.to_csv("sorted_results.csv")
 
 **Save DeseqDataSet:**
 ```python
-import pickle
-
-# Save as AnnData for later use
-with open("dds_result.pkl", "wb") as f:
-    pickle.dump(dds.to_picklable_anndata(), f)
+# Save as AnnData/H5AD for later inspection
+dds.to_picklable_anndata().write_h5ad("dds_result.h5ad")
 ```
 
 **Load saved results:**
@@ -328,8 +338,8 @@ with open("dds_result.pkl", "wb") as f:
 results = pd.read_csv("deseq2_results.csv", index_col=0)
 
 # Load AnnData
-with open("dds_result.pkl", "rb") as f:
-    adata = pickle.load(f)
+import anndata as ad
+adata = ad.read_h5ad("dds_result.h5ad")
 ```
 
 ### Basic Visualization
@@ -409,24 +419,33 @@ metadata["condition"] = metadata["condition"].astype("category")
 metadata["batch"] = metadata["batch"].astype("category")
 ```
 
+**Use current formulaic design syntax:**
+```python
+# Preferred in PyDESeq2 0.5.x
+design = "~batch + condition"
+
+# Avoid deprecated constructor arguments:
+# design_factors, continuous_factors, ref_level
+```
+
 ### 3. Statistical Testing Guidelines
 
 **Set appropriate alpha:**
 ```python
 # Standard significance threshold
-ds = DeseqStats(dds, alpha=0.05)
+ds = DeseqStats(dds, contrast=["condition", "treated", "control"], alpha=0.05)
 
 # More stringent for exploratory analysis
-ds = DeseqStats(dds, alpha=0.01)
+ds = DeseqStats(dds, contrast=["condition", "treated", "control"], alpha=0.01)
 ```
 
 **Use independent filtering:**
 ```python
 # Recommended: filter low-power tests
-ds = DeseqStats(dds, independent_filter=True)
+ds = DeseqStats(dds, contrast=["condition", "treated", "control"], independent_filter=True)
 
 # Only disable if you have specific reasons
-ds = DeseqStats(dds, independent_filter=False)
+ds = DeseqStats(dds, contrast=["condition", "treated", "control"], independent_filter=False)
 ```
 
 ### 4. LFC Shrinkage
@@ -443,7 +462,7 @@ ds = DeseqStats(dds, independent_filter=False)
 ```python
 # Save both versions
 ds.results_df.to_csv("results_unshrunken.csv")
-ds.lfc_shrink()
+ds.lfc_shrink(coeff="condition[T.treated]")
 ds.results_df.to_csv("results_shrunken.csv")
 ```
 
@@ -452,11 +471,12 @@ ds.results_df.to_csv("results_shrunken.csv")
 For large datasets:
 ```python
 # Use parallel processing
+inference = DefaultInference(n_cpus=4)
 dds = DeseqDataSet(
     counts=counts_df,
     metadata=metadata,
     design="~condition",
-    n_cpus=4  # Adjust based on available cores
+    inference=inference,  # Adjust based on available cores
 )
 
 # Process in batches if needed
@@ -553,14 +573,14 @@ design = "~condition + batch + condition:batch"  # Add interaction
 ```python
 # Check dispersion estimates
 import matplotlib.pyplot as plt
-dispersions = dds.varm["dispersions"]
+dispersions = dds.var["dispersions"]
 plt.hist(dispersions, bins=50)
 plt.xlabel("Dispersion")
 plt.ylabel("Frequency")
 plt.show()
 
 # Check size factors (should be close to 1)
-print("Size factors:", dds.obsm["size_factors"])
+print("Size factors:", dds.obs["size_factors"])
 
 # Look at top genes even if not significant
 top_genes = ds.results_df.nsmallest(20, "pvalue")
@@ -572,7 +592,8 @@ print(top_genes)
 **Solutions:**
 ```python
 # 1. Use fewer CPUs (paradoxically can help)
-dds = DeseqDataSet(..., n_cpus=1)
+inference = DefaultInference(n_cpus=1)
+dds = DeseqDataSet(..., inference=inference)
 
 # 2. Filter more aggressively
 genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 20]

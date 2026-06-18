@@ -117,11 +117,11 @@ For overdispersed count data.
 - Poisson model shows overdispersion
 
 ```python
-# Negative Binomial GLM
-model = sm.GLM(y, X, family=sm.families.NegativeBinomial())
+# Negative Binomial GLM with fixed alpha
+model = sm.GLM(y, X, family=sm.families.NegativeBinomial(alpha=1.0))
 results = model.fit()
 
-# Alternative: use discrete choice model with alpha estimation
+# Use the discrete count model when alpha should be estimated
 from statsmodels.discrete.discrete_model import NegativeBinomial
 nb_model = NegativeBinomial(y, X)
 nb_results = nb_model.fit()

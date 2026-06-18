@@ -18,6 +18,8 @@ plt.savefig('graph.png', dpi=300, bbox_inches='tight')
 plt.close()
 ```
 
+NetworkX 3.5 added `nx.display(G)`, a newer declarative drawing API that reads visualization attributes (color, size, position) stored directly on nodes and edges. `nx.draw` and the `draw_networkx_*` functions below remain fully supported.
+
 ### Drawing with Labels
 ```python
 # Draw with node labels

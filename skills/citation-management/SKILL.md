@@ -3,9 +3,8 @@ name: citation-management
 description: Comprehensive citation management for academic research. Search Google Scholar and PubMed for papers, extract accurate metadata, validate citations, and generate properly formatted BibTeX entries. This skill should be used when you need to find papers, verify citation information, convert DOIs to BibTeX, or ensure reference accuracy in scientific writing.
 allowed-tools: Read Write Edit Bash
 license: MIT License
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key for LLM-powered citation steps.", "required_for": "optional features"}, {"name": "NCBI_EMAIL", "prompt": "Email for NCBI Entrez identification.", "required_for": "optional features"}, {"name": "NCBI_API_KEY", "prompt": "NCBI API key to raise Entrez rate limits.", "required_for": "optional features"}]
+metadata: {"version": "1.2", "skill-author": "K-Dense Inc.", "openclaw": {"primaryEnv": "OPENROUTER_API_KEY", "envVars": [{"name": "OPENROUTER_API_KEY", "required": false, "description": "OpenRouter API key for LLM-powered citation steps."}, {"name": "NCBI_EMAIL", "required": false, "description": "Email for NCBI Entrez identification."}, {"name": "NCBI_API_KEY", "required": false, "description": "NCBI API key to raise Entrez rate limits."}]}}
 ---
 
 # Citation Management
@@ -214,6 +213,97 @@ python scripts/extract_metadata.py --input identifiers.txt --output citations.bi
 - **Preprints**: repository (arXiv, bioRxiv), preprint ID
 - **Additional**: abstract, keywords, URL
 
+### Phase 2.5: Metadata Enrichment via Web Search (MANDATORY)
+
+**Goal**: Detect and fill in any missing metadata fields using web search. This phase runs AFTER extraction and BEFORE formatting to ensure every BibTeX entry is complete.
+
+**Why This Is Critical**: Metadata extraction from APIs (CrossRef, PubMed, arXiv) sometimes returns incomplete records — missing volume, pages, issue number, or DOI. These gaps must be filled before the bibliography is considered ready.
+
+#### Step 1: Scan for Incomplete Entries
+
+After extracting metadata, scan the BibTeX file for entries missing key fields:
+
+**Fields to check per entry type:**
+
+| Entry Type | Must Have | Should Have |
+|------------|-----------|-------------|
+| @article | author, title, journal, year | volume, pages, number, doi |
+| @inproceedings | author, title, booktitle, year | pages, doi |
+| @book | author/editor, title, publisher, year | isbn, doi |
+| @misc | author, title, year | doi or url |
+
+Any `@article` entry missing `volume`, `pages`, or `doi` is considered **incomplete** and must be enriched.
+
+#### Step 2: Web Search for Missing Metadata
+
+For each incomplete entry, use the **parallel-web skill** to search for the missing information:
+
+**Option A — Search by title and author** (best for finding DOI):
+```bash
+parallel-cli search "FIRST_AUTHOR TITLE JOURNAL_NAME volume pages DOI" \
+  --json --max-results 10 \
+  -o sources/search_citation_CITATIONKEY.json
+```
+
+**Option B — Extract from DOI page** (best when DOI is known but volume/pages missing):
+```bash
+parallel-cli extract "https://doi.org/10.XXXX/YYYY" --json \
+  --objective "extract complete citation metadata: volume, issue, pages, publication date" \
+  -o sources/extract_doi_CITATIONKEY.json
+```
+
+**Option C — Search CrossRef API directly** (programmatic, fast):
+```bash
+parallel-cli search "crossref DOI metadata FIRST_AUTHOR TITLE" \
+  --json --max-results 10 \
+  -o sources/search_crossref_CITATIONKEY.json
+```
+
+**Option D — Search Google Scholar** (fallback for hard-to-find papers):
+```bash
+parallel-cli search "google scholar FIRST_AUTHOR TITLE YEAR complete citation" \
+  --json --max-results 10 \
+  -o sources/search_scholar_CITATIONKEY.json
+```
+
+#### Step 3: Update BibTeX Entries
+
+After finding the missing metadata:
+
+1. Open `references.bib`
+2. Add the missing fields to the incomplete entry
+3. Verify the found metadata is consistent with existing fields (same author, title, year)
+4. Log each fix:
+   ```
+   [HH:MM:SS] METADATA ENRICHED: [CitationKey] - added volume={X}, pages={Y--Z}, doi={10.XXX/YYY} ✅
+   ```
+
+#### Step 4: Handle Unfindable Metadata
+
+If metadata genuinely cannot be found after web search (very old paper, obscure conference, etc.):
+
+1. Add a `note` field to the BibTeX entry explaining the gap:
+   ```bibtex
+   note = {Volume and pages not available — published online only}
+   ```
+2. Log the exception:
+   ```
+   [HH:MM:SS] METADATA INCOMPLETE: [CitationKey] - pages unavailable (online-only publication) ⚠️
+   ```
+3. These exceptions should be rare — most modern papers have complete metadata findable via web search.
+
+#### Quick Reference: Common Missing Fields and Where to Find Them
+
+| Missing Field | Best Search Strategy |
+|---------------|---------------------|
+| DOI | Search "AUTHOR TITLE DOI" via parallel-cli search |
+| Volume | Extract from DOI page or search "JOURNAL YEAR TITLE volume" |
+| Pages | Extract from DOI page or search publisher website |
+| Issue/Number | Extract from DOI page or CrossRef |
+| Publisher | Search "JOURNAL publisher" or check journal website |
+
+---
+
 ### Phase 3: BibTeX Formatting
 
 **Goal**: Generate clean, properly formatted BibTeX entries.
@@ -310,13 +400,21 @@ python scripts/format_bibtex.py references.bib \
 # Validate BibTeX file
 python scripts/validate_citations.py references.bib
 
-# Validate and fix common issues
-python scripts/validate_citations.py references.bib \
-  --auto-fix \
-  --output validated_references.bib
+# Validate against a venue standard (e.g., Nature, NeurIPS, Literature Review)
+python scripts/validate_citations.py references.bib --venue nature
+python scripts/validate_citations.py references.bib --venue neurips
+python scripts/validate_citations.py references.bib --venue review
+
+# Validate with custom minimum citation count
+python scripts/validate_citations.py references.bib --min-count 40
+
+# Check references against a written manuscript file (detect missing or unused citations)
+python scripts/validate_citations.py references.bib --manuscript paper.md
 
 # Generate detailed validation report
 python scripts/validate_citations.py references.bib \
+  --venue nature \
+  --manuscript paper.md \
   --report validation_report.json \
   --verbose
 ```
@@ -378,6 +476,39 @@ python scripts/validate_citations.py references.bib \
     }
   ]
 }
+```
+
+#### Citation Count Standards by Venue
+
+**Citations must always be high in number based on standards for journal and conference publications in the venue of choice or recommendation.** Never settle for a sparse reference list; establish an authoritative, rich context with dense, verified citations.
+
+| Venue Type | Target Citation Count |
+|------------|----------------------|
+| High-impact multidisciplinary journals (Nature, Science, Cell) | **35-50+** |
+| ML / CS conferences (NeurIPS, ICML, ICLR, CVPR, ACL) | **30-45+** |
+| Comprehensive literature reviews / market research reports | **40-65+** |
+| Medical journals (NEJM, Lancet, JAMA) | **30-45+** |
+
+Always adjust the citation target upward depending on standard density and practices of the target venue. Avoid 'lazy' citation over-repetition — do not repeatedly cite the same 1 or 2 papers to support multiple unrelated claims; draw from a diverse, high-quality set of reputable references.
+
+Enforce these standards programmatically with `validate_citations.py --venue <venue>` or `--min-count <N>`.
+
+#### Mandatory Post-Writing Reference Checks (Non-Negotiable)
+
+Once the entire scientific report or paper has been drafted and written, perform a comprehensive post-writing verification of all citations before compiling the final deliverables:
+
+1. **Verify No Missing or Unresolved Citations**: Check the draft or compiled document to ensure that every in-text citation correctly resolves to a reference in `references.bib`. There must be ZERO broken citation keys, missing identifiers, or unresolved references (e.g., `[?]` or `[citation needed]`).
+2. **Verify No Unused (Dangling) Bibliography Entries**: Check that every entry in `references.bib` is actually cited in the body of the report. Remove any unused entries to keep the bibliography perfectly clean.
+3. **Verify Citation Quantity Against Target Standards**: Ensure the final citation count meets or exceeds the high standard of the chosen or recommended venue (see table above). If the count is below standard, perform additional literature search first, find high-quality papers, and integrate them into appropriate sections.
+4. **Verify Metadata Completeness**: Confirm that all cited entries contain complete, fully-verified fields (all author names, complete journal/conference names, exact year, volume, issue, page range, and valid DOI).
+
+Run all of these checks in one command:
+
+```bash
+python scripts/validate_citations.py references.bib \
+  --venue <venue> \
+  --manuscript paper.md \
+  --report post_writing_check.json
 ```
 
 ### Phase 5: Integration with Writing Workflow
@@ -657,14 +788,15 @@ python scripts/extract_metadata.py \
 
 ### validate_citations.py
 
-Validate BibTeX entries for accuracy and completeness.
+Validate BibTeX entries for accuracy, completeness, citation count standard compliance, and manuscript integration.
 
 **Features**:
 - DOI verification via doi.org and CrossRef
 - Required field checking
 - Duplicate detection
 - Format validation
-- Auto-fix common issues
+- **Publication standard citation count checks** against specified venues (Nature, NeurIPS, review, etc.) or custom thresholds.
+- **Mandatory post-writing checks** matching manuscript citations (Markdown or LaTeX) with defined BibTeX entries to detect unresolved/missing or unused references.
 - Detailed reporting
 
 **Usage**:
@@ -672,19 +804,23 @@ Validate BibTeX entries for accuracy and completeness.
 # Basic validation
 python scripts/validate_citations.py references.bib
 
-# With auto-fix
-python scripts/validate_citations.py references.bib \
-  --auto-fix \
-  --output fixed_references.bib
+# Validate against a venue standard (e.g., Nature, NeurIPS, Literature Review)
+python scripts/validate_citations.py references.bib --venue nature
+python scripts/validate_citations.py references.bib --venue neurips
+python scripts/validate_citations.py references.bib --venue review
 
-# Detailed validation report
+# Validate with custom minimum citation count
+python scripts/validate_citations.py references.bib --min-count 40
+
+# Check references against a written manuscript file (detect missing or unused citations)
+python scripts/validate_citations.py references.bib --manuscript paper.md
+
+# Combined full validation
 python scripts/validate_citations.py references.bib \
+  --venue nature \
+  --manuscript paper.md \
   --report validation_report.json \
   --verbose
-
-# Only check DOIs
-python scripts/validate_citations.py references.bib \
-  --check-dois-only
 ```
 
 ### format_bibtex.py
@@ -857,8 +993,8 @@ python scripts/doi_to_bibtex.py 10.1038/nature12345 --clipboard
 5. **Duplicate entries**: Same paper cited multiple times with different keys
    - **Solution**: Use duplicate detection in validation
 
-6. **Missing required fields**: Incomplete BibTeX entries
-   - **Solution**: Validate and ensure all required fields present
+6. **Missing required fields**: Incomplete BibTeX entries (volume, pages, DOI missing)
+   - **Solution**: Run Phase 2.5 metadata enrichment — web search for every missing field before proceeding. NEVER leave an @article entry without volume, pages, and DOI.
 
 7. **Outdated preprints**: Citing preprint when published version exists
    - **Solution**: Check if preprints have been published, update to journal version

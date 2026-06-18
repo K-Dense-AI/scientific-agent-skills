@@ -1,6 +1,6 @@
 # Support the Open Source Projects We Depend On
 
-Scientific Agent Skills is built on the shoulders of giants. The 135 skills in this repository leverage dozens of incredible open source projects created and maintained by dedicated developers and research communities around the world.
+Scientific Agent Skills is built on the shoulders of giants. The 146 skills in this repository leverage dozens of incredible open source projects created and maintained by dedicated developers and research communities around the world.
 
 **If you find value in these skills, please consider supporting the underlying open source projects that make them possible.**
 
@@ -132,7 +132,7 @@ Scientific Agent Skills is built on the shoulders of giants. The 135 skills in t
 
 | Project | Description | Links |
 |---------|-------------|-------|
-| **ESM** | Evolutionary scale modeling | [GitHub](https://github.com/facebookresearch/esm) |
+| **ESM** | Evolutionary scale modeling | [GitHub](https://github.com/Biohub/esm) |
 
 ### Data Formats & I/O
 

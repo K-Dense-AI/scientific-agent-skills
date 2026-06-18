@@ -22,12 +22,13 @@ X_scaled = (X - X.mean(axis=0)) / X.std(axis=0)
 
 # 2. BUILD MODEL
 # ==============
-with pm.Model() as model:
-    # Define coordinates for named dimensions
-    coords = {
-        'predictors': ['var1', 'var2', 'var3'],
-        'obs_id': np.arange(len(y))
-    }
+coords = {
+    'predictors': ['var1', 'var2', 'var3'],
+    'obs_id': np.arange(len(y))
+}
+
+with pm.Model(coords=coords) as model:
+    X_data = pm.Data('X_scaled', X_scaled, dims=('obs_id', 'predictors'))
 
     # Priors
     alpha = pm.Normal('alpha', mu=0, sigma=1)
@@ -35,15 +36,15 @@ with pm.Model() as model:
     sigma = pm.HalfNormal('sigma', sigma=1)
 
     # Linear predictor
-    mu = alpha + pm.math.dot(X_scaled, beta)
+    mu = alpha + pm.math.dot(X_data, beta)
 
-    # Likelihood
-    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, dims='obs_id')
+    # Tie observed shape to X_data so out-of-sample prediction can resize it
+    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, shape=X_data.shape[0], dims='obs_id')
 
 # 3. PRIOR PREDICTIVE CHECK
 # ==========================
 with model:
-    prior_pred = pm.sample_prior_predictive(samples=1000, random_seed=42)
+    prior_pred = pm.sample_prior_predictive(draws=1000, random_seed=42)
 
 # Visualize prior predictions
 az.plot_ppc(prior_pred, group='prior', num_pp_samples=100)
@@ -84,7 +85,7 @@ divergences = idata.sample_stats.diverging.sum().item()
 print(f"Number of divergences: {divergences}")
 
 # Trace plots
-az.plot_trace(idata, var_names=['alpha', 'beta', 'sigma'])
+az.plot_trace_dist(idata, var_names=['alpha', 'beta', 'sigma'])
 plt.tight_layout()
 plt.show()
 
@@ -117,18 +118,19 @@ X_new_scaled = (X_new - X.mean(axis=0)) / X.std(axis=0)
 
 with model:
     # Update data
-    pm.set_data({'X': X_new_scaled})
+    pm.set_data({'X_scaled': X_new_scaled}, coords={'obs_id': np.arange(len(X_new_scaled))})
 
     # Sample predictions
     post_pred = pm.sample_posterior_predictive(
-        idata.posterior,
+        idata,
         var_names=['y_obs'],
+        predictions=True,
         random_seed=42
     )
 
 # Prediction intervals
-y_pred_mean = post_pred.posterior_predictive['y_obs'].mean(dim=['chain', 'draw'])
-y_pred_hdi = az.hdi(post_pred.posterior_predictive, var_names=['y_obs'])
+y_pred_mean = post_pred.predictions['y_obs'].mean(dim=['chain', 'draw'])
+y_pred_hdi = az.hdi(post_pred.predictions, var_names=['y_obs'])
 
 # 9. SAVE RESULTS
 # ===============
@@ -337,7 +339,7 @@ Always validate priors:
 
 ```python
 with model:
-    prior_pred = pm.sample_prior_predictive(samples=1000)
+    prior_pred = pm.sample_prior_predictive(draws=1000)
 
 # Check if predictions are reasonable
 print(f"Prior predictive range: {prior_pred.prior_predictive['y'].min():.2f} to {prior_pred.prior_predictive['y'].max():.2f}")
@@ -403,7 +405,8 @@ for name, weight in zip(comparison.index, weights):
 def weighted_predictions(idatas, weights):
     preds = []
     for (name, idata), weight in zip(idatas.items(), weights):
-        pred = idata.posterior_predictive['y_obs'].mean(dim=['chain', 'draw'])
+        group = idata.predictions if hasattr(idata, 'predictions') else idata.posterior_predictive
+        pred = group['y_obs'].mean(dim=['chain', 'draw'])
         preds.append(weight * pred)
     return sum(preds)
 
@@ -506,13 +509,14 @@ group_A = idata.posterior['alpha'].sel(groups='A')
 ## Saving and Loading Results
 
 ```python
-# Save InferenceData
+# Save posterior data tree
 idata.to_netcdf('results.nc')
 
-# Load InferenceData
+# Load saved posterior data
 loaded_idata = az.from_netcdf('results.nc')
 
 # Save model for later predictions
+# Only unpickle model files you created and trust; prefer NetCDF for sampled results.
 import pickle
 
 with open('model.pkl', 'wb') as f:

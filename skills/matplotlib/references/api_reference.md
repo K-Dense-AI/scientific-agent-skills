@@ -56,7 +56,7 @@ ax = fig.add_subplot(111)  # Alternative method
 
 **Statistical plots:**
 - `ax.hist(data, bins=10, density=False)` - Histogram
-- `ax.boxplot(data, labels=None)` - Box plot
+- `ax.boxplot(data, tick_labels=None, orientation='vertical')` - Box plot
 - `ax.violinplot(data)` - Violin plot
 
 **2D plots:**
@@ -88,7 +88,7 @@ ax = fig.add_subplot(111)  # Alternative method
 
 **Ticks:**
 - `ax.set_xticks(positions)` - Set x-tick positions
-- `ax.set_xticklabels(labels)` - Set x-tick labels
+- `ax.set_xticks(positions, labels)` - Set x-tick positions and labels together
 - `ax.tick_params(axis='both', labelsize=10)` - Customize tick appearance
 
 **Grid and spines:**
@@ -299,8 +299,6 @@ ax5 = fig.add_subplot(gs[2, 2])      # Bottom row, right column
 ## 3D Plotting
 
 ```python
-from mpl_toolkits.mplot3d import Axes3D
-
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
@@ -399,8 +397,7 @@ fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
 ax2 = ax1.twinx()
 
 # Remove tick labels
-ax.set_xticklabels([])
-ax.set_yticklabels([])
+ax.tick_params(labelbottom=False, labelleft=False)
 
 # Scientific notation
 ax.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))

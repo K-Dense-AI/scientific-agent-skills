@@ -70,7 +70,7 @@ def main():
     print("=" * 60)
 
     if DATA_FORMAT == 'spikeglx':
-        recording = si.read_spikeglx(DATA_PATH, stream_id=STREAM_ID)
+        recording = si.read_spikeglx(DATA_PATH, stream_name=STREAM_ID)
     elif DATA_FORMAT == 'openephys':
         recording = si.read_openephys(DATA_PATH)
     elif DATA_FORMAT == 'nwb':
@@ -143,7 +143,7 @@ def main():
     sorting = si.run_sorter(
         SORTER,
         rec,
-        output_folder=output_path / f'{SORTER}_output',
+        folder=output_path / f'{SORTER}_output',
         verbose=True,
         **SORTER_PARAMS,
     )

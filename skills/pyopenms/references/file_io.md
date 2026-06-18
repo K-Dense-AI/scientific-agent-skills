@@ -66,39 +66,48 @@ spec = indexed_mzml.getSpectrumById(100)
 spec = indexed_mzml.getSpectrumByNativeId("scan=5000")
 ```
 
-### Streaming Access
+### Streaming / On-Disc Access
 
-Memory-efficient processing for very large files:
+Memory-efficient processing for very large files uses `OnDiscMSExperiment`,
+which parses the index of an indexed mzML and loads spectra on demand instead of
+holding the whole run in memory. (The old `MSExperimentConsumer` subclassing
+pattern is not available in pyOpenMS 3.5.)
 
 ```python
-# Define consumer function
-class SpectrumProcessor(ms.MSExperimentConsumer):
-    def __init__(self):
-        super().__init__()
-        self.count = 0
+# Requires an indexed mzML. Write one with the write-index option set:
+exp = ms.MSExperiment()
+ms.MzMLFile().load("large.mzML", exp)
+f = ms.MzMLFile()
+opt = f.getOptions(); opt.setWriteIndex(True); f.setOptions(opt)
+f.store("large_indexed.mzML", exp)
 
-    def consumeSpectrum(self, spec):
-        # Process spectrum
+# Now access spectra lazily, one at a time
+od = ms.OnDiscMSExperiment()
+if od.openFile("large_indexed.mzML"):
+    count = 0
+    for i in range(od.getNrSpectra()):
+        spec = od.getSpectrum(i)   # loaded from disk on demand
         if spec.getMSLevel() == 2:
-            self.count += 1
-
-# Stream file
-consumer = SpectrumProcessor()
-ms.MzMLFile().transform("large.mzML", consumer)
-print(f"Processed {consumer.count} MS2 spectra")
+            count += 1
+    print(f"Processed {count} MS2 spectra")
 ```
 
 ### Cached Access
 
-Balance between memory usage and speed:
+A cached binary representation trades a little disk space for faster repeated
+reads. Use the static `CachedmzML.store`/`load` methods:
 
 ```python
-# Use on-disk caching
-options = ms.CachedmzML()
-options.setMetaDataOnly(False)
-
+# Write a cached representation
 exp = ms.MSExperiment()
-ms.CachedmzMLHandler().load("sample.mzML", exp, options)
+ms.MzMLFile().load("sample.mzML", exp)
+ms.CachedmzML().store("sample.cachedmzML", exp)
+
+# Load it back for on-demand spectrum access
+cached = ms.CachedmzML()
+ms.CachedmzML().load("sample.cachedmzML", cached)
+print(f"{cached.getNrSpectra()} spectra")
+spec = cached.getSpectrum(0)
 ```
 
 ## Writing mzML Files
@@ -133,8 +142,9 @@ file_handler.store("compressed.mzML", exp)
 
 ```python
 # Load identification results
-protein_ids = []
-peptide_ids = []
+protein_ids = []                              # protein IDs: plain list
+# pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
+peptide_ids = ms.PeptideIdentificationList()
 
 ms.IdXMLFile().load("identifications.idXML", protein_ids, peptide_ids)
 
@@ -154,8 +164,8 @@ for peptide_id in peptide_ids:
 
 ```python
 # Read mzIdentML
-protein_ids = []
-peptide_ids = []
+protein_ids = []                              # protein IDs: plain list
+peptide_ids = ms.PeptideIdentificationList()  # pyOpenMS 3.5+: not a plain list
 
 ms.MzIdentMLFile().load("results.mzid", protein_ids, peptide_ids)
 ```
@@ -164,8 +174,8 @@ ms.MzIdentMLFile().load("results.mzid", protein_ids, peptide_ids)
 
 ```python
 # Load pepXML
-protein_ids = []
-peptide_ids = []
+protein_ids = []                              # protein IDs: plain list
+peptide_ids = ms.PeptideIdentificationList()  # pyOpenMS 3.5+: not a plain list
 
 ms.PepXMLFile().load("results.pep.xml", protein_ids, peptide_ids)
 ```

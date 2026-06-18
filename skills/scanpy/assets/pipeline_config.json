@@ -1,0 +1,19 @@
+{
+  "min_genes": 200,
+  "max_genes": 6000,
+  "min_cells": 3,
+  "mt_threshold": 10,
+  "scrublet": true,
+  "target_sum": 10000,
+  "n_top_genes": 2000,
+  "hvg_flavor": "seurat",
+  "scale": false,
+  "regress_out": null,
+  "n_pcs": 40,
+  "n_neighbors": 15,
+  "resolution": 0.5,
+  "batch_key": null,
+  "batch_method": "harmony",
+  "marker_method": "wilcoxon",
+  "skip_markers": false
+}

@@ -36,9 +36,10 @@ This document provides comprehensive details on all DiffDock configuration param
   - Automatically generates protein structure from sequence
   - Alternative to `--protein_path`
 
-- **`--ligand`**: Ligand specification (SMILES string or file path)
-  - SMILES string: `--ligand "COc(cc1)ccc1C#N"`
-  - File path: `--ligand ligand.sdf` or `.mol2`
+- **`--ligand_description`**: Ligand specification (SMILES string or file path) for single-complex inference
+  - SMILES string: `--ligand_description "COc(cc1)ccc1C#N"`
+  - File path: `--ligand_description ligand.sdf` or `.mol2`
+  - Note: some upstream README text still mentions `--ligand`, but current `inference.py` registers `--ligand_description`
 
 - **`--protein_ligand_csv`**: CSV file for batch processing
   - Required columns: `complex_name`, `protein_path`, `ligand_description`, `protein_sequence`
@@ -64,6 +65,9 @@ This document provides comprehensive details on all DiffDock configuration param
 - **`--no_final_step_noise`**: Omit noise at the final diffusion step
   - Default: `true`
 
+- **`--resample_rdkit`**: Resample the RDKit ligand conformer before inference
+  - Default: `false`
+
 ### Sampling Settings
 - **`--samples_per_complex`**: Number of samples to generate per complex
   - Default: `10`
@@ -71,6 +75,9 @@ This document provides comprehensive details on all DiffDock configuration param
 
 - **`--sigma_schedule`**: Noise schedule type
   - Default: `expbeta` (exponential-beta)
+
+- **`--inf_sched_alpha` / `--inf_sched_beta`**: Inference schedule shape parameters
+  - Default: `1` / `1`
 
 - **`--initial_noise_std_proportion`**: Initial noise standard deviation scaling
   - Default: `1.46`
@@ -139,6 +146,9 @@ This document provides comprehensive details on all DiffDock configuration param
 - **`--no_random`**: Disable randomization
   - Default: `false`
   - Useful for reproducibility testing
+
+- **`--no_random_pocket`**: Disable random pocket randomization
+  - Default: `false`
 
 ### Alternative Sampling
 - **`--ode`**: Use ODE solver instead of SDE

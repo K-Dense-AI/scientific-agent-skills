@@ -1,306 +1,225 @@
 # Standard Neuropixels Analysis Workflow
 
-Complete step-by-step guide for analyzing Neuropixels recordings from raw data to curated units.
+Complete step-by-step guide for analyzing Neuropixels recordings from raw data to curated
+units, using the SpikeInterface API directly.
 
 ## Overview
-
-This reference documents the complete analysis pipeline:
 
 ```
 Raw Recording → Preprocessing → Motion Correction → Spike Sorting →
 Postprocessing → Quality Metrics → Curation → Export
 ```
 
-## 1. Data Loading
-
-### Supported Formats
-
 ```python
 import spikeinterface.full as si
-import neuropixels_analysis as npa
+import spikeinterface.curation as sc
 
-# SpikeGLX (most common)
-recording = si.read_spikeglx('/path/to/run/', stream_id='imec0.ap')
-
-# Open Ephys
-recording = si.read_openephys('/path/to/experiment/')
-
-# NWB format
-recording = si.read_nwb('/path/to/file.nwb')
-
-# Or use our convenience wrapper
-recording = npa.load_recording('/path/to/data/', format='spikeglx')
+si.set_global_job_kwargs(n_jobs=-1, chunk_duration="1s", progress_bar=True)
 ```
 
-### Verify Recording Properties
+## 1. Data Loading
+
+### Supported formats
 
 ```python
-# Basic properties
+# Inspect streams first
+stream_names, stream_ids = si.get_neo_streams("spikeglx", "/path/to/run_g0/")
+
+# SpikeGLX (most common)
+recording = si.read_spikeglx("/path/to/run_g0/", stream_name="imec0.ap", load_sync_channel=False)
+
+# Open Ephys
+recording = si.read_openephys("/path/to/experiment/")
+
+# NWB
+recording = si.read_nwb("/path/to/file.nwb")
+```
+
+### Verify recording properties
+
+```python
 print(f"Channels: {recording.get_num_channels()}")
 print(f"Duration: {recording.get_total_duration():.1f}s")
 print(f"Sampling rate: {recording.get_sampling_frequency()}Hz")
-
-# Probe geometry
-print(f"Probe: {recording.get_probe().name}")
-
-# Channel locations
+print(f"Probe: {recording.get_probe()}")
 locations = recording.get_channel_locations()
 ```
 
 ## 2. Preprocessing
 
-### Standard Preprocessing Chain
+### Standard chain (IBL-style)
 
 ```python
-# Option 1: Full pipeline (recommended)
-rec_preprocessed = npa.preprocess(recording)
-
-# Option 2: Step-by-step control
-rec = si.bandpass_filter(recording, freq_min=300, freq_max=6000)
-rec = si.phase_shift(rec)  # Correct ADC phase
-bad_channels = si.detect_bad_channels(rec)
-rec = rec.remove_channels(bad_channels)
-rec = si.common_reference(rec, operator='median')
-rec_preprocessed = rec
+rec = si.highpass_filter(recording, freq_min=400.0)
+bad_channel_ids, channel_labels = si.detect_bad_channels(rec)
+rec = rec.remove_channels(bad_channel_ids)
+rec = si.phase_shift(rec)                                   # ADC phase (NP 1.0)
+rec = si.common_reference(rec, operator="median", reference="global")
 ```
 
-### IBL-Style Destriping
-
-For recordings with strong artifacts:
+A bandpass alternative (some labs prefer an explicit passband):
 
 ```python
-from ibldsp.voltage import decompress_destripe_cbin
-
-# IBL destriping (very effective)
-rec = si.highpass_filter(recording, freq_min=400)
+rec = si.bandpass_filter(recording, freq_min=300.0, freq_max=6000.0)
 rec = si.phase_shift(rec)
-rec = si.highpass_spatial_filter(rec)  # Destriping
-rec = si.common_reference(rec, reference='global', operator='median')
+bad_channel_ids, _ = si.detect_bad_channels(rec)
+rec = rec.remove_channels(bad_channel_ids)
+rec = si.common_reference(rec, operator="median", reference="global")
 ```
 
-### Save Preprocessed Data
+### Spatial destriping (strong artifacts)
 
 ```python
-# Save for reuse (speeds up iteration)
-rec_preprocessed.save(folder='preprocessed/', n_jobs=4)
+rec = si.highpass_filter(recording, freq_min=400.0)
+rec = si.phase_shift(rec)
+rec = si.highpass_spatial_filter(rec)                       # destriping
+rec = si.common_reference(rec, operator="median", reference="global")
+```
+
+### Save preprocessed data
+
+```python
+rec = rec.save(folder="preprocessed/", format="binary")
 ```
 
 ## 3. Motion/Drift Correction
 
-### Check if Correction Needed
+### Check whether correction is needed
 
 ```python
-# Estimate motion
-motion_info = npa.estimate_motion(rec_preprocessed, preset='kilosort_like')
+from spikeinterface.sortingcomponents.peak_detection import detect_peaks
+from spikeinterface.sortingcomponents.peak_localization import localize_peaks
 
-# Visualize drift
-npa.plot_drift(rec_preprocessed, motion_info, output='drift_map.png')
+noise_levels = si.get_noise_levels(rec, return_in_uV=False)
+peaks = detect_peaks(rec, method="locally_exclusive", noise_levels=noise_levels,
+                     detect_threshold=5, radius_um=50.0)
+peak_locations = localize_peaks(rec, peaks, method="center_of_mass")
 
-# Check magnitude
-if motion_info['motion'].max() > 10:  # microns
-    print("Significant drift detected - correction recommended")
+si.plot_drift_raster_map(peaks=peaks, peak_locations=peak_locations, recording=rec, clim=(-50, 50))
 ```
 
-### Apply Correction
+### Apply correction
 
 ```python
-# DREDge-based correction (default)
-rec_corrected = npa.correct_motion(
-    rec_preprocessed,
-    preset='nonrigid_accurate',  # or 'kilosort_like' for speed
-)
-
-# Or full control
-from spikeinterface.preprocessing import correct_motion
-
-rec_corrected = correct_motion(
-    rec_preprocessed,
-    preset='nonrigid_accurate',
-    folder='motion_output/',
-    output_motion=True,
-)
+# One-call correction with a preset
+rec_corrected = si.correct_motion(rec, preset="nonrigid_fast_and_accurate", folder="motion/")
 ```
+
+See [MOTION_CORRECTION.md](MOTION_CORRECTION.md) for the full estimate/interpolate pipeline
+and DREDge usage.
 
 ## 4. Spike Sorting
 
 ### Recommended: Kilosort4
 
 ```python
-# Run Kilosort4 (requires GPU)
-sorting = npa.run_sorting(
-    rec_corrected,
-    sorter='kilosort4',
-    output_folder='sorting_KS4/',
-)
+sorting = si.run_sorter("kilosort4", rec_corrected, folder="sorting_KS4/", verbose=True)
 
 # With custom parameters
-sorting = npa.run_sorting(
-    rec_corrected,
-    sorter='kilosort4',
-    output_folder='sorting_KS4/',
-    sorter_params={
-        'batch_size': 30000,
-        'nblocks': 5,  # For nonrigid drift
-        'Th_learned': 8,  # Detection threshold
-    },
+sorting = si.run_sorter(
+    "kilosort4", rec_corrected, folder="sorting_KS4/",
+    nblocks=5,           # non-rigid drift blocks
+    Th_universal=9,      # detection threshold
+    Th_learned=8,
+    batch_size=60000,
 )
 ```
 
-### Alternative Sorters
+### Alternative sorters
 
 ```python
-# SpykingCircus2 (CPU-based)
-sorting = npa.run_sorting(rec_corrected, sorter='spykingcircus2')
-
-# Mountainsort5 (fast, good for short recordings)
-sorting = npa.run_sorting(rec_corrected, sorter='mountainsort5')
+sorting = si.run_sorter("spykingcircus2", rec_corrected, folder="sc2/")   # CPU
+sorting = si.run_sorter("tridesclous2", rec_corrected, folder="tdc2/")    # CPU
+sorting = si.run_sorter("mountainsort5", rec_corrected, folder="ms5/")    # CPU
 ```
 
-### Compare Multiple Sorters
+### Compare multiple sorters
 
 ```python
-# Run multiple sorters
-sortings = {}
-for sorter in ['kilosort4', 'spykingcircus2']:
-    sortings[sorter] = npa.run_sorting(rec_corrected, sorter=sorter)
+sortings = {s: si.run_sorter(s, rec_corrected, folder=f"{s}/")
+            for s in ["kilosort4", "spykingcircus2"]}
 
-# Compare results
-comparison = npa.compare_sorters(list(sortings.values()))
-agreement_matrix = comparison.get_agreement_matrix()
+comparison = si.compare_multiple_sorters(list(sortings.values()),
+                                         name_list=list(sortings.keys()))
+agreement = comparison.get_agreement_sorting(minimum_agreement_count=2)
 ```
 
 ## 5. Postprocessing
 
-### Create Analyzer
+### Create analyzer and compute extensions
 
 ```python
-# Create sorting analyzer (central object for all postprocessing)
-analyzer = npa.create_analyzer(
-    sorting,
-    rec_corrected,
-    output_folder='analyzer/',
-)
+analyzer = si.create_sorting_analyzer(sorting, rec_corrected, sparse=True,
+                                      format="binary_folder", folder="analyzer/")
 
-# Compute all standard extensions
-analyzer = npa.postprocess(
-    sorting,
-    rec_corrected,
-    output_folder='analyzer/',
-    compute_all=True,  # Waveforms, templates, metrics, etc.
-)
-```
-
-### Compute Individual Extensions
-
-```python
-# Waveforms
-analyzer.compute('waveforms', ms_before=1.0, ms_after=2.0, max_spikes_per_unit=500)
-
-# Templates
-analyzer.compute('templates', operators=['average', 'std'])
-
-# Spike amplitudes
-analyzer.compute('spike_amplitudes')
-
-# Correlograms
-analyzer.compute('correlograms', window_ms=50.0, bin_ms=1.0)
-
-# Unit locations
-analyzer.compute('unit_locations', method='monopolar_triangulation')
-
-# Spike locations
-analyzer.compute('spike_locations', method='center_of_mass')
+analyzer.compute("random_spikes", method="uniform", max_spikes_per_unit=500)
+analyzer.compute("waveforms", ms_before=1.0, ms_after=2.0)
+analyzer.compute("templates", operators=["average", "std"])
+analyzer.compute("noise_levels")
+analyzer.compute("spike_amplitudes")
+analyzer.compute("correlograms", window_ms=50.0, bin_ms=1.0)
+analyzer.compute("unit_locations", method="monopolar_triangulation")
+analyzer.compute("template_similarity")
 ```
 
 ## 6. Quality Metrics
 
-### Compute All Metrics
-
 ```python
-# Compute comprehensive metrics
-metrics = npa.compute_quality_metrics(
-    analyzer,
-    metric_names=[
-        'snr',
-        'isi_violations_ratio',
-        'presence_ratio',
-        'amplitude_cutoff',
-        'firing_rate',
-        'amplitude_cv',
-        'sliding_rp_violation',
-        'd_prime',
-        'nearest_neighbor',
-    ],
-)
-
-# View metrics
+metric_names = ["snr", "isi_violation", "presence_ratio", "amplitude_cutoff",
+                "firing_rate", "amplitude_cv", "sliding_rp_violation"]
+analyzer.compute("quality_metrics", metric_names=metric_names)
+metrics = analyzer.get_extension("quality_metrics").get_data()
 print(metrics.head())
 ```
 
-### Key Metrics Explained
+### Key metrics
 
-| Metric | Good Value | Description |
-|--------|------------|-------------|
+| Metric (column) | Good value | Description |
+|-----------------|------------|-------------|
 | `snr` | > 5 | Signal-to-noise ratio |
-| `isi_violations_ratio` | < 0.01 | Refractory period violations |
+| `isi_violations_ratio` | < 0.5 (strict: < 0.01) | Refractory period violations |
 | `presence_ratio` | > 0.9 | Fraction of recording with spikes |
 | `amplitude_cutoff` | < 0.1 | Estimated missed spikes |
 | `firing_rate` | > 0.1 Hz | Average firing rate |
 
 ## 7. Curation
 
-### Automated Curation
+### Threshold-based
 
 ```python
-# Allen Institute criteria
-labels = npa.curate(metrics, method='allen')
+query = "(amplitude_cutoff < 0.1) & (isi_violations_ratio < 0.5) & (presence_ratio > 0.9)"
+good_unit_ids = metrics.query(query).index.values
+```
 
-# IBL criteria
-labels = npa.curate(metrics, method='ibl')
+For `allen` / `ibl` / `strict` presets in one call, use `scripts/compute_metrics.py`.
 
-# Custom thresholds
-labels = npa.curate(
-    metrics,
-    snr_threshold=5,
-    isi_violations_threshold=0.01,
-    presence_threshold=0.9,
+### Model-based (UnitRefine)
+
+```python
+noise_labels = sc.model_based_label_units(
+    sorting_analyzer=analyzer,
+    repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
+    trust_model=True,
+)
+neural = analyzer.remove_units(noise_labels[noise_labels["prediction"] == "noise"].index)
+sua_mua = sc.model_based_label_units(
+    sorting_analyzer=neural,
+    repo_id="SpikeInterface/UnitRefine_sua_mua_classifier",
+    trust_model=True,
 )
 ```
 
-### AI-Assisted Curation
+### AI-assisted (uncertain units)
+
+Read API keys from the environment — never hardcode them (see [AI_CURATION.md](AI_CURATION.md)):
 
 ```python
+import os
 from anthropic import Anthropic
 
-# Setup API
-client = Anthropic()
-
-# Visual analysis for uncertain units
-uncertain = metrics.query('snr > 3 and snr < 8').index.tolist()
-
-for unit_id in uncertain:
-    result = npa.analyze_unit_visually(analyzer, unit_id, api_client=client)
-    labels[unit_id] = result['classification']
-```
-
-### Interactive Curation Session
-
-```python
-# Create session
-session = npa.CurationSession.create(analyzer, output_dir='curation/')
-
-# Review units
-while session.current_unit():
-    unit = session.current_unit()
-    report = npa.generate_unit_report(analyzer, unit.unit_id)
-
-    # Your decision
-    decision = input(f"Unit {unit.unit_id}: ")
-    session.set_decision(unit.unit_id, decision)
-    session.next_unit()
-
-# Export
-labels = session.get_final_labels()
+client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+uncertain = metrics.query("snr > 3 and snr < 8").index.tolist()
+# Render each uncertain unit's summary image and ask the model to classify it.
 ```
 
 ## 8. Export Results
@@ -308,78 +227,79 @@ labels = session.get_final_labels()
 ### Export to Phy
 
 ```python
-from spikeinterface.exporters import export_to_phy
-
-export_to_phy(
-    analyzer,
-    output_folder='phy_export/',
-    copy_binary=True,
-)
+analyzer_clean = analyzer.select_units(good_unit_ids, folder="analyzer_clean/", format="binary_folder")
+si.export_to_phy(analyzer_clean, output_folder="phy_export/",
+                 compute_pc_features=True, compute_amplitudes=True)
 ```
 
 ### Export to NWB
 
 ```python
 from spikeinterface.exporters import export_to_nwb
-
-export_to_nwb(
-    analyzer,
-    nwbfile_path='results.nwb',
-    metadata={
-        'session_description': 'Neuropixels recording',
-        'experimenter': 'Lab Name',
-    },
-)
+export_to_nwb(analyzer_clean, "results.nwb")
 ```
 
-### Save Quality Summary
+### Save quality summary
 
 ```python
-# Save metrics CSV
-metrics.to_csv('quality_metrics.csv')
+metrics.to_csv("quality_metrics.csv")
 
-# Save labels
 import json
-with open('curation_labels.json', 'w') as f:
+labels = {int(uid): ("good" if uid in good_unit_ids else "other") for uid in metrics.index}
+with open("curation_labels.json", "w") as f:
     json.dump(labels, f, indent=2)
 
-# Generate summary report
-npa.plot_quality_metrics(analyzer, metrics, output='quality_summary.png')
+si.export_report(analyzer_clean, "report/", format="png")
 ```
 
 ## Full Pipeline Example
 
 ```python
-import neuropixels_analysis as npa
+import spikeinterface.full as si
+
+si.set_global_job_kwargs(n_jobs=-1, chunk_duration="1s", progress_bar=True)
 
 # Load
-recording = npa.load_recording('/data/experiment/', format='spikeglx')
+recording = si.read_spikeglx("/data/experiment/", stream_name="imec0.ap", load_sync_channel=False)
 
 # Preprocess
-rec = npa.preprocess(recording)
+rec = si.highpass_filter(recording, freq_min=400.0)
+bad_channel_ids, _ = si.detect_bad_channels(rec)
+rec = rec.remove_channels(bad_channel_ids)
+rec = si.phase_shift(rec)
+rec = si.common_reference(rec, operator="median", reference="global")
 
 # Motion correction
-rec = npa.correct_motion(rec)
+rec = si.correct_motion(rec, preset="nonrigid_fast_and_accurate", folder="motion/")
 
 # Sort
-sorting = npa.run_sorting(rec, sorter='kilosort4')
+sorting = si.run_sorter("kilosort4", rec, folder="ks4/")
 
-# Postprocess
-analyzer, metrics = npa.postprocess(sorting, rec)
+# Postprocess + metrics
+analyzer = si.create_sorting_analyzer(sorting, rec, sparse=True, format="binary_folder", folder="analyzer/")
+analyzer.compute(["random_spikes", "waveforms", "templates", "noise_levels",
+                  "spike_amplitudes", "correlograms", "unit_locations"])
+analyzer.compute("quality_metrics",
+                 metric_names=["snr", "isi_violation", "presence_ratio", "amplitude_cutoff", "firing_rate"])
+metrics = analyzer.get_extension("quality_metrics").get_data()
 
 # Curate
-labels = npa.curate(metrics, method='allen')
+query = "(amplitude_cutoff < 0.1) & (isi_violations_ratio < 0.5) & (presence_ratio > 0.9)"
+good_unit_ids = metrics.query(query).index.values
+print(f"Good units: {len(good_unit_ids)}/{len(metrics)}")
+```
 
-# Export good units
-good_units = [uid for uid, label in labels.items() if label == 'good']
-print(f"Good units: {len(good_units)}/{len(labels)}")
+Or run it as a script:
+
+```bash
+python scripts/neuropixels_pipeline.py /data/experiment/ output/ --sorter kilosort4 --curation allen
 ```
 
 ## Tips for Success
 
-1. **Always visualize drift** before deciding on motion correction
-2. **Save preprocessed data** to avoid recomputing
-3. **Compare multiple sorters** for critical experiments
-4. **Review uncertain units manually** - don't trust automated curation blindly
-5. **Document your parameters** for reproducibility
-6. **Use GPU** for Kilosort4 (10-50x faster than CPU alternatives)
+1. **Always visualize drift** before deciding on motion correction.
+2. **Save preprocessed data** to avoid recomputing (and Kilosort needs a binary file).
+3. **Compare multiple sorters** for critical experiments.
+4. **Review uncertain units manually** — don't trust automated curation blindly.
+5. **Document parameters and model repo IDs** for reproducibility.
+6. **Use a GPU** for Kilosort4.

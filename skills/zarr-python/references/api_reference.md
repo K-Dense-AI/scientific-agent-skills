@@ -17,6 +17,8 @@ zarr.create_array(store, *, shape, chunks, dtype='f8', compressors='default',
                   overwrite=False)
 ```
 
+`chunks` may be a regular tuple (for example `(100, 100)`) or, in Zarr 3.2+, a rectilinear nested sequence (for example `([10, 20, 30], [50, 50])`).
+
 ### `zarr.array()`
 ```python
 zarr.array(data, *, chunks=None, dtype=None, store=None, compressors='default')
@@ -46,7 +48,7 @@ store = MemoryStore()
 # ZIP archive
 store = ZipStore('data.zip', mode='w')  # close when done writing
 
-# Cloud via fsspec URI (install zarr[remote] + s3fs/gcsfs)
+# Cloud via fsspec URI (install pinned zarr[remote] + pinned backend)
 store = FsspecStore.from_url('s3://bucket/path.zarr', storage_options={'anon': False})
 group = zarr.open_group(store=store, mode='r')
 
@@ -59,16 +61,16 @@ zarr.open_group('s3://bucket/data.zarr', mode='r', storage_options={'anon': True
 ## Compression (zarr.codecs)
 
 ```python
-from zarr.codecs import BloscCodec, GzipCodec, ZstdCodec, BytesCodec
+from zarr.codecs import BloscCodec, BloscShuffle, GzipCodec, ZstdCodec
 
 # Default Blosc (zstd) is applied when compressors='default'
-codec = BloscCodec(cname='zstd', clevel=5, shuffle='shuffle')
+codec = BloscCodec(cname='zstd', clevel=5, shuffle=BloscShuffle.bitshuffle)
 z = zarr.create_array('data.zarr', shape=(1000, 1000), chunks=(100, 100),
                       dtype='f4', compressors=codec)
 
 # No compression
 z = zarr.create_array('data.zarr', shape=(1000, 1000), chunks=(100, 100),
-                      dtype='f4', compressors=BytesCodec())
+                      dtype='f4', compressors=None)
 ```
 
 For **Zarr format 2** arrays, import codecs from `numcodecs` instead of `zarr.codecs`.
@@ -139,6 +141,7 @@ ds.to_zarr('output.zarr')
 - Reads: safe without coordination.
 - Writes: safe across workers when chunks do not overlap.
 - `synchronizer=` / `ThreadSynchronizer` / `ProcessSynchronizer`: **not available in v3** (see migration reference).
+- Tune Zarr's internal concurrency with `zarr.config.set({"async.concurrency": 8, "threading.max_workers": 8})`, especially when combining Zarr with Dask.
 
 ## Format versions
 

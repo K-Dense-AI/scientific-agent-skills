@@ -19,16 +19,19 @@ import numpy as np
 
 # Define molecule
 symbols = ['H', 'H']
-coordinates = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.74])  # Angstroms
+geometry = np.array([[0.0, 0.0, -0.66140414], [0.0, 0.0, 0.66140414]])
+molecule = qchem.Molecule(
+    symbols,
+    geometry,
+    charge=0,
+    mult=1,
+    basis_name='sto-3g',
+)
 
 # Generate Hamiltonian
 hamiltonian, n_qubits = qchem.molecular_hamiltonian(
-    symbols,
-    coordinates,
-    charge=0,
-    mult=1,  # Spin multiplicity
-    basis='sto-3g',
-    method='dhf'  # Dirac-Hartree-Fock
+    molecule,
+    mapping='jordan_wigner',
 )
 
 print(f"Hamiltonian: {hamiltonian}")
@@ -47,7 +50,7 @@ a_0 = fermi.FermiC(0)  # Creation operator
 a_1 = fermi.FermiA(1)  # Annihilation operator
 
 # Convert to qubits
-qubit_op = qml.qchem.jordan_wigner(a_0 * a_1)
+qubit_op = qml.jordan_wigner(a_0 * a_1)
 ```
 
 ### Bravyi-Kitaev Transformation
@@ -58,8 +61,7 @@ from pennylane.qchem import bravyi_kitaev
 
 # Build Hamiltonian with Bravyi-Kitaev
 hamiltonian, n_qubits = qchem.molecular_hamiltonian(
-    symbols,
-    coordinates,
+    molecule,
     mapping='bravyi_kitaev'
 )
 ```
@@ -125,10 +127,9 @@ print(f"Final ground state energy: {energy:.8f} Ha")
 ### UCCSD Ansatz
 
 ```python
-from pennylane.qchem import UCCSD
-
 # Singles and doubles excitations
 singles, doubles = qchem.excitations(electrons=2, orbitals=n_qubits)
+s_wires, d_wires = qchem.excitations_to_wires(singles, doubles)
 
 @qml.qnode(dev)
 def uccsd_circuit(params):
@@ -136,7 +137,7 @@ def uccsd_circuit(params):
     qml.BasisState(hf_state, wires=range(n_qubits))
 
     # UCCSD ansatz
-    UCCSD(params, wires=range(n_qubits), s_wires=singles, d_wires=doubles)
+    qml.UCCSD(params, wires=range(n_qubits), s_wires=s_wires, d_wires=d_wires)
 
     return qml.expval(hamiltonian)
 
@@ -210,19 +211,19 @@ def adaptive_vqe(hamiltonian, n_qubits, max_gates=10):
 ```python
 # Simple diatomic
 h2_symbols = ['H', 'H']
-h2_coords = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.74])
+h2_coords = np.array([[0.0, 0.0, -0.66140414], [0.0, 0.0, 0.66140414]])
 
 # Water molecule
 h2o_symbols = ['O', 'H', 'H']
 h2o_coords = np.array([
-    0.0, 0.0, 0.0,      # O
-    0.757, 0.586, 0.0,  # H
-   -0.757, 0.586, 0.0   # H
+    [0.0, 0.0, 0.0],      # O
+    [0.757, 0.586, 0.0],  # H
+    [-0.757, 0.586, 0.0], # H
 ])
 
 # From XYZ format
-molecule = qchem.read_structure('molecule.xyz')
-symbols, coords = molecule
+symbols, geometry = qchem.read_structure('molecule.xyz')
+molecule = qchem.Molecule(symbols, geometry)
 ```
 
 ### Geometry Optimization
@@ -232,8 +233,9 @@ def optimize_geometry(symbols, initial_coords, basis='sto-3g'):
     """Optimize molecular geometry."""
 
     def energy_surface(coords):
+        molecule = qchem.Molecule(symbols, coords, basis_name=basis)
         H, n_qubits = qchem.molecular_hamiltonian(
-            symbols, coords, basis=basis
+            molecule
         )
 
         # Run VQE to get energy
@@ -269,11 +271,11 @@ def dissociation_curve(symbols, axis=2, distances=None):
     energies = []
 
     for d in distances:
-        coords = np.zeros(6)
-        coords[axis] = d  # Set bond length
+        coords = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, d]])
+        molecule = qchem.Molecule(symbols, coords, basis_name='sto-3g')
 
         H, n_qubits = qchem.molecular_hamiltonian(
-            symbols, coords, basis='sto-3g'
+            molecule
         )
 
         energy = run_vqe(H, n_qubits)
@@ -300,18 +302,21 @@ plt.show()
 
 ```python
 # Minimal basis (fastest, least accurate)
+molecule = qchem.Molecule(symbols, coords, basis_name='sto-3g')
 H_sto3g, n_qubits = qchem.molecular_hamiltonian(
-    symbols, coords, basis='sto-3g'
+    molecule
 )
 
 # Double-zeta basis
+molecule = qchem.Molecule(symbols, coords, basis_name='6-31g')
 H_631g, n_qubits = qchem.molecular_hamiltonian(
-    symbols, coords, basis='6-31g'
+    molecule
 )
 
 # Large basis (slower, more accurate)
+molecule = qchem.Molecule(symbols, coords, basis_name='cc-pvdz')
 H_ccpvdz, n_qubits = qchem.molecular_hamiltonian(
-    symbols, coords, basis='cc-pvdz'
+    molecule
 )
 ```
 
@@ -322,11 +327,11 @@ H_ccpvdz, n_qubits = qchem.molecular_hamiltonian(
 active_electrons = 2
 active_orbitals = 2
 
+molecule = qchem.Molecule(symbols, coords, basis_name='sto-3g')
 H_active, n_qubits = qchem.molecular_hamiltonian(
-    symbols,
-    coords,
+    molecule,
     active_electrons=active_electrons,
-    active_orbitals=active_orbitals
+    active_orbitals=active_orbitals,
 )
 
 print(f"Full system: {len(symbols)} electrons")
@@ -339,17 +344,17 @@ print(f"Qubits needed: {n_qubits}")
 ```python
 # Jordan-Wigner (default)
 H_jw, n_q_jw = qchem.molecular_hamiltonian(
-    symbols, coords, mapping='jordan_wigner'
+    molecule, mapping='jordan_wigner'
 )
 
 # Bravyi-Kitaev
 H_bk, n_q_bk = qchem.molecular_hamiltonian(
-    symbols, coords, mapping='bravyi_kitaev'
+    molecule, mapping='bravyi_kitaev'
 )
 
 # Parity
 H_parity, n_q_parity = qchem.molecular_hamiltonian(
-    symbols, coords, mapping='parity'
+    molecule, mapping='parity'
 )
 
 print(f"Jordan-Wigner terms: {len(H_jw.ops)}")
@@ -448,8 +453,9 @@ def full_chemistry_workflow(symbols, coords, basis='sto-3g'):
     """Complete quantum chemistry calculation."""
 
     print("1. Building molecular Hamiltonian...")
+    molecule = qchem.Molecule(symbols, coords, basis_name=basis)
     H, n_qubits = qchem.molecular_hamiltonian(
-        symbols, coords, basis=basis
+        molecule
     )
 
     print(f"   Molecule: {' '.join(symbols)}")
@@ -486,11 +492,12 @@ def compute_molecular_properties(symbols, coords, vqe_params):
     """Calculate molecular properties from VQE solution."""
 
     # Energy
-    H, n_qubits = qchem.molecular_hamiltonian(symbols, coords)
+    molecule = qchem.Molecule(symbols, coords)
+    H, n_qubits = qchem.molecular_hamiltonian(molecule)
     energy = vqe_circuit(vqe_params)
 
     # Dipole moment
-    dipole_obs = qchem.dipole_moment(symbols, coords)
+    dipole_obs = qchem.dipole_moment(molecule)
 
     @qml.qnode(dev)
     def dipole_circuit(axis):
@@ -527,14 +534,16 @@ def reaction_energy(reactants, products):
     E_reactants = 0
     for molecule in reactants:
         symbols, coords = molecule
-        H, n_qubits = qchem.molecular_hamiltonian(symbols, coords)
+        mol = qchem.Molecule(symbols, coords)
+        H, n_qubits = qchem.molecular_hamiltonian(mol)
         E_reactants += run_vqe(H, n_qubits)
 
     # Calculate energies of products
     E_products = 0
     for molecule in products:
         symbols, coords = molecule
-        H, n_qubits = qchem.molecular_hamiltonian(symbols, coords)
+        mol = qchem.Molecule(symbols, coords)
+        H, n_qubits = qchem.molecular_hamiltonian(mol)
         E_products += run_vqe(H, n_qubits)
 
     # Reaction energy

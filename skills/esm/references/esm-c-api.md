@@ -10,8 +10,8 @@ ESM C (Cambrian) is a family of protein language models optimized for representa
 
 | Model ID | Parameters | Layers | Best For |
 |----------|-----------|--------|----------|
-| `esmc-300m` | 300M | 30 | Fast inference, lightweight applications |
-| `esmc-600m` | 600M | 36 | Balanced performance and quality |
+| `esmc_300m` / `esmc-300m-2024-12` | 300M | 30 | Fast inference, lightweight applications |
+| `esmc_600m` / `esmc-600m-2024-12` | 600M | 36 | Balanced performance and quality |
 | `esmc-6b-2024-12` | 6B | 80 | Maximum quality (Forge API; not open weights) |
 
 **Key Features:**
@@ -37,23 +37,23 @@ Main interface for ESM C models.
 
 ```python
 from esm.models.esmc import ESMC
-from esm.sdk.api import ESMProtein
+from esm.sdk.api import ESMProtein, LogitsConfig
 
 # Load model with automatic device placement
-model = ESMC.from_pretrained("esmc-300m").to("cuda")
+model = ESMC.from_pretrained("esmc_300m").to("cuda")
 
 # Or specify device explicitly
-model = ESMC.from_pretrained("esmc-600m").to("cpu")
+model = ESMC.from_pretrained("esmc_600m").to("cpu")
 
-# For maximum quality (local open weights: esmc-300m or esmc-600m)
+# For maximum local quality (open weights: esmc_300m or esmc_600m)
 # For 6B hosted inference, use Forge with esmc-6b-2024-12 (see forge-api.md)
-model = ESMC.from_pretrained("esmc-600m").to("cuda")
+model = ESMC.from_pretrained("esmc_600m").to("cuda")
 ```
 
 **Model Selection Criteria:**
 
-- **esmc-300m**: Development, real-time applications, batch processing of many sequences
-- **esmc-600m**: Production deployments, good quality/speed balance
+- **esmc_300m**: Development, real-time applications, batch processing of many sequences
+- **esmc_600m**: Production deployments, good quality/speed balance
 - **esmc-6b-2024-12** (Forge): Research, maximum accuracy when 6B open weights are unavailable locally
 
 ### Basic Embedding Generation
@@ -62,10 +62,10 @@ model = ESMC.from_pretrained("esmc-600m").to("cuda")
 
 ```python
 from esm.models.esmc import ESMC
-from esm.sdk.api import ESMProtein
+from esm.sdk.api import ESMProtein, LogitsConfig
 
 # Load model
-model = ESMC.from_pretrained("esmc-600m").to("cuda")
+model = ESMC.from_pretrained("esmc_600m").to("cuda")
 
 # Create protein
 protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
@@ -73,11 +73,13 @@ protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
 # Encode to tensor
 protein_tensor = model.encode(protein)
 
-# Generate embeddings
-embeddings = model.forward(protein_tensor)
-
-# Get logits (per-position predictions)
-logits = model.logits(embeddings)
+# Generate logits and embeddings
+logits_output = model.logits(
+    protein_tensor,
+    LogitsConfig(sequence=True, return_embeddings=True),
+)
+embeddings = logits_output.embeddings
+logits = logits_output.logits
 
 print(f"Embedding shape: {embeddings.shape}")
 print(f"Logits shape: {logits.shape}")
@@ -87,8 +89,8 @@ print(f"Logits shape: {logits.shape}")
 
 For a sequence of length L:
 - `embeddings.shape`: `(1, L, hidden_dim)` where hidden_dim depends on model
-  - esmc-300m: hidden_dim = 960
-  - esmc-600m: hidden_dim = 1152
+  - esmc_300m: hidden_dim = 960
+  - esmc_600m: hidden_dim = 1152
   - esmc-6b: hidden_dim = 2560
 - `logits.shape`: `(1, L, 64)` - per-position amino acid predictions
 
@@ -335,12 +337,12 @@ class ProteinPropertyPredictor(nn.Module):
         return x
 
 # Use ESM C as frozen feature extractor
-esm_model = ESMC.from_pretrained("esmc-600m").to("cuda")
+esm_model = ESMC.from_pretrained("esmc_600m").to("cuda")
 esm_model.train(False)  # Inference mode (disables dropout; not Python eval)
 
 # Create task-specific model
 predictor = ProteinPropertyPredictor(
-    embedding_dim=1152,  # esmc-600m dimension
+    embedding_dim=1152,  # esmc_600m dimension
     hidden_dim=512,
     output_dim=1  # e.g., stability score
 ).to("cuda")
@@ -394,7 +396,7 @@ print(f"Residue similarity: {similarity.item():.4f}")
 import torch
 
 # Use half precision for memory efficiency
-model = ESMC.from_pretrained("esmc-600m").to("cuda").half()
+model = ESMC.from_pretrained("esmc_600m").to("cuda").half()
 
 # Process with mixed precision
 with torch.cuda.amp.autocast():
@@ -495,7 +497,7 @@ cache.save()
 
 **Migration from ESM2:**
 
-ESM C is designed as a drop-in replacement:
+ESM C is designed as a modern replacement for many ESM2 embedding workflows:
 
 ```python
 # Old ESM2 code
@@ -504,7 +506,7 @@ model, alphabet = pretrained.esm2_t33_650M_UR50D()
 
 # New ESM C code (similar API)
 from esm.models.esmc import ESMC
-model = ESMC.from_pretrained("esmc-600m")
+model = ESMC.from_pretrained("esmc_600m")
 ```
 
 Key differences:
@@ -546,7 +548,7 @@ ESM C can be fine-tuned for specific tasks:
 import torch.optim as optim
 
 # Load model
-model = ESMC.from_pretrained("esmc-300m").to("cuda")
+model = ESMC.from_pretrained("esmc_300m").to("cuda")
 
 # Unfreeze for fine-tuning
 for param in model.parameters():

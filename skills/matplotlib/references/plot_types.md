@@ -91,8 +91,7 @@ width = 0.35
 
 ax.bar(x - width/2, values1, width, label='Group 1')
 ax.bar(x + width/2, values2, width, label='Group 2')
-ax.set_xticks(x)
-ax.set_xticklabels(categories)
+ax.set_xticks(x, categories)
 ax.legend()
 ```
 
@@ -168,15 +167,16 @@ plt.colorbar(h[3], ax=ax, label='Counts')
 ### Box Plot
 ```python
 ax.boxplot([data1, data2, data3],
-           labels=['Group A', 'Group B', 'Group C'],
+           tick_labels=['Group A', 'Group B', 'Group C'],
            showmeans=True, meanline=True)
 ax.set_ylabel('Values')
 ```
 
 ### Horizontal Box Plot
 ```python
-ax.boxplot([data1, data2, data3], vert=False,
-           labels=['Group A', 'Group B', 'Group C'])
+ax.boxplot([data1, data2, data3],
+           orientation='horizontal',
+           tick_labels=['Group A', 'Group B', 'Group C'])
 ax.set_xlabel('Values')
 ```
 
@@ -185,8 +185,7 @@ ax.set_xlabel('Values')
 parts = ax.violinplot([data1, data2, data3],
                       positions=[1, 2, 3],
                       showmeans=True, showmedians=True)
-ax.set_xticks([1, 2, 3])
-ax.set_xticklabels(['Group A', 'Group B', 'Group C'])
+ax.set_xticks([1, 2, 3], ['Group A', 'Group B', 'Group C'])
 ```
 
 ## 6. Heatmaps
@@ -220,10 +219,8 @@ im = ax.imshow(corr, cmap='RdBu_r', vmin=-1, vmax=1)
 plt.colorbar(im, ax=ax, label='Correlation')
 
 # Set tick labels
-ax.set_xticks(range(len(corr)))
-ax.set_yticks(range(len(corr)))
-ax.set_xticklabels(corr.columns, rotation=45, ha='right')
-ax.set_yticklabels(corr.columns)
+ax.set_xticks(range(len(corr)), corr.columns, rotation=45, ha='right')
+ax.set_yticks(range(len(corr)), corr.columns)
 ```
 
 ## 7. Contour Plots
@@ -304,8 +301,7 @@ angles_closed = np.concatenate((angles, [angles[0]]))
 ax = plt.subplot(111, projection='polar')
 ax.plot(angles_closed, values_closed, 'o-', linewidth=2)
 ax.fill(angles_closed, values_closed, alpha=0.25)
-ax.set_xticks(angles)
-ax.set_xticklabels(categories)
+ax.set_xticks(angles, categories)
 ```
 
 ## 10. Stream and Quiver Plots
@@ -355,8 +351,6 @@ ax.legend()
 
 ### 3D Scatter
 ```python
-from mpl_toolkits.mplot3d import Axes3D
-
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 scatter = ax.scatter(x, y, z, c=colors, cmap='viridis',
@@ -433,8 +427,7 @@ ax.broken_barh([(10, 20), (50, 50), (120, 30)], (20, 9),
 ax.set_ylim(5, 35)
 ax.set_xlim(0, 200)
 ax.set_xlabel('Time')
-ax.set_yticks([15, 25])
-ax.set_yticklabels(['Task 1', 'Task 2'])
+ax.set_yticks([15, 25], ['Task 1', 'Task 2'])
 ```
 
 ## 14. Time Series Plots

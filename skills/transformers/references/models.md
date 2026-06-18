@@ -150,22 +150,28 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-**load_in_8bit**: 8-bit quantization (requires optional `bitsandbytes`; `uv pip install bitsandbytes`)
+**BitsAndBytesConfig**: 8-bit and 4-bit quantization (requires optional `bitsandbytes`; `uv pip install bitsandbytes==0.49.2`)
 ```python
+from transformers import BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
 model = AutoModelForCausalLM.from_pretrained(
     "model-id",
-    load_in_8bit=True,
-    device_map="auto"
+    device_map="auto",
+    quantization_config=quantization_config
 )
 ```
 
-**load_in_4bit**: 4-bit quantization
+**4-bit QLoRA-style loading**: use `BitsAndBytesConfig` instead of direct `load_in_4bit` arguments
 ```python
+import torch
 from transformers import BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_type="nf4"
 )
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -336,11 +342,15 @@ export(
 
 **CUDA out of memory:**
 ```python
+import torch
+from transformers import BitsAndBytesConfig
+
 # Use smaller precision
 model = AutoModel.from_pretrained("model-id", dtype=torch.float16)
 
 # Or use quantization
-model = AutoModel.from_pretrained("model-id", load_in_8bit=True)
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+model = AutoModel.from_pretrained("model-id", quantization_config=quantization_config)
 
 # Or use CPU
 model = AutoModel.from_pretrained("model-id", device_map="cpu")

@@ -4,9 +4,7 @@ description: Biological data toolkit. Sequence analysis, alignments, phylogeneti
 license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.10+ and scikit-bio 0.7+ (uv pip install scikit-bio). NumPy 2.0+ is required. Optional matplotlib/seaborn/plotly for plotting; biom-format for BIOM tables; polars/anndata for table interoperability.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # scikit-bio

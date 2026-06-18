@@ -257,15 +257,17 @@ adata_combined = ad.concat([adata1, adata2], uns_merge='unique')
 
 ## Lazy Concatenation (AnnCollection)
 
-For very large datasets, use lazy concatenation that doesn't load all data:
+For very large datasets, use `AnnCollection` to lazily concatenate AnnData objects along the observation axis. This API is experimental; use backed AnnData objects when the inputs are stored in `.h5ad` files.
 
 ```python
+import anndata as ad
 from anndata.experimental import AnnCollection
 
-# Create collection from file paths (doesn't load data)
 files = ['data1.h5ad', 'data2.h5ad', 'data3.h5ad']
+backed_adatas = [ad.read_h5ad(path, backed='r') for path in files]
+
 collection = AnnCollection(
-    files,
+    backed_adatas,
     join_obs='outer',
     join_vars='inner',
     label='dataset',
@@ -298,6 +300,7 @@ first_dataset = collection[0]
 For datasets too large for memory, concatenate directly on disk:
 
 ```python
+import anndata as ad
 from anndata.experimental import concat_on_disk
 
 # Concatenate without loading into memory

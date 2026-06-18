@@ -3,9 +3,7 @@ name: torch-geometric
 description: PyTorch Geometric (PyG) for graph neural networks — node/link/graph classification, message passing (GCN, GAT, GraphSAGE, GIN), heterogeneous graphs, neighbor sampling, and custom datasets. Use when working with torch_geometric, not for general NetworkX analytics or non-graph PyTorch models.
 license: MIT license
 compatibility: Requires Python 3.10+, PyTorch 2.6+, and torch-geometric 2.7.x. Optional extension wheels (pyg-lib, torch-scatter, torch-sparse, torch-cluster) must match your PyTorch/CUDA build from https://data.pyg.org/whl.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # PyTorch Geometric (PyG)

@@ -4,9 +4,7 @@ description: Production-ready reinforcement learning algorithms (PPO, SAC, DQN, 
 license: MIT license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.10+, PyTorch >= 2.3, and stable-baselines3 2.8+. Gymnasium environments; optional extras for TensorBoard and Atari (ale-py).
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Stable Baselines3

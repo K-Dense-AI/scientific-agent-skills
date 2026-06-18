@@ -309,7 +309,7 @@ soma_schema = ln.Schema(
 ).save()
 
 # Curate
-curator = ln.curators.TileDBSOMACurator(soma_exp, soma_schema)
+curator = ln.curators.TiledbsomaExperimentCurator(soma_exp, soma_schema)
 curator.validate()
 ```
 
@@ -331,11 +331,8 @@ ln.Feature(name="age_str", dtype=int, coerce_dtype=True).save()  # Auto-convert 
 ### Value Validation
 
 ```python
-# Validate against allowed values
-cell_type_feature = ln.Feature(name="cell_type", dtype=str).save()
-
-# Link to registry for controlled vocabulary
-cell_type_feature.link_to_registry(bt.CellType)
+# Validate against allowed values in the Bionty CellType registry
+cell_type_feature = ln.Feature(name="cell_type", dtype=bt.CellType).save()
 
 # Now validation checks against CellType registry
 curator = ln.curators.DataFrameCurator(df, schema)

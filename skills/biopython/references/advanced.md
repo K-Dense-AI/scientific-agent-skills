@@ -43,7 +43,7 @@ pwm = motif.counts.normalize(pseudocounts=0.5)
 print(pwm)
 
 # Calculate information content
-ic = motif.counts.information_content()
+ic = sum(motif.relative_entropy)
 print(f"Information content: {ic:.2f} bits")
 ```
 
@@ -324,23 +324,27 @@ gd_diagram.draw(format="linear", pagesize="A4", fragments=1)
 gd_diagram.write("genome_diagram.pdf", "PDF")
 ```
 
-## Sequence Comparison with Bio.pairwise2
+## Sequence Comparison with PairwiseAligner
 
-**Note**: `Bio.pairwise2` is deprecated — use `Bio.Align.PairwiseAligner` instead (see `alignment.md`). For HMM workflows, `Bio.HMM` and `Bio.MarkovModel` were removed in Biopython 1.86; use [hmmlearn](https://pypi.org/project/hmmlearn/) instead.
-
-Legacy `pairwise2` example (avoid in new code):
+`Bio.pairwise2` is deprecated (since Biopython 1.80). Use `Bio.Align.PairwiseAligner` for new pairwise alignment code (see `alignment.md`). For HMM workflows, `Bio.HMM` and `Bio.MarkovModel` were removed in Biopython 1.86; use [hmmlearn](https://pypi.org/project/hmmlearn/) instead.
 
 ```python
-from Bio import pairwise2
-from Bio.pairwise2 import format_alignment
+from Bio.Align import PairwiseAligner
 
-# Global alignment
-alignments = pairwise2.align.globalxx("ACCGT", "ACGT")
+aligner = PairwiseAligner()
+aligner.mode = "global"
+aligner.match_score = 1
+aligner.mismatch_score = 0
+aligner.gap_score = 0  # Optional: mimic the old globalxx scoring style
 
-# Print top alignments
+alignments = aligner.align("ACCGT", "ACGT")
+
 for alignment in alignments[:3]:
-    print(format_alignment(*alignment))
+    print(alignment)
+    print(f"Score: {alignment.score}")
 ```
+
+Avoid importing `Bio.pairwise2` in new code. It remains a legacy migration concern only.
 
 ## Working with PubChem
 
@@ -486,7 +490,6 @@ for orf in orfs:
 
 ```python
 from Bio import SeqIO
-from Bio.SeqUtils import CodonUsage
 
 def analyze_codon_usage(fasta_file):
     """Analyze codon usage in coding sequences."""

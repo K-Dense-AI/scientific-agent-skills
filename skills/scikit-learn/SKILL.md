@@ -4,9 +4,7 @@ description: Machine learning in Python with scikit-learn. Use when working with
 license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.11+ and scikit-learn 1.7+. NumPy and SciPy are required dependencies. Optional matplotlib/seaborn for bundled example scripts that save plots.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Scikit-learn

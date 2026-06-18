@@ -52,28 +52,37 @@ def parse_confidence_scores(results_dir):
 
 def parse_single_complex(complex_dir):
     """Parse results for a single complex."""
-    predictions = []
+    predictions_by_rank = {}
 
     # Look for SDF files with rank information
     for sdf_file in complex_dir.glob("*.sdf"):
         filename = sdf_file.name
 
-        # Extract rank from filename (e.g., "rank_1.sdf" or "index_0_rank_1.sdf")
-        rank_match = re.search(r'rank_(\d+)', filename)
+        # Current DiffDock writes rank1_confidence0.87.sdf; older runs may use rank_1.sdf.
+        rank_match = re.search(r'rank_?(\d+)', filename)
         if rank_match:
             rank = int(rank_match.group(1))
 
             # Try to extract confidence score from filename or separate file
             confidence = extract_confidence_score(sdf_file, complex_dir)
 
-            predictions.append({
+            prediction = {
                 'rank': rank,
                 'file': sdf_file.name,
                 'path': str(sdf_file),
                 'confidence': confidence
-            })
+            }
+
+            existing = predictions_by_rank.get(rank)
+            if (
+                existing is None
+                or (existing['confidence'] is None and confidence is not None)
+                or ('confidence' in filename and 'confidence' not in existing['file'])
+            ):
+                predictions_by_rank[rank] = prediction
 
     # Sort by rank
+    predictions = list(predictions_by_rank.values())
     predictions.sort(key=lambda x: x['rank'])
 
     return {'predictions': predictions} if predictions else None
@@ -84,18 +93,23 @@ def extract_confidence_score(sdf_file, complex_dir):
     Extract confidence score for a prediction.
 
     Tries multiple methods:
-    1. Read from confidence_scores.txt file
-    2. Parse from SDF file properties
-    3. Extract from filename if present
+    1. Extract from current filename format, e.g. rank1_confidence0.87.sdf
+    2. Read from legacy confidence_scores.txt file
+    3. Parse from SDF file properties
     """
-    # Method 1: confidence_scores.txt
+    # Method 1: Filename
+    conf_match = re.search(r'(?:confidence|conf)_?(-?\d+(?:\.\d+)?)', sdf_file.name)
+    if conf_match:
+        return float(conf_match.group(1))
+
+    # Method 2: legacy confidence_scores.txt
     confidence_file = complex_dir / "confidence_scores.txt"
     if confidence_file.exists():
         try:
             with open(confidence_file) as f:
                 lines = f.readlines()
                 # Extract rank from filename
-                rank_match = re.search(r'rank_(\d+)', sdf_file.name)
+                rank_match = re.search(r'rank_?(\d+)', sdf_file.name)
                 if rank_match:
                     rank = int(rank_match.group(1))
                     if rank <= len(lines):
@@ -103,7 +117,7 @@ def extract_confidence_score(sdf_file, complex_dir):
         except Exception:
             pass
 
-    # Method 2: Parse from SDF file
+    # Method 3: Parse from SDF file
     try:
         with open(sdf_file) as f:
             content = f.read()
@@ -113,11 +127,6 @@ def extract_confidence_score(sdf_file, complex_dir):
                 return float(conf_match.group(1))
     except Exception:
         pass
-
-    # Method 3: Filename (e.g., "rank_1_conf_0.95.sdf")
-    conf_match = re.search(r'conf_(-?\d+\.?\d*)', sdf_file.name)
-    if conf_match:
-        return float(conf_match.group(1))
 
     return None
 

@@ -2,9 +2,8 @@
 name: open-notebook
 description: Self-hosted, open-source alternative to Google NotebookLM for AI-powered research and document analysis. Use when organizing research materials into notebooks, ingesting diverse content sources (PDFs, videos, audio, web pages, Office documents), generating AI-powered notes and summaries, creating multi-speaker podcasts from research, chatting with documents using context-aware AI, searching across materials with full-text and vector search, or running custom content transformations. Supports 16+ AI providers including OpenAI, Anthropic, Google, Ollama, Groq, and Mistral with complete data privacy through self-hosting.
 license: MIT
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "OPEN_NOTEBOOK_URL", "prompt": "Open Notebook server URL.", "required_for": "full functionality"}, {"name": "OPEN_NOTEBOOK_PASSWORD", "prompt": "Open Notebook password, if auth is enabled.", "required_for": "optional features"}, {"name": "OPEN_NOTEBOOK_ENCRYPTION_KEY", "prompt": "Encryption key for stored content, if configured.", "required_for": "optional features"}]
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc.", "openclaw": {"envVars": [{"name": "OPEN_NOTEBOOK_URL", "required": true, "description": "Open Notebook server URL."}, {"name": "OPEN_NOTEBOOK_PASSWORD", "required": false, "description": "Open Notebook password, if auth is enabled."}, {"name": "OPEN_NOTEBOOK_ENCRYPTION_KEY", "required": false, "description": "Encryption key for stored content, if configured."}]}}
 ---
 
 # Open Notebook

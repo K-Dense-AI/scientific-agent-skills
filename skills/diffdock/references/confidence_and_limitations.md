@@ -174,8 +174,8 @@ For methodology details and benchmarking results, see:
    - Corso et al., arXiv:2210.01776
 
 2. **DiffDock-L Paper** (2024):
-   - Enhanced model with improved generalization
-   - Stärk et al., arXiv:2402.18396
+   - "Deep Confident Steps to New Pockets: Strategies for Docking Generalization"
+   - Corso et al., ICLR 2024, arXiv:2402.18396
 
 3. **PoseBusters Benchmark**:
    - Rigorous docking evaluation framework

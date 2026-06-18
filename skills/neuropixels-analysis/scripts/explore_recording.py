@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def explore_recording(data_path: str, stream_id: str = 'imec0.ap'):
+def explore_recording(data_path: str, stream_name: str = 'imec0.ap'):
     """Explore a Neuropixels recording."""
 
     print(f"Loading: {data_path}")
-    recording = si.read_spikeglx(data_path, stream_id=stream_id)
+    recording = si.read_spikeglx(data_path, stream_name=stream_name)
 
     # Basic info
     print("\n" + "="*50)
@@ -147,7 +147,7 @@ def plot_power_spectrum(recording, output_path=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Explore Neuropixels recording')
     parser.add_argument('data_path', help='Path to SpikeGLX recording')
-    parser.add_argument('--stream', default='imec0.ap', help='Stream ID')
+    parser.add_argument('--stream', default='imec0.ap', help='Stream name (e.g. imec0.ap)')
     parser.add_argument('--plot', action='store_true', help='Generate plots')
     parser.add_argument('--output', default=None, help='Output directory for plots')
 

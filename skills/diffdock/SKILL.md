@@ -1,10 +1,16 @@
 ---
 name: diffdock
-description: Diffusion-based molecular docking. Predict protein-ligand binding poses from PDB/SMILES, confidence scores, virtual screening, for structure-based drug design. Not for affinity prediction.
+description: DiffDock and DiffDock-L molecular docking. Use for protein-small-molecule pose prediction from PDB or sequence plus SMILES/SDF/MOL2, batch docking, virtual screening, and pose-confidence interpretation. Not for binding affinity prediction.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Glob
+  - Grep
+compatibility: Requires the DiffDock repository, Python 3.9 environment from upstream environment.yml or the official Docker image, RDKit, PyTorch/PyG, and optional CUDA GPU acceleration. Current guidance targets DiffDock v1.1.3 / DiffDock-L.
 license: MIT license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # DiffDock: Molecular Docking with Diffusion Models
@@ -68,6 +74,7 @@ micromamba activate diffdock
 - GPU strongly recommended (10-100x speedup vs CPU)
 - First run pre-computes SO(2)/SO(3) lookup tables (~2-5 minutes)
 - Model checkpoints (~500MB) download automatically if not present
+- Current upstream release is DiffDock v1.1.3; DiffDock-L is the default model line in `default_inference_args.yaml`
 
 ## Core Workflows
 
@@ -84,7 +91,7 @@ micromamba activate diffdock
 python -m inference \
   --config default_inference_args.yaml \
   --protein_path protein.pdb \
-  --ligand "CC(=O)Oc1ccccc1C(=O)O" \
+  --ligand_description "CC(=O)Oc1ccccc1C(=O)O" \
   --out_dir results/single_docking/
 ```
 
@@ -93,19 +100,22 @@ python -m inference \
 python -m inference \
   --config default_inference_args.yaml \
   --protein_sequence "MSKGEELFTGVVPILVELDGDVNGHKF..." \
-  --ligand ligand.sdf \
+  --ligand_description ligand.sdf \
   --out_dir results/sequence_docking/
 ```
 
 **Output Structure:**
 ```
 results/single_docking/
-├── rank_1.sdf          # Top-ranked pose
-├── rank_2.sdf          # Second-ranked pose
-├── ...
-├── rank_10.sdf         # 10th pose (default: 10 samples)
-└── confidence_scores.txt
+└── complex_0/
+    ├── rank1.sdf                    # Convenience copy of top-ranked pose
+    ├── rank1_confidence0.87.sdf     # Top-ranked pose with confidence in filename
+    ├── rank2_confidence0.42.sdf     # Second-ranked pose
+    ├── ...
+    └── rank10_confidence-1.23.sdf   # 10th pose (default: 10 samples)
 ```
+
+Current `inference.py` registers `--ligand_description` for single-complex runs. Some upstream README text still says `--ligand`; use `--ligand_description` unless your local checkout explicitly supports a `--ligand` alias.
 
 ### Workflow 2: Batch Processing Multiple Complexes
 
@@ -291,7 +301,7 @@ DiffDock generates poses; combine with other tools for affinity:
 
 **GNINA (Fast neural network scoring):**
 ```bash
-for pose in results/*.sdf; do
+for pose in results/single_docking/complex_0/*confidence*.sdf; do
     gnina -r protein.pdb -l "$pose" --score_only
 done
 ```
@@ -463,8 +473,8 @@ When using DiffDock, cite the appropriate papers:
 
 **DiffDock-L (current default model):**
 ```
-Stärk et al. (2024) "DiffDock-L: Improving Molecular Docking with Diffusion Models"
-arXiv:2402.18396
+Corso et al. (2024) "Deep Confident Steps to New Pockets: Strategies for Docking Generalization"
+ICLR 2024, arXiv:2402.18396
 ```
 
 **Original DiffDock:**

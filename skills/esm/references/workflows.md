@@ -20,7 +20,7 @@ from esm.sdk.api import ESMProtein, GenerationConfig, FunctionAnnotation
 import matplotlib.pyplot as plt
 
 # Setup
-model = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda")
+model = ESM3.from_pretrained("esm3-open").to("cuda")
 
 # Step 1: Define target properties
 print("Step 1: Defining target GFP properties...")
@@ -147,7 +147,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 
 # Setup
-model = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda")
+model = ESM3.from_pretrained("esm3-open").to("cuda")
 
 # Parent protein
 parent_sequence = "MPRTKEINDAGLIVHSPQWFYKARNDTESLGKIVHEFPM"
@@ -227,7 +227,7 @@ print("\nGenerating embeddings for clustering...")
 
 from esm.models.esmc import ESMC
 
-embedding_model = ESMC.from_pretrained("esmc-300m").to("cuda")
+embedding_model = ESMC.from_pretrained("esmc_300m").to("cuda")
 
 def get_embedding(sequence):
     """Get mean-pooled embedding for sequence."""
@@ -304,7 +304,7 @@ from esm.sdk.api import ESMProtein, GenerationConfig
 import numpy as np
 
 # Setup
-model = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda")
+model = ESM3.from_pretrained("esm3-open").to("cuda")
 
 # Load target structure (e.g., from PDB)
 target_protein = ESMProtein.from_pdb("target_structure.pdb")
@@ -466,8 +466,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 
 # Setup models
-esm3_model = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda")
-esmc_model = ESMC.from_pretrained("esmc-600m").to("cuda")
+esm3_model = ESM3.from_pretrained("esm3-open").to("cuda")
+esmc_model = ESMC.from_pretrained("esmc_600m").to("cuda")
 
 # Example: Predict if protein is an enzyme
 # (In practice, you'd have a labeled training set)
@@ -544,7 +544,7 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
 # Setup
-model = ESMC.from_pretrained("esmc-600m").to("cuda")
+model = ESMC.from_pretrained("esmc_600m").to("cuda")
 
 # Load protein dataset (example)
 sequences = [

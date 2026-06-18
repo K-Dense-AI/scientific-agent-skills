@@ -4,9 +4,7 @@ description: This skill should be used for time series machine learning tasks in
 license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.10+ and the aeon package (uv pip install). Optional aeon[all_extras] for deep learning and extended dependencies.
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
 ---
 
 # Aeon Time Series Machine Learning

@@ -2,9 +2,13 @@
 name: rdkit
 description: Cheminformatics toolkit for fine-grained molecular control. SMILES/SDF parsing, descriptors (MW, LogP, TPSA), fingerprints, substructure search, 2D/3D generation, similarity, reactions. For standard workflows with simpler interface, use datamol (wrapper around RDKit). Use rdkit for advanced control, custom sanitization, specialized algorithms.
 license: BSD-3-Clause license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+compatibility: Examples target RDKit 2026.03.x. Use conda-forge for the broadest binary support or PyPI package `rdkit` for supported platform wheels; `rdkit-pypi` is the legacy PyPI name.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # RDKit Cheminformatics Toolkit
@@ -12,6 +16,25 @@ metadata:
 ## Overview
 
 RDKit is a comprehensive cheminformatics library providing Python APIs for molecular analysis and manipulation. This skill provides guidance for reading/writing molecular structures, calculating descriptors, fingerprinting, substructure searching, chemical reactions, 2D/3D coordinate generation, and molecular visualization. Use this skill for drug discovery, computational chemistry, and cheminformatics research tasks.
+
+**Current baseline (checked 2026-06-07):** RDKit **2026.03.3** is the latest GitHub/PyPI release (`rdkit` 2026.3.3 on PyPI). Official installation docs continue to recommend conda-forge for most users, while cross-platform PyPI wheels are published under the `rdkit` package name. `rdkit-pypi` is the old PyPI package name and should only appear when maintaining legacy environments.
+
+## Installation and Setup
+
+Use `uv` when installing into an existing Python environment:
+
+```bash
+uv pip install rdkit
+```
+
+For reproducible chemistry environments, especially when mixing compiled scientific packages, conda-forge remains the upstream recommendation:
+
+```bash
+conda create -c conda-forge -n my-rdkit-env rdkit
+conda activate my-rdkit-env
+```
+
+Avoid installing both conda `rdkit` and PyPI `rdkit`/`rdkit-pypi` into the same environment unless you are deliberately debugging packaging behavior. Mixed installs can make it unclear which binary extension is being imported.
 
 ## Core Capabilities
 
@@ -110,7 +133,6 @@ for problem in problems:
     print(problem.GetType(), problem.Message())
 
 # Partial sanitization (skip specific steps)
-from rdkit.Chem import rdMolStandardize
 Chem.SanitizeMol(mol, sanitizeOps=Chem.SANITIZE_ALL ^ Chem.SANITIZE_PROPERTIES)
 ```
 
@@ -509,10 +531,14 @@ mol  # Shows molecule image
 ```python
 # Show what molecular features a fingerprint bit represents
 from rdkit.Chem import Draw
+from rdkit.Chem import rdFingerprintGenerator
 
 # For Morgan fingerprints
-bit_info = {}
-fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, bitInfo=bit_info)
+additional_output = rdFingerprintGenerator.AdditionalOutput()
+additional_output.AllocateBitInfoMap()
+morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+fp = morgan_gen.GetFingerprint(mol, additionalOutput=additional_output)
+bit_info = additional_output.GetBitInfoMap()
 
 # Draw environment for specific bit
 img = Draw.DrawMorganBit(mol, bit_id, bit_info)
@@ -645,18 +671,22 @@ def analyze_druglikeness(smiles):
 
 ```python
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import rdFingerprintGenerator
 from rdkit import DataStructs
 
 def similarity_screen(query_smiles, database_smiles, threshold=0.7):
     query_mol = Chem.MolFromSmiles(query_smiles)
-    query_fp = AllChem.GetMorganFingerprintAsBitVect(query_mol, 2)
+    if query_mol is None:
+        return []
+
+    morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+    query_fp = morgan_gen.GetFingerprint(query_mol)
 
     hits = []
     for idx, smiles in enumerate(database_smiles):
         mol = Chem.MolFromSmiles(smiles)
         if mol:
-            fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2)
+            fp = morgan_gen.GetFingerprint(mol)
             sim = DataStructs.TanimotoSimilarity(query_fp, fp)
             if sim >= threshold:
                 hits.append((idx, smiles, sim))
@@ -696,29 +726,48 @@ if mol is None:
 
 ### Performance Optimization
 
-**Use binary formats for storage:**
+**Use safe storage formats:**
 
 ```python
-import pickle
+import base64
+import json
+from pathlib import Path
+from rdkit import Chem
 
-# Pickle molecules for fast loading
-with open('molecules.pkl', 'wb') as f:
-    pickle.dump(mols, f)
+# Portable exchange formats such as SMILES and SDF are safest for shared data.
+# For local caches, RDKit's binary molecule representation avoids generic pickle.
+payload = [base64.b64encode(mol.ToBinary()).decode("ascii") for mol in mols]
+Path("molecules.rdmol.json").write_text(json.dumps(payload))
 
-# Load pickled molecules (much faster than reparsing)
-with open('molecules.pkl', 'rb') as f:
-    mols = pickle.load(f)
+cached = json.loads(Path("molecules.rdmol.json").read_text())
+mols = [Chem.Mol(base64.b64decode(item)) for item in cached]
 ```
+
+Do not load Python pickle files from untrusted sources. Pickle deserialization can execute arbitrary code; prefer SMILES/SDF for interchange and RDKit binary payloads for trusted local caches.
 
 **Use bulk operations:**
 
 ```python
+from rdkit import DataStructs
+from rdkit.Chem import rdFingerprintGenerator
+
 # Calculate fingerprints for all molecules at once
-fps = [AllChem.GetMorganFingerprintAsBitVect(mol, 2) for mol in mols]
+morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+fps = [morgan_gen.GetFingerprint(mol) for mol in mols]
 
 # Use bulk similarity calculations
 similarities = DataStructs.BulkTanimotoSimilarity(fps[0], fps[1:])
 ```
+
+### Version-Sensitive Behavior
+
+Pin RDKit versions when exact molecular identifiers or numeric features are part of a persisted dataset, model feature pipeline, or regulated report. Recent releases changed or documented behavior in several Python-facing areas:
+
+- **Canonical SMILES and stereo:** 2026.03 changed canonical double-bond handling to avoid stereo corruption, so some stereo-containing SMILES may differ from older releases.
+- **Descriptors and hashes:** 2024.09 corrected unbranched-alkane fragment descriptor SMARTS and changed some tautomer/protomer hash outputs.
+- **Drawing:** legacy `rdkit.Chem.Draw` canvas modules and functions such as `MolToImageFile`, `MolToMPL`, and `MolToQPixmap` were removed; use `Draw.MolToFile`, `Draw.MolToImage`, or `rdMolDraw2D`.
+- **MolStandardize:** use `rdkit.Chem.MolStandardize.rdMolStandardize`; the older Python MolStandardize implementation was removed.
+- **Similarity maps:** `GetSimilarityMapFromWeights()`, `GetSimilarityMapForFingerprint()`, and `GetSimilarityMapForModel()` now require an `rdMolDraw2D` drawing object.
 
 ### Thread Safety
 
@@ -768,6 +817,8 @@ This skill includes detailed API reference documentation:
 - `smarts_patterns.md` - Common SMARTS patterns for functional groups and structural features
 
 Load these references when needing specific API details, parameter information, or pattern examples.
+
+Only the files listed in `references/` and `scripts/` are bundled local resources. Names such as `rdkit`, `datamol`, `scipy`, and `sklearn` refer to installable Python packages, not local files in this skill.
 
 ### scripts/
 

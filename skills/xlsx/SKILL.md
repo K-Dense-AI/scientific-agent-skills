@@ -3,9 +3,7 @@ name: xlsx
 description: "Create, edit, analyze, or convert Excel spreadsheets (.xlsx, .xlsm) where the workbook file is the primary deliverable. Use for formulas, formatting, financial models, multi-sheet workbooks, and tabular cleanup exported to Excel. Also applies to .csv/.tsv when the user wants spreadsheet output. Do NOT use for Word documents, HTML reports, standalone Python scripts, database pipelines, or Google Sheets API work."
 allowed-tools: Read Write Edit Bash Grep Glob
 license: Proprietary. LICENSE.txt has complete terms
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 compatibility: Requires Python 3.8+, LibreOffice (soffice on PATH), and gcc only when Unix sockets are restricted
 ---
 

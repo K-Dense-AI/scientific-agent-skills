@@ -157,15 +157,17 @@ def measure_probabilities():
 ### Samples and Counts
 
 ```python
+@qml.set_shots(1000)
 @qml.qnode(dev)
-def measure_samples(shots=1000):
+def measure_samples():
     qml.Hadamard(wires=0)
 
     # Raw samples
     return qml.sample(qml.PauliZ(0))
 
+@qml.set_shots(1000)
 @qml.qnode(dev)
-def measure_counts(shots=1000):
+def measure_counts():
     qml.Hadamard(wires=0)
     qml.CNOT(wires=[0, 1])
 
@@ -288,8 +290,12 @@ def dynamic_for_loop(n_iterations):
 ### While Loops (with Catalyst)
 
 ```python
-@qml.qjit  # Just-in-time compilation
-@qml.qnode(dev)
+from catalyst import qjit
+
+compiled_dev = qml.device("lightning.qubit", wires=1)
+
+@qjit  # Just-in-time compilation with Catalyst
+@qml.qnode(compiled_dev)
 def dynamic_while_loop():
     qml.Hadamard(wires=0)
 
@@ -347,8 +353,8 @@ print(f"Depth: {specs['depth']}")
 print(f"Parameters: {specs['num_trainable_params']}")
 
 # Resource estimation
-resources = qml.resource.resource_estimation(circuit)(params)
-print(f"Total gates: {resources['num_gates']}")
+resources = qml.specs(circuit)(params)["resources"]
+print(f"Total gates: {resources.num_gates}")
 ```
 
 ### Tape Inspection
@@ -369,8 +375,8 @@ print("Wires used:", tape.wires)
 ### Circuit Transformations
 
 ```python
-# Expand composite operations
-expanded = qml.transforms.expand_tape(tape)
+# Expand composite operations to a target gate set
+expanded = qml.transforms.decompose(tape, gate_set={qml.RX, qml.RY, qml.RZ, qml.CNOT})
 
 # Cancel adjacent operations
 optimized = qml.transforms.cancel_inverses(tape)

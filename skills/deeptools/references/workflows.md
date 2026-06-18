@@ -267,7 +267,7 @@ bamCoverage \
     --numberOfProcessors 8
 ```
 
-**Important:** Do NOT use `--extendReads` for RNA-seq (would extend over splice junctions).
+**Important:** Do NOT use `--extendReads` for RNA-seq (would extend over splice junctions). `--filterRNAstrand` assumes common dUTP/NSR/NNSR reverse-stranded library prep; for other chemistries, confirm orientation or use SAM flag filters.
 
 ---
 
@@ -360,6 +360,8 @@ alignmentSieve \
     --maxFragmentLength 2000 \
     --ignoreDuplicates
 ```
+
+**Note:** `--ATACshift` is equivalent to `--shift 4 -5 5 -4` and uses only properly paired fragments.
 
 ---
 

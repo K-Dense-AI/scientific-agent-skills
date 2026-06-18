@@ -21,10 +21,10 @@ import arviz as az
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from typing import Dict
+from typing import Any, Dict
 
 
-def compare_models(models_dict: Dict[str, az.InferenceData],
+def compare_models(models_dict: Dict[str, Any],
                    ic='loo',
                    scale='deviance',
                    verbose=True):
@@ -34,7 +34,7 @@ def compare_models(models_dict: Dict[str, az.InferenceData],
     Parameters
     ----------
     models_dict : dict
-        Dictionary mapping model names to InferenceData objects.
+        Dictionary mapping model names to PyMC posterior objects.
         All models must have log_likelihood computed.
     ic : str
         Information criterion to use: 'loo' (default) or 'waic'
@@ -117,7 +117,7 @@ def compare_models(models_dict: Dict[str, az.InferenceData],
     return comparison
 
 
-def check_loo_reliability(models_dict: Dict[str, az.InferenceData],
+def check_loo_reliability(models_dict: Dict[str, Any],
                           threshold=0.7,
                           verbose=True):
     """
@@ -126,7 +126,7 @@ def check_loo_reliability(models_dict: Dict[str, az.InferenceData],
     Parameters
     ----------
     models_dict : dict
-        Dictionary mapping model names to InferenceData objects
+        Dictionary mapping model names to PyMC posterior objects
     threshold : float
         Pareto-k threshold for flagging observations (default: 0.7)
     verbose : bool
@@ -227,7 +227,7 @@ def plot_model_comparison(comparison, output_path=None, show=True):
     return fig
 
 
-def model_averaging(models_dict: Dict[str, az.InferenceData],
+def model_averaging(models_dict: Dict[str, Any],
                     weights=None,
                     var_name='y_obs',
                     ic='loo'):
@@ -237,7 +237,7 @@ def model_averaging(models_dict: Dict[str, az.InferenceData],
     Parameters
     ----------
     models_dict : dict
-        Dictionary mapping model names to InferenceData objects
+        Dictionary mapping model names to PyMC posterior objects
     weights : array-like, optional
         Model weights. If None, computed from IC (pseudo-BMA weights)
     var_name : str
@@ -272,10 +272,12 @@ def model_averaging(models_dict: Dict[str, az.InferenceData],
     predictions = []
     for name in model_names:
         idata = models_dict[name]
-        if 'posterior_predictive' in idata:
+        if hasattr(idata, 'posterior_predictive') and var_name in idata.posterior_predictive:
             pred = idata.posterior_predictive[var_name].values
+        elif hasattr(idata, 'predictions') and var_name in idata.predictions:
+            pred = idata.predictions[var_name].values
         else:
-            print(f"Warning: {name} missing posterior_predictive, skipping")
+            print(f"Warning: {name} missing posterior_predictive/predictions for {var_name}, skipping")
             continue
         predictions.append(pred)
 
@@ -288,7 +290,7 @@ def model_averaging(models_dict: Dict[str, az.InferenceData],
     return averaged, weights
 
 
-def cross_validation_comparison(models_dict: Dict[str, az.InferenceData],
+def cross_validation_comparison(models_dict: Dict[str, Any],
                                 k=10,
                                 verbose=True):
     """
@@ -300,7 +302,7 @@ def cross_validation_comparison(models_dict: Dict[str, az.InferenceData],
     Parameters
     ----------
     models_dict : dict
-        Dictionary of model names to InferenceData
+        Dictionary of model names to PyMC posterior objects
     k : int
         Number of folds (default: 10)
     verbose : bool

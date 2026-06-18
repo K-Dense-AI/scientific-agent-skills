@@ -51,6 +51,9 @@ coords = {
 }
 
 with pm.Model(coords=coords) as linear_model:
+    # Data container allows out-of-sample prediction with pm.set_data
+    X_data = pm.Data('X_scaled', X_scaled, dims=('obs_id', 'predictors'))
+
     # Priors
     # TODO: Adjust prior parameters based on your domain knowledge
     alpha = pm.Normal('alpha', mu=0, sigma=1)
@@ -58,10 +61,10 @@ with pm.Model(coords=coords) as linear_model:
     sigma = pm.HalfNormal('sigma', sigma=1)
 
     # Linear predictor
-    mu = alpha + pm.math.dot(X_scaled, beta)
+    mu = alpha + pm.math.dot(X_data, beta)
 
-    # Likelihood
-    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, dims='obs_id')
+    # Tie observed shape to X_data so predictions can use a new row count
+    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, shape=X_data.shape[0], dims='obs_id')
 
 # =============================================================================
 # 3. PRIOR PREDICTIVE CHECK
@@ -69,7 +72,7 @@ with pm.Model(coords=coords) as linear_model:
 
 print("Running prior predictive check...")
 with linear_model:
-    prior_pred = pm.sample_prior_predictive(samples=1000, random_seed=42)
+    prior_pred = pm.sample_prior_predictive(draws=1000, random_seed=42)
 
 # Visualize prior predictions
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -138,8 +141,7 @@ else:
     print("\n✓ No divergences")
 
 # Trace plots
-fig, axes = plt.subplots(len(['alpha', 'beta', 'sigma']), 2, figsize=(12, 8))
-az.plot_trace(idata, var_names=['alpha', 'beta', 'sigma'], axes=axes)
+az.plot_trace_dist(idata, var_names=['alpha', 'beta', 'sigma'])
 plt.tight_layout()
 plt.savefig('trace_plots.png', dpi=300, bbox_inches='tight')
 print("\nTrace plots saved to 'trace_plots.png'")
@@ -203,16 +205,17 @@ X_new_scaled = (X_new - X_mean) / X_std
 
 # Update model data and predict
 with linear_model:
-    pm.set_data({'X_scaled': X_new_scaled, 'obs_id': np.arange(len(X_new))})
+    pm.set_data({'X_scaled': X_new_scaled}, coords={'obs_id': np.arange(len(X_new))})
 
     post_pred = pm.sample_posterior_predictive(
-        idata.posterior,
+        idata,
         var_names=['y_obs'],
+        predictions=True,
         random_seed=42
     )
 
 # Extract predictions
-y_pred_samples = post_pred.posterior_predictive['y_obs']
+y_pred_samples = post_pred.predictions['y_obs']
 y_pred_mean = y_pred_samples.mean(dim=['chain', 'draw']).values
 y_pred_hdi = az.hdi(y_pred_samples, hdi_prob=0.95).values
 
@@ -228,7 +231,7 @@ for i in range(len(X_new)):
 # 9. SAVE RESULTS
 # =============================================================================
 
-# Save InferenceData
+# Save posterior data tree
 idata.to_netcdf('linear_regression_results.nc')
 print("\nResults saved to 'linear_regression_results.nc'")
 

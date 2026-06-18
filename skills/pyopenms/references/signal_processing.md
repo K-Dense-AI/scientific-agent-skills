@@ -11,17 +11,21 @@ Most signal processing algorithms follow a standard pattern:
 ```python
 import pyopenms as ms
 
-# 1. Create algorithm instance
-algo = ms.AlgorithmName()
+# 1. Create algorithm instance (GaussFilter shown as a concrete example)
+algo = ms.GaussFilter()
 
 # 2. Get and modify parameters
 params = algo.getParameters()
-params.setValue("parameter_name", value)
+params.setValue("gaussian_width", 0.2)
 algo.setParameters(params)
 
 # 3. Apply to data
 algo.filterExperiment(exp)  # or filterSpectrum(spec)
 ```
+
+> **Tip:** `scripts/process_spectra.py` runs a configurable smoothing →
+> centroiding → normalization → thresholding chain from the command line, so you
+> rarely need to wire these steps up by hand.
 
 ## Smoothing
 
@@ -87,22 +91,26 @@ exp_picked = ms.MSExperiment()
 peak_picker.pickExperiment(exp, exp_picked)
 ```
 
-### Peak Picker for CWT
+### Iterative Peak Picker
 
-Continuous wavelet transform-based peak picking:
+The CWT-based `PeakPickerCWT` was removed in modern OpenMS. For data where
+`PeakPickerHiRes` struggles (e.g. broader or low-resolution peaks), use
+`PeakPickerIterative`, which refits peak widths over several iterations:
 
 ```python
-# Create CWT peak picker
-cwt_picker = ms.PeakPickerCWT()
+# Create iterative peak picker
+it_picker = ms.PeakPickerIterative()
 
 # Configure parameters
-params = cwt_picker.getParameters()
-params.setValue("signal_to_noise", 1.0)
-params.setValue("peak_width", 0.15)  # Expected peak width
-cwt_picker.setParameters(params)
+params = it_picker.getParameters()
+params.setValue("signal_to_noise_", 1.0)
+params.setValue("peak_width", 0.15)         # expected peak width
+params.setValue("nr_iterations_", 5)
+it_picker.setParameters(params)
 
 # Pick peaks
-cwt_picker.pickExperiment(exp, exp_picked)
+exp_picked = ms.MSExperiment()
+it_picker.pickExperiment(exp, exp_picked)
 ```
 
 ## Normalization
@@ -235,27 +243,30 @@ params.setValue("charge_max", 4)
 params.setValue("potential_charge_states", "1,2,3,4")
 deconvoluter.setParameters(params)
 
-# Apply deconvolution
+# Apply deconvolution. Input is a FeatureMap (not an MSExperiment); the two
+# ConsensusMaps receive the charge groups and the connecting edges.
 feature_map_out = ms.FeatureMap()
-deconvoluter.compute(exp, feature_map, feature_map_out, ms.ConsensusMap())
+groups = ms.ConsensusMap()
+edges = ms.ConsensusMap()
+deconvoluter.compute(feature_map, feature_map_out, groups, edges)
 ```
 
-### Isotope Deconvolution
+### Deisotoping a Spectrum
 
-Remove isotopic patterns:
+The `IsotopeWaveletTransform` algorithm was removed. To collapse isotope
+envelopes in a centroided spectrum to monoisotopic peaks, use the static
+`Deisotoper.deisotopeAndSingleCharge`:
 
 ```python
-# Create isotope wavelet transform
-isotope_wavelet = ms.IsotopeWaveletTransform()
-
-# Configure parameters
-params = isotope_wavelet.getParameters()
-params.setValue("max_charge", 3)
-params.setValue("intensity_threshold", 10.0)
-isotope_wavelet.setParameters(params)
-
-# Apply transformation
-isotope_wavelet.transform(exp)
+spec = exp.getSpectrum(0)
+spec.sortByPosition()
+# Positional args: spectrum, fragment_tolerance, fragment_unit_ppm, min_charge,
+# max_charge, keep_only_deisotoped, min_isopeaks, max_isopeaks,
+# make_single_charged, annotate_charge, annotate_iso_peak_count,
+# use_decreasing_model, start_intensity_check, add_up_intensity, annotate_features
+ms.Deisotoper.deisotopeAndSingleCharge(
+    spec, 10.0, True, 1, 3, True, 2, 10, True, True, False, True, 3, False, False
+)
 ```
 
 ## Retention Time Alignment

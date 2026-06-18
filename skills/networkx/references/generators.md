@@ -177,8 +177,15 @@ G = nx.hypercube_graph(n=4)
 
 ### Random Trees
 ```python
-# Random tree with n nodes
-G = nx.random_tree(n=100, seed=42)
+# Random labeled tree with n nodes, sampled uniformly over labeled trees
+# (nx.random_tree was removed in NetworkX 3.4)
+G = nx.random_labeled_tree(100, seed=42)
+
+# Sample uniformly over isomorphism classes instead
+G = nx.random_unlabeled_tree(100, seed=42)
+
+# Rooted variants
+G = nx.random_labeled_rooted_tree(100, seed=42)
 
 # Prefix tree (tries)
 G = nx.prefix_tree([[0, 1, 2], [0, 1, 3], [0, 4]])
@@ -248,8 +255,8 @@ G = nx.DiGraph([(u, v) for (u, v) in G.edges() if u < v])  # Remove backward edg
 
 ### Tournament Graphs
 ```python
-# Random tournament (complete directed graph)
-G = nx.random_tournament(n=10, seed=42)
+# Random tournament (complete directed graph); lives in the tournament module
+G = nx.tournament.random_tournament(n=10, seed=42)
 ```
 
 ## Duplication-Divergence Models

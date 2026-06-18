@@ -2,9 +2,8 @@
 name: parallel-web
 description: "All-in-one web toolkit powered by parallel-cli, with a strong emphasis on academic and scientific sources. Use this skill whenever the user needs to search the web, fetch/extract URL content, enrich data with web-sourced fields, or run deep research reports. Covers: web search (fast lookups, research, current info — prioritizing peer-reviewed papers, preprints, and scholarly databases), URL extraction (fetching pages, articles, academic PDFs), bulk data enrichment (adding fields to CSV/lists from the web), and deep research (exhaustive multi-source reports grounded in academic literature). Also handles setup, status checks, and result retrieval. Use this skill for ANY web-related task — even if the user doesn't mention 'parallel' or 'web' explicitly. If they want to look something up, fetch a page, enrich a dataset, investigate a topic, find academic papers, check citations, or review scientific literature, this is the skill to use."
 compatibility: Requires parallel-cli and internet access.
-metadata:
-  version: "1.0"
-  author: K-Dense, Inc.
+required_environment_variables: [{"name": "PARALLEL_API_KEY", "prompt": "Parallel API key.", "required_for": "full functionality"}]
+metadata: {"version": "1.1", "author": "K-Dense, Inc.", "openclaw": {"primaryEnv": "PARALLEL_API_KEY", "envVars": [{"name": "PARALLEL_API_KEY", "required": true, "description": "Parallel API key."}]}}
 ---
 
 # Parallel Web Toolkit

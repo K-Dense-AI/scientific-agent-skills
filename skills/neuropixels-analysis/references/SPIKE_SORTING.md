@@ -28,7 +28,7 @@ import spikeinterface.full as si
 sorting = si.run_sorter(
     'kilosort4',
     recording,
-    output_folder='ks4_output',
+    folder='ks4_output',
     verbose=True
 )
 
@@ -40,7 +40,7 @@ print(f"Found {len(sorting.unit_ids)} units")
 sorting = si.run_sorter(
     'kilosort4',
     recording,
-    output_folder='ks4_output',
+    folder='ks4_output',
     # Detection
     Th_universal=9,        # Spike detection threshold
     Th_learned=8,          # Learned threshold
@@ -92,7 +92,7 @@ ks4_params = {
 sorting = si.run_sorter(
     'kilosort3',
     recording,
-    output_folder='ks3_output',
+    folder='ks3_output',
     # Key parameters
     detect_threshold=6,
     projection_threshold=[9, 9],
@@ -114,7 +114,7 @@ pip install spykingcircus
 sorting = si.run_sorter(
     'spykingcircus2',
     recording,
-    output_folder='sc2_output',
+    folder='sc2_output',
     # Parameters
     detect_threshold=5,
     selection_method='all',
@@ -133,7 +133,7 @@ pip install mountainsort5
 sorting = si.run_sorter(
     'mountainsort5',
     recording,
-    output_folder='ms5_output',
+    folder='ms5_output',
     # Parameters
     detect_threshold=5.0,
     scheme='2',  # '1', '2', or '3'
@@ -145,9 +145,9 @@ sorting = si.run_sorter(
 ### Compare Sorters
 ```python
 # Run multiple sorters
-sorting_ks4 = si.run_sorter('kilosort4', recording, output_folder='ks4/')
-sorting_sc2 = si.run_sorter('spykingcircus2', recording, output_folder='sc2/')
-sorting_ms5 = si.run_sorter('mountainsort5', recording, output_folder='ms5/')
+sorting_ks4 = si.run_sorter('kilosort4', recording, folder='ks4/')
+sorting_sc2 = si.run_sorter('spykingcircus2', recording, folder='sc2/')
+sorting_ms5 = si.run_sorter('mountainsort5', recording, folder='ms5/')
 
 # Compare results
 comparison = si.compare_multiple_sorters(
@@ -176,7 +176,7 @@ sorting_ensemble = si.create_ensemble_sorting(
 sorting = si.run_sorter(
     'kilosort3',
     recording,
-    output_folder='ks3_docker/',
+    folder='ks3_docker/',
     docker_image='spikeinterface/kilosort3-compiled-base:latest',
     verbose=True
 )
@@ -187,7 +187,7 @@ sorting = si.run_sorter(
 sorting = si.run_sorter(
     'kilosort3',
     recording,
-    output_folder='ks3_singularity/',
+    folder='ks3_singularity/',
     singularity_image='/path/to/kilosort3.sif',
     verbose=True
 )
@@ -199,7 +199,7 @@ sorting = si.run_sorter(
 ```python
 # Multiple recording files
 recordings = [
-    si.read_spikeglx(f'/path/to/recording_{i}', stream_id='imec0.ap')
+    si.read_spikeglx(f'/path/to/recording_{i}', stream_name='imec0.ap')
     for i in range(3)
 ]
 
@@ -207,7 +207,7 @@ recordings = [
 recording_concat = si.concatenate_recordings(recordings)
 
 # Sort
-sorting = si.run_sorter('kilosort4', recording_concat, output_folder='ks4/')
+sorting = si.run_sorter('kilosort4', recording_concat, folder='ks4/')
 
 # Split back by original recording
 sortings_split = si.split_sorting(sorting, recording_concat)
@@ -225,7 +225,7 @@ for i, segment in enumerate(recording.split_by_times([0, 3600, 7200, 10800])):
     sorting_seg = si.run_sorter(
         'kilosort4',
         segment,
-        output_folder=segments_output / f'segment_{i}'
+        folder=segments_output / f'segment_{i}'
     )
     sortings.append(sorting_seg)
 ```
@@ -302,7 +302,7 @@ for unit_id in sorting.unit_ids:
 sorting = si.run_sorter(
     'kilosort4',
     recording,
-    output_folder='ks4/',
+    folder='ks4/',
     batch_size=30000  # Smaller batch
 )
 ```
@@ -313,7 +313,7 @@ sorting = si.run_sorter(
 sorting = si.run_sorter(
     'kilosort4',
     recording,
-    output_folder='ks4/',
+    folder='ks4/',
     Th_universal=7,  # Lower from default 9
     Th_learned=6
 )
@@ -325,7 +325,7 @@ sorting = si.run_sorter(
 sorting = si.run_sorter(
     'kilosort4',
     recording,
-    output_folder='ks4/',
+    folder='ks4/',
     dmin=20,   # Increase from 15
     dminx=16   # Increase from 12
 )

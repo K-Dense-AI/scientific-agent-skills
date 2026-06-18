@@ -75,10 +75,12 @@ Converts BAM alignment files into normalized coverage tracks in bigWig or bedGra
 - `--Offset`: Position-specific offsets (useful for RiboSeq, GROseq)
 - `--filterRNAstrand`: Separate forward/reverse strand reads
 - `--ignoreForNormalization`: Exclude chromosomes from normalization (e.g., sex chromosomes)
+- `--exactScaling`: Process all reads when sampling-based scaling may be inaccurate
 - `--numberOfProcessors, -p`: Parallel processing
 
 **Important Notes:**
 - For RNA-seq: Do NOT use --extendReads (would extend over splice junctions)
+- `--filterRNAstrand` assumes common dUTP/NSR/NNSR reverse-stranded libraries; verify library orientation before interpreting forward/reverse tracks
 - For ChIP-seq: Use --extendReads with smaller bin sizes
 - Never apply --ignoreDuplicates after GC bias correction
 
@@ -181,7 +183,13 @@ Filters BAM files by various quality metrics on-the-fly. Useful for creating fil
 - `--minFragmentLength / --maxFragmentLength`: Fragment length filters
 - `--samFlagInclude / --samFlagExclude`: SAM flag filtering
 - `--shift`: Shift reads (e.g., for ATACseq Tn5 correction)
-- `--ATACshift`: Automatically shift for ATAC-seq data
+- `--ATACshift`: Automatically shift for ATAC-seq data; equivalent to `--shift 4 -5 5 -4`
+- `--BED`: Write BEDPE output instead of BAM/CRAM
+- `--filterMetrics`: Save counts before/after filtering
+
+**Important Notes:**
+- `--shift` and `--ATACshift` use only properly paired reads.
+- Adjust effective genome size if blacklisted regions are excluded before RPGC normalization.
 
 ---
 
@@ -203,14 +211,19 @@ Calculates scores per genomic region and prepares matrices for plotHeatmap and p
 - `-bs, --binSize`: Bin size for averaging scores
 - `--skipZeros`: Skip regions with all zeros
 - `--minThreshold / --maxThreshold`: Filter by signal intensity
-- `--sortRegions`: ascending, descending, keep, no
+- `--sortRegions`: ascend, descend, keep, no
 - `--sortUsing`: mean, median, max, min, sum, region_length
+- `--sortUsingSamples`: Limit sorting to selected sample columns
 - `-p, --numberOfProcessors`: Parallel processing
 - `--averageTypeBins`: Statistical method (mean, median, min, max, sum, std)
 
 **Output Options:**
 - `--outFileNameMatrix`: Export tab-delimited data
 - `--outFileSortedRegions`: Save filtered/sorted BED file
+
+**Important Notes:**
+- Use `--sortRegions keep` if output order must match the input BED/GTF order.
+- Matrices from deepTools 3.x include labels and are not backward compatible with pre-3.0 plotting tools.
 
 **Common Usage:**
 ```bash
@@ -471,6 +484,29 @@ plotEnrichment -b Input.bam H3K4me3.bam \
 ---
 
 ## Miscellaneous Tools
+
+### bigwigAverage
+
+Averages multiple bigWig tracks by partitioning the genome into equal-sized bins, optionally applying scale factors before averaging.
+
+**Key Parameters:**
+- `--bigwigs, -b`: Input bigWig files
+- `--outFileName, -o`: Output file name
+- `--outFileFormat, -of`: bigwig or bedgraph
+- `--scaleFactors`: Colon-separated scale factors, such as `0.7:1`
+- `--skipNonCoveredRegions, --skipNAs`: Skip missing regions instead of treating them as zero
+- `--binSize, -bs`: Bin size for averaging
+- `--region, -r`: Limit processing to a test region
+- `--blackListFileName, -bl`: Exclude blacklisted regions
+- `--numberOfProcessors, -p`: Parallel processing
+
+**Common Usage:**
+```bash
+bigwigAverage -b rep1.bw rep2.bw -o average.bw \
+    --scaleFactors 1:0.9 --binSize 50
+```
+
+---
 
 ### computeMatrixOperations
 

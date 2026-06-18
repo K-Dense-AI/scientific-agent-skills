@@ -168,6 +168,7 @@ Analyze cancer-associated genes and their mutations.
 
 ```python
 import gget
+import pandas as pd
 import matplotlib.pyplot as plt
 
 print("Cancer Genomics Analysis Workflow")
@@ -263,6 +264,7 @@ Analyze single-cell RNA-seq data for specific cell types and tissues.
 
 ```python
 import gget
+import numpy as np
 import scanpy as sc
 
 print("Single-Cell Expression Analysis Workflow")

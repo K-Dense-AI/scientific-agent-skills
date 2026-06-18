@@ -1,199 +1,103 @@
 #!/usr/bin/env python3
 """
-Quality Control Analysis Script for Scanpy
+Quality control and filtering for single-cell RNA-seq data.
 
-Performs comprehensive quality control on single-cell RNA-seq data,
-including calculating metrics, generating QC plots, and filtering cells.
+Calculates QC metrics (genes/counts per cell, mitochondrial / ribosomal /
+hemoglobin fractions), writes before/after QC plots, optionally runs Scrublet
+doublet detection, and filters cells and genes by the given thresholds.
 
-Usage:
-    python qc_analysis.py <input_file> [--output <output_file>]
+Run this FIRST on raw counts, before normalization.
+
+Examples:
+    python qc_analysis.py raw.h5ad -o filtered.h5ad
+    python qc_analysis.py raw.h5ad -o filtered.h5ad --mt-threshold 10 --min-genes 500
+    python qc_analysis.py 10x_dir/ -o filtered.h5ad --max-genes 6000 --scrublet
 """
 
 import argparse
-import scanpy as sc
-import matplotlib.pyplot as plt
+
+from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata
 
 
-def calculate_qc_metrics(adata, mt_threshold=5, min_genes=200, min_cells=3):
-    """
-    Calculate QC metrics and filter cells/genes.
-
-    Parameters:
-    -----------
-    adata : AnnData
-        Annotated data matrix
-    mt_threshold : float
-        Maximum percentage of mitochondrial genes (default: 5)
-    min_genes : int
-        Minimum number of genes per cell (default: 200)
-    min_cells : int
-        Minimum number of cells per gene (default: 3)
-
-    Returns:
-    --------
-    AnnData
-        Filtered annotated data matrix
-    """
-    # Identify mitochondrial genes (assumes gene names follow standard conventions)
-    adata.var['mt'] = adata.var_names.str.startswith(('MT-', 'mt-', 'Mt-'))
-
-    # Calculate QC metrics
-    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None,
-                                log1p=False, inplace=True)
-
-    print("\n=== QC Metrics Summary ===")
-    print(f"Total cells: {adata.n_obs}")
-    print(f"Total genes: {adata.n_vars}")
-    print(f"Mean genes per cell: {adata.obs['n_genes_by_counts'].mean():.2f}")
-    print(f"Mean counts per cell: {adata.obs['total_counts'].mean():.2f}")
-    print(f"Mean mitochondrial %: {adata.obs['pct_counts_mt'].mean():.2f}")
-
-    return adata
+def annotate_gene_classes(adata):
+    """Flag mitochondrial, ribosomal, and hemoglobin genes (human or mouse names)."""
+    names = adata.var_names
+    adata.var["mt"] = names.str.startswith(("MT-", "mt-", "Mt-"))
+    adata.var["ribo"] = names.str.startswith(("RPS", "RPL", "Rps", "Rpl"))
+    adata.var["hb"] = names.str.contains(r"^HB[^P]|^Hb[^p]", regex=True)
+    return [v for v in ["mt", "ribo", "hb"] if adata.var[v].any()]
 
 
-def generate_qc_plots(adata, output_prefix='qc'):
-    """
-    Generate comprehensive QC plots.
-
-    Parameters:
-    -----------
-    adata : AnnData
-        Annotated data matrix
-    output_prefix : str
-        Prefix for saved figure files
-    """
-    # Create figure directory if it doesn't exist
-    import os
-    os.makedirs('figures', exist_ok=True)
-
-    # Violin plots for QC metrics
-    sc.pl.violin(adata, ['n_genes_by_counts', 'total_counts', 'pct_counts_mt'],
-                 jitter=0.4, multi_panel=True, save=f'_{output_prefix}_violin.pdf')
-
-    # Scatter plots
-    sc.pl.scatter(adata, x='total_counts', y='pct_counts_mt',
-                  save=f'_{output_prefix}_mt_scatter.pdf')
-    sc.pl.scatter(adata, x='total_counts', y='n_genes_by_counts',
-                  save=f'_{output_prefix}_genes_scatter.pdf')
-
-    # Highest expressing genes
-    sc.pl.highest_expr_genes(adata, n_top=20,
-                              save=f'_{output_prefix}_highest_expr.pdf')
-
-    print(f"\nQC plots saved to figures/ directory with prefix '{output_prefix}'")
-
-
-def filter_data(adata, mt_threshold=5, min_genes=200, max_genes=None,
-                min_counts=None, max_counts=None, min_cells=3):
-    """
-    Filter cells and genes based on QC thresholds.
-
-    Parameters:
-    -----------
-    adata : AnnData
-        Annotated data matrix
-    mt_threshold : float
-        Maximum percentage of mitochondrial genes
-    min_genes : int
-        Minimum number of genes per cell
-    max_genes : int, optional
-        Maximum number of genes per cell
-    min_counts : int, optional
-        Minimum number of counts per cell
-    max_counts : int, optional
-        Maximum number of counts per cell
-    min_cells : int
-        Minimum number of cells per gene
-
-    Returns:
-    --------
-    AnnData
-        Filtered annotated data matrix
-    """
-    n_cells_before = adata.n_obs
-    n_genes_before = adata.n_vars
-
-    # Filter cells
-    sc.pp.filter_cells(adata, min_genes=min_genes)
-    if max_genes:
-        adata = adata[adata.obs['n_genes_by_counts'] < max_genes, :]
-    if min_counts:
-        adata = adata[adata.obs['total_counts'] >= min_counts, :]
-    if max_counts:
-        adata = adata[adata.obs['total_counts'] < max_counts, :]
-
-    # Filter by mitochondrial percentage
-    adata = adata[adata.obs['pct_counts_mt'] < mt_threshold, :]
-
-    # Filter genes
-    sc.pp.filter_genes(adata, min_cells=min_cells)
-
-    print(f"\n=== Filtering Results ===")
-    print(f"Cells: {n_cells_before} -> {adata.n_obs} ({adata.n_obs/n_cells_before*100:.1f}% retained)")
-    print(f"Genes: {n_genes_before} -> {adata.n_vars} ({adata.n_vars/n_genes_before*100:.1f}% retained)")
-
-    return adata
+def make_qc_plots(sc, adata, prefix):
+    qc_keys = ["n_genes_by_counts", "total_counts", "pct_counts_mt"]
+    qc_keys = [k for k in qc_keys if k in adata.obs.columns]
+    sc.pl.violin(adata, qc_keys, jitter=0.4, multi_panel=True,
+                 show=False, save=f"_{prefix}_violin.png")
+    if "pct_counts_mt" in adata.obs.columns:
+        sc.pl.scatter(adata, x="total_counts", y="pct_counts_mt",
+                      show=False, save=f"_{prefix}_mt.png")
+    sc.pl.scatter(adata, x="total_counts", y="n_genes_by_counts",
+                  show=False, save=f"_{prefix}_counts.png")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='QC analysis for single-cell data')
-    parser.add_argument('input', help='Input file (h5ad, 10X mtx, csv, etc.)')
-    parser.add_argument('--output', default='qc_filtered.h5ad',
-                        help='Output file name (default: qc_filtered.h5ad)')
-    parser.add_argument('--mt-threshold', type=float, default=5,
-                        help='Max mitochondrial percentage (default: 5)')
-    parser.add_argument('--min-genes', type=int, default=200,
-                        help='Min genes per cell (default: 200)')
-    parser.add_argument('--min-cells', type=int, default=3,
-                        help='Min cells per gene (default: 3)')
-    parser.add_argument('--skip-plots', action='store_true',
-                        help='Skip generating QC plots')
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    add_io_args(p, default_output="qc_filtered.h5ad")
+    p.add_argument("--min-genes", type=int, default=200, help="Min genes per cell (default 200)")
+    p.add_argument("--max-genes", type=int, default=None, help="Max genes per cell (upper outliers)")
+    p.add_argument("--min-counts", type=int, default=None, help="Min total counts per cell")
+    p.add_argument("--max-counts", type=int, default=None, help="Max total counts per cell")
+    p.add_argument("--min-cells", type=int, default=3, help="Min cells per gene (default 3)")
+    p.add_argument("--mt-threshold", type=float, default=5, help="Max pct mitochondrial counts (default 5)")
+    p.add_argument("--scrublet", action="store_true", help="Run Scrublet doublet detection and drop doublets")
+    p.add_argument("--no-plots", action="store_true", help="Skip QC plots")
+    args = p.parse_args()
 
-    args = parser.parse_args()
+    sc = configure_scanpy(figdir=args.figdir)
+    adata = load_anndata(args.input)
+    adata.var_names_make_unique()
+    info(f"Loaded {adata.n_obs} cells x {adata.n_vars} genes")
 
-    # Configure scanpy
-    sc.settings.verbosity = 2
-    sc.settings.set_figure_params(dpi=300, facecolor='white')
-    sc.settings.figdir = './figures/'
+    qc_vars = annotate_gene_classes(adata)
+    sc.pp.calculate_qc_metrics(adata, qc_vars=qc_vars, percent_top=None,
+                               log1p=False, inplace=True)
+    info(f"Mean genes/cell={adata.obs['n_genes_by_counts'].mean():.0f}  "
+         f"mean counts/cell={adata.obs['total_counts'].mean():.0f}  "
+         f"mean pct_mt={adata.obs.get('pct_counts_mt', 0).mean():.1f}")
 
-    print(f"Loading data from: {args.input}")
+    if not args.no_plots:
+        make_qc_plots(sc, adata, "qc_before")
 
-    # Load data based on file extension
-    if args.input.endswith('.h5ad'):
-        adata = sc.read_h5ad(args.input)
-    elif args.input.endswith('.h5'):
-        adata = sc.read_10x_h5(args.input)
-    elif args.input.endswith('.csv'):
-        adata = sc.read_csv(args.input)
-    else:
-        # Try reading as 10X mtx directory
-        adata = sc.read_10x_mtx(args.input)
+    n0, g0 = adata.n_obs, adata.n_vars
+    sc.pp.filter_cells(adata, min_genes=args.min_genes)
+    if args.min_counts:
+        sc.pp.filter_cells(adata, min_counts=args.min_counts)
+    if args.max_genes:
+        adata = adata[adata.obs["n_genes_by_counts"] < args.max_genes, :].copy()
+    if args.max_counts:
+        adata = adata[adata.obs["total_counts"] < args.max_counts, :].copy()
+    if "pct_counts_mt" in adata.obs.columns:
+        adata = adata[adata.obs["pct_counts_mt"] < args.mt_threshold, :].copy()
+    sc.pp.filter_genes(adata, min_cells=args.min_cells)
 
-    print(f"Loaded data: {adata.n_obs} cells x {adata.n_vars} genes")
+    if args.scrublet:
+        info("Running Scrublet doublet detection...")
+        try:
+            sc.pp.scrublet(adata)
+        except (ImportError, ValueError) as e:
+            die(f"Scrublet failed ({e}). Install with: uv pip install scikit-image")
+        n_dbl = int(adata.obs["predicted_doublet"].sum())
+        adata = adata[~adata.obs["predicted_doublet"], :].copy()
+        info(f"Removed {n_dbl} predicted doublets")
 
-    # Calculate QC metrics
-    adata = calculate_qc_metrics(adata, mt_threshold=args.mt_threshold,
-                                  min_genes=args.min_genes, min_cells=args.min_cells)
+    info(f"Cells {n0} -> {adata.n_obs} ({adata.n_obs / n0 * 100:.1f}% kept)  "
+         f"Genes {g0} -> {adata.n_vars}")
 
-    # Generate QC plots (before filtering)
-    if not args.skip_plots:
-        print("\nGenerating QC plots (before filtering)...")
-        generate_qc_plots(adata, output_prefix='qc_before')
+    if not args.no_plots:
+        make_qc_plots(sc, adata, "qc_after")
 
-    # Filter data
-    adata = filter_data(adata, mt_threshold=args.mt_threshold,
-                        min_genes=args.min_genes, min_cells=args.min_cells)
-
-    # Generate QC plots (after filtering)
-    if not args.skip_plots:
-        print("\nGenerating QC plots (after filtering)...")
-        generate_qc_plots(adata, output_prefix='qc_after')
-
-    # Save filtered data
-    print(f"\nSaving filtered data to: {args.output}")
-    adata.write_h5ad(args.output)
-
-    print("\n=== QC Analysis Complete ===")
+    save_anndata(adata, args.output)
 
 
 if __name__ == "__main__":

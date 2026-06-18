@@ -17,7 +17,7 @@ from pathlib import Path
 try:
     from rdkit import Chem
 except ImportError:
-    print("Error: RDKit not installed. Install with: conda install -c conda-forge rdkit")
+    print("Error: RDKit not installed. Install with: uv pip install rdkit")
     sys.exit(1)
 
 

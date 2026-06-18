@@ -1,10 +1,8 @@
 ---
 name: networkx
-description: Comprehensive toolkit for creating, analyzing, and visualizing complex networks and graphs in Python. Use when working with network/graph data structures, analyzing relationships between entities, computing graph algorithms (shortest paths, centrality, clustering), detecting communities, generating synthetic networks, or visualizing network topologies. Applicable to social networks, biological networks, transportation systems, citation networks, and any domain involving pairwise relationships.
+description: Create, analyze, and visualize complex networks and graphs in Python with NetworkX. Use when working with network/graph data structures, computing graph algorithms (shortest paths, centrality, clustering), detecting communities, generating synthetic networks (random, scale-free, small-world), reading/writing graph file formats, or drawing network topologies. Common applications include social, biological, transportation, and citation networks.
 license: 3-clause BSD license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # NetworkX
@@ -12,6 +10,8 @@ metadata:
 ## Overview
 
 NetworkX is a Python package for creating, manipulating, and analyzing complex networks and graphs. Use this skill when working with network or graph data structures, including social networks, biological networks, transportation systems, citation networks, knowledge graphs, or any system involving relationships between entities.
+
+This skill targets NetworkX 3.x (current stable: 3.6, which requires Python >= 3.11). Several pre-3.0 APIs (`nx.info`, `nx.write_gpickle`, `nx.read_shp`) and the 3.4-era `nx.random_tree` no longer exist — current replacements are used throughout this skill.
 
 ## When to Use This Skill
 
@@ -131,8 +131,8 @@ G = nx.watts_strogatz_graph(n=100, k=6, p=0.1, seed=42)
 # Grid graph
 G = nx.grid_2d_graph(m=5, n=7)
 
-# Random tree
-G = nx.random_tree(n=100, seed=42)
+# Random tree (random_tree was removed in NetworkX 3.4)
+G = nx.random_labeled_tree(100, seed=42)
 ```
 
 **Reference**: See `references/generators.md` for comprehensive coverage of all graph generators including classic, random, lattice, bipartite, and specialized network models with detailed parameters and use cases.
@@ -155,7 +155,8 @@ nx.write_graphml(G, 'graph.graphml')
 G = nx.read_gml('graph.gml')
 nx.write_gml(G, 'graph.gml')
 
-# JSON
+# JSON (node-link format; edge list is stored under the "edges" key
+# since NetworkX 3.6 — older files may use "links", see references/io.md)
 data = nx.node_link_data(G)
 G = nx.node_link_graph(data)
 ```
@@ -330,6 +331,7 @@ Most NetworkX tasks follow this pattern:
 - Consider loading only necessary subgraphs
 - Use efficient file formats (pickle for Python objects, compressed formats)
 - Leverage approximate algorithms for very large networks (e.g., `k` parameter in centrality calculations)
+- For heavy workloads, NetworkX 3.x supports drop-in accelerated backends via the `backend=` keyword or `nx.config.backend_priority` — e.g. `nx-cugraph` (GPU), `nx-parallel` (multicore), `graphblas-algorithms` (sparse linear algebra). Install the backend package and pass `backend="cugraph"` (or similar) to supported functions; no algorithm code changes needed.
 
 **Node and Edge Types**:
 - Nodes can be any hashable Python object (numbers, strings, tuples, custom objects)

@@ -17,11 +17,13 @@ df.select(pl.col("name"), pl.col("age"))
 
 **Pattern-based selection:**
 ```python
+import polars.selectors as cs
+
 # All columns starting with "sales_"
 df.select(pl.col("^sales_.*$"))
 
 # All numeric columns
-df.select(pl.col(pl.NUMERIC_DTYPES))
+df.select(cs.numeric())
 
 # All columns except specific ones
 df.select(pl.all().exclude("id", "timestamp"))
@@ -384,19 +386,19 @@ df.sort(
 # Basic conditional
 df.with_columns(
     status=pl.when(pl.col("age") >= 18)
-        .then("adult")
-        .otherwise("minor")
+        .then(pl.lit("adult"))
+        .otherwise(pl.lit("minor"))
 )
 
 # Multiple conditions
 df.with_columns(
     category=pl.when(pl.col("score") >= 90)
-        .then("A")
+        .then(pl.lit("A"))
         .when(pl.col("score") >= 80)
-        .then("B")
+        .then(pl.lit("B"))
         .when(pl.col("score") >= 70)
-        .then("C")
-        .otherwise("F")
+        .then(pl.lit("C"))
+        .otherwise(pl.lit("F"))
 )
 
 # Conditional computation
@@ -512,7 +514,7 @@ df.filter(pl.col("date").dt.month().is_in([6, 7, 8]))  # Summer months
 ```python
 # Create list column
 df.with_columns(
-    items_list=pl.col("item1", "item2", "item3").to_list()
+    items_list=pl.concat_list("item1", "item2", "item3")
 )
 
 # List operations
@@ -527,10 +529,8 @@ df.with_columns(
 # Explode lists to rows
 df.explode("items")
 
-# Filter list elements
-df.with_columns(
-    filtered=pl.col("items").list.eval(pl.element() > 10)
-)
+# For element-wise list filtering, use Polars' native list-expression
+# methods with pl.element(); avoid Python callbacks in hot paths.
 ```
 
 ## Struct Operations

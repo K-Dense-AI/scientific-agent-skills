@@ -20,10 +20,10 @@ result = df1.join(df2, on="id", how="inner")
 result = df1.join(df2, on="id", how="left")
 ```
 
-**Outer Join (union):**
+**Full Join (union):**
 ```python
 # Keep all rows from both DataFrames
-result = df1.join(df2, on="id", how="outer")
+result = df1.join(df2, on="id", how="full")
 ```
 
 **Cross Join (Cartesian product):**
@@ -230,9 +230,9 @@ df = pl.DataFrame({
 
 # Pivot: products become columns
 pivoted = df.pivot(
+    on="product",
     values="sales",
-    index="date",
-    columns="product"
+    index="date"
 )
 # Result:
 # date     | A   | B
@@ -253,9 +253,9 @@ df = pl.DataFrame({
 
 # Aggregate duplicates
 pivoted = df.pivot(
+    on="product",
     values="sales",
     index="date",
-    columns="product",
     aggregate_function="sum"  # or "mean", "max", "min", etc.
 )
 ```
@@ -271,9 +271,9 @@ df = pl.DataFrame({
 })
 
 pivoted = df.pivot(
+    on="product",
     values="sales",
-    index=["region", "date"],
-    columns="product"
+    index=["region", "date"]
 )
 ```
 
@@ -405,7 +405,7 @@ wide = pl.DataFrame({
 long = wide.unpivot(index="id", on=["A", "B"])
 
 # Back to wide (maybe with transformations)
-wide_again = long.pivot(values="value", index="id", columns="variable")
+wide_again = long.pivot(on="variable", values="value", index="id")
 ```
 
 ### Pattern 2: Nested to Flat
@@ -442,7 +442,7 @@ result = (
     sales
     .group_by("date", "product")
     .agg(pl.col("sales").sum())
-    .pivot(values="sales", index="date", columns="product")
+    .pivot(on="product", values="sales", index="date")
 )
 ```
 
@@ -470,7 +470,7 @@ result = (
         metric=pl.col("variable").str.extract(r"Q[0-9]_(.*)", 1)
     )
     .drop("variable")
-    .pivot(values="value", index=["id", "quarter"], columns="metric")
+    .pivot(on="metric", values="value", index=["id", "quarter"])
 )
 ```
 
@@ -545,5 +545,5 @@ orders.join(customers, on="customer_id").join(products, on="product_id")
 
 ```python
 # Pivot for reporting
-sales.pivot(values="amount", index="month", columns="product")
+sales.pivot(on="product", values="amount", index="month")
 ```

@@ -22,12 +22,12 @@ def check_python_version():
     version = sys.version_info
 
     print("Checking Python version...")
-    if version.major == 3 and version.minor >= 8:
+    if version.major == 3 and version.minor >= 9:
         print(f"  ✓ Python {version.major}.{version.minor}.{version.micro}")
         return True
     else:
         print(f"  ✗ Python {version.major}.{version.minor}.{version.micro} "
-              f"(requires Python 3.8 or higher)")
+              f"(requires Python 3.9 or higher; upstream environment.yml uses Python 3.9.18)")
         return False
 
 
@@ -38,7 +38,12 @@ def check_package(package_name, import_name=None, version_attr='__version__'):
 
     try:
         module = __import__(import_name)
-        version = getattr(module, version_attr, 'unknown')
+        version = module
+        for attr in version_attr.split('.'):
+            version = getattr(version, attr, None)
+            if version is None:
+                version = 'unknown'
+                break
         print(f"  ✓ {package_name:20s} (version: {version})")
         return True
     except ImportError:
@@ -120,7 +125,7 @@ def check_esm():
         return True
     except ImportError:
         print(f"  ⚠ ESM not installed (needed for protein sequence folding)")
-        print(f"    Install with: pip install fair-esm")
+        print(f"    Install with: uv pip install fair-esm")
         return False
 
 

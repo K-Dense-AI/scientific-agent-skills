@@ -3,10 +3,8 @@ name: zarr-python
 description: Chunked N-D arrays for cloud storage (Zarr-Python 3). Compressed arrays, parallel I/O, S3/GCS via fsspec, NumPy/Dask/Xarray compatible, for large-scale scientific computing pipelines.
 allowed-tools: Read Write Edit Bash
 license: MIT license
-compatibility: Requires Python 3.12+ and zarr 3.x. Cloud I/O needs zarr[remote] plus s3fs or gcsfs. Legacy Zarr v2 workflows use zarr==2.* on older Python.
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+compatibility: Requires Python 3.12+ and zarr 3.x. Cloud I/O needs zarr[remote] plus pinned s3fs or gcsfs. Legacy Zarr v2 workflows need exact 2.x pins on older Python.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Zarr Python
@@ -15,25 +13,23 @@ metadata:
 
 Zarr is a Python library for storing large N-dimensional arrays with chunking and compression. Apply this skill for efficient parallel I/O, cloud-native workflows, and seamless integration with NumPy, Dask, and Xarray.
 
-**Current upstream:** zarr **3.2.1** (PyPI, May 2026). Docs: [zarr.readthedocs.io](https://zarr.readthedocs.io/en/stable/). New arrays default to **Zarr format 3**; set `zarr_format=2` for legacy interop. This skill is a **community guide** maintained by K-Dense Inc., not an official zarr-developers package.
+**Current upstream:** zarr **3.2.1** (released 2026-05-05). Docs: [zarr.readthedocs.io](https://zarr.readthedocs.io/en/stable/). New arrays default to **Zarr format 3**; set `zarr_format=2` for legacy interop. Zarr 3.2 adds rectilinear chunks and continues to refine the v3 codec pipeline. This skill is a **community guide** maintained by K-Dense Inc., not an official zarr-developers package.
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-uv pip install "zarr>=3.2,<4"
+uv pip install "zarr==3.2.1"
 ```
 
-Requires **Python 3.12+** (per PyPI metadata for zarr 3.2.x). For remote stores (S3, GCS, HTTP):
+Requires **Python 3.12+** and NumPy 2.0+ for current stable Zarr-Python. For remote stores (S3, GCS, HTTP), pin the optional extras/backends in your project lockfile:
 
 ```bash
-uv pip install "zarr[remote]"
-uv pip install s3fs   # AWS S3
-uv pip install gcsfs  # Google Cloud Storage
+uv pip install "zarr[remote]==3.2.1" "s3fs==2026.4.0" "gcsfs==2026.5.0"
 ```
 
-Pin `zarr>=3,<4` in application dependencies. Use `uv pip install "zarr==2.*"` only when you must stay on Zarr-Python 2 / Python 3.10–3.11.
+Use a version range such as `zarr>=3,<4` only when your project has a committed lockfile and compatibility tests. For Zarr-Python 2 / Python 3.10–3.11 workflows, choose an exact `zarr==2.x.y` patch version from the support-v2 release notes and commit the resulting lockfile.
 
 ### Basic Array Creation
 
@@ -163,13 +159,22 @@ z = zarr.zeros((10000, 10000), chunks=(1000, 1000))  # Square chunks
 - Using chunks (1, 200, 200): ~107ms
 - Using chunks (200, 200, 1): ~1.65ms (65× faster!)
 
-### Sharding for Large-Scale Storage
+### Rectilinear Chunks and Sharding
 
-When arrays have millions of small chunks, use sharding to group chunks into larger storage objects:
+Zarr 3.2 supports **rectilinear chunks** for uneven grids. Pass nested chunk lengths when a dimension has variable tile sizes:
 
 ```python
-from zarr.codecs import BloscCodec, BytesCodec, ShardingCodec
+z = zarr.create_array(
+    store="rectilinear.zarr",
+    shape=(60, 100),
+    chunks=([10, 20, 30], [50, 50]),
+    dtype="f4",
+)
+```
 
+When arrays have millions of small chunks, use **sharding** to group chunks into larger storage objects:
+
+```python
 # Create array with sharding
 z = zarr.create_array(
     store='data.zarr',
@@ -194,18 +199,18 @@ Zarr applies compression per chunk to reduce storage while maintaining fast acce
 ### Configuring Compression
 
 ```python
-from zarr.codecs import BloscCodec, GzipCodec, ZstdCodec, BytesCodec
+from zarr.codecs import BloscCodec, BloscShuffle, GzipCodec
 
 # Default: Blosc with Zstandard
 z = zarr.zeros((1000, 1000), chunks=(100, 100))  # Uses default compression
 
-# Configure Blosc codec
+# Configure Blosc compression
 z = zarr.create_array(
     store='data.zarr',
     shape=(1000, 1000),
     chunks=(100, 100),
     dtype='f4',
-    codecs=[BloscCodec(cname='zstd', clevel=5, shuffle='shuffle')]
+    compressors=BloscCodec(cname='zstd', clevel=5, shuffle=BloscShuffle.bitshuffle)
 )
 
 # Available Blosc compressors: 'blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd'
@@ -216,7 +221,7 @@ z = zarr.create_array(
     shape=(1000, 1000),
     chunks=(100, 100),
     dtype='f4',
-    codecs=[GzipCodec(level=6)]
+    compressors=GzipCodec(level=6)
 )
 
 # Disable compression
@@ -225,7 +230,7 @@ z = zarr.create_array(
     shape=(1000, 1000),
     chunks=(100, 100),
     dtype='f4',
-    codecs=[BytesCodec()]  # No compression
+    compressors=None
 )
 ```
 
@@ -239,13 +244,13 @@ z = zarr.create_array(
 
 ```python
 # Optimal for numeric scientific data
-codecs=[BloscCodec(cname='zstd', clevel=5, shuffle='shuffle')]
+compressors=BloscCodec(cname='zstd', clevel=5, shuffle=BloscShuffle.bitshuffle)
 
 # Optimal for speed
-codecs=[BloscCodec(cname='lz4', clevel=1)]
+compressors=BloscCodec(cname='lz4', clevel=1)
 
 # Optimal for compression ratio
-codecs=[GzipCodec(level=9)]
+compressors=GzipCodec(level=9)
 ```
 
 ## Storage Backends
@@ -303,8 +308,8 @@ Zarr 3 uses **fsspec** backends via URI strings or `FsspecStore` (preferred over
 ```python
 import zarr
 
-# S3 — credentials from standard AWS env vars (scope reads to these keys only)
-# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
+# S3 — prefer IAM roles/profiles; fsspec handles provider credential discovery.
+# Never print, log, or copy credential values into prompts or notebooks.
 z = zarr.create_array(
     store="s3://my-bucket/path/to/array.zarr",
     shape=(1000, 1000),
@@ -314,7 +319,7 @@ z = zarr.create_array(
 )
 z[:] = data
 
-# GCS — GOOGLE_APPLICATION_CREDENTIALS or gcloud default credentials
+# GCS — prefer workload identity or gcloud application-default credentials.
 z = zarr.open_array(
     "gs://my-bucket/path/to/array.zarr",
     mode="r",
@@ -327,7 +332,7 @@ store = FsspecStore.from_url("s3://my-bucket/data.zarr", storage_options={"anon"
 root = zarr.open_group(store=store, mode="r+")
 ```
 
-Cloud backends read credentials from provider environment variables locally via fsspec; they are not sent to third-party endpoints outside your configured bucket/project.
+Cloud backends read credentials through the provider SDK/fsspec backend. Do not inspect broad `.env` files; if a user explicitly needs help debugging auth, ask for redacted configuration and read only the named provider variables they approve. Treat all `import zarr`, `import dask`, `import h5py`, and `import xarray` examples as third-party package imports, not bundled script files.
 
 **Cloud Storage Best Practices**:
 - Use consolidated metadata to reduce latency: `zarr.consolidate_metadata(store)`
@@ -510,13 +515,26 @@ ds.to_zarr('climate_data.zarr')
 
 ## Parallel Computing and Thread Safety
 
-The `synchronizer` argument (`ThreadSynchronizer`, `ProcessSynchronizer`) is **not ported to Zarr-Python 3** yet. Use these patterns instead:
+Zarr uses async I/O internally. Tune concurrency for remote storage or Dask-heavy workloads:
+
+```python
+import zarr
+
+# Higher values can improve remote throughput; lower values reduce pressure
+# when Dask already supplies many worker threads.
+zarr.config.set({
+    "async.concurrency": 8,
+    "threading.max_workers": 8,
+})
+```
+
+The old `synchronizer` argument (`ThreadSynchronizer`, `ProcessSynchronizer`) is **not available in Zarr-Python 3**. Use these patterns instead:
 
 - **Reads:** always safe across threads/processes.
 - **Writes:** safe when each worker writes to **non-overlapping chunks**; most stores support atomic chunk writes.
 - **Overlapping writes:** coordinate externally (file locks, workflow design) until synchronizers return.
 
-For Dask-heavy workloads, tune Zarr async concurrency — see [Optimizing performance](https://zarr.readthedocs.io/en/stable/user-guide/performance/).
+For Dask-heavy workloads, estimate total concurrent I/O as roughly `dask_threads × async.concurrency` and lower Zarr's concurrency settings if the store or memory becomes saturated.
 
 ## Consolidated Metadata
 
@@ -598,7 +616,7 @@ print(z.info)
 
 # Output includes:
 # - Type, shape, chunks, dtype
-# - Compression codec and level
+# - Serializer and compressors
 # - Storage size (compressed vs uncompressed)
 # - Storage location
 

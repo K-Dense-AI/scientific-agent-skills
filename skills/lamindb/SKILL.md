@@ -1,35 +1,34 @@
 ---
 name: lamindb
-description: This skill should be used when working with LaminDB, an open-source data framework for biology that makes data queryable, traceable, reproducible, and FAIR. Use when managing biological datasets (scRNA-seq, spatial, flow cytometry, etc.), tracking computational workflows, curating and validating data with biological ontologies, building data lakehouses, or ensuring data lineage and reproducibility in biological research. Covers data management, annotation, ontologies (genes, cell types, diseases, tissues), schema validation, integrations with workflow managers (Nextflow, Snakemake) and MLOps platforms (W&B, MLflow), and deployment strategies.
+description: Use when working with LaminDB, the open-source lineage-native lakehouse for biological datasets and models. Covers setup, artifact registration, query/search, lineage tracking, validation, ontology-backed annotation with Bionty, collections, branches, storage, and workflow integrations.
 license: Apache-2.0 license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # LaminDB
 
 ## Overview
 
-LaminDB is an open-source data framework for biology designed to make data queryable, traceable, reproducible, and FAIR (Findable, Accessible, Interoperable, Reusable). It provides a unified platform that combines lakehouse architecture, lineage tracking, feature stores, biological ontologies, LIMS (Laboratory Information Management System), and ELN (Electronic Lab Notebook) capabilities through a single Python API.
+LaminDB is an open-source, lineage-native lakehouse for biology. It makes datasets and models queryable, traceable, validated, reproducible, and FAIR (Findable, Accessible, Interoperable, Reusable) while storing data in open formats across local filesystems, S3, GCS, Hugging Face, SQLite, and Postgres.
 
 **Core Value Proposition:**
-- **Queryability**: Search and filter datasets by metadata, features, and ontology terms
-- **Traceability**: Automatic lineage tracking from raw data through analysis to results
-- **Reproducibility**: Version control for data, code, and environment
-- **FAIR Compliance**: Standardized annotations using biological ontologies
+- **Queryability**: Search and filter artifacts, records, runs, features, schemas, and collections
+- **Traceability**: Track inputs, outputs, parameters, source code, and environments for notebooks, scripts, functions, and pipelines
+- **Validation**: Curate DataFrame, AnnData, SpatialData, TileDB-SOMA, Parquet, Zarr, and other biological formats with schemas
+- **FAIR Compliance**: Standardize annotations with Bionty-backed ontologies and custom registries
+- **Change management**: Organize work with projects, branches, spaces, collections, and saved notes or plans
 
 ## When to Use This Skill
 
 Use this skill when:
 
 - **Managing biological datasets**: scRNA-seq, bulk RNA-seq, spatial transcriptomics, flow cytometry, multi-modal data, EHR data
-- **Tracking computational workflows**: Notebooks, scripts, pipeline execution (Nextflow, Snakemake, Redun)
+- **Tracking computational workflows**: Notebooks, scripts, functions, shell scripts, and pipeline execution (Nextflow, Snakemake, Redun)
 - **Curating and validating data**: Schema validation, standardization, ontology-based annotation
 - **Working with biological ontologies**: Genes, proteins, cell types, tissues, diseases, pathways (via Bionty)
 - **Building data lakehouses**: Unified query interface across multiple datasets
 - **Ensuring reproducibility**: Automatic versioning, lineage tracking, environment capture
-- **Integrating ML pipelines**: Connecting with Weights & Biases, MLflow, HuggingFace, scVI-tools
+- **Integrating ML pipelines**: Connecting with Weights & Biases, MLflow, Hugging Face, Lightning, scVI-tools
 - **Deploying data infrastructure**: Setting up local or cloud-based data management systems
 - **Collaborating on datasets**: Sharing curated, annotated data with standardized metadata
 
@@ -41,14 +40,17 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 
 **Core entities:**
 - **Artifacts**: Versioned datasets (DataFrame, AnnData, Parquet, Zarr, etc.)
-- **Records**: Experimental entities (samples, perturbations, instruments)
+- **Records & ULabels**: Experimental entities, typed records, and simple labels
+- **Collections**: Versioned, immutable sets of artifacts
 - **Runs & Transforms**: Computational lineage tracking (what code produced what data)
 - **Features**: Typed metadata fields for annotation and querying
+- **Projects, Branches & Spaces**: Project grouping, change management, and access boundaries
 
 **Key workflows:**
 - Create and version artifacts from files or Python objects
 - Track notebook/script execution with `ln.track()` and `ln.finish()`
-- Annotate artifacts with typed features
+- Track function workflows with `@ln.flow()` and `@ln.step()`
+- Annotate artifacts with records, ulabels, projects, and typed features
 - Visualize data lineage graphs with `artifact.view_lineage()`
 - Query by provenance (find all outputs from specific code/inputs)
 
@@ -60,10 +62,10 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 - Registry exploration and lookup with auto-complete
 - Single record retrieval with `get()`, `one()`, `one_or_none()`
 - Filtering with comparison operators (`__gt`, `__lte`, `__contains`, `__startswith`)
-- Feature-based queries (query by annotated metadata)
+- Feature-based queries, including expression-style queries with `Feature` objects
 - Cross-registry traversal with double-underscore syntax
 - Full-text search across registries
-- Advanced logical queries with Q objects (AND, OR, NOT)
+- Advanced logical queries with `ln.Q` objects (AND, OR, NOT)
 - Streaming large datasets without loading into memory
 
 **Key workflows:**
@@ -96,7 +98,7 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 
 **Key workflows:**
 - Define features and schemas for data validation
-- Use `DataFrameCurator` or `AnnDataCurator` for validation
+- Use `DataFrameCurator`, `AnnDataCurator`, `SpatialDataCurator`, or `TiledbsomaExperimentCurator` for validation
 - Standardize values with `.cat.standardize()`
 - Map to ontologies with `.cat.add_ontology()`
 - Save curated artifacts with schema linkage
@@ -132,11 +134,12 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 - Nextflow: Track pipeline processes and outputs
 - Snakemake: Integrate into Snakemake rules
 - Redun: Combine with Redun task tracking
+- Lightning: Persist checkpoints and training metadata
 
 **MLOps platforms:**
 - Weights & Biases: Link experiments with data artifacts
 - MLflow: Track models and experiments
-- HuggingFace: Track model fine-tuning
+- Hugging Face: Track model fine-tuning
 - scVI-tools: Single-cell analysis workflows
 
 **Storage systems:**
@@ -160,9 +163,12 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 ### 6. Setup and Deployment
 
 **Installation:**
-- Basic: `uv pip install lamindb`
-- With extras: `uv pip install 'lamindb[gcp,zarr,fcs]'`
-- Modules: bionty, wetlab, clinical
+- Current stable baseline: `lamindb==2.5.1` (released 2026-06-01; Python >=3.10, <=3.14)
+- Basic: `uv pip install 'lamindb==2.5.1'`
+- With extras: `uv pip install 'lamindb[gcp,zarr-v2,fcs]==2.5.1'`
+- Minimal namespace only: `uv pip install 'lamindb-core==2.5.1'`
+- Bionty module: included in the LaminDB docs and available as `uv pip install 'bionty==2.4.0'`
+- Optional modules: pin reviewed releases for wetlab or clinical schema modules rather than installing floating latest versions
 
 **Instance types:**
 - Local SQLite (development)
@@ -179,7 +185,7 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 - Cache management for cloud files
 - Multi-user system configurations
 - Git repository sync
-- Environment variables
+- Named environment variables for credentials and connection URLs
 
 **Deployment patterns:**
 - Local dev → Cloud production migration
@@ -187,6 +193,15 @@ LaminDB provides six interconnected capability areas, each documented in detail 
 - Shared storage with personal instances
 
 **Reference:** `references/setup-deployment.md` - Read this for detailed installation, configuration, storage setup, database management, security best practices, and troubleshooting.
+
+## Safety and Security Defaults
+
+When helping with LaminDB setup or integrations:
+
+- Never display, log, or transmit actual API keys, cloud credentials, database passwords, or full connection strings that include secrets.
+- Prefer IAM roles, workload identity, secret managers, or named environment variables such as `LAMIN_DB_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `GOOGLE_APPLICATION_CREDENTIALS`; only check whether a named variable is present, not its value.
+- Before saving content from REST APIs, external databases, or user-provided files, validate and sanitize it with an explicit schema or curator.
+- For reproducible installs, pin package versions or use a lock file. Floating installs are acceptable only when the user explicitly wants the latest upstream release.
 
 ## Common Use Case Workflows
 
@@ -197,7 +212,7 @@ import lamindb as ln
 import bionty as bt
 import anndata as ad
 
-# Start tracking
+# Start tracking a notebook/script run
 ln.track(params={"analysis": "scRNA-seq QC and annotation"})
 
 # Import cell type ontology
@@ -214,9 +229,9 @@ curator = ln.curators.AnnDataCurator(adata, schema)
 curator.validate()
 artifact = curator.save_artifact(key="scrna/validated.h5ad")
 
-# Link ontology annotations
-cell_types = bt.CellType.from_values(adata.obs.cell_type)
-artifact.feature_sets.add_ontology(cell_types)
+# Link ontology-backed annotations for queryability
+cell_types = bt.CellType.from_values(adata.obs["cell_type"])
+artifact.cell_types.add(*cell_types)
 
 ln.finish()
 ```
@@ -235,13 +250,13 @@ for i, file in enumerate(data_files):
     ).save()
 
     # Annotate with features
-    artifact.features.add_values({
+    artifact.features.set_values({
         "batch": i,
         "tissue": tissues[i],
         "condition": conditions[i]
     })
 
-# Query across all experiments
+# Query across all experiments by annotated features
 immune_datasets = ln.Artifact.filter(
     key__startswith="scrna/",
     tissue="PBMC",
@@ -278,7 +293,7 @@ wandb.log({"accuracy": 0.95})
 import joblib
 joblib.dump(model, "model.pkl")
 model_artifact = ln.Artifact("model.pkl", key="models/exp-42.pkl").save()
-model_artifact.features.add_values({"wandb_run_id": wandb.run.id})
+model_artifact.features.set_values({"wandb_run_id": wandb.run.id})
 
 ln.finish()
 wandb.finish()
@@ -308,23 +323,25 @@ output_artifact = ln.Artifact(
 ln.finish()
 ```
 
+For native Nextflow projects, prefer the `nf-lamin` plugin and current `nextflow.config` patterns when available; use inline Python tracking for small or custom pipeline steps.
+
 ## Getting Started Checklist
 
 To start using LaminDB effectively:
 
 1. **Installation & Setup** (`references/setup-deployment.md`)
-   - Install LaminDB and required extras
+   - Install pinned LaminDB and required extras
    - Authenticate with `lamin login`
    - Initialize instance with `lamin init --storage ...`
 
 2. **Learn Core Concepts** (`references/core-concepts.md`)
    - Understand Artifacts, Records, Runs, Transforms
    - Practice creating and retrieving artifacts
-   - Implement `ln.track()` and `ln.finish()` in workflows
+   - Implement `ln.track()`/`ln.finish()` or `@ln.flow()`/`@ln.step()` in workflows
 
 3. **Master Querying** (`references/data-management.md`)
    - Practice filtering and searching registries
-   - Learn feature-based queries
+   - Learn feature-based queries and expression-style filters
    - Experiment with streaming large files
 
 4. **Set Up Validation** (`references/annotation-validation.md`)
@@ -358,7 +375,7 @@ Follow these principles when working with LaminDB:
 
 6. **Version, don't duplicate**: Use built-in versioning instead of creating new keys for modifications
 
-7. **Annotate with features**: Define typed features for queryable metadata
+7. **Annotate with features**: Define typed features and use `artifact.features.set_values()` for queryable metadata
 
 8. **Document thoroughly**: Add descriptions to artifacts, schemas, and transforms
 

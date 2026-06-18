@@ -101,100 +101,117 @@ Use `axis_query()` for queries that exceed available RAM.
 
 **Pattern: Iterative processing**
 ```python
-import pyarrow as pa
+import tiledbsoma as soma
 
 # Create query
-query = census["census_data"]["homo_sapiens"].axis_query(
+with census["census_data"]["homo_sapiens"].axis_query(
     measurement_name="RNA",
     obs_query=soma.AxisQuery(
         value_filter="tissue_general == 'brain' and is_primary_data == True"
     ),
     var_query=soma.AxisQuery(
         value_filter="feature_name in ['FOXP2', 'TBR1', 'SATB2']"
-    )
-)
-
-# Iterate through X matrix in chunks
-iterator = query.X("raw").tables()
-for batch in iterator:
-    # Process batch (a pyarrow.Table)
-    # batch has columns: soma_data, soma_dim_0, soma_dim_1
-    process_batch(batch)
+    ),
+) as query:
+    # Iterate through X matrix in chunks
+    iterator = query.X("raw").tables()
+    for batch in iterator:
+        # Process batch (a pyarrow.Table)
+        # batch has columns: soma_data, soma_dim_0, soma_dim_1
+        process_batch(batch)
 ```
 
 **Pattern: Incremental statistics (mean/variance)**
 ```python
+import tiledbsoma as soma
+
 # Using Welford's online algorithm
 n = 0
 mean = 0
 M2 = 0
 
-iterator = query.X("raw").tables()
-for batch in iterator:
-    values = batch["soma_data"].to_numpy()
-    for x in values:
-        n += 1
-        delta = x - mean
-        mean += delta / n
-        delta2 = x - mean
-        M2 += delta * delta2
+with census["census_data"]["homo_sapiens"].axis_query(
+    measurement_name="RNA",
+    obs_query=soma.AxisQuery(value_filter="tissue_general == 'brain' and is_primary_data == True"),
+    var_query=soma.AxisQuery(value_filter="feature_name in ['FOXP2', 'TBR1', 'SATB2']"),
+) as query:
+    iterator = query.X("raw").tables()
+    for batch in iterator:
+        values = batch["soma_data"].to_numpy()
+        for x in values:
+            n += 1
+            delta = x - mean
+            mean += delta / n
+            delta2 = x - mean
+            M2 += delta * delta2
 
 variance = M2 / (n - 1) if n > 1 else 0
 ```
 
 ### 4. PyTorch Integration (Machine Learning)
 
-Use `experiment_dataloader()` for training models.
+Use TileDB-SOMA-ML for training models. The former `cellxgene_census.experimental.ml` loaders are deprecated and scheduled for removal.
 
 **Pattern: Create training dataloader**
 ```python
-from cellxgene_census.experimental.ml import experiment_dataloader
-import torch
+import tiledbsoma as soma
+from tiledbsoma_ml import ExperimentDataset, experiment_dataloader
 
 with cellxgene_census.open_soma() as census:
-    # Create dataloader
-    dataloader = experiment_dataloader(
-        census["census_data"]["homo_sapiens"],
+    experiment = census["census_data"]["homo_sapiens"]
+    with experiment.axis_query(
         measurement_name="RNA",
-        X_name="raw",
-        obs_value_filter="tissue_general == 'liver' and is_primary_data == True",
-        obs_column_names=["cell_type"],
-        batch_size=128,
-        shuffle=True,
-    )
+        obs_query=soma.AxisQuery(
+            value_filter="tissue_general == 'liver' and is_primary_data == True"
+        ),
+    ) as query:
+        dataset = ExperimentDataset(
+            query=query,
+            layer_name="raw",
+            obs_column_names=["cell_type"],
+            batch_size=128,
+            shuffle=True,
+        )
+        dataloader = experiment_dataloader(dataset)
 
-    # Training loop
-    for epoch in range(num_epochs):
-        for batch in dataloader:
-            X = batch["X"]  # Gene expression
-            labels = batch["obs"]["cell_type"]  # Cell type labels
-            # Train model...
+        for epoch in range(num_epochs):
+            dataset.set_epoch(epoch)
+            for X, obs in dataloader:
+                labels = obs["cell_type"]
+                # Train model...
 ```
 
 **Pattern: Train/test split**
 ```python
-from cellxgene_census.experimental.ml import ExperimentDataset
-
-# Create dataset from query
-dataset = ExperimentDataset(
-    experiment_axis_query,
-    layer_name="raw",
-    obs_column_names=["cell_type"],
-    batch_size=128,
-)
-
 # Split data
-train_dataset, test_dataset = dataset.random_split(
-    split=[0.8, 0.2],
-    seed=42
-)
+train_dataset, test_dataset = dataset.random_split(0.8, 0.2, seed=42)
 
 # Create loaders
-train_loader = experiment_dataloader(train_dataset)
-test_loader = experiment_dataloader(test_dataset)
+train_loader = experiment_dataloader(train_dataset, num_workers=2)
+test_loader = experiment_dataloader(test_dataset, num_workers=2)
 ```
 
-### 5. Integration Workflows
+Set `batch_size` and `shuffle` on `ExperimentDataset`, not on the PyTorch `DataLoader`.
+
+### 5. Spatial Census Data
+
+Use the `cellxgene-census[spatial]` extra and query the `census_spatial_sequencing` collection for Visium or Slide-seq V2 data.
+
+```python
+import tiledbsoma as soma
+
+with cellxgene_census.open_soma(census_version="2025-11-08") as census:
+    spatial_experiment = census["census_spatial_sequencing"]["homo_sapiens"]
+    with spatial_experiment.axis_query(
+        measurement_name="RNA",
+        obs_query=soma.AxisQuery(
+            value_filter="dataset_id == '4cceac62-9513-42a4-90e5-2878dbb0192c'"
+        ),
+    ) as query:
+        sdata = query.to_spatialdata(X_name="raw")
+```
+
+### 6. Integration Workflows
 
 **Pattern: Scanpy integration**
 ```python
@@ -247,7 +264,7 @@ obs_value_filter="cell_type == 'B cell' and is_primary_data == True"
 ### 2. Specify Census Version
 For reproducible analysis, always specify the Census version:
 ```python
-census = cellxgene_census.open_soma(census_version="2023-07-25")
+census = cellxgene_census.open_soma(census_version="2025-11-08")
 ```
 
 ### 3. Use Context Manager

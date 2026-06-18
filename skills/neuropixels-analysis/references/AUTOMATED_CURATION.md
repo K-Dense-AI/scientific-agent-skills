@@ -69,8 +69,8 @@ unit_labels = results['unit_labels']
 ```python
 import spikeinterface.full as si
 
-# After spike sorting
-sorting = si.run_sorter('kilosort4', recording, output_folder='ks4/')
+# After spike sorting (run_sorter uses folder=, not output_folder=)
+sorting = si.run_sorter('kilosort4', recording, folder='ks4/')
 
 # Create analyzer and compute required extensions
 analyzer = si.create_sorting_analyzer(sorting, recording, sparse=True)
@@ -115,6 +115,81 @@ results = bc.run_bombcell(
     **custom_params
 )
 ```
+
+## UnitRefine: Model-Based Curation
+
+SpikeInterface ships pretrained machine-learning classifiers (the **UnitRefine** family) and
+a loader for any scikit-learn pipeline shared on Hugging Face. Instead of hand-tuning
+thresholds, you pass a `SortingAnalyzer` (with quality + template metrics computed) and the
+model predicts a label and confidence per unit.
+
+### Prepare the analyzer
+
+The model needs the metrics it was trained on. Compute quality metrics and template metrics:
+
+```python
+import spikeinterface.full as si
+import spikeinterface.curation as sc
+
+analyzer = si.create_sorting_analyzer(sorting, recording, sparse=True, folder='analyzer/')
+analyzer.compute([
+    'noise_levels', 'random_spikes', 'waveforms', 'templates',
+    'spike_locations', 'spike_amplitudes', 'correlograms',
+    'principal_components', 'quality_metrics', 'template_metrics',
+])
+analyzer.compute('template_metrics', include_multi_channel_metrics=True)
+```
+
+### Apply the UnitRefine classifiers
+
+The recommended flow chains two models: first noise vs neural, then SUA vs MUA on the
+neural units. These models were trained on real Neuropixels data (V1, SC, ALM from 11 mice):
+
+```python
+# 1) noise vs neural
+noise_labels = sc.model_based_label_units(
+    sorting_analyzer=analyzer,
+    repo_id='SpikeInterface/UnitRefine_noise_neural_classifier',
+    trust_model=True,
+)
+neural = analyzer.remove_units(noise_labels[noise_labels['prediction'] == 'noise'].index)
+
+# 2) single-unit (sua) vs multi-unit (mua)
+sua_mua_labels = sc.model_based_label_units(
+    sorting_analyzer=neural,
+    repo_id='SpikeInterface/UnitRefine_sua_mua_classifier',
+    trust_model=True,
+)
+
+import pandas as pd
+all_labels = pd.concat(
+    [sua_mua_labels, noise_labels[noise_labels['prediction'] == 'noise']]
+).sort_index()
+print(all_labels)   # columns: prediction, probability
+```
+
+### Loading a model explicitly
+
+```python
+model, model_info = sc.load_model(
+    repo_id='SpikeInterface/toy_tetrode_model',
+    trusted=['numpy.dtype'],
+)
+print(model.feature_names_in_)              # metrics the model expects
+print(model_info['label_conversion'])      # integer -> human-readable label
+
+# Apply a model from a local folder
+labels = sc.model_based_label_units(sorting_analyzer=analyzer, model_folder='path/to/model/')
+```
+
+### Security and validation notes
+
+- `trust_model=True` (or an explicit `trusted=[...]` list) is required to unpack the
+  `.skops` model file. Only load models from sources you trust — treat `.skops`/`.pkl`
+  files like any other executable artifact.
+- Models trained on one brain area/dataset may not transfer. Use the confidence
+  (`probability`) to decide which units to auto-accept vs. send to manual review, and
+  validate against a manually labelled subset before trusting a model on new data.
 
 ## SpikeInterface Auto-Curation
 
@@ -227,12 +302,12 @@ unique_ids = um.get_unique_ids()
 # 3. Run UnitMatch for cross-session tracking
 
 # Session 1
-sorting1 = si.run_sorter('kilosort4', rec1, output_folder='session1/ks4/')
+sorting1 = si.run_sorter('kilosort4', rec1, folder='session1/ks4/')
 # Run Bombcell
 labels1 = bc.run_bombcell('session1/ks4/', raw1_path)
 
 # Session 2
-sorting2 = si.run_sorter('kilosort4', rec2, output_folder='session2/ks4/')
+sorting2 = si.run_sorter('kilosort4', rec2, folder='session2/ks4/')
 labels2 = bc.run_bombcell('session2/ks4/', raw2_path)
 
 # Track units across sessions
@@ -284,7 +359,7 @@ manual_labels = si.read_phy('phy_review/').get_property('quality')
 | **Manual (Phy)** | Gold standard, flexible | Slow, subjective |
 | **SpikeInterface QM** | Fast, reproducible | Simple thresholds only |
 | **Bombcell** | Multi-class, validated | Requires waveform extraction |
-| **UnitRefine** | ML-based, learns from data | Needs training data |
+| **UnitRefine** | ML-based, pretrained models on Hugging Face | May not transfer across datasets |
 
 ## Best Practices
 
@@ -354,5 +429,7 @@ sorting_curated, labels = curate_sorting(sorting, recording, 'output/')
 - [Bombcell GitHub](https://github.com/Julie-Fabre/bombcell)
 - [UnitMatch GitHub](https://github.com/EnnyvanBeest/UnitMatch)
 - [SpikeInterface Curation](https://spikeinterface.readthedocs.io/en/stable/modules/curation.html)
+- [Model-based curation tutorial](https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html)
+- [UnitRefine models (Hugging Face)](https://huggingface.co/SpikeInterface)
 - Fabre et al. (2023) "Bombcell: automated curation and cell classification"
 - van Beest et al. (2024) "UnitMatch: tracking neurons across days with high-density probes"

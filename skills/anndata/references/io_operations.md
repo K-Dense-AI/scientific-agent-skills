@@ -9,6 +9,8 @@ import anndata as ad
 from anndata.io import read_csv, read_mtx, read_loom, read_elem, write_elem
 ```
 
+Avoid deprecated I/O aliases such as `ad.read`; use `ad.read_h5ad` or `anndata.io.read_h5ad` explicitly.
+
 ## Native Formats
 
 ### H5AD (HDF5-based)
@@ -35,10 +37,11 @@ adata = ad.read_h5ad('data.h5ad')
 
 # Read in backed mode (lazy loading for large files)
 adata = ad.read_h5ad('data.h5ad', backed='r')  # Read-only
-adata = ad.read_h5ad('data.h5ad', backed='r+')  # Read-write
+adata = ad.read_h5ad('data.h5ad', backed='r+')  # Read-write for X
 
 # Backed mode enables working with datasets larger than RAM
 # Only accessed data is loaded into memory
+# In backed mode, only X updates are persisted; write a new file for obs/var/uns changes.
 ```
 
 #### Backed mode operations
@@ -84,20 +87,24 @@ import anndata
 
 # Default writes Zarr v2; opt into v3 and optional auto-sharding
 anndata.settings.zarr_write_format = 3
-anndata.settings.auto_shard_zarr_v3 = True  # shards="auto" for v3 arrays
+anndata.settings.auto_shard_zarr_v3 = True  # experimental; independent of zarr_write_format
 
 adata.write_zarr('data.zarr', chunks=(1000, 1000))
 ```
 
+Zarr v3 writing is available in anndata 0.12, with structured-array exceptions and evolving performance guidance. Consolidated metadata is recommended for remote Zarr stores.
+
 #### Remote Zarr access
+Only open remote stores from trusted, expected locations. Prefer allowlisted HTTPS/S3/GCS paths or signed URLs, and avoid asking an agent to fetch arbitrary user-supplied URLs.
+
 ```python
 import fsspec
 
-# Access Zarr from S3
+# Access Zarr from an expected S3 location
 store = fsspec.get_mapper('s3://bucket-name/data.zarr')
 adata = ad.read_zarr(store)
 
-# Access Zarr from URL
+# Access Zarr from a trusted HTTPS location
 store = fsspec.get_mapper('https://example.com/data.zarr')
 adata = ad.read_zarr(store)
 ```
@@ -264,7 +271,16 @@ with h5py.File('data.h5ad', 'a') as f:
 
 ## Lazy Operations
 
-For very large datasets, use lazy reading to avoid loading entire datasets:
+For very large datasets, use lazy reading to avoid loading entire datasets. `read_lazy` is experimental and is designed for on-disk or in-cloud AnnData stores, including lazy `obs` and `var` access.
+
+```python
+from anndata.experimental import read_lazy
+
+adata = read_lazy('large_data.zarr')
+print(adata.obs.head())  # Does not require loading X
+```
+
+For element-level control, use `read_elem_lazy` on an open store:
 
 ```python
 import h5py
@@ -305,36 +321,44 @@ print(adata.var.columns)
 # X is not loaded into memory
 ```
 
-### Append to existing file
+### Update backed data or write a new file
 ```python
-# Open in read-write mode
+# Open in read-write mode for X updates
 adata = ad.read_h5ad('data.h5ad', backed='r+')
 
-# Modify metadata
-adata.obs['new_column'] = values
+# X updates can be persisted in backed mode
+adata.X[0, 0] = 0
 
-# Changes are written to disk
+# Metadata changes are not persisted from backed mode; write a new file instead
+adata_memory = adata.to_memory()
+adata_memory.obs['new_column'] = values
+adata_memory.write_h5ad('data_with_metadata.h5ad')
 ```
 
-### Download from URL
+### Download from a trusted URL
+Validate remote sources before downloading. Prefer local files or vetted object-store paths over arbitrary URLs.
+
 ```python
 import anndata as ad
-
-# Read directly from URL (for h5ad files)
-url = 'https://example.com/data.h5ad'
-adata = ad.read_h5ad(url, backed='r')  # Streaming access
-
-# For other formats, download first
 import urllib.request
-urllib.request.urlretrieve(url, 'local_file.h5ad')
-adata = ad.read_h5ad('local_file.h5ad')
+from urllib.parse import urlparse
+
+url = 'https://example.org/datasets/reference.h5ad'
+parsed = urlparse(url)
+trusted_hosts = {'example.org'}
+
+if parsed.scheme != 'https' or parsed.netloc not in trusted_hosts:
+    raise ValueError('Refusing to download from an untrusted host')
+
+urllib.request.urlretrieve(url, 'reference.h5ad')
+adata = ad.read_h5ad('reference.h5ad')
 ```
 
 ## Performance Tips
 
 ### Reading
 - Use `backed='r'` for large files you only need to query
-- Use `backed='r+'` if you need to modify metadata without loading all data
+- Use `backed='r+'` only for `X` updates; write a new file for metadata changes
 - H5AD format is generally fastest for random access
 - Zarr is better for cloud storage and parallel access
 - Consider compression for storage, but note it may slow down reading
@@ -392,10 +416,14 @@ for i in range(0, adata.n_obs, chunk_size):
 
 ### Strategy 3: Use AnnCollection
 ```python
+import anndata as ad
 from anndata.experimental import AnnCollection
 
-# Create collection without loading data
-adatas = [f'dataset_{i}.h5ad' for i in range(10)]
+# Create backed objects, then lazily concatenate along observations
+adatas = [
+    ad.read_h5ad(f'dataset_{i}.h5ad', backed='r')
+    for i in range(10)
+]
 collection = AnnCollection(
     adatas,
     join_obs='inner',
@@ -429,12 +457,10 @@ adata.X = csr_matrix(adata.X)
 adata.write_h5ad('compressed.h5ad', compression='gzip')
 ```
 
-### Issue: Cannot modify backed object
-**Solution**: Either load to memory or open in 'r+' mode
+### Issue: Cannot modify backed metadata
+**Solution**: Load to memory and write a new file. Backed mode only persists updates to `X`.
 ```python
-# Option 1: Load to memory
 adata = adata.to_memory()
-
-# Option 2: Open in read-write mode
-adata = ad.read_h5ad('file.h5ad', backed='r+')
+adata.obs['new_column'] = values
+adata.write_h5ad('updated_file.h5ad')
 ```

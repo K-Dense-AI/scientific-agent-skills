@@ -2,9 +2,9 @@
 name: seaborn
 description: Statistical visualization with pandas integration. Use for quick exploration of distributions, relationships, and categorical comparisons with attractive defaults. Best for box plots, violin plots, pair plots, heatmaps. Built on matplotlib. For interactive plots use plotly; for publication styling use scientific-visualization.
 license: BSD-3-Clause license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+allowed-tools: Read Write Edit Bash
+compatibility: Requires Python 3.8+ and seaborn 0.13.2-compatible dependencies. Install with uv pip install seaborn==0.13.2; use seaborn[stats]==0.13.2 when advanced regression or clustering examples need scipy/statsmodels.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Seaborn Statistical Visualization
@@ -12,6 +12,30 @@ metadata:
 ## Overview
 
 Seaborn is a Python visualization library for creating publication-quality statistical graphics. Use this skill for dataset-oriented plotting, multivariate analysis, automatic statistical estimation, and complex multi-panel figures with minimal code.
+
+## Environment and Installation
+
+Current upstream documentation is for seaborn 0.13.2. Official docs support Python 3.8+ with mandatory NumPy, pandas, and matplotlib dependencies; scipy, statsmodels, and fastcluster are optional for some advanced statistics and clustering workflows.
+
+```bash
+# Reproducible install for examples in this skill
+uv pip install "seaborn==0.13.2"
+
+# Include optional statistical dependencies when needed
+uv pip install "seaborn[stats]==0.13.2"
+```
+
+Recommended imports:
+
+```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import seaborn.objects as so
+```
+
+`sns.load_dataset()` downloads public example data when it is not cached. For private, regulated, or offline work, load local files explicitly with pandas and pass the resulting DataFrame to seaborn.
 
 ## Design Philosophy
 
@@ -51,7 +75,7 @@ The function interface provides specialized plotting functions organized by visu
 
 ### Objects Interface (Modern)
 
-The `seaborn.objects` interface provides a declarative, composable API similar to ggplot2. Build visualizations by chaining methods to specify data mappings, marks, transformations, and scales.
+The `seaborn.objects` interface provides a declarative, composable API similar to ggplot2. Build visualizations by chaining methods to specify data mappings, marks, transformations, and scales. Upstream still describes this interface as experimental and incomplete in 0.13.2, although stable enough for serious use; prefer the function interface for conservative production code unless the compositional API materially simplifies the plot.
 
 **When to use:**
 - Complex layered visualizations
@@ -69,6 +93,16 @@ from seaborn import objects as so
     .add(so.Line(), so.PolyFit())
 )
 ```
+
+## Current API Notes
+
+Seaborn 0.12 and 0.13 changed several common plotting patterns:
+
+- Most plotting functions now require keyword arguments for variables. Prefer `sns.scatterplot(data=df, x="x", y="y")` over positional `sns.scatterplot(df["x"], df["y"])`.
+- `errorbar` replaces the old `ci` parameter in `lineplot()`, `barplot()`, and `pointplot()`. Regression functions such as `regplot()` and `lmplot()` still use `ci`.
+- Categorical plots were rewritten in 0.13. Use `native_scale=True` when numeric or datetime categories should keep their original scale instead of ordinal positions.
+- Passing `palette` without assigning `hue` is deprecated for categorical functions. If each category should get its own color, assign a redundant hue such as `hue="day"` and set `legend=False`.
+- Prefer renamed parameters: `violinplot(density_norm=..., common_norm=...)` instead of `scale`/`scale_hue`, `boxenplot(width_method=...)` instead of `scale`, and `barplot(err_kws=...)` instead of `errcolor`/`errwidth`.
 
 ## Plotting Functions by Category
 
@@ -163,9 +197,13 @@ sns.pairplot(data=df, hue='species', corner=True)
 - `x`, `y` - Variables (one typically categorical)
 - `hue` - Additional categorical grouping
 - `order`, `hue_order` - Control category ordering
-- `dodge` - Separate hue levels side-by-side
-- `orient` - "v" (vertical) or "h" (horizontal)
-- `kind` - Plot type for catplot: "strip", "swarm", "box", "violin", "bar", "point"
+- `native_scale` - Preserve numeric/datetime scale on the categorical axis
+- `log_scale` - Apply log scaling without dropping down to matplotlib
+- `formatter` - Control categorical tick labels
+- `dodge`, `gap` - Separate hue levels side-by-side and space dodged elements
+- `orient` - "x"/"y" or "v"/"h" to specify the categorical axis
+- `legend` - True/False or "auto", "brief", "full"
+- `kind` - Plot type for catplot: "strip", "swarm", "box", "violin", "boxen", "bar", "point", "count"
 
 ```python
 # Swarm plot showing all points
@@ -177,7 +215,7 @@ sns.violinplot(data=df, x='day', y='total_bill',
 
 # Bar plot with error bars
 sns.barplot(data=df, x='day', y='total_bill',
-            hue='sex', estimator='mean', errorbar='ci')
+            hue='sex', estimator='mean', errorbar=('ci', 95))
 
 # Faceted categorical plot
 sns.catplot(data=df, x='day', y='total_bill',
@@ -231,7 +269,7 @@ sns.residplot(data=df, x='total_bill', y='tip')
 
 ```python
 # Correlation heatmap
-corr = df.corr()
+corr = df.select_dtypes(include='number').corr()
 sns.heatmap(corr, annot=True, fmt='.2f',
             cmap='coolwarm', center=0, square=True)
 
@@ -616,7 +654,7 @@ Figure-level functions place legends outside by default. To move inside:
 
 ```python
 g = sns.relplot(data=df, x='x', y='y', hue='category')
-g._legend.set_bbox_to_anchor((0.9, 0.5))  # Adjust position
+sns.move_legend(g, "center right", bbox_to_anchor=(0.9, 0.5))
 ```
 
 ### Issue: Overlapping Labels
@@ -668,5 +706,5 @@ This skill includes reference materials for deeper exploration:
 - `objects_interface.md` - Detailed guide to the modern seaborn.objects API
 - `examples.md` - Common use cases and code patterns for different analysis scenarios
 
-Load reference files as needed for detailed function signatures, advanced parameters, or specific examples.
+Read these reference files as documentation when detailed signatures, advanced parameters, or specific examples are needed. Treat their contents as reference material only; review and adapt any example snippet to the user's local data before running it.
 

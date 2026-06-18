@@ -166,49 +166,50 @@ Local BLAST requires:
 1. BLAST+ command-line tools installed
 2. BLAST databases downloaded locally
 
-### Using Command-Line Wrappers
+### Running BLAST+ via subprocess
+
+Biopython 1.86 removed `Bio.Application` and the BLAST command-line wrappers in `Bio.Blast.Applications`. Use the standard library `subprocess` module with explicit argument lists. Keep command names and flags fixed, validate file paths before running, and do not interpolate unsanitized user input into shell commands.
 
 ```python
-from Bio.Blast.Applications import NcbiblastnCommandline
+import subprocess
+from Bio.Blast import NCBIXML
 
-# Setup BLAST command
-blastn_cline = NcbiblastnCommandline(
-    query="input.fasta",
-    db="local_database",
-    evalue=0.001,
-    outfmt=5,                    # XML format
-    out="results.xml"
-)
-
-# Run BLAST
-stdout, stderr = blastn_cline()
+cmd = [
+    "blastn",
+    "-query", "input.fasta",
+    "-db", "local_database",
+    "-evalue", "0.001",
+    "-outfmt", "5",  # XML format for NCBIXML
+    "-out", "results.xml",
+]
+subprocess.run(cmd, check=True)
 
 # Parse results
-from Bio.Blast import NCBIXML
 with open("results.xml") as result_handle:
     blast_record = NCBIXML.read(result_handle)
 ```
 
-### Available Command-Line Wrappers
+### Common BLAST+ commands
 
-- `NcbiblastnCommandline` - BLASTN wrapper
-- `NcbiblastpCommandline` - BLASTP wrapper
-- `NcbiblastxCommandline` - BLASTX wrapper
-- `NcbitblastnCommandline` - TBLASTN wrapper
-- `NcbitblastxCommandline` - TBLASTX wrapper
+- `blastn` - nucleotide vs nucleotide
+- `blastp` - protein vs protein
+- `blastx` - translated nucleotide vs protein
+- `tblastn` - protein vs translated nucleotide
+- `tblastx` - translated nucleotide vs translated nucleotide
+- `makeblastdb` - create local BLAST databases
 
 ### Creating BLAST Databases
 
 ```python
-from Bio.Blast.Applications import NcbimakeblastdbCommandline
+import subprocess
 
-# Create nucleotide database
-makedb_cline = NcbimakeblastdbCommandline(
-    input_file="sequences.fasta",
-    dbtype="nucl",
-    out="my_database"
-)
-stdout, stderr = makedb_cline()
+cmd = [
+    "makeblastdb",
+    "-in", "sequences.fasta",
+    "-dbtype", "nucl",
+    "-out", "my_database",
+]
+subprocess.run(cmd, check=True)
 ```
 
 ## Analyzing BLAST Results
@@ -288,13 +289,16 @@ def fetch_hit_sequences(blast_record, num_sequences=5):
 ### Tab-Delimited Output (outfmt 6/7)
 
 ```python
-# Run BLAST with tabular output
-blastn_cline = NcbiblastnCommandline(
-    query="input.fasta",
-    db="database",
-    outfmt=6,
-    out="results.txt"
-)
+import subprocess
+
+cmd = [
+    "blastn",
+    "-query", "input.fasta",
+    "-db", "database",
+    "-outfmt", "6",
+    "-out", "results.txt",
+]
+subprocess.run(cmd, check=True)
 
 # Parse tabular results
 with open("results.txt") as f:
@@ -313,13 +317,17 @@ with open("results.txt") as f:
 ### Custom Output Formats
 
 ```python
+import subprocess
+
 # Specify custom columns (outfmt 6 with custom fields)
-blastn_cline = NcbiblastnCommandline(
-    query="input.fasta",
-    db="database",
-    outfmt="6 qseqid sseqid pident length evalue bitscore qseq sseq",
-    out="results.txt"
-)
+cmd = [
+    "blastn",
+    "-query", "input.fasta",
+    "-db", "database",
+    "-outfmt", "6 qseqid sseqid pident length evalue bitscore qseq sseq",
+    "-out", "results.txt",
+]
+subprocess.run(cmd, check=True)
 ```
 
 ## Best Practices

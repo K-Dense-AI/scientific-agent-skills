@@ -4,9 +4,7 @@ description: Pythonic wrapper around RDKit with simplified interface and sensibl
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.8+ and datamol (uv pip install). RDKit is installed automatically as a datamol dependency (since 0.12.2). Optional s3fs/gcsfs for cloud I/O via fsspec.
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
 ---
 
 # Datamol Cheminformatics Skill

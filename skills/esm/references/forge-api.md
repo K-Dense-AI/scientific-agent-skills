@@ -1,8 +1,8 @@
-# Forge API Reference
+# Forge and Hosted API Reference
 
 ## Overview
 
-Forge is EvolutionaryScale's cloud platform for scalable protein design and inference. It provides API access to the full ESM3 model family, including large models not available for local execution.
+Forge is EvolutionaryScale's hosted platform for scalable ESM3 and ESMC inference. Biohub is the current platform surface for newer hosted workflows such as ESMFold2; SDK classes may still use `forge` names even when the endpoint is `https://biohub.ai`.
 
 **Key Benefits:**
 - Access to all ESM3 models including 98B parameter version
@@ -16,7 +16,7 @@ Forge is EvolutionaryScale's cloud platform for scalable protein design and infe
 
 ### 1. Obtain API Token
 
-Sign up and get your API token at: https://forge.evolutionaryscale.ai
+Create a token in the [Biohub developer console](https://biohub.ai/developer-console/api-keys) for Biohub APIs. For legacy Forge-hosted ESM3/ESMC access, use https://forge.evolutionaryscale.ai.
 
 ### 2. Install ESM SDK
 
@@ -28,13 +28,14 @@ Requires Python 3.12. The Forge client is included in the standard PyPI package.
 
 ### 3. Set API Key
 
-Export your Forge API key (never hardcode in source files):
+Export your API key (never hardcode in source files):
 
 ```bash
-export ESM_API_KEY="your-key-from-forge-console"
+export ESM_API_KEY="your-key-from-console"
 ```
 
 `esm.sdk.client()` reads `ESM_API_KEY` by default when `token` is omitted.
+Keep API hosts fixed to trusted endpoints such as `https://forge.evolutionaryscale.ai` and `https://biohub.ai`; do not accept an arbitrary endpoint URL from untrusted input.
 
 ### 4. Basic Connection
 
@@ -156,31 +157,27 @@ results = asyncio.run(generate_many(client, proteins))
 print(f"Generated {len(results)} proteins")
 ```
 
-### Batch Processing with BatchExecutor
+### Batch Processing with Async Concurrency
 
-For large-scale processing with automatic concurrency management:
+For large-scale processing, combine the SDK's async methods with an explicit concurrency limit:
 
 ```python
-from esm.sdk.forge import BatchExecutor
+import asyncio
 from esm.sdk.api import ESMProtein, GenerationConfig
 
-# Create batch executor
-executor = BatchExecutor(
-    client=client,
-    max_concurrent=10  # Process 10 requests concurrently
-)
+async def generate_many_limited(client, proteins, config, max_concurrent=10):
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def run_one(protein):
+        async with semaphore:
+            return await client.async_generate(protein, config)
+
+    return await asyncio.gather(*(run_one(protein) for protein in proteins))
 
 # Prepare batch of proteins
 proteins = [ESMProtein(sequence=f"MPRT{'_' * 50}KEND") for _ in range(100)]
 config = GenerationConfig(track="sequence", num_steps=25)
-
-# Submit batch
-batch_results = executor.submit_batch(
-    proteins=proteins,
-    config=config,
-    progress_callback=lambda i, total: print(f"Processed {i}/{total}")
-)
-
+batch_results = asyncio.run(generate_many_limited(client, proteins, config))
 print(f"Completed {len(batch_results)} generations")
 ```
 
@@ -188,15 +185,12 @@ print(f"Completed {len(batch_results)} generations")
 
 ### Understanding Limits
 
-Forge implements rate limiting based on:
+Hosted APIs may rate limit based on:
 - Requests per minute (RPM)
 - Tokens per minute (TPM)
 - Concurrent requests
 
-**Typical Limits (subject to change):**
-- Free tier: 60 RPM, 5 concurrent
-- Pro tier: 300 RPM, 20 concurrent
-- Enterprise: Custom limits
+Check the Forge or Biohub console for your current credits, model access, and rate limits; do not bake assumed limits into production code.
 
 ### Handling Rate Limits
 
@@ -268,25 +262,25 @@ Process results as they complete:
 
 ```python
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
 async def stream_generate(client, proteins, config):
     """Stream results as they complete."""
-    pending = {
+    task_to_index = {
         asyncio.create_task(client.async_generate(p, config)): i
         for i, p in enumerate(proteins)
     }
+    pending_tasks = set(task_to_index)
 
     results = [None] * len(proteins)
 
-    while pending:
-        done, pending = await asyncio.wait(
-            pending.keys(),
+    while pending_tasks:
+        done, pending_tasks = await asyncio.wait(
+            pending_tasks,
             return_when=asyncio.FIRST_COMPLETED
         )
 
         for task in done:
-            idx = pending.pop(task)
+            idx = task_to_index[task]
             result = await task
             results[idx] = result
             yield idx, result
@@ -624,7 +618,7 @@ For dedicated infrastructure and enterprise use:
 
 ## Best Practices Summary
 
-1. **Authentication**: Use `ESM_API_KEY` environment variable or a secrets manager — never hardcode tokens
+1. **Authentication**: Use `ESM_API_KEY` environment variable or a secrets manager; never hardcode tokens
 2. **Rate Limiting**: Implement exponential backoff and respect limits
 3. **Error Handling**: Always handle network errors and retries
 4. **Caching**: Cache results for repeated queries

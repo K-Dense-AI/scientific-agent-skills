@@ -4,9 +4,7 @@ description: Write competitive research proposals for NSF, NIH, DOE, DARPA, and 
 allowed-tools: Read Write Edit Bash
 license: MIT license
 compatibility: Works in Agent Skills-compatible hosts. Grant-writing guidance needs no network; optional figures via the scientific-schematics skill require OPENROUTER_API_KEY and outbound API access.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Research Grant Writing

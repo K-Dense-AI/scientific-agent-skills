@@ -86,8 +86,8 @@ with pm.Model(coords=coords) as hierarchical_model:
     # Observation noise
     sigma = pm.HalfNormal('sigma', sigma=5)
 
-    # Likelihood
-    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, dims='obs')
+    # Likelihood; tie shape to X_data so prediction data can have a new row count
+    y_obs = pm.Normal('y_obs', mu=mu, sigma=sigma, observed=y, shape=X_data.shape[0], dims='obs')
 
 print("Model built successfully!")
 print(f"Groups: {n_groups}")
@@ -99,7 +99,7 @@ print(f"Observations: {n_obs}")
 
 print("\nRunning prior predictive check...")
 with hierarchical_model:
-    prior_pred = pm.sample_prior_predictive(samples=500, random_seed=42)
+    prior_pred = pm.sample_prior_predictive(draws=500, random_seed=42)
 
 # Visualize prior predictions
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -171,11 +171,9 @@ else:
     print("\n✓ No divergences")
 
 # Trace plots for hyperparameters
-fig, axes = plt.subplots(5, 2, figsize=(12, 12))
-az.plot_trace(
+az.plot_trace_dist(
     idata,
     var_names=['mu_alpha', 'sigma_alpha', 'mu_beta', 'sigma_beta', 'sigma'],
-    axes=axes
 )
 plt.tight_layout()
 plt.savefig('hierarchical_trace_plots.png', dpi=300, bbox_inches='tight')
@@ -282,15 +280,16 @@ new_X = np.array([-2, -1, 0, 1, 2])
 new_groups = np.array([0, 2, 4, 6, 8])  # Select some groups
 
 with hierarchical_model:
-    pm.set_data({'X_data': new_X, 'groups_data': new_groups, 'obs': np.arange(len(new_X))})
+    pm.set_data({'X_data': new_X, 'groups_data': new_groups}, coords={'obs': np.arange(len(new_X))})
 
     post_pred = pm.sample_posterior_predictive(
-        idata.posterior,
+        idata,
         var_names=['y_obs'],
+        predictions=True,
         random_seed=42
     )
 
-y_pred_samples = post_pred.posterior_predictive['y_obs']
+y_pred_samples = post_pred.predictions['y_obs']
 y_pred_mean = y_pred_samples.mean(dim=['chain', 'draw']).values
 y_pred_hdi = az.hdi(y_pred_samples, hdi_prob=0.95).values
 

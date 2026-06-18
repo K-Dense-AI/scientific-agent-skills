@@ -216,7 +216,7 @@ print("Operations:", tape.operations)
 print("Observables:", tape.observables)
 
 # Transform tape
-expanded_tape = transforms.expand_tape(tape)
+expanded_tape = transforms.decompose(tape, gate_set={qml.RX, qml.RY, qml.RZ, qml.CNOT})
 optimized_tape = transforms.cancel_inverses(tape)
 ```
 

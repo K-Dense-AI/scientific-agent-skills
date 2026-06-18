@@ -1,10 +1,10 @@
 ---
 name: polars
-description: Fast in-memory DataFrame library for datasets that fit in RAM. Use when pandas is too slow but data still fits in memory. Lazy evaluation, parallel execution, Apache Arrow backend. Best for 1-100GB datasets, ETL pipelines, faster pandas replacement. For larger-than-RAM data use dask or vaex.
+description: High-performance DataFrame library for Python ETL, analytics, and pandas migration. Use for expression-based data manipulation with lazy query optimization, parallel execution, streaming out-of-core processing, Arrow interoperability, and optional GPU execution.
 license: https://github.com/pola-rs/polars/blob/main/LICENSE
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+allowed-tools: Read
+compatibility: Requires Python 3.10+ for polars 1.41.x. Install with uv pip install; optional extras enable Excel, database, cloud, pandas/NumPy, and GPU integrations.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Polars
@@ -17,9 +17,14 @@ Polars is a lightning-fast DataFrame library for Python and Rust built on Apache
 
 ### Installation and Basic Usage
 
-Install Polars:
-```python
-uv pip install polars
+Install the current stable Polars release verified during this refresh:
+```bash
+uv pip install "polars==1.41.2"
+```
+
+Install optional integrations only when needed:
+```bash
+uv pip install "polars[excel,database,fsspec,pandas,numpy]==1.41.2"
 ```
 
 Basic DataFrame creation and operations:
@@ -267,7 +272,7 @@ pl.concat([df1, df2], how="diagonal")
 Reshape data:
 ```python
 # Pivot (wide format)
-df.pivot(values="sales", index="date", columns="product")
+df.pivot(on="product", values="sales", index="date")
 
 # Unpivot (long format)
 df.unpivot(index="id", on=["col1", "col2"])
@@ -332,7 +337,7 @@ For comprehensive migration guide, load `references/pandas_migration.md`.
 
 3. **Use streaming for very large data:**
    ```python
-   lf.collect(streaming=True)
+   lf.collect(engine="streaming")
    ```
 
 4. **Select only needed columns early:**

@@ -146,7 +146,7 @@ df.with_columns(
 
 | Operation | Pandas | Polars |
 |-----------|--------|--------|
-| Pivot | `df.pivot(index="a", columns="b", values="c")` | `df.pivot(values="c", index="a", columns="b")` |
+| Pivot | `df.pivot(index="a", columns="b", values="c")` | `df.pivot(on="b", values="c", index="a")` |
 | Melt | `df.melt(id_vars="id")` | `df.unpivot(index="id")` |
 
 ### I/O Operations
@@ -258,10 +258,10 @@ df["category"] = np.where(
 ```python
 df = df.with_columns(
     category=pl.when(pl.col("value") > 100)
-        .then("high")
+        .then(pl.lit("high"))
         .when(pl.col("value") > 50)
-        .then("medium")
-        .otherwise("low")
+        .then(pl.lit("medium"))
+        .otherwise(pl.lit("low"))
 )
 ```
 

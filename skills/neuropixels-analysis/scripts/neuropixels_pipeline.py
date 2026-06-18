@@ -19,7 +19,7 @@ import spikeinterface.full as si
 import numpy as np
 
 
-def load_recording(data_path: str, stream_id: str = 'imec0.ap') -> si.BaseRecording:
+def load_recording(data_path: str, stream_name: str = 'imec0.ap') -> si.BaseRecording:
     """Load a SpikeGLX or Open Ephys recording."""
 
     data_path = Path(data_path)
@@ -29,7 +29,7 @@ def load_recording(data_path: str, stream_id: str = 'imec0.ap') -> si.BaseRecord
         # SpikeGLX format
         streams, _ = si.get_neo_streams('spikeglx', data_path)
         print(f"Available streams: {streams}")
-        recording = si.read_spikeglx(data_path, stream_id=stream_id)
+        recording = si.read_spikeglx(data_path, stream_name=stream_name)
     elif any(data_path.rglob('*.oebin')):
         # Open Ephys format
         recording = si.read_openephys(data_path)
@@ -157,11 +157,13 @@ def correct_motion(
     """Apply motion correction if needed."""
     print(f"Applying motion correction (preset: {preset})...")
 
+    # correct_motion returns just the corrected recording by default. Pass
+    # output_motion_info=True only if you also want the motion info dict (a tuple is
+    # returned in that case).
     rec_corrected = si.correct_motion(
         recording,
         preset=preset,
         folder=f'{output_folder}/motion',
-        output_motion_info=True,
         n_jobs=8,
         chunk_duration='1s',
         progress_bar=True

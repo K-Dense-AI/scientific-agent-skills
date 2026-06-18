@@ -1,6 +1,6 @@
 # Seaborn Function Reference
 
-This document provides a comprehensive reference for all major seaborn functions, organized by category.
+This document provides a comprehensive reference for all major seaborn functions, organized by category. It is updated for seaborn 0.13.2 patterns.
 
 ## Relational Plots
 
@@ -390,16 +390,17 @@ Same as `boxplot()`, plus:
 - `bw_adjust` - KDE bandwidth multiplier
 - `cut` - KDE extension beyond extremes
 - `density_norm` - "area", "count", "width"
+- `common_norm` - Normalize density across hue/facet groups
 - `inner` - "box", "quartile", "point", "stick", None
 - `split` - Split violins for hue comparison
-- `scale` - Scaling method: "area", "count", "width"
-- `scale_hue` - Scale across hue levels
+- `inner_kws` - Additional parameters for interior artists
 - `gridsize` - KDE grid resolution
 
 **Example:**
 ```python
 sns.violinplot(data=df, x='day', y='total_bill',
                hue='sex', split=True, inner='quartile',
+               density_norm='area', common_norm=False,
                palette='muted')
 ```
 
@@ -412,12 +413,13 @@ Same as `boxplot()`, plus:
 - `k_depth` - "tukey", "proportion", "trustworthy", "full", or int
 - `outlier_prop` - Proportion of data as outliers
 - `trust_alpha` - Alpha for trustworthy depth
+- `width_method` - How box widths represent distribution: "exponential", "linear", "area"
 - `showfliers` - Show outlier points
 
 **Example:**
 ```python
 sns.boxenplot(data=df, x='day', y='total_bill',
-              hue='time', palette='Set2')
+              hue='time', width_method='area', palette='Set2')
 ```
 
 ### barplot()
@@ -442,8 +444,7 @@ sns.boxenplot(data=df, x='day', y='total_bill',
 - `saturation` - Color saturation
 - `width` - Bar width
 - `dodge` - Separate hue levels side-by-side
-- `errcolor` - Error bar color
-- `errwidth` - Error bar line width
+- `err_kws` - Matplotlib keyword arguments for error bars
 - `capsize` - Error bar cap width
 - `native_scale` - Use numeric scale
 - `formatter` - Formatter for categorical axis
@@ -454,7 +455,8 @@ sns.boxenplot(data=df, x='day', y='total_bill',
 ```python
 sns.barplot(data=df, x='day', y='total_bill',
             hue='sex', estimator='median',
-            errorbar=('ci', 95), capsize=0.1)
+            errorbar=('ci', 95), capsize=0.1,
+            err_kws={'linewidth': 1.5})
 ```
 
 ### countplot()

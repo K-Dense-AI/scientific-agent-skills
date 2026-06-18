@@ -21,7 +21,7 @@ df = pl.read_csv(
     columns=["col1", "col2"],  # Select specific columns
     n_rows=1000,  # Read only first 1000 rows
     skip_rows=10,  # Skip first 10 rows
-    dtypes={"col1": pl.Int64, "col2": pl.Utf8},  # Specify types
+    schema_overrides={"col1": pl.Int64, "col2": pl.String},  # Specify types
     null_values=["NA", "null", ""],  # Define null values
     encoding="utf-8",
     ignore_errors=False
@@ -265,13 +265,13 @@ lf = pl.scan_parquet("s3://bucket/path/*.parquet")
 # Write to S3
 df.write_parquet("s3://bucket/path/output.parquet")
 
-# With credentials
-import os
-os.environ["AWS_ACCESS_KEY_ID"] = "your_key"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "your_secret"
-os.environ["AWS_REGION"] = "us-west-2"
-
-df = pl.read_parquet("s3://bucket/file.parquet")
+# Prefer cloud profiles, IAM roles, or Polars credential providers over
+# hardcoding secrets in scripts.
+lf = pl.scan_parquet(
+    "s3://bucket/file.parquet",
+    credential_provider=pl.CredentialProviderAWS(profile_name="analytics"),
+)
+df = lf.collect()
 ```
 
 ### Azure Blob Storage
@@ -283,9 +283,15 @@ df = pl.read_parquet("az://container/path/file.parquet")
 # Write to Azure
 df.write_parquet("az://container/path/output.parquet")
 
-# With credentials
-os.environ["AZURE_STORAGE_ACCOUNT_NAME"] = "account"
-os.environ["AZURE_STORAGE_ACCOUNT_KEY"] = "key"
+# Prefer managed identity or an Azure SDK credential provider.
+from azure.identity import DefaultAzureCredential
+
+df = pl.read_parquet(
+    "abfss://container@account.dfs.core.windows.net/path/file.parquet",
+    credential_provider=pl.CredentialProviderAzure(
+        credential=DefaultAzureCredential()
+    ),
+)
 ```
 
 ### Google Cloud Storage (GCS)
@@ -297,8 +303,9 @@ df = pl.read_parquet("gs://bucket/path/file.parquet")
 # Write to GCS
 df.write_parquet("gs://bucket/path/output.parquet")
 
-# With credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/path/to/credentials.json"
+# Prefer Application Default Credentials or workload identity configured
+# outside the script.
+df = pl.read_parquet("gs://bucket/path/file.parquet")
 ```
 
 ## Google BigQuery
@@ -429,11 +436,11 @@ For datasets larger than memory, use lazy mode with streaming:
 ```python
 # Streaming mode
 lf = pl.scan_csv("very_large.csv")
-result = lf.filter(pl.col("value") > 100).collect(streaming=True)
+result = lf.filter(pl.col("value") > 100).collect(engine="streaming")
 
 # Streaming with multiple files
 lf = pl.scan_parquet("data/*.parquet")
-result = lf.group_by("category").agg(pl.col("value").sum()).collect(streaming=True)
+result = lf.group_by("category").agg(pl.col("value").sum()).collect(engine="streaming")
 ```
 
 ## Best Practices
@@ -478,7 +485,7 @@ result = (
 )
 
 # 3. Use streaming for very large data
-result = lf.filter(...).select(...).collect(streaming=True)
+result = lf.filter(...).select(...).collect(engine="streaming")
 
 # 4. Read only needed rows during development
 df = pl.read_csv("large.csv", n_rows=10000)  # Sample for testing
@@ -504,7 +511,7 @@ lf.sink_parquet("output.parquet")  # Streaming write
 # 1. Specify dtypes when reading CSV
 df = pl.read_csv(
     "data.csv",
-    dtypes={"id": pl.Int64, "name": pl.Utf8}  # Avoids inference
+    schema_overrides={"id": pl.Int64, "name": pl.String}  # Avoids inference
 )
 
 # 2. Use appropriate compression
@@ -544,14 +551,14 @@ else:
 schema = pl.read_csv("data.csv", n_rows=1000).schema
 
 # Use inferred schema for full read
-df = pl.read_csv("data.csv", dtypes=schema)
+df = pl.read_csv("data.csv", schema=schema)
 
 # Define schema explicitly
 schema = {
     "id": pl.Int64,
-    "name": pl.Utf8,
+    "name": pl.String,
     "date": pl.Date,
     "value": pl.Float64
 }
-df = pl.read_csv("data.csv", dtypes=schema)
+df = pl.read_csv("data.csv", schema=schema)
 ```

@@ -4,6 +4,8 @@
 
 PyOpenMS provides specialized tools for untargeted metabolomics analysis including feature detection optimized for small molecules, adduct grouping, compound identification, and integration with metabolomics databases.
 
+> **Code examples target pyOpenMS 3.5.0.** APIs removed in 3.5.0 (e.g. `FeatureFinder().run("centroided", ...)` and `MetaboliteAdductDecharger`) are not used here. The skill also ships ready-to-run scripts implementing these workflows end-to-end: `scripts/detect_features_metabo.py`, `scripts/align_link_quantify.py`, `scripts/consensus_to_matrix.py`, `scripts/detect_adducts.py`, `scripts/accurate_mass_search.py`, and `scripts/export_gnps_sirius.py`.
+
 ## Untargeted Metabolomics Pipeline
 
 ### Complete Workflow
@@ -20,7 +22,8 @@ def metabolomics_pipeline(input_files, output_dir):
         output_dir: Directory for output files
     """
 
-    # Step 1: Peak picking and feature detection
+    # Step 1: Feature detection (MassTraceDetection ->
+    # ElutionPeakDetection -> FeatureFindingMetabo)
     feature_maps = []
 
     for mzml_file in input_files:
@@ -29,26 +32,37 @@ def metabolomics_pipeline(input_files, output_dir):
         # Load data
         exp = ms.MSExperiment()
         ms.MzMLFile().load(mzml_file, exp)
+        exp.sortSpectra(True)
 
-        # Peak picking if needed
-        if not exp.getSpectrum(0).isSorted():
-            picker = ms.PeakPickerHiRes()
-            exp_picked = ms.MSExperiment()
-            picker.pickExperiment(exp, exp_picked)
-            exp = exp_picked
+        # Detect mass traces
+        mtd = ms.MassTraceDetection()
+        p = mtd.getDefaults()
+        p.setValue("mass_error_ppm", 10.0)
+        p.setValue("noise_threshold_int", 1000.0)
+        mtd.setParameters(p)
+        mass_traces = []
+        mtd.run(exp, mass_traces, 0)
 
-        # Feature detection
-        ff = ms.FeatureFinder()
-        params = ff.getParameters("centroided")
+        # Split traces into elution peaks
+        epd = ms.ElutionPeakDetection()
+        p = epd.getDefaults()
+        p.setValue("width_filtering", "fixed")
+        epd.setParameters(p)
+        mt_split = []
+        epd.detectPeaks(mass_traces, mt_split)
 
-        # Metabolomics-specific parameters
-        params.setValue("mass_trace:mz_tolerance", 5.0)  # ppm, tighter for metabolites
-        params.setValue("mass_trace:min_spectra", 5)
-        params.setValue("isotopic_pattern:charge_low", 1)
-        params.setValue("isotopic_pattern:charge_high", 2)  # Mostly singly charged
-
+        # Assemble metabolite features
+        ffm = ms.FeatureFindingMetabo()
+        p = ffm.getDefaults()
+        p.setValue("isotope_filtering_model", "metabolites (5% RMS)")
+        p.setValue("remove_single_traces", "true")
+        p.setValue("charge_lower_bound", 1)
+        p.setValue("charge_upper_bound", 3)
+        ffm.setParameters(p)
         features = ms.FeatureMap()
-        ff.run("centroided", exp, features, params, ms.FeatureMap())
+        chrom_out = []
+        ffm.run(mt_split, features, chrom_out)
+        features.setUniqueIds()
 
         features.setPrimaryMSRunPath([mzml_file.encode()])
         feature_maps.append(features)
@@ -59,31 +73,37 @@ def metabolomics_pipeline(input_files, output_dir):
     print("Detecting adducts...")
     adduct_grouped_maps = []
 
-    adduct_detector = ms.MetaboliteAdductDecharger()
-    params = adduct_detector.getParameters()
-    params.setValue("potential_adducts", "[M+H]+,[M+Na]+,[M+K]+,[M+NH4]+,[M-H]-,[M+Cl]-")
-    params.setValue("charge_min", 1)
-    params.setValue("charge_max", 1)
-    adduct_detector.setParameters(params)
-
     for fm in feature_maps:
+        mfd = ms.MetaboliteFeatureDeconvolution()
+        p = mfd.getDefaults()
+        # potential_adducts uses Elements:Charge:Probability syntax
+        p.setValue("potential_adducts",
+                   [b"H:+:0.4", b"Na:+:0.25", b"NH4:+:0.25",
+                    b"K:+:0.1", b"H-2O-1:0:0.05"])
+        p.setValue("charge_min", 1)
+        p.setValue("charge_max", 1)
+        mfd.setParameters(p)
+
         fm_out = ms.FeatureMap()
-        adduct_detector.compute(fm, fm_out, ms.ConsensusMap())
+        groups = ms.ConsensusMap()
+        edges = ms.ConsensusMap()
+        mfd.compute(fm, fm_out, groups, edges)  # 4 args
         adduct_grouped_maps.append(fm_out)
 
-    # Step 3: RT alignment
+    # Step 3: RT alignment (PoseClustering: pick a reference,
+    # then align each map in place against it)
     print("Aligning retention times...")
     aligner = ms.MapAlignmentAlgorithmPoseClustering()
+    reference = adduct_grouped_maps[0]
+    aligner.setReference(reference)
 
-    params = aligner.getParameters()
-    params.setValue("max_num_peaks_considered", 1000)
-    params.setValue("pairfinder:distance_MZ:max_difference", 10.0)
-    params.setValue("pairfinder:distance_MZ:unit", "ppm")
-    aligner.setParameters(params)
+    transformer = ms.MapAlignmentTransformer()
+    for fm in adduct_grouped_maps:
+        trafo = ms.TransformationDescription()
+        aligner.align(fm, trafo)
+        transformer.transformRetentionTimes(fm, trafo, True)
 
-    aligned_maps = []
-    transformations = []
-    aligner.align(adduct_grouped_maps, aligned_maps, transformations)
+    aligned_maps = adduct_grouped_maps
 
     # Step 4: Feature linking
     print("Linking features...")
@@ -96,23 +116,21 @@ def metabolomics_pipeline(input_files, output_dir):
     grouper.setParameters(params)
 
     consensus_map = ms.ConsensusMap()
-    grouper.group(aligned_maps, consensus_map)
+    grouper.group(aligned_maps, consensus_map)  # list of FeatureMap
+    consensus_map.setUniqueIds()
 
     print(f"Created {consensus_map.size()} consensus features")
 
-    # Step 5: Gap filling (fill missing values)
-    print("Filling gaps...")
-    # Gap filling not directly available in Python API
-    # Would use TOPP tool FeatureFinderMetaboIdent
-
-    # Step 6: Export results
+    # Step 5: Export results
     consensus_file = f"{output_dir}/consensus.consensusXML"
     ms.ConsensusXMLFile().store(consensus_file, consensus_map)
 
-    # Export to CSV for downstream analysis
-    df = consensus_map.get_df()
+    # Export quant matrix for downstream analysis
+    # get_intensity_df() -> features x samples; get_metadata_df() -> rt/mz/charge/quality
+    intensities = consensus_map.get_intensity_df()
+    metadata = consensus_map.get_metadata_df()
     csv_file = f"{output_dir}/metabolite_table.csv"
-    df.to_csv(csv_file, index=False)
+    metadata.join(intensities).to_csv(csv_file)
 
     print(f"Results saved to {output_dir}")
 
@@ -127,41 +145,43 @@ consensus = metabolomics_pipeline(input_files, "output")
 
 ### Configure Adduct Types
 
+Adducts are configured with the `Elements:Charge:Probability` syntax (e.g.
+`b"Na:+:0.25"`), not bracket notation like `[M+Na]+`. Probabilities across the
+list should sum to ~1.0.
+
 ```python
 # Create adduct detector
-adduct_detector = ms.MetaboliteAdductDecharger()
+mfd = ms.MetaboliteFeatureDeconvolution()
 
 # Configure common adducts
-params = adduct_detector.getParameters()
+params = mfd.getDefaults()
 
-# Positive mode adducts
+# Positive mode adducts (Elements:Charge:Probability)
 positive_adducts = [
-    "[M+H]+",
-    "[M+Na]+",
-    "[M+K]+",
-    "[M+NH4]+",
-    "[2M+H]+",
-    "[M+H-H2O]+"
+    b"H:+:0.4",
+    b"Na:+:0.25",
+    b"NH4:+:0.25",
+    b"K:+:0.1",
+    b"H-2O-1:0:0.05",  # neutral water loss
 ]
 
-# Negative mode adducts
+# Negative mode adducts (set negative_mode="true" when using these)
 negative_adducts = [
-    "[M-H]-",
-    "[M+Cl]-",
-    "[M+FA-H]-",  # Formate
-    "[2M-H]-"
+    b"H-1:-:0.6",
+    b"Cl:-:0.2",
 ]
 
 # Set for positive mode
-params.setValue("potential_adducts", ",".join(positive_adducts))
+params.setValue("potential_adducts", positive_adducts)
 params.setValue("charge_min", 1)
 params.setValue("charge_max", 1)
-params.setValue("max_neutrals", 1)
-adduct_detector.setParameters(params)
+mfd.setParameters(params)
 
-# Apply adduct detection
+# Apply adduct detection (4 args: in, out, groups, edges)
 feature_map_out = ms.FeatureMap()
-adduct_detector.compute(feature_map, feature_map_out, ms.ConsensusMap())
+groups = ms.ConsensusMap()
+edges = ms.ConsensusMap()
+mfd.compute(feature_map, feature_map_out, groups, edges)
 ```
 
 ### Access Adduct Information
@@ -180,11 +200,38 @@ for feature in feature_map_out:
 
 ## Compound Identification
 
-### Mass-Based Annotation
+### Accurate Mass Search (HMDB)
+
+The built-in `AccurateMassSearchEngine` annotates a `FeatureMap` against HMDB
+and writes results as mzTab.
+
+> **Caveat:** the pip wheel ships `HMDBMappingFile.tsv` but **not**
+> `HMDB2StructMapping.tsv`, so `engine.init()` fails unless you supply the
+> struct file yourself. Download it from
+> https://github.com/OpenMS/OpenMS/blob/develop/share/OpenMS/CHEMISTRY/HMDB2StructMapping.tsv
+> and point `db:struct` at it.
 
 ```python
-# Annotate features with compound database
-from pyopenms import MassDecomposition
+engine = ms.AccurateMassSearchEngine()
+p = engine.getDefaults()
+p.setValue("mass_error_value", 5.0)
+p.setValue("mass_error_unit", "ppm")
+p.setValue("ionization_mode", "positive")
+# If the struct file is missing from the wheel, supply it:
+# p.setValue("db:struct", b"/path/to/HMDB2StructMapping.tsv")
+engine.setParameters(p)
+engine.init()
+
+mztab = ms.MzTab()
+engine.run(feature_map, mztab)
+ms.MzTabFile().store("out.mzTab", mztab)
+```
+
+### Mass-Based Annotation (custom database)
+
+```python
+# Annotate features against your own compound list.
+# (Plain Python, no pyOpenMS-specific DB required.)
 
 # Load compound database (example structure)
 # In practice, use external database like HMDB, METLIN
@@ -280,8 +327,8 @@ for cons_feature in consensus_map_normalized:
 import pandas as pd
 import numpy as np
 
-# Export to pandas
-df = consensus_map.get_df()
+# Export intensities to pandas (features x samples)
+df = consensus_map.get_intensity_df()
 
 # Assume QC samples are columns with 'QC' in name
 qc_cols = [col for col in df.columns if 'QC' in col]
@@ -324,8 +371,8 @@ if blank_cols and sample_cols:
 import pandas as pd
 import numpy as np
 
-# Load data
-df = consensus_map.get_df()
+# Load intensities (features x samples)
+df = consensus_map.get_intensity_df()
 
 # Replace zeros with NaN
 df = df.replace(0, np.nan)
@@ -452,21 +499,40 @@ export_for_metaboanalyst(df, "for_metaboanalyst.csv")
 Test parameters on pooled QC sample:
 
 ```python
-# Test different mass trace parameters
-mz_tolerances = [3.0, 5.0, 10.0]
-min_spectra_values = [3, 5, 7]
+# Test different mass trace detection parameters
+mass_errors_ppm = [3.0, 5.0, 10.0]
+noise_thresholds = [500.0, 1000.0, 2000.0]
 
-for tol in mz_tolerances:
-    for min_spec in min_spectra_values:
-        ff = ms.FeatureFinder()
-        params = ff.getParameters("centroided")
-        params.setValue("mass_trace:mz_tolerance", tol)
-        params.setValue("mass_trace:min_spectra", min_spec)
+exp.sortSpectra(True)
 
+for mass_err in mass_errors_ppm:
+    for noise in noise_thresholds:
+        mtd = ms.MassTraceDetection()
+        p = mtd.getDefaults()
+        p.setValue("mass_error_ppm", mass_err)
+        p.setValue("noise_threshold_int", noise)
+        mtd.setParameters(p)
+        mass_traces = []
+        mtd.run(exp, mass_traces, 0)
+
+        epd = ms.ElutionPeakDetection()
+        p = epd.getDefaults()
+        p.setValue("width_filtering", "fixed")
+        epd.setParameters(p)
+        mt_split = []
+        epd.detectPeaks(mass_traces, mt_split)
+
+        ffm = ms.FeatureFindingMetabo()
+        p = ffm.getDefaults()
+        p.setValue("isotope_filtering_model", "metabolites (5% RMS)")
+        p.setValue("remove_single_traces", "true")
+        ffm.setParameters(p)
         features = ms.FeatureMap()
-        ff.run("centroided", exp, features, params, ms.FeatureMap())
+        chrom_out = []
+        ffm.run(mt_split, features, chrom_out)
 
-        print(f"tol={tol}, min_spec={min_spec}: {features.size()} features")
+        print(f"mass_error_ppm={mass_err}, noise={noise}: "
+              f"{features.size()} features")
 ```
 
 ### Retention Time Windows

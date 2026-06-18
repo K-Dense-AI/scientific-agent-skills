@@ -4,9 +4,7 @@ description: High-performance genomic interval operations and bioinformatics fil
 license: Apache-2.0
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.11–3.14 and polars-bio (uv pip install). Cloud I/O uses standard AWS/GCS/Azure SDK env vars when paths use s3://, gs://, or az:// URIs.
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
 ---
 
 # polars-bio

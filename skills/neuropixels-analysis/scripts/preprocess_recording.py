@@ -16,7 +16,7 @@ def preprocess_recording(
     input_path: str,
     output_dir: str,
     format: str = 'auto',
-    stream_id: str = None,
+    stream_name: str = None,
     freq_min: float = 300,
     freq_max: float = 6000,
     phase_shift: bool = True,
@@ -30,7 +30,7 @@ def preprocess_recording(
 
     # Load recording
     if format == 'spikeglx' or (format == 'auto' and 'imec' in str(input_path).lower()):
-        recording = si.read_spikeglx(input_path, stream_id=stream_id or 'imec0.ap')
+        recording = si.read_spikeglx(input_path, stream_name=stream_name or 'imec0.ap')
     elif format == 'openephys':
         recording = si.read_openephys(input_path)
     elif format == 'nwb':
@@ -38,8 +38,8 @@ def preprocess_recording(
     else:
         # Try auto-detection
         try:
-            recording = si.read_spikeglx(input_path, stream_id=stream_id or 'imec0.ap')
-        except:
+            recording = si.read_spikeglx(input_path, stream_name=stream_name or 'imec0.ap')
+        except Exception:
             recording = si.load_extractor(input_path)
 
     print(f"Recording: {recording.get_num_channels()} channels, {recording.get_total_duration():.1f}s")
@@ -94,7 +94,7 @@ def main():
     parser.add_argument('input', help='Path to input recording')
     parser.add_argument('--output', '-o', default='preprocessed/', help='Output directory')
     parser.add_argument('--format', '-f', default='auto', choices=['auto', 'spikeglx', 'openephys', 'nwb'])
-    parser.add_argument('--stream-id', default=None, help='Stream ID for multi-probe recordings')
+    parser.add_argument('--stream-name', default=None, help='Stream name for multi-probe recordings (e.g. imec0.ap)')
     parser.add_argument('--freq-min', type=float, default=300, help='Highpass cutoff (Hz)')
     parser.add_argument('--freq-max', type=float, default=6000, help='Lowpass cutoff (Hz)')
     parser.add_argument('--no-phase-shift', action='store_true', help='Skip phase shift correction')
@@ -108,7 +108,7 @@ def main():
         args.input,
         args.output,
         format=args.format,
-        stream_id=args.stream_id,
+        stream_name=args.stream_name,
         freq_min=args.freq_min,
         freq_max=args.freq_max,
         phase_shift=not args.no_phase_shift,

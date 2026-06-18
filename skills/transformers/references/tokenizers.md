@@ -323,12 +323,17 @@ messages = [
     {"role": "user", "content": "How are you?"}
 ]
 
-# Apply chat template
-text = tokenizer.apply_chat_template(messages, tokenize=False)
+# Format for display or preprocessing
+text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 print(text)
 
-# Tokenize directly
-inputs = tokenizer.apply_chat_template(messages, tokenize=True, return_tensors="pt")
+# Tokenize directly for generation
+inputs = tokenizer.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt"
+)
 ```
 
 ## Common Patterns

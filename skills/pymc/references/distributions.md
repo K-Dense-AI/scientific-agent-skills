@@ -62,6 +62,10 @@ Continuous distributions define probability densities over real-valued domains.
 - Support: (-∞, ∞)
 - Common uses: Heavy-tailed alternative to normal
 
+**`pm.HalfStudentT(name, nu, sigma)`**
+- Positive half-Student-t distribution
+- Common uses: Heavy-tailed prior for scale parameters
+
 ### Specialized Continuous Distributions
 
 **`pm.Laplace(name, mu, b)`** - Laplace (double exponential) distribution
@@ -90,11 +94,15 @@ Continuous distributions define probability densities over real-valued domains.
 
 **`pm.Gumbel(name, mu, beta)`** - Gumbel distribution for extreme values
 
+**`pm.PolyaGamma(name, h, z)`** - Polya-gamma distribution for data augmentation patterns
+
 **`pm.Rice(name, nu, sigma)`** - Rice (Rician) distribution
 
 **`pm.Moyal(name, mu, sigma)`** - Moyal distribution
 
 **`pm.Kumaraswamy(name, a, b)`** - Kumaraswamy distribution (Beta alternative)
+
+**`pm.Wald(name, mu, lam)`** - Wald / inverse Gaussian distribution
 
 **`pm.Interpolated(name, x_points, pdf_points)`** - Custom distribution from interpolation
 
@@ -180,6 +188,10 @@ Multivariate distributions define joint probability distributions over vector-va
 - Parameters: `n` (number of trials), `p` (probability vector)
 - Common uses: Count data across multiple categories
 
+**`pm.DirichletMultinomial(name, n, a)`**
+- Dirichlet-multinomial distribution
+- Common uses: Overdispersed categorical counts
+
 **`pm.MvStudentT(name, nu, mu, cov)`**
 - Multivariate Student's t-distribution
 - Parameters: `nu` (degrees of freedom), `mu` (location), `cov` (scale matrix)
@@ -191,9 +203,17 @@ Multivariate distributions define joint probability distributions over vector-va
 
 **`pm.LKJCholeskyCov(name, n, eta, sd_dist)`** - LKJ prior with Cholesky decomposition
 
-**`pm.Wishart(name, nu, V)`** - Wishart distribution (for covariance matrices)
+**`pm.OrderedMultinomial(name, eta, cutpoints, n)`** - Ordered multinomial outcomes
+
+**`pm.StickBreakingWeights(name, alpha, K)`** - Stick-breaking weights for mixture models
+
+**`pm.ZeroSumNormal(name, sigma)`** - Normal prior constrained to sum to zero
+
+**`pm.Wishart(name, nu, V)`** - Wishart distribution (for covariance matrices; prefer LKJ-based priors for most covariance models)
 
 **`pm.InverseWishart(name, nu, V)`** - Inverse Wishart distribution
+
+**`pm.WishartBartlett(name, S, nu)`** - Wishart with Bartlett decomposition
 
 **`pm.MatrixNormal(name, mu, rowcov, colcov)`** - Matrix normal distribution
 
@@ -226,6 +246,8 @@ Mixture distributions combine multiple component distributions.
 
 **`pm.HurdlePoisson(name, psi, mu)`** - Hurdle Poisson (two-part model)
 
+**`pm.HurdleNegativeBinomial(name, psi, mu, alpha)`** - Hurdle negative binomial for overdispersed counts with structural zeros
+
 **`pm.HurdleGamma(name, psi, alpha, beta)`** - Hurdle gamma
 
 **`pm.HurdleLogNormal(name, psi, mu, sigma)`** - Hurdle log-normal
@@ -246,6 +268,9 @@ Distributions designed for temporal data and sequential modeling.
 
 **`pm.MvGaussianRandomWalk(name, mu, cov, init_dist)`**
 - Multivariate Gaussian random walk
+
+**`pm.MvStudentTRandomWalk(name, nu, mu, cov, init_dist)`**
+- Heavy-tailed multivariate random walk
 
 **`pm.GARCH11(name, omega, alpha_1, beta_1)`**
 - GARCH(1,1) volatility model
@@ -295,7 +320,7 @@ Distributions designed for temporal data and sequential modeling.
 2. **Probabilities**: Use `Beta` or `Uniform(0, 1)`
 3. **Unbounded parameters**: Use `Normal` or `StudentT` (for robustness)
 4. **Positive parameters**: Use `LogNormal`, `Gamma`, or `Exponential`
-5. **Correlation matrices**: Use `LKJCorr`
+5. **Correlation/covariance matrices**: Prefer `LKJCholeskyCov` for covariance models; use `LKJCorr` when only correlations are needed
 6. **Count data**: Use `Poisson` or `NegativeBinomial` (for overdispersion)
 
 ### Shape Broadcasting

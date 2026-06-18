@@ -2,9 +2,8 @@
 name: omero-integration
 description: Microscopy data management platform. Access images via Python, retrieve datasets, analyze pixels, manage ROIs/annotations, batch processing, for high-content screening and microscopy workflows.
 license: Unknown
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "OMERO_HOST", "prompt": "OMERO server hostname.", "required_for": "full functionality"}, {"name": "OMERO_PORT", "prompt": "OMERO server port (default 4064).", "required_for": "optional features"}, {"name": "OMERO_USER", "prompt": "OMERO username.", "required_for": "full functionality"}, {"name": "OMERO_PASSWORD", "prompt": "OMERO password.", "required_for": "full functionality"}]
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc.", "openclaw": {"envVars": [{"name": "OMERO_HOST", "required": true, "description": "OMERO server hostname."}, {"name": "OMERO_PORT", "required": false, "description": "OMERO server port (default 4064)."}, {"name": "OMERO_USER", "required": true, "description": "OMERO username."}, {"name": "OMERO_PASSWORD", "required": true, "description": "OMERO password."}]}}
 ---
 
 # OMERO Integration

@@ -300,13 +300,54 @@ class CitationValidator:
         
         return duplicates
     
-    def validate_file(self, filepath: str, check_dois: bool = False) -> Dict:
+    def parse_manuscript_citations(self, filepath: str) -> List[str]:
+        """
+        Parse a manuscript file (Markdown or LaTeX) and extract all cited keys.
+        
+        Args:
+            filepath: Path to manuscript file
+            
+        Returns:
+            List of cited citation keys
+        """
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            print(f'Error reading manuscript file {filepath}: {e}', file=sys.stderr)
+            return []
+        
+        cited_keys = set()
+        
+        # 1. LaTeX citations: \cite{key1, key2}, \citep{key}, \citet{key}, etc.
+        latex_matches = re.findall(r'\\cite[a-z]*\*?\{([^}]+)\}', content)
+        for match in latex_matches:
+            keys = [k.strip() for k in match.split(',')]
+            for key in keys:
+                if key:
+                    cited_keys.add(key)
+                    
+        # 2. Markdown / Pandoc citations: @key or [@key1; @key2]
+        # Match @ followed by valid citation key chars (alphanumeric, -, _, :, .)
+        # Avoid email addresses, twitter handles, etc. by requiring that @ is not preceded by alphanumeric/dot/dash/underscore
+        md_matches = re.findall(r'(?<![a-zA-Z0-9_.-])@([a-zA-Z0-9_\-:]+)', content)
+        for key in md_matches:
+            # Exclude common false positives
+            if key and not key.isdigit():
+                cited_keys.add(key)
+                
+        return list(cited_keys)
+
+    def validate_file(self, filepath: str, check_dois: bool = False, min_count: Optional[int] = None, venue: Optional[str] = None, manuscript_filepath: Optional[str] = None) -> Dict:
         """
         Validate entire BibTeX file.
         
         Args:
             filepath: Path to BibTeX file
             check_dois: Whether to verify DOIs (slow)
+            min_count: Optional minimum citation count to enforce
+            venue: Optional venue type to check against standards
+            manuscript_filepath: Optional path to manuscript to cross-check citations
             
         Returns:
             Validation report dictionary
@@ -316,10 +357,19 @@ class CitationValidator:
         
         if not entries:
             return {
+                'filepath': filepath,
                 'total_entries': 0,
-                'errors': [],
+                'valid_entries': 0,
+                'errors': [{
+                    'type': 'empty_bibtex_file',
+                    'severity': 'high',
+                    'message': f'BibTeX file {filepath} has no valid entries.'
+                }],
                 'warnings': [],
-                'duplicates': []
+                'duplicates': [],
+                'venue_standard_checked': venue,
+                'min_count_checked': min_count,
+                'manuscript_results': {'checked': False}
             }
         
         print(f'Found {len(entries)} entries', file=sys.stderr)
@@ -365,13 +415,139 @@ class CitationValidator:
         
         all_errors.extend(doi_errors)
         
+        # Count and Venue verification logic
+        count_errors = []
+        count_warnings = []
+        
+        target_min = None
+        target_max = None
+        venue_name = None
+        
+        self.venue_standards = {
+            'nature': (35, 50, 'Nature'),
+            'science': (35, 50, 'Science'),
+            'cell': (35, 50, 'Cell'),
+            'multidisciplinary': (35, 50, 'High-impact Multidisciplinary Journal'),
+            'neurips': (30, 45, 'NeurIPS'),
+            'icml': (30, 45, 'ICML'),
+            'iclr': (30, 45, 'ICLR'),
+            'cvpr': (30, 45, 'CVPR'),
+            'acl': (30, 45, 'ACL'),
+            'ml_cs_conf': (30, 45, 'ML/CS Conference'),
+            'review': (40, 65, 'Comprehensive Literature Review'),
+            'market_research': (40, 65, 'Market Research Report'),
+            'literature_review': (40, 65, 'Literature Review / Market Research'),
+            'nejm': (30, 45, 'NEJM'),
+            'lancet': (30, 45, 'The Lancet'),
+            'jama': (30, 45, 'JAMA'),
+            'medical': (30, 45, 'Medical Journal')
+        }
+        
+        if venue:
+            v_lower = venue.lower().strip()
+            if v_lower in self.venue_standards:
+                target_min, target_max, venue_name = self.venue_standards[v_lower]
+            else:
+                print(f"Warning: Unknown venue '{venue}'. Supported venues are: {', '.join(self.venue_standards.keys())}", file=sys.stderr)
+        
+        if min_count is not None:
+            target_min = min_count
+            venue_name = f"Custom threshold (min: {min_count})"
+            target_max = None
+            
+        total_count = len(entries)
+        if target_min is not None:
+            # Determine critical threshold (e.g. 70% of target minimum)
+            critical_min = int(target_min * 0.7)
+            if critical_min < 1:
+                critical_min = 1
+                
+            if total_count < critical_min:
+                count_errors.append({
+                    'type': 'critically_low_citation_count',
+                    'severity': 'high',
+                    'message': f'Total citation entries count ({total_count}) is critically low for {venue_name or "specified standard"}. Expected at least {target_min} citations.'
+                })
+            elif total_count < target_min:
+                count_warnings.append({
+                    'type': 'low_citation_count',
+                    'severity': 'medium',
+                    'message': f'Total citation entries count ({total_count}) is below the recommended standard for {venue_name or "specified standard"}. Expected {target_min}-{target_max or "+"} citations.'
+                })
+        
+        # Manuscript checking logic
+        manuscript_results = {
+            'checked': False,
+            'manuscript_filepath': None,
+            'cited_keys': [],
+            'missing_keys': [],
+            'unused_keys': []
+        }
+        
+        if manuscript_filepath:
+            manuscript_results['checked'] = True
+            manuscript_results['manuscript_filepath'] = manuscript_filepath
+            
+            # Parse cited keys
+            cited_keys = self.parse_manuscript_citations(manuscript_filepath)
+            manuscript_results['cited_keys'] = cited_keys
+            
+            bib_keys = {entry['key'] for entry in entries}
+            
+            # Missing references: cited in manuscript but not defined in BibTeX
+            missing_keys = [key for key in cited_keys if key not in bib_keys]
+            manuscript_results['missing_keys'] = missing_keys
+            for key in missing_keys:
+                all_errors.append({
+                    'type': 'unresolved_citation',
+                    'entry': key,
+                    'severity': 'high',
+                    'message': f'Unresolved citation: Key "@{key}" is cited in manuscript "{manuscript_filepath}" but not defined in the BibTeX file.'
+                })
+                
+            # Unused references: defined in BibTeX but not cited in manuscript
+            unused_keys = [key for key in bib_keys if key not in cited_keys]
+            manuscript_results['unused_keys'] = unused_keys
+            for key in unused_keys:
+                all_warnings.append({
+                    'type': 'unused_citation',
+                    'entry': key,
+                    'severity': 'medium',
+                    'message': f'Unused citation: Reference "{key}" is defined in the BibTeX file but not cited in the manuscript.'
+                })
+                
+            # Check the count of ACTUALLY used citations
+            actual_count = len(cited_keys) - len(missing_keys)
+            if target_min is not None:
+                critical_min = int(target_min * 0.7)
+                if critical_min < 1:
+                    critical_min = 1
+                if actual_count < critical_min:
+                    count_errors.append({
+                        'type': 'critically_low_manuscript_citation_count',
+                        'severity': 'high',
+                        'message': f'The number of cited references in the manuscript ({actual_count}) is critically low for {venue_name or "specified standard"}. Expected at least {target_min} actually cited references.'
+                    })
+                elif actual_count < target_min:
+                    count_warnings.append({
+                        'type': 'low_manuscript_citation_count',
+                        'severity': 'medium',
+                        'message': f'The number of cited references in the manuscript ({actual_count}) is below the recommended standard for {venue_name or "specified standard"}. Expected {target_min}-{target_max or "+"} cited references.'
+                    })
+        
+        all_errors.extend(count_errors)
+        all_warnings.extend(count_warnings)
+        
         return {
             'filepath': filepath,
             'total_entries': len(entries),
             'valid_entries': len(entries) - len([e for e in all_errors if e['severity'] == 'high']),
             'errors': all_errors,
             'warnings': all_warnings,
-            'duplicates': duplicates
+            'duplicates': duplicates,
+            'venue_standard_checked': venue,
+            'min_count_checked': min_count,
+            'manuscript_results': manuscript_results
         }
     
     def _extract_year_crossref(self, message: Dict) -> str:
@@ -437,18 +613,52 @@ def main():
         help='Show detailed output'
     )
     
+    parser.add_argument(
+        '--min-count',
+        type=int,
+        help='Enforce a minimum number of citation entries'
+    )
+    
+    parser.add_argument(
+        '--venue',
+        help='Enforce citation standards for a specific venue (e.g. nature, neurips, review)'
+    )
+    
+    parser.add_argument(
+        '--manuscript',
+        help='Path to manuscript file (Markdown or LaTeX) to check for unresolved or unused citations'
+    )
+    
     args = parser.parse_args()
     
     # Validate file
     validator = CitationValidator()
-    report = validator.validate_file(args.file, check_dois=args.check_dois)
+    report = validator.validate_file(
+        args.file, 
+        check_dois=args.check_dois,
+        min_count=args.min_count,
+        venue=args.venue,
+        manuscript_filepath=args.manuscript
+    )
     
     # Print summary
     print('\n' + '='*60)
     print('CITATION VALIDATION REPORT')
     print('='*60)
     print(f'\nFile: {args.file}')
-    print(f'Total entries: {report["total_entries"]}')
+    if report.get('venue_standard_checked'):
+        print(f'Venue Standard: {report["venue_standard_checked"]}')
+    if report.get('min_count_checked') is not None:
+        print(f'Required Min Count: {report["min_count_checked"]}')
+    print(f'Total entries in BibTeX: {report["total_entries"]}')
+    
+    m_res = report.get('manuscript_results', {})
+    if m_res.get('checked'):
+        print(f'Manuscript checked: {m_res["manuscript_filepath"]}')
+        print(f'  Actual unique citations in manuscript: {len(m_res["cited_keys"])}')
+        print(f'  Missing/unresolved: {len(m_res["missing_keys"])}')
+        print(f'  Unused in bib file: {len(m_res["unused_keys"])}')
+        
     print(f'Valid entries: {report["valid_entries"]}')
     print(f'Errors: {len(report["errors"])}')
     print(f'Warnings: {len(report["warnings"])}')
@@ -466,7 +676,7 @@ def main():
                 print(f'  Severity: {error["severity"]}')
     
     # Print warnings
-    if report['warnings'] and args.verbose:
+    if report['warnings'] and (args.verbose or report.get('venue_standard_checked') or report.get('min_count_checked') is not None or m_res.get('checked')):
         print('\n' + '-'*60)
         print('WARNINGS (should fix):')
         print('-'*60)
@@ -487,8 +697,9 @@ def main():
             json.dump(report, f, indent=2)
         print(f'\nDetailed report saved to: {args.report}')
     
-    # Exit with error code if there are errors
-    if report['errors']:
+    # Exit with error code if there are high-severity errors
+    has_high_errors = any(e.get('severity') == 'high' for e in report['errors'])
+    if has_high_errors:
         sys.exit(1)
 
 

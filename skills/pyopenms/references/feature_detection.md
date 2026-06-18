@@ -4,6 +4,10 @@
 
 Feature detection identifies persistent signals (chromatographic peaks) in LC-MS data. Feature linking combines features across multiple samples for quantitative comparison.
 
+> **Ready-to-run scripts:** The skill ships CLIs that implement these workflows end to end: `scripts/detect_features_metabo.py` (metabolomics), `scripts/detect_features_centroided.py` (proteomics/centroided), `scripts/align_link_quantify.py` (alignment + linking + quant matrix), and `scripts/detect_adducts.py` (adduct grouping). Use them directly, or adapt the code below.
+
+> **API note (pyOpenMS 3.5.0):** The old `FeatureFinder` class and its `run("centroided", ...)` API were **removed**. Metabolomics now uses the `MassTraceDetection` -> `ElutionPeakDetection` -> `FeatureFindingMetabo` pipeline, and centroided/proteomics data uses `FeatureFinderAlgorithmPicked`. The patterns below reflect the current API.
+
 ## Feature Detection Basics
 
 A feature represents a chromatographic peak characterized by:
@@ -15,9 +19,9 @@ A feature represents a chromatographic peak characterized by:
 
 ## Feature Finding
 
-### Feature Finder Multiples (FFM)
+### Feature Finding for Metabolomics (FeatureFindingMetabo)
 
-Standard algorithm for feature detection in centroided data:
+For small molecules, run the three-stage pipeline that replaced the removed `FeatureFinder`: detect mass traces, split them into elution peaks, then assemble isotope-grouped features.
 
 ```python
 import pyopenms as ms
@@ -25,22 +29,36 @@ import pyopenms as ms
 # Load centroided data
 exp = ms.MSExperiment()
 ms.MzMLFile().load("centroided.mzML", exp)
+exp.sortSpectra(True)
 
-# Create feature finder
-ff = ms.FeatureFinder()
+# Stage 1: mass trace detection
+mtd = ms.MassTraceDetection()
+p = mtd.getDefaults()
+p.setValue("mass_error_ppm", 10.0)
+p.setValue("noise_threshold_int", 1000.0)
+mtd.setParameters(p)
+mass_traces = []
+mtd.run(exp, mass_traces, 0)
 
-# Get default parameters
-params = ff.getParameters("centroided")
+# Stage 2: elution peak detection
+epd = ms.ElutionPeakDetection()
+p = epd.getDefaults()
+p.setValue("width_filtering", "fixed")
+epd.setParameters(p)
+mt_split = []
+epd.detectPeaks(mass_traces, mt_split)
 
-# Modify key parameters
-params.setValue("mass_trace:mz_tolerance", 10.0)  # ppm
-params.setValue("mass_trace:min_spectra", 7)  # Min scans per feature
-params.setValue("isotopic_pattern:charge_low", 1)
-params.setValue("isotopic_pattern:charge_high", 4)
-
-# Run feature detection
+# Stage 3: feature assembly with isotope grouping
+ffm = ms.FeatureFindingMetabo()
+p = ffm.getDefaults()
+p.setValue("isotope_filtering_model", "metabolites (5% RMS)")  # or "none"
+p.setValue("remove_single_traces", "true")
+p.setValue("charge_lower_bound", 1)
+p.setValue("charge_upper_bound", 3)
+ffm.setParameters(p)
 features = ms.FeatureMap()
-ff.run("centroided", exp, features, params, ms.FeatureMap())
+chrom_out = []
+ffm.run(mt_split, features, chrom_out)
 
 print(f"Detected {features.size()} features")
 
@@ -48,26 +66,28 @@ print(f"Detected {features.size()} features")
 ms.FeatureXMLFile().store("features.featureXML", features)
 ```
 
-### Feature Finder for Metabolomics
+### Feature Finding for Proteomics (FeatureFinderAlgorithmPicked)
 
-Optimized for small molecules:
+For centroided peptide data, use `FeatureFinderAlgorithmPicked` (replaces the removed `FeatureFinder` "centroided" workflow):
 
 ```python
-# Create feature finder for metabolomics
-ff = ms.FeatureFinder()
+exp = ms.MSExperiment()
+ms.MzMLFile().load("centroided.mzML", exp)
+exp.sortSpectra(True)
+exp.updateRanges()
 
-# Get metabolomics-specific parameters
-params = ff.getParameters("centroided")
+ff = ms.FeatureFinderAlgorithmPicked()
+params = ff.getDefaults()
+params.setValue("isotopic_pattern:charge_low", 1)
+params.setValue("isotopic_pattern:charge_high", 4)
 
-# Configure for metabolomics
-params.setValue("mass_trace:mz_tolerance", 5.0)  # Lower tolerance
-params.setValue("mass_trace:min_spectra", 5)
-params.setValue("isotopic_pattern:charge_low", 1)  # Mostly singly charged
-params.setValue("isotopic_pattern:charge_high", 2)
-
-# Run detection
 features = ms.FeatureMap()
-ff.run("centroided", exp, features, params, ms.FeatureMap())
+seeds = ms.FeatureMap()
+# signature: run(input_map, output, param, seeds)
+ff.run(exp, features, params, seeds)
+
+print(f"Detected {features.size()} features")
+ms.FeatureXMLFile().store("features.featureXML", features)
 ```
 
 ## Accessing Feature Data
@@ -117,11 +137,11 @@ import pandas as pd
 df = feature_map.get_df()
 
 print(df.columns)
-# Typical columns: RT, mz, intensity, charge, quality
+# Columns are lowercase: rt, mz, intensity, charge, quality
 
 # Analyze features
 print(f"Mean intensity: {df['intensity'].mean()}")
-print(f"RT range: {df['RT'].min():.1f} - {df['RT'].max():.1f}")
+print(f"RT range: {df['rt'].min():.1f} - {df['rt'].max():.1f}")
 ```
 
 ## Feature Linking
@@ -136,14 +156,21 @@ fm1 = ms.FeatureMap()
 fm2 = ms.FeatureMap()
 ms.FeatureXMLFile().load("sample1.featureXML", fm1)
 ms.FeatureXMLFile().load("sample2.featureXML", fm2)
+feature_maps = [fm1, fm2]
 
-# Create aligner
+# Pick the largest map as the alignment reference
 aligner = ms.MapAlignmentAlgorithmPoseClustering()
+ref_idx = max(range(len(feature_maps)), key=lambda i: feature_maps[i].size())
+aligner.setReference(feature_maps[ref_idx])
 
-# Align maps
-fm_aligned = []
-transformations = []
-aligner.align([fm1, fm2], fm_aligned, transformations)
+# Align each non-reference map in place against the reference
+transformer = ms.MapAlignmentTransformer()
+for i, fm in enumerate(feature_maps):
+    if i == ref_idx:
+        continue
+    trafo = ms.TransformationDescription()
+    aligner.align(fm, trafo)
+    transformer.transformRetentionTimes(fm, trafo, True)
 ```
 
 ### Feature Linking Algorithm
@@ -167,8 +194,11 @@ feature_maps = [fm1, fm2, fm3]
 # Create consensus map
 consensus_map = ms.ConsensusMap()
 
-# Link features
+# Link features (feature_maps is a list of FeatureMap)
 grouper.group(feature_maps, consensus_map)
+
+# Assign unique IDs before storing
+consensus_map.setUniqueIds()
 
 print(f"Created {consensus_map.size()} consensus features")
 
@@ -210,25 +240,41 @@ for map_idx, description in file_descriptions.items():
     print(f"  Size: {description.size}")
 ```
 
-## Adduct Detection
+### Building Quant Matrices from a ConsensusMap
 
-Identify different ionization forms of the same molecule:
+`ConsensusMap` exposes two DataFrame helpers that make quantitative tables easy:
 
 ```python
-# Create adduct detector
-adduct_detector = ms.MetaboliteAdductDecharger()
+# Feature intensities, features (rows) x samples (columns)
+intensity_df = consensus_map.get_intensity_df()
+
+# Per-consensus-feature metadata: rt, mz, charge, quality
+metadata_df = consensus_map.get_metadata_df()
+
+# Join into a single annotated quant matrix
+quant = metadata_df.join(intensity_df)
+```
+
+## Adduct Detection
+
+Identify different ionization forms of the same molecule. The class is `MetaboliteFeatureDeconvolution` (the old `MetaboliteAdductDecharger` does not exist in 3.5.0). Adducts are specified with `Elements:Charge:Probability` syntax, not bracket notation like `[M+H]+`:
+
+```python
+# Create adduct deconvolution
+mfd = ms.MetaboliteFeatureDeconvolution()
 
 # Configure parameters
-params = adduct_detector.getParameters()
-params.setValue("potential_adducts", "[M+H]+,[M+Na]+,[M+K]+,[M-H]-")
-params.setValue("charge_min", 1)
-params.setValue("charge_max", 1)
-params.setValue("max_neutrals", 1)
-adduct_detector.setParameters(params)
+p = mfd.getDefaults()
+p.setValue("potential_adducts", [b"H:+:0.4", b"Na:+:0.25", b"NH4:+:0.25", b"K:+:0.1", b"H-2O-1:0:0.05"])
+p.setValue("charge_min", 1)
+p.setValue("charge_max", 1)
+mfd.setParameters(p)
 
-# Detect adducts
-feature_map_out = ms.FeatureMap()
-adduct_detector.compute(feature_map, feature_map_out, ms.ConsensusMap())
+# Detect adducts: compute(in, out, cons_groups, cons_edges)
+fm_out = ms.FeatureMap()
+groups = ms.ConsensusMap()
+edges = ms.ConsensusMap()
+mfd.compute(feature_map, fm_out, groups, edges)
 ```
 
 ## Complete Feature Detection Workflow
@@ -249,22 +295,43 @@ def feature_detection_workflow(input_files, output_consensus):
 
     feature_maps = []
 
-    # Step 1: Detect features in each file
+    # Step 1: Detect features in each file (metabolomics pipeline)
     for mzml_file in input_files:
         print(f"Processing {mzml_file}...")
 
         # Load experiment
         exp = ms.MSExperiment()
         ms.MzMLFile().load(mzml_file, exp)
+        exp.sortSpectra(True)
 
-        # Find features
-        ff = ms.FeatureFinder()
-        params = ff.getParameters("centroided")
-        params.setValue("mass_trace:mz_tolerance", 10.0)
-        params.setValue("mass_trace:min_spectra", 7)
+        # Mass trace detection
+        mtd = ms.MassTraceDetection()
+        p = mtd.getDefaults()
+        p.setValue("mass_error_ppm", 10.0)
+        p.setValue("noise_threshold_int", 1000.0)
+        mtd.setParameters(p)
+        mass_traces = []
+        mtd.run(exp, mass_traces, 0)
 
+        # Elution peak detection
+        epd = ms.ElutionPeakDetection()
+        p = epd.getDefaults()
+        p.setValue("width_filtering", "fixed")
+        epd.setParameters(p)
+        mt_split = []
+        epd.detectPeaks(mass_traces, mt_split)
+
+        # Feature assembly
+        ffm = ms.FeatureFindingMetabo()
+        p = ffm.getDefaults()
+        p.setValue("isotope_filtering_model", "metabolites (5% RMS)")
+        p.setValue("remove_single_traces", "true")
+        p.setValue("charge_lower_bound", 1)
+        p.setValue("charge_upper_bound", 3)
+        ffm.setParameters(p)
         features = ms.FeatureMap()
-        ff.run("centroided", exp, features, params, ms.FeatureMap())
+        chrom_out = []
+        ffm.run(mt_split, features, chrom_out)
 
         # Store filename in feature map
         features.setPrimaryMSRunPath([mzml_file.encode()])
@@ -272,12 +339,18 @@ def feature_detection_workflow(input_files, output_consensus):
         feature_maps.append(features)
         print(f"  Found {features.size()} features")
 
-    # Step 2: Align retention times
+    # Step 2: Align retention times against the largest map
     print("Aligning retention times...")
     aligner = ms.MapAlignmentAlgorithmPoseClustering()
-    aligned_maps = []
-    transformations = []
-    aligner.align(feature_maps, aligned_maps, transformations)
+    ref_idx = max(range(len(feature_maps)), key=lambda i: feature_maps[i].size())
+    aligner.setReference(feature_maps[ref_idx])
+    transformer = ms.MapAlignmentTransformer()
+    for i, fm in enumerate(feature_maps):
+        if i == ref_idx:
+            continue
+        trafo = ms.TransformationDescription()
+        aligner.align(fm, trafo)
+        transformer.transformRetentionTimes(fm, trafo, True)
 
     # Step 3: Link features
     print("Linking features across samples...")
@@ -289,7 +362,8 @@ def feature_detection_workflow(input_files, output_consensus):
     grouper.setParameters(params)
 
     consensus_map = ms.ConsensusMap()
-    grouper.group(aligned_maps, consensus_map)
+    grouper.group(feature_maps, consensus_map)
+    consensus_map.setUniqueIds()
 
     # Save results
     ms.ConsensusXMLFile().store(output_consensus, consensus_map)
@@ -352,8 +426,9 @@ for feature in feature_map:
 ```python
 # Annotate features with peptide identifications
 # Load identifications
+# pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
 protein_ids = []
-peptide_ids = []
+peptide_ids = ms.PeptideIdentificationList()
 ms.IdXMLFile().load("identifications.idXML", protein_ids, peptide_ids)
 
 # Create ID mapper
@@ -376,16 +451,26 @@ for feature in feature_map:
 Optimize parameters for your data type:
 
 ```python
-# Test different tolerance values
+# Test different mass-trace tolerance values (metabolomics pipeline)
 mz_tolerances = [5.0, 10.0, 20.0]  # ppm
 
 for tol in mz_tolerances:
-    ff = ms.FeatureFinder()
-    params = ff.getParameters("centroided")
-    params.setValue("mass_trace:mz_tolerance", tol)
+    mtd = ms.MassTraceDetection()
+    p = mtd.getDefaults()
+    p.setValue("mass_error_ppm", tol)
+    p.setValue("noise_threshold_int", 1000.0)
+    mtd.setParameters(p)
+    mass_traces = []
+    mtd.run(exp, mass_traces, 0)
 
+    epd = ms.ElutionPeakDetection()
+    mt_split = []
+    epd.detectPeaks(mass_traces, mt_split)
+
+    ffm = ms.FeatureFindingMetabo()
     features = ms.FeatureMap()
-    ff.run("centroided", exp, features, params, ms.FeatureMap())
+    chrom_out = []
+    ffm.run(mt_split, features, chrom_out)
 
     print(f"Tolerance {tol} ppm: {features.size()} features")
 ```
@@ -401,7 +486,7 @@ df = feature_map.get_df()
 import matplotlib.pyplot as plt
 
 plt.figure(figsize=(10, 6))
-plt.scatter(df['RT'], df['mz'], s=df['intensity']/1000, alpha=0.5)
+plt.scatter(df['rt'], df['mz'], s=df['intensity']/1000, alpha=0.5)
 plt.xlabel('Retention Time (s)')
 plt.ylabel('m/z')
 plt.title('Feature Map')

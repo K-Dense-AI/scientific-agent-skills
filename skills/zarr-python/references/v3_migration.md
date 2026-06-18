@@ -1,6 +1,6 @@
 # Zarr-Python 3 Migration Quick Reference
 
-Targets **zarr 3.2.x** (PyPI stable, May 2026). Official guide: [3.0 Migration Guide](https://zarr.readthedocs.io/en/stable/user-guide/v3_migration/).
+Targets **zarr 3.2.x** (current stable: **3.2.1**, released 2026-05-05). Official guide: [3.0 Migration Guide](https://zarr.readthedocs.io/en/stable/user-guide/v3_migration/).
 
 ## Version and format defaults
 
@@ -41,7 +41,7 @@ import zarr
 root = zarr.open_group(
     store="s3://my-bucket/path/data.zarr",
     mode="r",
-    storage_options={"anon": False},  # uses AWS_* env vars via fsspec
+    storage_options={"anon": False},  # provider credentials are handled by fsspec
 )
 
 # Explicit FsspecStore
@@ -50,20 +50,21 @@ store = FsspecStore.from_url("s3://my-bucket/path/data.zarr", storage_options={"
 root = zarr.open_group(store=store, mode="r")
 ```
 
-Install remote I/O extras: `uv pip install "zarr[remote]"` (pulls fsspec). Add `s3fs` or `gcsfs` for the target protocol.
+Install remote I/O extras with pinned versions in production projects, for example: `uv pip install "zarr[remote]==3.2.1" "s3fs==2026.4.0" "gcsfs==2026.5.0"`. Zarr's `remote` extra pulls fsspec; add the protocol backend needed by the target store.
 
 ## Codecs and compression
 
-- Zarr v3 arrays: use `zarr.codecs.*` (e.g. `BloscCodec`, `GzipCodec`, `BytesCodec`) via `compressors=` on `create_array`.
+- Zarr v3 arrays: use `zarr.codecs.*` (e.g. `BloscCodec`, `GzipCodec`) via `compressors=` on `create_array`.
 - Zarr v2 arrays: `numcodecs` codecs still work; import from `numcodecs`, not `zarr.*`.
 - `compressor=` kwarg on creation functions → use `compressors=` in v3.
+- Disable compression with `compressors=None`; `BytesCodec` is the serializer, not the "no compression" setting.
 
 ```python
-from zarr.codecs import BloscCodec
+from zarr.codecs import BloscCodec, BloscShuffle
 
 z = zarr.create_array(
     store="data.zarr", shape=(1000, 1000), chunks=(100, 100), dtype="f4",
-    compressors=BloscCodec(cname="zstd", clevel=5, shuffle="shuffle"),
+    compressors=BloscCodec(cname="zstd", clevel=5, shuffle=BloscShuffle.bitshuffle),
 )
 ```
 
@@ -74,6 +75,7 @@ z = zarr.create_array(
 | `group.create_dataset(...)` | `group.create_array(...)` |
 | `group.require_dataset(...)` | `group.require_array(...)` |
 | `group.foo` attribute access | `group["foo"]` only |
+| `zarr.storage.init_group(...)` | `zarr.open_group(...)` or `zarr.create_group(...)` |
 
 ## Array operations
 
@@ -83,6 +85,34 @@ z.resize((15000, 15000))  # not z.resize(15000, 15000)
 ```
 
 Advanced indexing: `vindex`, `oindex`, and `blocks` remain as convenience properties; equivalent methods are `get_coordinate_selection`, `get_orthogonal_selection`, etc.
+
+### Rectilinear chunks (3.2+)
+
+Zarr 3.2 adds support for rectilinear chunk grids. Existing regular chunk tuples still work, but you can now pass nested chunk lengths when chunk boundaries vary by dimension:
+
+```python
+z = zarr.create_array(
+    store="rectilinear.zarr",
+    shape=(60, 100),
+    chunks=([10, 20, 30], [50, 50]),
+    dtype="f4",
+)
+```
+
+### Metadata migration CLI (3.1.3+)
+
+For v2 stores that need v3 metadata, use the Zarr CLI non-destructively first:
+
+```bash
+zarr migrate v3 path/to/input.zarr path/to/output.zarr
+zarr migrate v3 path/to/input.zarr --dry-run
+```
+
+Only remove v2 metadata after downstream readers have been tested:
+
+```bash
+zarr remove-metadata v2 path/to/input.zarr
+```
 
 ## Not yet ported to v3 (avoid or expect errors)
 
@@ -94,4 +124,4 @@ From the [migration guide WIP list](https://zarr.readthedocs.io/en/stable/user-g
 
 ## Zarr-Python 2 support
 
-Install last 2.x: `uv pip install "zarr==2.*"`. Maintenance lives on the `support/v2` branch (security fixes for ~6 months after 3.0).
+For legacy workflows, choose an exact `zarr==2.x.y` release from the support-v2 release notes and commit a lockfile. Maintenance lives on the `support/v2` branch (security fixes for ~6 months after 3.0).

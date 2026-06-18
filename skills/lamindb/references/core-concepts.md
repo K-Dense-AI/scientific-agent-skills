@@ -184,10 +184,10 @@ ln.Run.filter(project=project).to_dataframe()
 
 ### Function-Level Tracking
 
-Use the `@ln.tracked()` decorator for fine-grained lineage:
+Use `@ln.flow()` for workflow entry points and `@ln.step()` for fine-grained lineage inside workflows:
 
 ```python
-@ln.tracked()
+@ln.step()
 def preprocess_data(input_key: str, output_key: str, normalize: bool = True) -> None:
     """Preprocess raw data and save result."""
     # Load input (automatically tracked)
@@ -201,9 +201,12 @@ def preprocess_data(input_key: str, output_key: str, normalize: bool = True) -> 
     # Save output (automatically tracked)
     ln.Artifact.from_dataframe(data, key=output_key).save()
 
-# Each call creates a separate Transform and Run
-preprocess_data("raw/batch1.csv", "processed/batch1.csv", normalize=True)
-preprocess_data("raw/batch2.csv", "processed/batch2.csv", normalize=False)
+@ln.flow()
+def run_preprocessing() -> None:
+    preprocess_data("raw/batch1.csv", "processed/batch1.csv", normalize=True)
+    preprocess_data("raw/batch2.csv", "processed/batch2.csv", normalize=False)
+
+run_preprocessing()
 ```
 
 ### Accessing Lineage Information
@@ -250,7 +253,7 @@ ln.Feature(name="treatment", dtype=str).save()
 
 ```python
 # Single values
-artifact.features.add_values({
+artifact.features.set_values({
     "gc_content": 0.55,
     "experiment_date": "2025-10-31"
 })

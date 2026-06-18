@@ -80,7 +80,8 @@ plt.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.15)
 plt.savefig('figure.png', bbox_inches='tight')
 
 # Solution 5: Rotate long tick labels
-ax.set_xticklabels(labels, rotation=45, ha='right')
+ax.set_xticks(positions, labels)
+plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
 ```
 
 ### Issue: Colorbar Affects Subplot Size
@@ -198,9 +199,9 @@ ax.hexbin(x, y, gridsize=50, cmap='viridis')
 from matplotlib.font_manager import findfont, FontProperties
 print(findfont(FontProperties(family='sans-serif')))
 
-# Solution 2: Rebuild font cache
-import matplotlib.font_manager
-matplotlib.font_manager._rebuild()
+# Solution 2: Check Matplotlib's cache directory, then restart Python
+import matplotlib
+print(matplotlib.get_cachedir())
 
 # Solution 3: Suppress warnings
 import warnings
@@ -434,8 +435,6 @@ scatter = ax.scatter(x, y, z, c=z, cmap='viridis')
 
 **Solution:**
 ```python
-from mpl_toolkits.mplot3d import Axes3D
-
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 ax.plot_surface(X, Y, Z)

@@ -1,24 +1,26 @@
 ---
 name: cellxgene-census
-description: Query the CELLxGENE Census (61M+ cells) programmatically. Use when you need expression data across tissues, diseases, or cell types from the largest curated single-cell atlas. Best for population-scale queries, reference atlas comparisons. For analyzing your own data use scanpy or scvi-tools.
-license: Unknown
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+description: Query the CZ CELLxGENE Census programmatically for versioned public single-cell and spatial transcriptomics data. Use when you need population-scale cell metadata, gene expression slices, Census summary counts, source H5AD URIs/downloads, embeddings, spatial Census data, or reference atlas comparisons across organisms, tissues, diseases, assays, and cell types. For analyzing your own local single-cell data use scanpy, anndata, or scvi-tools.
+allowed-tools: Read Write Edit Bash
+license: MIT
+compatibility: Requires Python >=3.10,<3.13. Examples target cellxgene-census 1.17.x and the 2025-11-08 stable LTS Census; spatial workflows need the spatial extra and TileDB-SOMA >=1.15.5. No authentication is required for public Census data.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # CZ CELLxGENE Census
 
 ## Overview
 
-The CZ CELLxGENE Census provides programmatic access to a comprehensive, versioned collection of standardized single-cell genomics data from CZ CELLxGENE Discover. This skill enables efficient querying and analysis of millions of cells across thousands of datasets.
+The CZ CELLxGENE Census provides programmatic access to a comprehensive, versioned collection of standardized single-cell and spatial transcriptomics data from CZ CELLxGENE Discover. This skill enables efficient querying and analysis of public Census releases without downloading whole datasets first.
 
 The Census includes:
-- **61+ million cells** from human and mouse
+- **217+ million total cells** and **125+ million unique cells** in the 2025-11-08 stable LTS release
+- **1,845 datasets** in the 2025-11-08 stable LTS release
+- **Human, mouse, marmoset, rhesus macaque, and chimpanzee** data in the current schema
 - **Standardized metadata** (cell types, tissues, diseases, donors)
-- **Raw gene expression** matrices
-- **Pre-calculated embeddings** and statistics
-- **Integration with PyTorch, scanpy, and other analysis tools**
+- **Raw gene expression** matrices and source H5AD lookup/download helpers
+- **Pre-calculated summary counts, embeddings, and spatial data**
+- **Integration with AnnData, Scanpy, TileDB-SOMA, TileDB-SOMA-ML, and other analysis tools**
 
 ## When to Use This Skill
 
@@ -35,12 +37,18 @@ This skill should be used when:
 
 Install the Census API:
 ```bash
-uv pip install cellxgene-census
+uv pip install "cellxgene-census==1.17.*"
 ```
 
-For machine learning workflows, install additional dependencies:
+For spatial workflows:
 ```bash
-uv pip install cellxgene-census[experimental]
+uv pip install "cellxgene-census[spatial]==1.17.*" "spatialdata[extra]>=0.2.5"
+```
+
+For PyTorch model training, use TileDB-SOMA-ML. The old `cellxgene_census.experimental.ml` loaders are deprecated:
+
+```bash
+uv pip install "cellxgene-census==1.17.*" tiledbsoma-ml
 ```
 
 ## Core Workflow Patterns
@@ -56,15 +64,15 @@ import cellxgene_census
 with cellxgene_census.open_soma() as census:
     # Work with census data
 
-# Open specific version for reproducibility
-with cellxgene_census.open_soma(census_version="2023-07-25") as census:
+# Open the current LTS version for reproducibility
+with cellxgene_census.open_soma(census_version="2025-11-08") as census:
     # Work with census data
 ```
 
 **Key points:**
 - Use context manager (`with` statement) for automatic cleanup
 - Specify `census_version` for reproducible analyses
-- Default opens latest "stable" release
+- `stable` opens the current LTS Census release; `latest` opens the newest weekly release retained for a shorter period
 
 ### 2. Exploring Census Information
 
@@ -72,15 +80,18 @@ Before querying expression data, explore available datasets and metadata.
 
 **Access summary information:**
 ```python
-# Get summary statistics
+# Get summary statistics as label/value rows
 summary = census["census_info"]["summary"].read().concat().to_pandas()
-print(f"Total cells: {summary['total_cell_count'][0]}")
+summary_values = summary.set_index("label")["value"]
+print(f"Total cells: {int(summary_values['total_cell_count']):,}")
+print(f"Unique cells: {int(summary_values['unique_cell_count']):,}")
 
 # Get all datasets
 datasets = census["census_info"]["datasets"].read().concat().to_pandas()
 
-# Filter datasets by criteria
-covid_datasets = datasets[datasets["disease"].str.contains("COVID", na=False)]
+# Get precomputed counts by organism, cell type, tissue, disease, and assay
+summary_counts = census["census_info"]["summary_cell_counts"].read().concat().to_pandas()
+tissue_counts = summary_counts[summary_counts["category"].eq("tissue_general")]
 ```
 
 **Query cell metadata to understand available data:**
@@ -96,7 +107,13 @@ unique_cell_types = cell_metadata["cell_type"].unique()
 print(f"Found {len(unique_cell_types)} cell types in brain")
 
 # Count cells by tissue
-tissue_counts = cell_metadata.groupby("tissue_general").size()
+tissue_metadata = cellxgene_census.get_obs(
+    census,
+    "homo_sapiens",
+    value_filter="is_primary_data == True",
+    column_names=["tissue_general"],
+)
+tissue_counts = tissue_metadata["tissue_general"].value_counts()
 ```
 
 **Important:** Always filter for `is_primary_data == True` to avoid counting duplicate cells unless specifically analyzing duplicates.
@@ -130,6 +147,7 @@ adata = cellxgene_census.get_anndata(
 - Combine conditions with `and`, `or`
 - Use `in` for multiple values: `tissue in ['lung', 'liver']`
 - Select only needed columns with `obs_column_names`
+- In current LTS releases, `disease` and `disease_ontology_term_id` may contain ` || `-delimited multiple values; inspect available values before relying on exact equality filters for disease cohorts
 
 **Getting metadata separately:**
 ```python
@@ -156,96 +174,117 @@ For queries exceeding available RAM, use `axis_query()` with iterative processin
 import tiledbsoma as soma
 
 # Create axis query
-query = census["census_data"]["homo_sapiens"].axis_query(
+with census["census_data"]["homo_sapiens"].axis_query(
     measurement_name="RNA",
     obs_query=soma.AxisQuery(
         value_filter="tissue_general == 'brain' and is_primary_data == True"
     ),
     var_query=soma.AxisQuery(
         value_filter="feature_name in ['FOXP2', 'TBR1', 'SATB2']"
-    )
-)
-
-# Iterate through expression matrix in chunks
-iterator = query.X("raw").tables()
-for batch in iterator:
-    # batch is a pyarrow.Table with columns:
-    # - soma_data: expression value
-    # - soma_dim_0: cell (obs) coordinate
-    # - soma_dim_1: gene (var) coordinate
-    process_batch(batch)
+    ),
+) as query:
+    # Iterate through expression matrix in chunks
+    iterator = query.X("raw").tables()
+    for batch in iterator:
+        # batch is a pyarrow.Table with columns:
+        # - soma_data: expression value
+        # - soma_dim_0: cell (obs) coordinate
+        # - soma_dim_1: gene (var) coordinate
+        process_batch(batch)
 ```
 
 **Computing incremental statistics:**
 ```python
+import tiledbsoma as soma
+
 # Example: Calculate mean expression
 n_observations = 0
 sum_values = 0.0
 
-iterator = query.X("raw").tables()
-for batch in iterator:
-    values = batch["soma_data"].to_numpy()
-    n_observations += len(values)
-    sum_values += values.sum()
+with census["census_data"]["homo_sapiens"].axis_query(
+    measurement_name="RNA",
+    obs_query=soma.AxisQuery(value_filter="tissue_general == 'brain' and is_primary_data == True"),
+    var_query=soma.AxisQuery(value_filter="feature_name in ['FOXP2', 'TBR1', 'SATB2']"),
+) as query:
+    iterator = query.X("raw").tables()
+    for batch in iterator:
+        values = batch["soma_data"].to_numpy()
+        n_observations += len(values)
+        sum_values += values.sum()
 
 mean_expression = sum_values / n_observations
 ```
 
 ### 5. Machine Learning with PyTorch
 
-For training models, use the experimental PyTorch integration:
+For training models, use TileDB-SOMA-ML. The former `cellxgene_census.experimental.ml` PyTorch loaders are deprecated and scheduled for removal.
 
 ```python
-from cellxgene_census.experimental.ml import experiment_dataloader
+import tiledbsoma as soma
+from tiledbsoma_ml import ExperimentDataset, experiment_dataloader
 
 with cellxgene_census.open_soma() as census:
-    # Create dataloader
-    dataloader = experiment_dataloader(
-        census["census_data"]["homo_sapiens"],
+    experiment = census["census_data"]["homo_sapiens"]
+    with experiment.axis_query(
         measurement_name="RNA",
-        X_name="raw",
-        obs_value_filter="tissue_general == 'liver' and is_primary_data == True",
-        obs_column_names=["cell_type"],
-        batch_size=128,
-        shuffle=True,
-    )
+        obs_query=soma.AxisQuery(
+            value_filter="tissue_general == 'liver' and is_primary_data == True"
+        ),
+    ) as query:
+        dataset = ExperimentDataset(
+            query=query,
+            layer_name="raw",
+            obs_column_names=["cell_type"],
+            batch_size=128,
+            shuffle=True,
+        )
+        dataloader = experiment_dataloader(dataset)
 
-    # Training loop
-    for epoch in range(num_epochs):
-        for batch in dataloader:
-            X = batch["X"]  # Gene expression tensor
-            labels = batch["obs"]["cell_type"]  # Cell type labels
+        # Training loop
+        for epoch in range(num_epochs):
+            dataset.set_epoch(epoch)
+            for X, obs in dataloader:
+                labels = obs["cell_type"]
 
-            # Forward pass
-            outputs = model(X)
-            loss = criterion(outputs, labels)
+                # Forward pass
+                outputs = model(X)
+                loss = criterion(outputs, labels)
 
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # Backward pass
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 ```
 
 **Train/test splitting:**
 ```python
-from cellxgene_census.experimental.ml import ExperimentDataset
-
-# Create dataset from experiment
-dataset = ExperimentDataset(
-    experiment_axis_query,
-    layer_name="raw",
-    obs_column_names=["cell_type"],
-    batch_size=128,
-)
-
-# Split into train and test
-train_dataset, test_dataset = dataset.random_split(
-    split=[0.8, 0.2],
-    seed=42
-)
+train_dataset, test_dataset = dataset.random_split(0.8, 0.2, seed=42)
+train_loader = experiment_dataloader(train_dataset, num_workers=2)
+test_loader = experiment_dataloader(test_dataset, num_workers=2)
 ```
 
-### 6. Integration with Scanpy
+Use `batch_size` and `shuffle` on `ExperimentDataset`, not on `torch.utils.data.DataLoader`; `experiment_dataloader()` rejects DataLoader-level `batch_size`, `shuffle`, `sampler`, and `batch_sampler` arguments.
+
+### 6. Spatial Census Data
+
+Spatial data is available for supported Census releases in a separate `census_spatial_sequencing` collection. Use the spatial extra and a current TileDB-SOMA version when querying Visium or Slide-seq V2 data:
+
+```python
+import cellxgene_census
+import tiledbsoma as soma
+
+with cellxgene_census.open_soma(census_version="2025-11-08") as census:
+    spatial_experiment = census["census_spatial_sequencing"]["homo_sapiens"]
+    with spatial_experiment.axis_query(
+        measurement_name="RNA",
+        obs_query=soma.AxisQuery(
+            value_filter="dataset_id == '4cceac62-9513-42a4-90e5-2878dbb0192c'"
+        ),
+    ) as query:
+        sdata = query.to_spatialdata(X_name="raw")
+```
+
+### 7. Integration with Scanpy
 
 Seamlessly integrate Census data with scanpy workflows:
 
@@ -273,7 +312,7 @@ sc.tl.umap(adata)
 sc.pl.umap(adata, color=["cell_type", "tissue", "disease"])
 ```
 
-### 7. Multi-Dataset Integration
+### 8. Multi-Dataset Integration
 
 Query and integrate multiple datasets:
 
@@ -291,8 +330,9 @@ for tissue in tissues:
     adata.obs["tissue"] = tissue
     adatas.append(adata)
 
-# Concatenate
-combined = adatas[0].concatenate(adatas[1:])
+# Concatenate with AnnData's current API
+import anndata as ad
+combined = ad.concat(adatas, label="tissue", keys=tissues)
 
 # Strategy 2: Query multiple datasets directly
 adata = cellxgene_census.get_anndata(
@@ -313,7 +353,7 @@ obs_value_filter="cell_type == 'B cell' and is_primary_data == True"
 ### Specify Census Version for Reproducibility
 Always specify the Census version in production analyses:
 ```python
-census = cellxgene_census.open_soma(census_version="2023-07-25")
+census = cellxgene_census.open_soma(census_version="2025-11-08")
 ```
 
 ### Estimate Query Size Before Loading
@@ -389,10 +429,14 @@ Key fields for filtering:
 - `dataset_id`
 - `is_primary_data` (Boolean: True = unique cell)
 
+The current schema includes organism collections beyond human and mouse. Confirm available organisms for the selected release with `list(census["census_data"].keys())`.
+
 ### Gene Metadata (var)
 - `feature_id` (Ensembl gene ID, e.g., "ENSG00000161798")
 - `feature_name` (Gene symbol, e.g., "FOXP2")
+- `feature_type`
 - `feature_length` (Gene length in base pairs)
+- `nnz`, `n_measured_obs` (availability summaries useful for checking sparsity and coverage)
 
 ## Reference Documentation
 
@@ -414,6 +458,7 @@ Examples and patterns for:
 - Small-to-medium queries (AnnData)
 - Large queries (out-of-core processing)
 - PyTorch integration
+- Spatial Census access patterns
 - Scanpy integration workflows
 - Multi-dataset integration
 - Best practices and common pitfalls
@@ -446,22 +491,26 @@ with cellxgene_census.open_soma() as census:
 
 ### Use Case 3: Train Cell Type Classifier
 ```python
-from cellxgene_census.experimental.ml import experiment_dataloader
+import tiledbsoma as soma
+from tiledbsoma_ml import ExperimentDataset, experiment_dataloader
 
 with cellxgene_census.open_soma() as census:
-    dataloader = experiment_dataloader(
-        census["census_data"]["homo_sapiens"],
+    experiment = census["census_data"]["homo_sapiens"]
+    with experiment.axis_query(
         measurement_name="RNA",
-        X_name="raw",
-        obs_value_filter="is_primary_data == True",
-        obs_column_names=["cell_type"],
-        batch_size=128,
-        shuffle=True,
-    )
+        obs_query=soma.AxisQuery(value_filter="is_primary_data == True"),
+    ) as query:
+        dataset = ExperimentDataset(
+            query=query,
+            layer_name="raw",
+            obs_column_names=["cell_type"],
+            batch_size=128,
+            shuffle=True,
+        )
+        dataloader = experiment_dataloader(dataset)
 
-    # Train model
-    for epoch in range(epochs):
-        for batch in dataloader:
+        for X, obs in dataloader:
+            labels = obs["cell_type"]
             # Training logic
             pass
 ```

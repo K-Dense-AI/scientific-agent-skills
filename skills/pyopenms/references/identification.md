@@ -4,6 +4,10 @@
 
 PyOpenMS supports peptide/protein identification through integration with search engines and provides tools for post-processing identification results including FDR control, protein inference, and annotation.
 
+The skill ships ready-to-use CLI scripts: `scripts/process_identifications.py` performs FDR filtering and export on idXML files, and `scripts/inspect_ms_data.py` summarizes idXML (and other MS) files.
+
+> **pyOpenMS 3.5+ API note:** `IdXMLFile().load()`/`store()` require the peptide-IDs argument to be a `ms.PeptideIdentificationList()`, not a plain Python list. Passing a plain list raises `Exception: can not handle type of (...)`. The protein-IDs argument is still a plain Python list.
+
 ## Supported Search Engines
 
 PyOpenMS integrates with these search engines:
@@ -24,8 +28,9 @@ PyOpenMS integrates with these search engines:
 import pyopenms as ms
 
 # Load identification results
-protein_ids = []
-peptide_ids = []
+protein_ids = []                              # protein IDs: plain list
+# pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
+peptide_ids = ms.PeptideIdentificationList()
 
 ms.IdXMLFile().load("identifications.idXML", protein_ids, peptide_ids)
 
@@ -95,7 +100,7 @@ fdr.apply(peptide_ids)
 
 # Filter by FDR threshold
 fdr_threshold = 0.01  # 1% FDR
-filtered_peptide_ids = []
+filtered_peptide_ids = ms.PeptideIdentificationList()  # use push_back to add IDs
 
 for peptide_id in peptide_ids:
     # Keep hits below FDR threshold
@@ -106,7 +111,7 @@ for peptide_id in peptide_ids:
 
     if filtered_hits:
         peptide_id.setHits(filtered_hits)
-        filtered_peptide_ids.append(peptide_id)
+        filtered_peptide_ids.push_back(peptide_id)
 
 print(f"Peptides passing FDR: {len(filtered_peptide_ids)}")
 ```
@@ -292,14 +297,18 @@ def identification_workflow(spectrum_file, fasta_file, output_file):
     search_params.missed_cleavages = 2
     search_params.modifications = ["Oxidation (M)", "Carbamidomethyl (C)"]
 
-    # Step 3: Run search (example with Comet adapter)
-    # Note: Requires search engine to be installed
-    # comet = ms.CometAdapter()
-    # protein_ids, peptide_ids = comet.search(exp, search_params)
+    # Step 3: Run the database search.
+    # NOTE: OpenMS search engines (Comet, MSGFPlus, XTandem, ...) are exposed as
+    # command-line TOPP tools, NOT pyOpenMS Python classes (there is no
+    # ms.CometAdapter). Run them as a subprocess and read the idXML they emit, e.g.:
+    #   subprocess.run(["CometAdapter", "-in", "spectra.mzML",
+    #                   "-database", fasta_file, "-out", "raw_identifications.idXML"])
+    # These adapter executables ship with an OpenMS (not pyOpenMS) installation.
 
-    # For this example, load pre-computed results
-    protein_ids = []
-    peptide_ids = []
+    # Here we load the pre-computed search results
+    protein_ids = []                              # protein IDs: plain list
+    # pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
+    peptide_ids = ms.PeptideIdentificationList()
     ms.IdXMLFile().load("raw_identifications.idXML", protein_ids, peptide_ids)
 
     print(f"Initial peptide IDs: {len(peptide_ids)}")
@@ -309,7 +318,7 @@ def identification_workflow(spectrum_file, fasta_file, output_file):
     fdr.apply(peptide_ids)
 
     # Filter by 1% FDR
-    filtered_peptide_ids = []
+    filtered_peptide_ids = ms.PeptideIdentificationList()  # use push_back to add IDs
     for peptide_id in peptide_ids:
         filtered_hits = []
         for hit in peptide_id.getHits():
@@ -319,7 +328,7 @@ def identification_workflow(spectrum_file, fasta_file, output_file):
 
         if filtered_hits:
             peptide_id.setHits(filtered_hits)
-            filtered_peptide_ids.append(peptide_id)
+            filtered_peptide_ids.push_back(peptide_id)
 
     print(f"Peptides after FDR (1%): {len(filtered_peptide_ids)}")
 

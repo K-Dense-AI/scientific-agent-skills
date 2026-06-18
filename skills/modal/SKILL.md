@@ -2,9 +2,8 @@
 name: modal
 description: Modal is a serverless cloud platform for running Python on demand, including on-demand GPUs. Use when deploying or serving AI/ML models, running GPU-accelerated workloads (training, fine-tuning, inference), serving web endpoints, scheduling batch jobs, or scaling Python code to cloud containers with the Modal SDK.
 license: Apache-2.0
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "MODAL_TOKEN_ID", "prompt": "Modal token id.", "required_for": "full functionality"}, {"name": "MODAL_TOKEN_SECRET", "prompt": "Modal token secret.", "required_for": "full functionality"}, {"name": "DATABASE_URL", "prompt": "Optional database URL for examples.", "required_for": "optional features"}]
+metadata: {"version": "1.2", "skill-author": "K-Dense Inc.", "openclaw": {"envVars": [{"name": "MODAL_TOKEN_ID", "required": true, "description": "Modal token id."}, {"name": "MODAL_TOKEN_SECRET", "required": true, "description": "Modal token secret."}, {"name": "DATABASE_URL", "required": false, "description": "Optional database URL for examples."}]}}
 ---
 
 # Modal

@@ -50,7 +50,9 @@ Best for categorical/nominal data without inherent ordering.
 
 **Usage:**
 ```python
-colors = plt.cm.tab10(np.linspace(0, 1, n_categories))
+import matplotlib as mpl
+
+colors = mpl.colormaps['tab10'](np.linspace(0, 1, n_categories))
 for i, category in enumerate(categories):
     ax.plot(x, y[i], color=colors[i], label=category)
 ```
@@ -76,6 +78,7 @@ Best for cyclic data (e.g., phase, angle).
 
 ```python
 from matplotlib.colors import LinearSegmentedColormap
+import matplotlib as mpl
 
 # From color list
 colors = ['blue', 'white', 'red']
@@ -88,15 +91,19 @@ cmap = LinearSegmentedColormap.from_list('custom', colors)
 
 # Use the custom colormap
 ax.imshow(data, cmap=cmap)
+
+# Optionally register it by name for reuse
+mpl.colormaps.register(cmap, name='custom')
 ```
 
 ### Discrete Colormaps
 
 ```python
 import matplotlib.colors as mcolors
+import matplotlib as mpl
 
 # Create discrete colormap from continuous
-cmap = plt.cm.viridis
+cmap = mpl.colormaps['viridis']
 bounds = np.linspace(0, 10, 11)
 norm = mcolors.BoundaryNorm(bounds, cmap.N)
 im = ax.imshow(data, cmap=cmap, norm=norm)
@@ -284,8 +291,10 @@ plt.rcParams['savefig.transparent'] = False
 ### Named Color Sets
 
 ```python
+import matplotlib as mpl
+
 # Tableau colors
-tableau_colors = plt.cm.tab10.colors
+tableau_colors = mpl.colormaps['tab10'].colors
 
 # CSS4 colors (subset)
 css_colors = ['steelblue', 'coral', 'teal', 'goldenrod', 'crimson']
@@ -309,9 +318,11 @@ plt.rcParams['axes.prop_cycle'] = cycler(color=colors) + cycler(linestyle=['-', 
 ### Palette Generation
 
 ```python
+import matplotlib as mpl
+
 # Evenly spaced colors from colormap
 n_colors = 5
-colors = plt.cm.viridis(np.linspace(0, 1, n_colors))
+colors = mpl.colormaps['viridis'](np.linspace(0, 1, n_colors))
 
 # Use in plot
 for i, (x, y) in enumerate(data):

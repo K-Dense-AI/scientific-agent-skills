@@ -23,12 +23,14 @@ Effective genome size refers to the length of the "mappable" genome - regions th
 |----------|----------|----------------|--------------|
 | Human | GRCh38/hg38 | 2,913,022,398 | `--effectiveGenomeSize 2913022398` |
 | Human | GRCh37/hg19 | 2,864,785,220 | `--effectiveGenomeSize 2864785220` |
-| Mouse | GRCm39/mm39 | 2,654,621,837 | `--effectiveGenomeSize 2654621837` |
+| Human | T2T/CHM13CAT_v2 | 3,117,292,070 | `--effectiveGenomeSize 3117292070` |
+| Mouse | GRCm39/mm39 | 2,654,621,783 | `--effectiveGenomeSize 2654621783` |
 | Mouse | GRCm38/mm10 | 2,652,783,500 | `--effectiveGenomeSize 2652783500` |
 | Zebrafish | GRCz11 | 1,368,780,147 | `--effectiveGenomeSize 1368780147` |
 | *Drosophila* | dm6 | 142,573,017 | `--effectiveGenomeSize 142573017` |
 | *C. elegans* | WBcel235/ce11 | 100,286,401 | `--effectiveGenomeSize 100286401` |
 | *C. elegans* | ce10 | 100,258,171 | `--effectiveGenomeSize 100258171` |
+| *Arabidopsis thaliana* | TAIR10 | 119,482,012 | `--effectiveGenomeSize 119482012` |
 
 ### Human (GRCh38) by Read Length
 
@@ -80,9 +82,9 @@ computeGCBias --bamfile input.bam \
 
 ## Choosing the Right Value
 
-**For most analyses:** Use the non-N bases method value for your reference genome
+**For most analyses with multimapping reads retained:** Use the non-N bases method value for your reference genome
 
-**For filtered data:** If you apply strict quality filters or remove multimapping reads, consider using the read-length-specific values
+**For filtered data:** If you apply MAPQ filters or remove multimapping reads, consider read-length-specific mappability values
 
 **When unsure:** Use the conservative non-N bases value - it's more widely applicable
 

@@ -4,10 +4,10 @@ Overview of databases queried by gget modules, including update frequencies and 
 
 ## Important Note
 
-The databases queried by gget are continuously being updated, which sometimes changes their structure. gget modules are tested automatically on a biweekly basis and updated to match new database structures when necessary. Always keep gget updated:
+The databases queried by gget are continuously being updated, which sometimes changes their structure. gget modules are tested automatically on a biweekly basis and updated to match new database structures when necessary. For reproducible environments matching this skill, pin the current verified version:
 
 ```bash
-pip install --upgrade gget
+uv pip install "gget==0.30.5"
 ```
 
 ## Database Directory
@@ -193,7 +193,34 @@ pip install --upgrade gget
   - Free for academic use
   - License fees apply for commercial use
   - Requires COSMIC account credentials
+  - Prefer the interactive prompt or named environment variables over credentials in CLI arguments
   - Must download database before querying
+
+#### NCBI Virus / INSDC
+- **Used by:** gget virus
+- **Description:** Viral nucleotide sequences and metadata from International Nucleotide Sequence Database Collaboration sources, accessed via NCBI Virus and optionally enriched with GenBank metadata
+- **Update frequency:** Continuous additions and corrections
+- **Access:** NCBI Virus / NCBI datasets APIs and bundled NCBI datasets CLI for optimized SARS-CoV-2 and Alphainfluenza paths
+- **Website:** https://www.ncbi.nlm.nih.gov/labs/virus/
+- **Data:**
+  - Viral nucleotide FASTA sequences
+  - Metadata CSV/JSONL
+  - Optional GenBank XML/CSV metadata and protein/gene annotations
+- **Notes:**
+  - Use restrictive host/completeness/date/length filters for broad taxa
+  - Keep command summaries for reproducibility and recovery
+  - Avoid unfiltered `--download_all_accessions`
+
+#### 8cubeDB
+- **Used by:** gget 8cube
+- **Description:** snRNA-seq-derived gene specificity and normalized expression metrics across mouse strains, tissues, sexes, and individuals
+- **Update frequency:** Project/version dependent
+- **Access:** 8cubeDB web API
+- **Website:** https://eightcubedb.onrender.com/
+- **Data:**
+  - Gene-level specificity metrics
+  - Block-level specificity metrics
+  - Mean and variance of normalized expression
 
 ### AI & Prediction Services
 
@@ -217,7 +244,7 @@ pip install --upgrade gget
 - **Website:** https://openai.com/
 - **Notes:**
   - Default model: gpt-3.5-turbo
-  - Free tier limited to 3 months after account creation
+  - Requires an API key; prefer `OPENAI_API_KEY` in Python workflows and avoid hard-coded keys
   - Set billing limits to control costs
 
 ## Data Consistency & Reproducibility
@@ -239,6 +266,8 @@ To ensure reproducibility in analyses:
    import gget
    print(gget.__version__)
    ```
+
+   Current verified version for this skill: `0.30.5` (requires Python >=3.8).
 
 3. **Save raw data:**
    ```python
@@ -262,6 +291,7 @@ To ensure reproducibility in analyses:
    - Implement delays for large-scale queries
    - Use local databases (DIAMOND, COSMIC) when possible
    - Cache results to avoid repeated queries
+   - For `gget virus`, use restrictive filters and resume partial downloads with baseline/merge options
 
 ## Database-Specific Best Practices
 
@@ -289,6 +319,12 @@ To ensure reproducibility in analyses:
 - cBioPortal: cache data locally for repeated analyses
 - COSMIC: download appropriate database subset for your needs
 - Respect license agreements for commercial use
+- Keep COSMIC credentials out of shell history, notebooks, and committed files
+
+### Viral Databases
+- Prefer taxon/accession-specific `gget virus` queries over all-accession downloads
+- Check `command_summary.txt` after each run for errors, software versions, and output paths
+- Use GenBank metadata only when needed because it increases runtime and output size
 
 ## Citations
 

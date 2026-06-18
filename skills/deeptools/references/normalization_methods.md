@@ -81,7 +81,7 @@ bamCoverage --bam input.bam --outFileName output.bw \
 
 **Formula:** `(Number of reads in bin) / (Sum of all reads in bins in millions)`
 
-**Key difference from CPM:** Only considers reads that fall within the analyzed bins, not all mapped reads.
+**Key difference from CPM:** deepTools scales by the sum of reads across all bins, analogous to TPM-style scaling for RNA-seq signal tracks.
 
 **When to use:**
 - Similar to CPM, but when you want to exclude reads outside analyzed regions
@@ -108,9 +108,9 @@ bamCoverage --bam input.bam --outFileName output.bw \
 
 ### 4. RPGC (Reads Per Genomic Content)
 
-**Formula:** `(Number of reads × Scaling factor) / Effective genome size`
+**Formula:** `(Number of reads per bin) / scaling factor for 1× average genomic coverage`
 
-**Scaling factor:** Calculated to achieve 1× genomic coverage (1 read per base)
+**Scaling factor:** deepTools estimates sequencing depth as `(total mapped reads × fragment length) / effective genome size`, then applies the inverse to match 1× average coverage.
 
 **When to use:**
 - Want comparable coverage values across samples
@@ -138,6 +138,7 @@ bamCoverage --bam input.bam --outFileName output.bw \
 
 **Cons:**
 - Requires knowing effective genome size
+- Effective genome size should change if blacklists, MAPQ filters, or multimapper removal substantially change the mappable space
 - Assumes uniform coverage (not true for ChIP-seq with peaks)
 
 ---
@@ -345,6 +346,19 @@ bamCoverage --bam input.bam --outFileName output.bw \
 ```
 
 **When to use:** Sex chromosomes in mixed-sex samples, mitochondrial DNA, or chromosomes with unusual coverage.
+
+### Exact Scaling
+
+By default, deepTools can sample reads to estimate scaling factors after filtering. Use `--exactScaling` when rare filtered regions are expected to make sampling inaccurate.
+
+```bash
+bamCoverage --bam input.bam --outFileName output.bw \
+    --normalizeUsing RPGC \
+    --effectiveGenomeSize 2913022398 \
+    --exactScaling
+```
+
+**Tradeoff:** More accurate scaling for unusual filtering patterns, but slower because all reads are processed for scaling.
 
 ---
 

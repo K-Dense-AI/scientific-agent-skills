@@ -92,7 +92,11 @@ Common formats include:
 - **embl** - EMBL format
 - **swiss** - SwissProt format
 - **fasta-2line** - FASTA with sequence on one line
+- **fasta-pearson** - Pearson FASTA with comment lines before the first record
+- **fasta-blast** - BLAST-style FASTA where `#`, `;`, or `!` comment lines are ignored
 - **tab** - Simple tab-separated format
+
+**Biopython 1.87 note:** `format="fasta"` no longer accepts comment lines before the first `>` record. If you need to parse FASTA files with leading comments, use `format="fasta-pearson"` or `format="fasta-blast"` depending on the source convention.
 
 ### The SeqRecord Object
 

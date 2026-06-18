@@ -17,8 +17,6 @@ Requirements:
 """
 
 import argparse
-import os
-import pickle
 import sys
 from pathlib import Path
 
@@ -26,9 +24,10 @@ import pandas as pd
 
 try:
     from pydeseq2.dds import DeseqDataSet
+    from pydeseq2.default_inference import DefaultInference
     from pydeseq2.ds import DeseqStats
 except ImportError:
-    print("Error: pydeseq2 not installed. Install with: pip install pydeseq2")
+    print("Error: pydeseq2 not installed. Install with: uv pip install pydeseq2==0.5.4")
     sys.exit(1)
 
 
@@ -94,12 +93,13 @@ def run_deseq2(counts_df, metadata, design, n_cpus=1):
     """Run DESeq2 normalization and fitting."""
     print(f"\nInitializing DeseqDataSet with design: {design}")
 
+    inference = DefaultInference(n_cpus=n_cpus)
     dds = DeseqDataSet(
         counts=counts_df,
         metadata=metadata,
         design=design,
         refit_cooks=True,
-        n_cpus=n_cpus,
+        inference=inference,
         quiet=False
     )
 
@@ -116,10 +116,23 @@ def run_deseq2(counts_df, metadata, design, n_cpus=1):
 
     print("\n✓ DESeq2 fitting complete")
 
-    return dds
+    return dds, inference
 
 
-def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True):
+def infer_shrink_coeff(dds, contrast):
+    """Infer the formulaic coefficient name for a categorical contrast."""
+    coeff = f"{contrast[0]}[T.{contrast[1]}]"
+    design_columns = list(dds.obsm["design_matrix"].columns)
+    if coeff in design_columns:
+        return coeff
+    raise ValueError(
+        "Could not infer LFC shrinkage coefficient "
+        f"{coeff!r}. Available design columns: {design_columns}. "
+        "Pass --shrink-coeff explicitly or use --no-shrink."
+    )
+
+
+def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True, inference=None, shrink_coeff=None):
     """Perform Wald tests and compute p-values."""
     print(f"\nPerforming statistical tests...")
     print(f"  Contrast: {contrast}")
@@ -131,6 +144,7 @@ def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True):
         alpha=alpha,
         cooks_filter=True,
         independent_filter=True,
+        inference=inference,
         quiet=False
     )
 
@@ -146,7 +160,8 @@ def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True):
     # Optional LFC shrinkage
     if shrink_lfc:
         print("\nApplying LFC shrinkage for visualization...")
-        ds.lfc_shrink()
+        coeff = shrink_coeff or infer_shrink_coeff(dds, contrast)
+        ds.lfc_shrink(coeff=coeff)
         print("✓ LFC shrinkage complete")
 
     return ds
@@ -176,10 +191,9 @@ def save_results(ds, dds, output_dir, shrink_lfc=True):
     sorted_results.to_csv(sorted_path)
     print(f"  Saved: {sorted_path}")
 
-    # Save DeseqDataSet as pickle
-    dds_path = output_dir / "deseq_dataset.pkl"
-    with open(dds_path, "wb") as f:
-        pickle.dump(dds.to_picklable_anndata(), f)
+    # Save as AnnData/H5AD to avoid unsafe pickle interchange.
+    dds_path = output_dir / "deseq_dataset.h5ad"
+    dds.to_picklable_anndata().write_h5ad(dds_path)
     print(f"  Saved: {dds_path}")
 
     # Print summary
@@ -286,29 +300,46 @@ Examples:
     --design "~batch + condition" \\
     --contrast condition treated control \\
     --output results/ \\
-    --n-cpus 4
+    --n-cpus 4 \\
+    --shrink-coeff "condition[T.treated]"
         """
     )
 
     parser.add_argument("--counts", required=True, help="Path to count matrix CSV file")
     parser.add_argument("--metadata", required=True, help="Path to metadata CSV file")
     parser.add_argument("--design", required=True, help="Design formula (e.g., '~condition')")
-    parser.add_argument("--contrast", nargs=3, required=True,
-                       metavar=("VARIABLE", "TEST", "REFERENCE"),
-                       help="Contrast specification: variable test_level reference_level")
+    parser.add_argument(
+        "--contrast",
+        nargs=3,
+        required=True,
+        metavar=("VARIABLE", "TEST", "REFERENCE"),
+        help="Contrast specification: variable test_level reference_level",
+    )
     parser.add_argument("--output", default="results", help="Output directory (default: results)")
-    parser.add_argument("--min-counts", type=int, default=10,
-                       help="Minimum total counts for gene filtering (default: 10)")
-    parser.add_argument("--alpha", type=float, default=0.05,
-                       help="Significance threshold (default: 0.05)")
-    parser.add_argument("--no-transpose", action="store_true",
-                       help="Don't transpose count matrix (use if already samples × genes)")
-    parser.add_argument("--no-shrink", action="store_true",
-                       help="Skip LFC shrinkage")
-    parser.add_argument("--n-cpus", type=int, default=1,
-                       help="Number of CPUs for parallel processing (default: 1)")
-    parser.add_argument("--plots", action="store_true",
-                       help="Generate volcano and MA plots")
+    parser.add_argument(
+        "--min-counts",
+        type=int,
+        default=10,
+        help="Minimum total counts for gene filtering (default: 10)",
+    )
+    parser.add_argument("--alpha", type=float, default=0.05, help="Significance threshold (default: 0.05)")
+    parser.add_argument(
+        "--no-transpose",
+        action="store_true",
+        help="Don't transpose count matrix (use if already samples × genes)",
+    )
+    parser.add_argument("--no-shrink", action="store_true", help="Skip LFC shrinkage")
+    parser.add_argument(
+        "--shrink-coeff",
+        help="Design-matrix coefficient to shrink (e.g., 'condition[T.treated]')",
+    )
+    parser.add_argument(
+        "--n-cpus",
+        type=int,
+        default=1,
+        help="Number of CPUs for parallel processing (default: 1)",
+    )
+    parser.add_argument("--plots", action="store_true", help="Generate volcano and MA plots")
 
     args = parser.parse_args()
 
@@ -316,7 +347,7 @@ Examples:
     counts_df, metadata = load_and_validate_data(
         args.counts,
         args.metadata,
-        transpose_counts=not args.no_transpose
+        transpose_counts=not args.no_transpose,
     )
 
     # Filter data
@@ -325,18 +356,20 @@ Examples:
         counts_df,
         metadata,
         min_counts=args.min_counts,
-        condition_col=condition_col
+        condition_col=condition_col,
     )
 
     # Run DESeq2
-    dds = run_deseq2(counts_df, metadata, args.design, n_cpus=args.n_cpus)
+    dds, inference = run_deseq2(counts_df, metadata, args.design, n_cpus=args.n_cpus)
 
     # Statistical testing
     ds = run_statistical_tests(
         dds,
         contrast=args.contrast,
         alpha=args.alpha,
-        shrink_lfc=not args.no_shrink
+        shrink_lfc=not args.no_shrink,
+        inference=inference,
+        shrink_coeff=args.shrink_coeff,
     )
 
     # Save results

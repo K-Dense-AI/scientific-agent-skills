@@ -4,9 +4,7 @@ description: Evaluate scientific claims and evidence quality. Use for assessing 
 allowed-tools: Read Write Edit
 license: MIT license
 compatibility: Analytical guidance needs no network. Optional figures via the scientific-schematics skill require OPENROUTER_API_KEY and outbound API access to OpenRouter.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Scientific Critical Thinking

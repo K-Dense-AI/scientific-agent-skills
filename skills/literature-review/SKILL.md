@@ -3,9 +3,8 @@ name: literature-review
 description: Conduct comprehensive, systematic literature reviews using multiple academic databases (PubMed, arXiv, bioRxiv, Semantic Scholar, etc.). This skill should be used when conducting systematic literature reviews, meta-analyses, research synthesis, or comprehensive literature searches across biomedical, scientific, and technical domains. Creates professionally formatted markdown documents and PDFs with verified citations in multiple citation styles (APA, Nature, Vancouver, etc.).
 allowed-tools: Read Write Edit Bash
 license: MIT license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "OPENROUTER_API_KEY", "prompt": "OpenRouter API key for the skill's LLM-powered steps.", "required_for": "optional features"}]
+metadata: {"version": "1.2", "skill-author": "K-Dense Inc.", "openclaw": {"primaryEnv": "OPENROUTER_API_KEY", "envVars": [{"name": "OPENROUTER_API_KEY", "required": false, "description": "OpenRouter API key for the skill's LLM-powered steps."}]}}
 ---
 
 # Literature Review
@@ -618,6 +617,17 @@ This skill works seamlessly with other scientific skills:
 ### Writing Skills
 - **brand-guidelines**: Apply institutional branding to PDF
 - **internal-comms**: Adapt review for different audiences
+- **venue-templates**: Access venue-specific writing style guides when preparing reviews for publication
+
+### Venue-Specific Writing Styles
+
+When preparing a literature review for a specific journal, consult the **venue-templates** skill for writing style guidance:
+- `venue_writing_styles.md`: Master style comparison across venues
+- `nature_science_style.md`: Nature/Science flowing abstract style, story-driven structure
+- `cell_press_style.md`: Cell Press graphical abstracts, Highlights format
+- `medical_journal_styles.md`: NEJM/Lancet/JAMA structured abstracts, PRISMA compliance
+
+These guides help adapt your review's tone, abstract format, and structure to match the target venue's expectations.
 
 ## Resources
 

@@ -26,8 +26,8 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
 
     Parameters
     ----------
-    idata : arviz.InferenceData
-        InferenceData object from pm.sample()
+    idata : xarray.DataTree or arviz.InferenceData
+        Posterior object from pm.sample()
     var_names : list, optional
         Variables to check. If None, checks all model parameters
     ess_threshold : int
@@ -174,8 +174,8 @@ def create_diagnostic_report(idata, var_names=None, output_dir='diagnostics/', s
 
     Parameters
     ----------
-    idata : arviz.InferenceData
-        InferenceData object from pm.sample()
+    idata : xarray.DataTree or arviz.InferenceData
+        Posterior object from pm.sample()
     var_names : list, optional
         Variables to plot. If None, uses all model parameters
     output_dir : str
@@ -198,12 +198,7 @@ def create_diagnostic_report(idata, var_names=None, output_dir='diagnostics/', s
     print(f"\nGenerating diagnostic plots in '{output_dir}'...")
 
     # 1. Trace plots
-    fig, axes = plt.subplots(
-        len(var_names) if var_names else 5,
-        2,
-        figsize=(12, 10)
-    )
-    az.plot_trace(idata, var_names=var_names, axes=axes)
+    az.plot_trace_dist(idata, var_names=var_names)
     plt.tight_layout()
     plt.savefig(output_path / 'trace_plots.png', dpi=300, bbox_inches='tight')
     print(f"  ✓ Saved trace plots")
@@ -272,10 +267,10 @@ def compare_prior_posterior(idata, prior_idata, var_names=None, output_path=None
 
     Parameters
     ----------
-    idata : arviz.InferenceData
-        InferenceData with posterior samples
-    prior_idata : arviz.InferenceData
-        InferenceData with prior samples
+    idata : xarray.DataTree or arviz.InferenceData
+        Posterior object with posterior samples
+    prior_idata : xarray.DataTree or arviz.InferenceData
+        Prior object with prior samples
     var_names : list, optional
         Variables to compare
     output_path : str, optional

@@ -8,7 +8,7 @@ Comprehensive preprocessing techniques for Neuropixels neural recordings.
 import spikeinterface.full as si
 
 # Load raw data
-recording = si.read_spikeglx('/path/to/data', stream_id='imec0.ap')
+recording = si.read_spikeglx('/path/to/data', stream_name='imec0.ap')
 
 # 1. Phase shift correction (for Neuropixels 1.0)
 rec = si.phase_shift(recording)
@@ -226,7 +226,7 @@ def preprocess_neuropixels(data_path, output_path):
     """Standard Neuropixels preprocessing pipeline."""
 
     # Load data
-    recording = si.read_spikeglx(data_path, stream_id='imec0.ap')
+    recording = si.read_spikeglx(data_path, stream_name='imec0.ap')
     print(f"Loaded: {recording.get_num_channels()} channels, "
           f"{recording.get_total_duration():.1f}s")
 

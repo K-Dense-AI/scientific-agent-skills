@@ -113,6 +113,33 @@ for epoch in range(100):
     optimizer.step()
 ```
 
+### PyTorch `TorchLayer` Integration
+
+Use `qml.qnn.TorchLayer` when the quantum circuit should behave like a `torch.nn.Module`. The QNode must have an `inputs` argument for data, and every other argument is treated as a trainable weight with a shape declared in `weight_shapes`.
+
+```python
+import torch
+import pennylane as qml
+
+n_qubits = 2
+dev = qml.device("default.qubit", wires=n_qubits)
+
+@qml.qnode(dev)
+def qnode(inputs, weights):
+    qml.AngleEmbedding(inputs, wires=range(n_qubits))
+    qml.StronglyEntanglingLayers(weights, wires=range(n_qubits))
+    return [qml.expval(qml.Z(i)) for i in range(n_qubits)]
+
+weight_shapes = {"weights": (3, n_qubits, 3)}
+qlayer = qml.qnn.TorchLayer(qnode, weight_shapes)
+
+model = torch.nn.Sequential(
+    torch.nn.Linear(4, n_qubits),
+    qlayer,
+    torch.nn.Linear(n_qubits, 2),
+)
+```
+
 ### JAX Integration
 
 ```python
@@ -147,52 +174,9 @@ for i in range(100):
     weights = weights - 0.01 * grads
 ```
 
-### TensorFlow Integration
+### TensorFlow Status
 
-```python
-import tensorflow as tf
-import pennylane as qml
-
-dev = qml.device('default.qubit', wires=2)
-
-@qml.qnode(dev, interface='tf')
-def quantum_circuit(inputs, weights):
-    qml.RY(inputs[0], wires=0)
-    qml.RY(inputs[1], wires=1)
-    qml.RX(weights[0], wires=0)
-    qml.RX(weights[1], wires=1)
-    qml.CNOT(wires=[0, 1])
-    return qml.expval(qml.PauliZ(0))
-
-# Keras layer
-class QuantumLayer(tf.keras.layers.Layer):
-    def __init__(self, n_qubits):
-        super().__init__()
-        self.n_qubits = n_qubits
-        weight_init = tf.random_uniform_initializer()
-        self.weights = tf.Variable(
-            initial_value=weight_init(shape=(n_qubits,), dtype=tf.float32),
-            trainable=True
-        )
-
-    def call(self, inputs):
-        return tf.stack([quantum_circuit(x, self.weights) for x in inputs])
-
-# Keras model
-model = tf.keras.Sequential([
-    tf.keras.layers.Dense(2, activation='relu'),
-    QuantumLayer(2),
-    tf.keras.layers.Dense(2, activation='softmax')
-])
-
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(0.01),
-    loss='sparse_categorical_crossentropy',
-    metrics=['accuracy']
-)
-
-model.fit(x_train, y_train, epochs=100, batch_size=32)
-```
+TensorFlow support is no longer maintained as of PennyLane v0.44, and `qml.qnn.keras.KerasLayer` has been removed. Prefer PyTorch (`qml.qnn.TorchLayer`) or JAX/Optax for new quantum machine learning code.
 
 ## Quantum Neural Networks
 
@@ -563,7 +547,7 @@ def hybrid_transfer_model(image, classical_weights, quantum_weights):
 
 1. **Start simple** - Begin with small circuits and scale up
 2. **Choose encoding wisely** - Match encoding to data structure
-3. **Use appropriate interfaces** - Select interface matching your ML framework
+3. **Use maintained interfaces** - Prefer PyTorch or JAX for new quantum ML projects
 4. **Monitor gradients** - Check for vanishing/exploding gradients (barren plateaus)
 5. **Regularize** - Add L2 regularization to prevent overfitting
 6. **Validate hardware compatibility** - Test on simulators before hardware

@@ -1,17 +1,17 @@
 ---
 name: pydeseq2
-description: Differential gene expression analysis (Python DESeq2). Identify DE genes from bulk RNA-seq counts, Wald tests, FDR correction, volcano/MA plots, for RNA-seq analysis.
+description: Differential gene expression analysis for bulk RNA-seq with PyDESeq2, including formulaic designs, Wald tests, FDR correction, LFC shrinkage, and result visualization.
+allowed-tools: Read Write Edit Bash
+compatibility: Requires Python >=3.11 and PyDESeq2 0.5.4-compatible dependencies. Examples target PyDESeq2 0.5.x, formulaic design strings, explicit contrasts, and uv-based installs.
 license: MIT license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # PyDESeq2
 
 ## Overview
 
-PyDESeq2 is a Python implementation of DESeq2 for differential expression analysis with bulk RNA-seq data. Design and execute complete workflows from data loading through result interpretation, including single-factor and multi-factor designs, Wald tests with multiple testing correction, optional apeGLM shrinkage, and integration with pandas and AnnData.
+PyDESeq2 is a Python implementation of DESeq2 for differential expression analysis with bulk RNA-seq data. Design and execute complete workflows from data loading through result interpretation, including formulaic single-factor and multi-factor designs, Wald tests with multiple testing correction, optional apeGLM shrinkage, and integration with pandas and AnnData.
 
 ## When to Use This Skill
 
@@ -30,6 +30,7 @@ For users who want to perform a standard differential expression analysis:
 ```python
 import pandas as pd
 from pydeseq2.dds import DeseqDataSet
+from pydeseq2.default_inference import DefaultInference
 from pydeseq2.ds import DeseqStats
 
 # 1. Load data
@@ -40,17 +41,26 @@ metadata = pd.read_csv("metadata.csv", index_col=0)
 genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
 counts_df = counts_df[genes_to_keep]
 
-# 3. Initialize and fit DESeq2
+# 3. Make the reference level explicit and fit DESeq2
+metadata["condition"] = pd.Categorical(
+    metadata["condition"], categories=["control", "treated"]
+)
+inference = DefaultInference(n_cpus=4)
 dds = DeseqDataSet(
     counts=counts_df,
     metadata=metadata,
     design="~condition",
-    refit_cooks=True
+    refit_cooks=True,
+    inference=inference,
 )
 dds.deseq2()
 
 # 4. Perform statistical testing
-ds = DeseqStats(dds, contrast=["condition", "treated", "control"])
+ds = DeseqStats(
+    dds,
+    contrast=["condition", "treated", "control"],
+    inference=inference,
+)
 ds.summary()
 
 # 5. Access results
@@ -114,10 +124,11 @@ design = "~group + condition + group:condition"  # Interaction effects
 ```
 
 **Design formula guidelines:**
-- Use Wilkinson formula notation (R-style)
+- Use formulaic/Wilkinson formula notation (R-style)
 - Put adjustment variables (e.g., batch) before the main variable of interest
 - Ensure variables exist as columns in the metadata DataFrame
-- Use appropriate data types (categorical for discrete variables)
+- Use appropriate data types; continuous variables are detected from the formula, and categorical variables can be forced with `C(variable)` or a pandas categorical dtype
+- Do not use deprecated `design_factors`, `continuous_factors`, or `ref_level` arguments in new workflows
 
 ### Step 3: DESeq2 Fitting
 
@@ -125,13 +136,16 @@ Initialize the DeseqDataSet and run the complete pipeline:
 
 ```python
 from pydeseq2.dds import DeseqDataSet
+from pydeseq2.default_inference import DefaultInference
 
+inference = DefaultInference(n_cpus=4)
 dds = DeseqDataSet(
     counts=counts_df,
     metadata=metadata,
     design="~condition",
     refit_cooks=True,  # Refit after removing outliers
-    n_cpus=1           # Parallel processing (adjust as needed)
+    inference=inference,
+    low_memory=False,
 )
 
 # Run the complete DESeq2 pipeline
@@ -169,7 +183,8 @@ ds.summary()
 **Contrast specification:**
 - Format: `[variable, test_level, reference_level]`
 - Example: `["condition", "treated", "control"]` tests treated vs control
-- If `None`, uses the last coefficient in the design
+- Use a numeric contrast vector for continuous variables or complex coefficients
+- Default contrasts are no longer supported in PyDESeq2 0.5.x; always provide `contrast`
 
 **Result DataFrame columns:**
 - `baseMean`: Mean normalized count across samples
@@ -184,7 +199,7 @@ ds.summary()
 Apply shrinkage to reduce noise in fold change estimates:
 
 ```python
-ds.lfc_shrink()  # Applies apeGLM shrinkage
+ds.lfc_shrink(coeff="condition[T.treated]")  # Applies apeGLM shrinkage
 ```
 
 **When to use LFC shrinkage:**
@@ -199,8 +214,6 @@ ds.lfc_shrink()  # Applies apeGLM shrinkage
 Save results and intermediate objects:
 
 ```python
-import pickle
-
 # Export results as CSV
 ds.results_df.to_csv("deseq2_results.csv")
 
@@ -208,10 +221,11 @@ ds.results_df.to_csv("deseq2_results.csv")
 significant = ds.results_df[ds.results_df.padj < 0.05]
 significant.to_csv("significant_genes.csv")
 
-# Save DeseqDataSet for later use
-with open("dds_result.pkl", "wb") as f:
-    pickle.dump(dds.to_picklable_anndata(), f)
+# Save a portable AnnData object for later inspection
+dds.to_picklable_anndata().write_h5ad("dds_result.h5ad")
 ```
+
+Avoid loading pickle files from untrusted sources. For exchange between agents, pipelines, or collaborators, prefer CSV results and `.h5ad` AnnData files.
 
 ## Common Analysis Patterns
 
@@ -302,6 +316,7 @@ python scripts/run_deseq2_analysis.py \
   --min-counts 10 \
   --alpha 0.05 \
   --n-cpus 4 \
+  --shrink-coeff "condition[T.treated]" \
   --plots
 ```
 
@@ -310,7 +325,8 @@ python scripts/run_deseq2_analysis.py \
 - Gene and sample filtering
 - Complete DESeq2 pipeline execution
 - Statistical testing with customizable parameters
-- Result export (CSV, pickle)
+- Result export (CSV and portable AnnData/H5AD)
+- Explicit LFC shrinkage coefficient support for PyDESeq2 0.5.x
 - Optional visualization (volcano and MA plots)
 
 Refer users to `scripts/run_deseq2_analysis.py` when they need a standalone analysis tool or want to batch process multiple datasets.
@@ -344,7 +360,7 @@ print(f"Downregulated: {len(downregulated)}")
 top_by_padj = ds.results_df.sort_values("padj").head(20)
 
 # Sort by absolute fold change (use shrunk values)
-ds.lfc_shrink()
+ds.lfc_shrink(coeff="condition[T.treated]")
 ds.results_df["abs_lfc"] = abs(ds.results_df.log2FoldChange)
 top_by_lfc = ds.results_df.sort_values("abs_lfc", ascending=False).head(20)
 
@@ -357,11 +373,11 @@ top_combined = ds.results_df.sort_values("score", ascending=False).head(20)
 
 ```python
 # Check normalization (size factors should be close to 1)
-print("Size factors:", dds.obsm["size_factors"])
+print("Size factors:", dds.obs["size_factors"])
 
 # Examine dispersion estimates
 import matplotlib.pyplot as plt
-plt.hist(dds.varm["dispersions"], bins=50)
+plt.hist(dds.var["dispersions"], bins=50)
 plt.xlabel("Dispersion")
 plt.ylabel("Frequency")
 plt.title("Dispersion Distribution")
@@ -484,11 +500,11 @@ design = "~condition + batch + condition:batch"  # Model interaction
 **Diagnostics:**
 ```python
 # Check dispersion distribution
-plt.hist(dds.varm["dispersions"], bins=50)
+plt.hist(dds.var["dispersions"], bins=50)
 plt.show()
 
 # Check size factors
-print(dds.obsm["size_factors"])
+print(dds.obs["size_factors"])
 
 # Look at top genes by raw p-value
 print(ds.results_df.nsmallest(20, "pvalue"))
@@ -529,21 +545,23 @@ Load these references into context when users need:
 
 7. **Contrast specification:** The format is `[variable, test_level, reference_level]` where test_level is compared against reference_level.
 
-8. **Save intermediate objects:** Use pickle to save DeseqDataSet objects for later use or additional analyses without re-running the expensive fitting step.
+8. **Save intermediate objects:** Prefer `dds.to_picklable_anndata().write_h5ad("dds_result.h5ad")` for portable outputs. Only load pickle files that you created yourself and trust.
 
 ## Installation and Requirements
 
 ```bash
-uv pip install pydeseq2
+uv pip install pydeseq2==0.5.4
 ```
 
 **System requirements:**
-- Python 3.10-3.11
-- pandas 1.4.3+
-- numpy 1.23.0+
-- scipy 1.11.0+
-- scikit-learn 1.1.1+
-- anndata 0.8.0+
+- Python 3.11+
+- PyDESeq2 0.5.4
+- pandas 2.2.0+
+- numpy 2.0.0+
+- scipy 1.12.0+
+- scikit-learn 1.4.0+
+- anndata 0.11.0+
+- formulaic 1.0.2+ and formulaic-contrasts 0.2.0+
 
 **Optional for visualization:**
 - matplotlib
@@ -552,7 +570,7 @@ uv pip install pydeseq2
 ## Additional Resources
 
 - **Official Documentation:** https://pydeseq2.readthedocs.io
-- **GitHub Repository:** https://github.com/owkin/PyDESeq2
+- **GitHub Repository:** https://github.com/scverse/PyDESeq2
 - **Publication:** Muzellec et al. (2023) Bioinformatics, DOI: 10.1093/bioinformatics/btad547
 - **Original DESeq2 (R):** Love et al. (2014) Genome Biology, DOI: 10.1186/s13059-014-0550-8
 

@@ -265,8 +265,9 @@ Identification results for a single spectrum.
 
 ```python
 # Load identifications
-protein_ids = []
-peptide_ids = []
+protein_ids = []                              # protein IDs: plain list
+# pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
+peptide_ids = ms.PeptideIdentificationList()
 ms.IdXMLFile().load("identifications.idXML", protein_ids, peptide_ids)
 
 # Access peptide identification

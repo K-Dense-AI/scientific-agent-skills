@@ -10,7 +10,7 @@ ESM3 is a frontier multimodal generative language model that reasons over the se
 
 | Model ID | Parameters | Availability | Best For |
 |----------|-----------|--------------|----------|
-| `esm3-sm-open-v1` | 1.4B | Open weights (local) | Development, testing, learning |
+| `esm3-open` | 1.4B | Open weights (local, Hugging Face license acceptance required) | Development, testing, learning |
 | `esm3-medium-2024-08` | 7B | Forge API only | Production, balanced quality/speed |
 | `esm3-large-2024-03` | 98B | Forge API only | Maximum quality, research |
 | `esm3-medium-multimer-2024-09` | 7B | Forge API only | Protein complexes (experimental) |
@@ -129,10 +129,10 @@ The unified interface for both local and remote inference.
 from esm.models.esm3 import ESM3
 
 # Load with automatic device placement
-model = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda")
+model = ESM3.from_pretrained("esm3-open").to("cuda")
 
 # Or explicitly specify device
-model = ESM3.from_pretrained("esm3-sm-open-v1").to("cpu")
+model = ESM3.from_pretrained("esm3-open").to("cpu")
 ```
 
 **Forge API (same interface as local):**
@@ -141,7 +141,7 @@ model = ESM3.from_pretrained("esm3-sm-open-v1").to("cpu")
 import os
 import esm
 
-# Drop-in replacement for ESM3.from_pretrained() — reads ESM_API_KEY by default
+# Drop-in replacement for ESM3.from_pretrained(); reads ESM_API_KEY by default
 model = esm.sdk.client("esm3-medium-2024-08", token=os.environ["ESM_API_KEY"])
 ```
 
@@ -390,7 +390,7 @@ import torch
 torch.cuda.empty_cache()
 
 # Use half precision for memory efficiency
-model = ESM3.from_pretrained("esm3-sm-open-v1").to("cuda").half()
+model = ESM3.from_pretrained("esm3-open").to("cuda").half()
 
 # Process in chunks for very long sequences
 def chunk_generate(model, long_sequence, chunk_size=500):
@@ -434,7 +434,7 @@ except torch.cuda.OutOfMemoryError:
 
 ## Model-Specific Considerations
 
-**esm3-sm-open-v1:**
+**esm3-open:**
 - Suitable for development and testing
 - Lower quality than larger models
 - Fast inference on consumer GPUs

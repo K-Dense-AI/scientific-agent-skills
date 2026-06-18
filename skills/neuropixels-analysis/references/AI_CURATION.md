@@ -1,345 +1,164 @@
 # AI-Assisted Curation Reference
 
-Guide to using AI visual analysis for unit curation, inspired by SpikeAgent's approach.
-
-## Overview
-
-AI-assisted curation uses vision-language models to analyze spike sorting visualizations,
-providing expert-level quality assessments similar to human curators.
-
-### Workflow
+Use vision-language models to analyze spike-sorting visualizations for borderline units,
+complementing quantitative quality metrics.
 
 ```
 Traditional:  Metrics → Threshold → Labels
-AI-Enhanced:  Metrics → AI Visual Analysis → Confidence Score → Labels
+AI-Enhanced:  Metrics → Render plots → Vision model → Confidence → Labels
 ```
 
-## Claude Code Integration
+> **Credential safety:** never hardcode API keys in analysis scripts — they end up in
+> version control and logs. Read them from environment variables that you set in your shell
+> (e.g. `export ANTHROPIC_API_KEY=...`). All examples below follow this pattern.
 
-When using this skill within Claude Code, Claude can directly analyze waveform plots without requiring API setup. Simply:
+## Agent integration (no API key needed)
 
-1. Generate a unit report or plot
-2. Ask Claude to analyze the visualization
-3. Claude will provide expert-level curation decisions
+When you run this skill inside an agent (Cursor, Claude Code, etc.), the agent can inspect
+images directly. Generate a unit summary figure and ask the agent to assess it:
 
-Example workflow in Claude Code:
 ```python
-# Generate plots for a unit
-npa.plot_unit_summary(analyzer, unit_id=0, output='unit_0_summary.png')
+import spikeinterface.widgets as sw
+import matplotlib.pyplot as plt
 
-# Then ask Claude: "Please analyze this unit's waveforms and autocorrelogram
-# to determine if it's a well-isolated single unit, multi-unit activity, or noise"
+sw.plot_unit_summary(analyzer, unit_id=0)
+plt.savefig("unit_0_summary.png", dpi=150, bbox_inches="tight")
+# Then ask the agent: "Is unit 0 a well-isolated single unit, MUA, or noise? Consider
+# waveform consistency, the refractory gap in the autocorrelogram, and amplitude stability."
 ```
 
-Claude can assess:
-- Waveform consistency and shape
-- Refractory period violations from autocorrelograms
-- Amplitude stability over time
-- Overall unit isolation quality
+The agent can assess waveform shape/consistency, refractory-period violations, amplitude
+stability over time, and overall isolation quality.
 
-## Quick Start
+## Programmatic API access
 
-### Generate Unit Report
+### Render a unit summary image
 
 ```python
-import neuropixels_analysis as npa
+import io, base64
+import matplotlib.pyplot as plt
+import spikeinterface.widgets as sw
 
-# Create visual report for a unit
-report = npa.generate_unit_report(analyzer, unit_id=0, output_dir='reports/')
-
-# Report includes:
-# - Waveforms, templates, autocorrelogram
-# - Amplitudes over time, ISI histogram
-# - Quality metrics summary
-# - Base64 encoded image for API
+def render_unit_image(analyzer, unit_id) -> str:
+    """Return a base64-encoded PNG summary for one unit."""
+    fig = plt.figure(figsize=(12, 8))
+    sw.plot_unit_summary(analyzer, unit_id=unit_id, figure=fig)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 ```
 
-### AI Visual Analysis
+### Anthropic (Claude) example
 
 ```python
+import os
 from anthropic import Anthropic
 
-# Setup API client
-client = Anthropic()
+client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])  # set in shell, not in code
 
-# Analyze single unit
-result = npa.analyze_unit_visually(
-    analyzer,
-    unit_id=0,
-    api_client=client,
-    model='claude-opus-4.5',
-    task='quality_assessment'
+PROMPT = (
+    "You are an expert electrophysiologist curating a spike-sorted unit. "
+    "Based on the waveform, template, autocorrelogram, amplitude-over-time, and ISI "
+    "histogram, classify this unit as exactly one of: good (well-isolated single unit), "
+    "mua (multi-unit), or noise. Reply with the label and a one-sentence justification."
 )
 
-print(f"Classification: {result['classification']}")
-print(f"Reasoning: {result['reasoning']}")
+def analyze_unit_visually(analyzer, unit_id, model="claude-opus-4-5"):
+    img_b64 = render_unit_image(analyzer, unit_id)
+    msg = client.messages.create(
+        model=model,
+        max_tokens=300,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image",
+                 "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": PROMPT},
+            ],
+        }],
+    )
+    return msg.content[0].text
+
+print(analyze_unit_visually(analyzer, unit_id=0))
 ```
 
-### Batch Analysis
+### OpenAI example
 
 ```python
-# Analyze all units
-results = npa.batch_visual_curation(
-    analyzer,
-    api_client=client,
-    output_dir='ai_curation/',
-    progress_callback=lambda i, n: print(f"Progress: {i}/{n}")
-)
+import os
+from openai import OpenAI
 
-# Get labels
-ai_labels = {uid: r['classification'] for uid, r in results.items()}
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+def analyze_unit_visually_openai(analyzer, unit_id, model="gpt-4o"):
+    img_b64 = render_unit_image(analyzer, unit_id)
+    resp = client.responses.create(
+        model=model,
+        input=[{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": PROMPT},
+                {"type": "input_image", "image_url": f"data:image/png;base64,{img_b64}"},
+            ],
+        }],
+    )
+    return resp.output_text
 ```
 
-## Interactive Curation Session
+> Model names change frequently. Use your provider's current vision-capable model
+> (e.g. a current Claude or GPT multimodal model) rather than an old preview ID.
 
-For human-in-the-loop curation with AI assistance:
+## Cost optimization: only call the model on uncertain units
 
 ```python
-# Create session
-session = npa.CurationSession.create(
-    analyzer,
-    output_dir='curation_session/',
-    sort_by_confidence=True  # Show uncertain units first
-)
+uncertain = metrics.query(
+    "snr > 2 and snr < 8 and isi_violations_ratio > 0.001 and isi_violations_ratio < 0.1"
+).index.tolist()
 
-# Process units
-while True:
-    unit = session.current_unit()
-    if unit is None:
-        break
-
-    print(f"Unit {unit.unit_id}:")
-    print(f"  Auto: {unit.auto_classification} (conf: {unit.confidence:.2f})")
-
-    # Generate report
-    report = npa.generate_unit_report(analyzer, unit.unit_id)
-
-    # Get AI opinion
-    ai_result = npa.analyze_unit_visually(analyzer, unit.unit_id, api_client=client)
-    session.set_ai_classification(unit.unit_id, ai_result['classification'])
-
-    # Human decision
-    decision = input("Decision (good/mua/noise/skip): ")
-    if decision != 'skip':
-        session.set_decision(unit.unit_id, decision)
-
-    session.next_unit()
-
-# Export results
-labels = session.get_final_labels()
-session.export_decisions('final_curation.csv')
+ai_labels = {}
+for uid in uncertain:
+    ai_labels[uid] = analyze_unit_visually(analyzer, uid)
 ```
 
-## Analysis Tasks
-
-### Quality Assessment (Default)
-
-Analyzes waveform shape, refractory period, amplitude stability.
+## Hybrid curation: metrics + AI
 
 ```python
-result = npa.analyze_unit_visually(analyzer, uid, task='quality_assessment')
-# Returns: 'good', 'mua', or 'noise'
-```
-
-### Merge Candidate Detection
-
-Determines if two units should be merged.
-
-```python
-result = npa.analyze_unit_visually(analyzer, uid, task='merge_candidate')
-# Returns: 'merge' or 'keep_separate'
-```
-
-### Drift Assessment
-
-Evaluates motion/drift in the recording.
-
-```python
-result = npa.analyze_unit_visually(analyzer, uid, task='drift_assessment')
-# Returns drift magnitude and correction recommendation
-```
-
-## Custom Prompts
-
-Create custom analysis prompts:
-
-```python
-from neuropixels_analysis.ai_curation import create_curation_prompt
-
-# Get base prompt
-prompt = create_curation_prompt(
-    task='quality_assessment',
-    additional_context='Focus on waveform amplitude consistency'
-)
-
-# Or fully custom
-custom_prompt = """
-Analyze this unit and determine if it represents a fast-spiking interneuron.
-
-Look for:
-1. Narrow waveform (peak-to-trough < 0.5ms)
-2. High firing rate
-3. Regular ISI distribution
-
-Classify as: FSI (fast-spiking interneuron) or OTHER
-"""
-
-result = npa.analyze_unit_visually(
-    analyzer, uid,
-    api_client=client,
-    custom_prompt=custom_prompt
-)
-```
-
-## Combining AI with Metrics
-
-Best practice: use both AI and quantitative metrics:
-
-```python
-def hybrid_curation(analyzer, metrics, api_client):
-    """Combine metrics and AI for robust curation."""
+def hybrid_curation(analyzer, metrics):
     labels = {}
-
     for unit_id in metrics.index:
         row = metrics.loc[unit_id]
-
-        # High confidence from metrics alone
-        if row['snr'] > 10 and row['isi_violations_ratio'] < 0.001:
-            labels[unit_id] = 'good'
-            continue
-
-        if row['snr'] < 1.5:
-            labels[unit_id] = 'noise'
-            continue
-
-        # Uncertain cases: use AI
-        result = npa.analyze_unit_visually(
-            analyzer, unit_id, api_client=api_client
-        )
-        labels[unit_id] = result['classification']
-
+        if row["snr"] > 10 and row["isi_violations_ratio"] < 0.001:
+            labels[unit_id] = "good"          # clearly good from metrics
+        elif row["snr"] < 1.5:
+            labels[unit_id] = "noise"         # clearly noise from metrics
+        else:
+            labels[unit_id] = analyze_unit_visually(analyzer, unit_id)  # ask the model
     return labels
 ```
 
-## Session Management
+## What each panel tells you
 
-### Resume Session
-
-```python
-# Resume interrupted session
-session = npa.CurationSession.load('curation_session/20250101_120000/')
-
-# Check progress
-summary = session.get_summary()
-print(f"Progress: {summary['progress_pct']:.1f}%")
-print(f"Remaining: {summary['remaining']} units")
-
-# Continue from where we left off
-unit = session.current_unit()
-```
-
-### Navigate Session
-
-```python
-# Go to specific unit
-session.go_to_unit(42)
-
-# Previous/next
-session.prev_unit()
-session.next_unit()
-
-# Update decision
-session.set_decision(42, 'good', notes='Clear refractory period')
-```
-
-### Export Results
-
-```python
-# Get final labels (priority: human > AI > auto)
-labels = session.get_final_labels()
-
-# Export detailed results
-df = session.export_decisions('curation_results.csv')
-
-# Summary
-summary = session.get_summary()
-print(f"Good: {summary['decisions'].get('good', 0)}")
-print(f"MUA: {summary['decisions'].get('mua', 0)}")
-print(f"Noise: {summary['decisions'].get('noise', 0)}")
-```
-
-## Visual Report Components
-
-The generated report includes 6 panels:
-
-| Panel | Content | What to Look For |
+| Panel | Content | What to look for |
 |-------|---------|------------------|
 | Waveforms | Individual spike waveforms | Consistency, shape |
 | Template | Mean ± std | Clean negative peak, physiological shape |
-| Autocorrelogram | Spike timing | Gap at 0ms (refractory period) |
+| Autocorrelogram | Spike timing | Gap at 0 ms (refractory period) |
 | Amplitudes | Amplitude over time | Stability, no drift |
-| ISI Histogram | Inter-spike intervals | Refractory gap < 1.5ms |
-| Metrics | Quality numbers | SNR, ISI violations, presence |
-
-## API Support
-
-Currently supported APIs:
-
-| Provider | Client | Model Examples |
-|----------|--------|----------------|
-| Anthropic | `anthropic.Anthropic()` | claude-opus-4.5 |
-| OpenAI | `openai.OpenAI()` | gpt-4-vision-preview |
-| Google | `google.generativeai` | gemini-pro-vision |
-
-### Anthropic Example
-
-```python
-from anthropic import Anthropic
-
-client = Anthropic(api_key="your-api-key")
-result = npa.analyze_unit_visually(analyzer, uid, api_client=client)
-```
-
-### OpenAI Example
-
-```python
-from openai import OpenAI
-
-client = OpenAI(api_key="your-api-key")
-result = npa.analyze_unit_visually(
-    analyzer, uid,
-    api_client=client,
-    model='gpt-4-vision-preview'
-)
-```
+| ISI histogram | Inter-spike intervals | Refractory gap < ~1.5 ms |
 
 ## Best Practices
 
-1. **Use AI for uncertain cases** - Don't waste API calls on obvious good/noise units
-2. **Combine with metrics** - AI should supplement, not replace, quantitative measures
-3. **Human oversight** - Review AI decisions, especially for important analyses
-4. **Save sessions** - Always use CurationSession to track decisions
-5. **Document reasoning** - Use notes field to record decision rationale
-
-## Cost Optimization
-
-```python
-# Only use AI for uncertain units
-uncertain_units = metrics.query("""
-    snr > 2 and snr < 8 and
-    isi_violations_ratio > 0.001 and isi_violations_ratio < 0.1
-""").index.tolist()
-
-# Batch process only these
-results = npa.batch_visual_curation(
-    analyzer,
-    unit_ids=uncertain_units,
-    api_client=client
-)
-```
+1. **Use AI for uncertain cases** — don't spend API calls on obvious good/noise units.
+2. **Combine with metrics and model-based curation** — AI supplements, not replaces,
+   quantitative measures (see [AUTOMATED_CURATION.md](AUTOMATED_CURATION.md)).
+3. **Keep a human in the loop** for important analyses.
+4. **Record reasoning** for each decision for reproducibility.
+5. **Never commit credentials** — keep keys in environment variables.
 
 ## References
 
-- [SpikeAgent](https://github.com/SpikeAgent/SpikeAgent) - AI-powered spike sorting assistant
-- [Anthropic Vision API](https://docs.anthropic.com/en/docs/vision)
-- [GPT-4 Vision](https://platform.openai.com/docs/guides/vision)
+- [Anthropic Vision API](https://docs.anthropic.com/en/docs/build-with-claude/vision)
+- [OpenAI Vision/Images](https://platform.openai.com/docs/guides/images-vision)
+- [SpikeInterface model-based curation](https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html)
+- [SpikeAgent](https://github.com/SpikeAgent/SpikeAgent) — AI-powered spike-sorting assistant

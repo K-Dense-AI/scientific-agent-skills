@@ -17,10 +17,12 @@ The main interface for MCMC sampling in PyMC.
 - `cores`: Number of CPU cores to use (default: all available)
 - `target_accept`: Target acceptance rate for step size tuning (default: 0.8, increase to 0.9-0.95 for difficult posteriors)
 - `random_seed`: Random seed for reproducibility
-- `return_inferencedata`: Return ArviZ InferenceData object (default: True)
-- `idata_kwargs`: Additional kwargs for InferenceData creation (e.g., `{"log_likelihood": True}` for model comparison)
+- `return_inferencedata`: Return an xarray `DataTree` object in PyMC 6 / ArviZ 1 (default: True)
+- `idata_kwargs`: Additional kwargs for data tree creation (e.g., `{"log_likelihood": True}` for model comparison)
+- `nuts_sampler`: Optional NUTS implementation: `"pymc"`, `"nutpie"`, `"blackjax"`, or `"numpyro"`
+- `backend`: Optional computational backend such as `"numba"`, `"c"`, or `"jax"`
 
-**Returns:** InferenceData object containing posterior samples, sampling statistics, and diagnostics
+**Returns:** ArviZ-compatible `DataTree` containing posterior samples, sampling statistics, and diagnostics
 
 **Example:**
 ```python
@@ -28,6 +30,8 @@ with pm.Model() as model:
     # ... define model ...
     idata = pm.sample(draws=2000, tune=1000, chains=4, target_accept=0.9)
 ```
+
+For PyMC 6, avoid deprecated `nuts_sampler_kwargs`; pass sampler-specific settings through explicit sampler keyword dictionaries such as `nuts={"target_accept": 0.9}` when needed.
 
 ### Sampling Algorithms
 
@@ -166,7 +170,8 @@ idata = pm.sample(cores=8, chains=8)
 # Use variational inference for initialization
 with model:
     approx = pm.fit()  # Run ADVI
-    idata = pm.sample(start=approx.sample(return_inferencedata=False)[0])
+    initvals = approx.sample(return_inferencedata=False)[0]
+    idata = pm.sample(initvals=initvals)
 ```
 
 #### High Autocorrelation
@@ -203,7 +208,7 @@ with model:
     # Draw samples from approximation
     idata = approx.sample(1000)
     # Or sample for MCMC initialization
-    start = approx.sample(return_inferencedata=False)[0]
+    initvals = approx.sample(return_inferencedata=False)[0]
 ```
 
 **Trade-offs:**
@@ -238,7 +243,7 @@ Better captures multimodality but more computationally expensive.
 
 Sample from the prior distribution (before seeing data).
 
-**`pm.sample_prior_predictive(samples=500, **kwargs)`**
+**`pm.sample_prior_predictive(draws=500, **kwargs)`**
 
 **Purpose:**
 - Validate priors are reasonable
@@ -248,7 +253,7 @@ Sample from the prior distribution (before seeing data).
 **Example:**
 ```python
 with model:
-    prior_pred = pm.sample_prior_predictive(samples=1000)
+    prior_pred = pm.sample_prior_predictive(draws=1000)
 
 # Visualize prior predictions
 az.plot_ppc(prior_pred, group='prior')
@@ -288,14 +293,17 @@ with model:
     idata = pm.sample()
 
     # Update with new predictor values
-    pm.set_data({'X': X_new})
+    pm.set_data({'X': X_new}, coords={'obs_id': np.arange(len(X_new))})
 
     # Sample predictions
     post_pred_new = pm.sample_posterior_predictive(
-        idata.posterior,
-        var_names=['y_pred']
+        idata,
+        var_names=['y_pred'],
+        predictions=True,
     )
 ```
+
+In PyMC 6, `var_names` controls what appears in the output but does not force trace variables to be resampled. Use `sample_vars` to explicitly regenerate trace variables and `freeze_vars` to reuse trace variables when changed data would otherwise mark them volatile.
 
 ## Maximum A Posteriori (MAP) Estimation
 
@@ -410,15 +418,15 @@ Good for multimodal posteriors or when NUTS struggles.
 Provide starting values:
 
 ```python
-start = {'mu': 0, 'sigma': 1}
+initvals = {'mu': 0, 'sigma': 1}
 with model:
-    idata = pm.sample(start=start)
+    idata = pm.sample(initvals=initvals)
 ```
 
 Or use MAP estimate:
 
 ```python
 with model:
-    start = pm.find_MAP()
-    idata = pm.sample(start=start)
+    initvals = pm.find_MAP()
+    idata = pm.sample(initvals=initvals)
 ```

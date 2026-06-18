@@ -4,9 +4,7 @@ description: Use when you need exact symbolic math in Python — algebra, calcul
 license: https://github.com/sympy/sympy/blob/master/LICENSE
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ and SymPy 1.14+. Optional NumPy/SciPy/Matplotlib for lambdify examples; C/Fortran compiler for autowrap/codegen.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # SymPy - Symbolic Mathematics in Python

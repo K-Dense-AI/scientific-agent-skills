@@ -28,10 +28,12 @@ LaminDB provides access to multiple curated ontology sources:
 
 ## Installation and Import
 
-```python
-# Install bionty (included with lamindb)
-pip install lamindb
+```bash
+# Install the current validated baseline
+uv pip install 'lamindb==2.5.1' 'bionty==2.4.0'
+```
 
+```python
 # Import
 import lamindb as ln
 import bionty as bt
@@ -225,7 +227,7 @@ artifact = ln.Artifact.from_anndata(
 ).save()
 
 # Link ontology records to artifact
-artifact.feature_sets.add_ontology(cell_types)
+artifact.cell_types.add(*cell_types)
 ```
 
 ### Annotating DataFrames
@@ -254,8 +256,8 @@ artifact = ln.Artifact.from_dataframe(
 cell_type_records = bt.CellType.from_values(df["cell_type"])
 tissue_records = bt.Tissue.from_values(df["tissue"])
 
-artifact.feature_sets.add_ontology(cell_type_records)
-artifact.feature_sets.add_ontology(tissue_records)
+artifact.cell_types.add(*cell_type_records)
+artifact.tissues.add(*tissue_records)
 ```
 
 ## Managing Custom Terms and Hierarchies
@@ -421,8 +423,8 @@ artifact = ln.Artifact.from_dataframe(
 ).save()
 
 # Link ontology records
-artifact.feature_sets.add_ontology(bt.CellType.from_values(df["cell_type"]))
-artifact.feature_sets.add_ontology(bt.Tissue.from_values(df["tissue"]))
+artifact.cell_types.add(*bt.CellType.from_values(df["cell_type"]))
+artifact.tissues.add(*bt.Tissue.from_values(df["tissue"]))
 
 ln.finish()  # Complete tracking
 ```
@@ -445,20 +447,19 @@ mouse_records = bt.Gene.from_values(mouse_orthologs, organism="mouse")
 ## Querying Ontology-Annotated Data
 
 ```python
-# Find all datasets with specific cell type
+# Find all datasets annotated with a specific cell type
 t_cell = bt.CellType.get(name="T cell")
-ln.Artifact.filter(feature_sets__cell_types=t_cell).to_dataframe()
+ln.Artifact.filter(cell_types=t_cell).to_dataframe()
 
 # Find datasets measuring specific genes
 cd8a = bt.Gene.get(symbol="CD8A", organism="human")
-ln.Artifact.filter(feature_sets__genes=cd8a).to_dataframe()
+schemas_with_cd8a = ln.Schema.filter(genes=cd8a)
+ln.Artifact.filter(schemas__in=schemas_with_cd8a).to_dataframe()
 
 # Query across ontology hierarchy
 # Find all datasets with T cell or T cell subtypes
 t_cell_subtypes = t_cell.query_children()
-ln.Artifact.filter(
-    feature_sets__cell_types__in=t_cell_subtypes
-).to_dataframe()
+ln.Artifact.filter(cell_types__in=t_cell_subtypes).to_dataframe()
 ```
 
 ## Best Practices

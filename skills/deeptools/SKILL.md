@@ -2,9 +2,13 @@
 name: deeptools
 description: NGS analysis toolkit. BAM to bigWig conversion, QC (correlation, PCA, fingerprints), heatmaps/profiles (TSS, peaks), for ChIP-seq, RNA-seq, ATAC-seq visualization.
 license: BSD license
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+compatibility: Requires Python >3.8 and deepTools 3.5.6-compatible dependencies. The upstream project recommends conda/bioconda for full dependency resolution; repo examples use uv with pinned PyPI installs for reproducible command-line workflows.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # deepTools: NGS Data Analysis Toolkit
@@ -70,8 +74,16 @@ See `assets/quick_reference.md` for frequently used commands and parameters.
 ## Installation
 
 ```bash
-uv pip install deeptools
+uv pip install deepTools==3.5.6
 ```
+
+Upstream recommends conda/bioconda for full dependency resolution, especially on shared HPC systems:
+
+```bash
+conda install -c conda-forge -c bioconda deeptools
+```
+
+On Apple Silicon, upstream documents either the PyPI route above or an `osx-64` conda environment when native conda packages are unavailable.
 
 ## Core Workflows
 
@@ -117,6 +129,8 @@ For strand-specific RNA-seq coverage tracks:
 Use bamCoverage with `--filterRNAstrand` to separate forward and reverse strands.
 
 **Important:** NEVER use `--extendReads` for RNA-seq (would extend over splice junctions).
+
+**Strand note:** `--filterRNAstrand` assumes common dUTP/NSR/NNSR reverse-stranded library preparation. For libraries where read 1 follows the RNA strand, forward/reverse output is inverted; use SAM flag filters when library chemistry differs.
 
 Use normalization: CPM for fixed bins, RPKM for gene-level analysis.
 
@@ -215,8 +229,8 @@ Choosing the correct normalization is critical for valid comparisons. Consult `r
 **Normalization methods:**
 - **RPGC**: 1× genome coverage (requires --effectiveGenomeSize)
 - **CPM**: Counts per million mapped reads
-- **RPKM**: Reads per kb per million (accounts for region length)
-- **BPM**: Bins per million
+- **RPKM**: Reads per kb per million (per-bin length and library-size scaling)
+- **BPM**: Bins per million, analogous to TPM-style scaling over binned signal
 - **None**: Raw counts (not recommended for comparisons)
 
 Full explanation: `references/normalization_methods.md`
@@ -228,6 +242,8 @@ RPGC normalization requires effective genome size. Common values:
 | Organism | Assembly | Size | Usage |
 |----------|----------|------|-------|
 | Human | GRCh38/hg38 | 2,913,022,398 | `--effectiveGenomeSize 2913022398` |
+| Human | T2T/CHM13CAT_v2 | 3,117,292,070 | `--effectiveGenomeSize 3117292070` |
+| Mouse | GRCm39/mm39 | 2,654,621,783 | `--effectiveGenomeSize 2654621783` |
 | Mouse | GRCm38/mm10 | 2,652,783,500 | `--effectiveGenomeSize 2652783500` |
 | Zebrafish | GRCz11 | 1,368,780,147 | `--effectiveGenomeSize 1368780147` |
 | *Drosophila* | dm6 | 142,573,017 | `--effectiveGenomeSize 142573017` |
@@ -241,6 +257,7 @@ Many deepTools commands share these options:
 
 **Performance:**
 - `--numberOfProcessors, -p`: Enable parallel processing (always use available cores)
+- `max` / `max/2`: Supported values for `--numberOfProcessors`; useful under schedulers because recent deepTools releases detect CPU affinity more carefully
 - `--region`: Process specific regions for testing (e.g., `chr1:1-1000000`)
 
 **Read Filtering:**
@@ -280,12 +297,13 @@ Many deepTools commands share these options:
 ### RNA-seq Specific
 
 - **Never extend reads** for RNA-seq (would span splice junctions)
-- **Strand-specific**: Use `--filterRNAstrand forward/reverse` for stranded libraries
+- **Strand-specific**: Use `--filterRNAstrand forward/reverse` for common dUTP-style stranded libraries; confirm library orientation before interpreting strand labels
 - **Normalization**: CPM for bins, RPKM for genes
 
 ### ATAC-seq Specific
 
 - **Apply Tn5 correction**: Use alignmentSieve with `--ATACshift`
+- **Use only proper pairs for shifting**: `--ATACshift` is equivalent to `--shift 4 -5 5 -4` and filters to properly paired fragments
 - **Fragment filtering**: Set appropriate min/max fragment lengths
 - **Check nucleosome pattern**: Fragment size plot should show ladder pattern
 
@@ -336,7 +354,7 @@ Complete documentation of all deepTools commands organized by category:
 - BAM and bigWig processing tools (9 tools)
 - Quality control tools (6 tools)
 - Visualization tools (3 tools)
-- Miscellaneous tools (2 tools)
+- Miscellaneous tools (3 tools, including `bigwigAverage`)
 
 Each tool includes:
 - Purpose and overview
@@ -475,18 +493,6 @@ When users need detailed information:
 - **Workflows**: Use `references/workflows.md` for complete analysis pipelines
 - **Normalization**: Consult `references/normalization_methods.md` for method selection
 - **Genome sizes**: Reference `references/effective_genome_sizes.md`
-
-Search references using grep patterns:
-```bash
-# Find tool documentation
-grep -A 20 "^### toolname" references/tools_reference.md
-
-# Find workflow
-grep -A 50 "^## Workflow Name" references/workflows.md
-
-# Find normalization method
-grep -A 15 "^### Method Name" references/normalization_methods.md
-```
 
 ## Example Interactions
 

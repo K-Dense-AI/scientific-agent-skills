@@ -4,9 +4,7 @@ description: Molecular featurization for ML (100+ featurizers). ECFP, MACCS, des
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9–3.10 (molfeat 0.11.0 does not support 3.11+). Requires datamol, PyTorch, and optional extras for GNN/transformer models.
-metadata:
-  version: "1.0"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
 ---
 
 # Molfeat - Molecular Featurization Hub

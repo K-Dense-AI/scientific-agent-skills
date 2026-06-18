@@ -150,9 +150,10 @@ ln.Artifact.filter(created_by__handle__startswith="test").to_dataframe()
 # Find artifacts by transform name
 ln.Artifact.filter(transform__name="preprocess.py").to_dataframe()
 
-# Find artifacts measuring specific genes
-ln.Artifact.filter(feature_sets__genes__symbol="CD8A").to_dataframe()
-ln.Artifact.filter(feature_sets__genes__ensembl_gene_id="ENSG00000153563").to_dataframe()
+# Find artifacts measuring specific genes through schemas
+cd8a = bt.Gene.get(symbol="CD8A")
+schemas_with_cd8a = ln.Schema.filter(genes=cd8a)
+ln.Artifact.filter(schemas__in=schemas_with_cd8a).to_dataframe()
 
 # Find runs with specific parameters
 ln.Run.filter(params__learning_rate=0.01).to_dataframe()
@@ -181,16 +182,14 @@ ln.Artifact.order_by("-created_at", "size").to_dataframe()
 ### OR Logic
 
 ```python
-from lamindb import Q
-
 # OR condition
 artifacts = ln.Artifact.filter(
-    Q(suffix=".jpg") | Q(suffix=".png")
+    ln.Q(suffix=".jpg") | ln.Q(suffix=".png")
 ).to_dataframe()
 
 # Complex OR with multiple conditions
 artifacts = ln.Artifact.filter(
-    Q(suffix=".h5ad", size__gt=1e6) | Q(suffix=".csv", size__lt=1e3)
+    ln.Q(suffix=".h5ad", size__gt=1e6) | ln.Q(suffix=".csv", size__lt=1e3)
 ).to_dataframe()
 ```
 
@@ -199,12 +198,12 @@ artifacts = ln.Artifact.filter(
 ```python
 # Exclude condition
 artifacts = ln.Artifact.filter(
-    ~Q(suffix=".tmp")
+    ~ln.Q(suffix=".tmp")
 ).to_dataframe()
 
 # Complex exclusion
 artifacts = ln.Artifact.filter(
-    ~Q(created_by__handle="testuser")
+    ~ln.Q(created_by__handle="testuser")
 ).to_dataframe()
 ```
 
@@ -213,9 +212,9 @@ artifacts = ln.Artifact.filter(
 ```python
 # Complex query
 artifacts = ln.Artifact.filter(
-    (Q(suffix=".h5ad") | Q(suffix=".csv")) &
-    Q(size__gt=1e6) &
-    ~Q(created_by__handle__startswith="test")
+    (ln.Q(suffix=".h5ad") | ln.Q(suffix=".csv")) &
+    ln.Q(size__gt=1e6) &
+    ~ln.Q(created_by__handle__startswith="test")
 ).to_dataframe()
 ```
 
@@ -380,7 +379,7 @@ Group related artifacts into collections:
 # Create collection
 collection = ln.Collection(
     [artifact1, artifact2, artifact3],
-    name="scRNA-seq batch 1-3",
+    key="scrna/batch_1_3",
     description="Complete dataset across three batches"
 ).save()
 
@@ -389,7 +388,7 @@ for artifact in collection.artifacts:
     print(artifact.key)
 
 # Query collections
-ln.Collection.filter(name__contains="batch").to_dataframe()
+ln.Collection.filter(key__contains="batch").to_dataframe()
 ```
 
 ## Best Practices

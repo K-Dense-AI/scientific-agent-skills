@@ -4,9 +4,8 @@ description: Benchling Python SDK and REST API integration for registry entities
 license: MIT
 allowed-tools: Read Write Edit Bash
 compatibility: Requires a Benchling account, tenant URL, and API key or OAuth app credentials. Install benchling-sdk with uv pip install.
-metadata:
-  version: "1.2"
-  skill-author: K-Dense Inc.
+required_environment_variables: [{"name": "BENCHLING_TENANT_URL", "prompt": "Benchling tenant base URL.", "required_for": "full functionality"}, {"name": "BENCHLING_API_KEY", "prompt": "API key auth (alternative to OAuth).", "required_for": "optional features"}, {"name": "BENCHLING_CLIENT_ID", "prompt": "OAuth app client id.", "required_for": "optional features"}, {"name": "BENCHLING_CLIENT_SECRET", "prompt": "OAuth app client secret.", "required_for": "optional features"}, {"name": "BENCHLING_PROD_TENANT_URL", "prompt": "Production tenant URL (multi-env setups).", "required_for": "optional features"}, {"name": "BENCHLING_PROD_API_KEY", "prompt": "Production API key (multi-env setups).", "required_for": "optional features"}, {"name": "BENCHLING_STAGING_TENANT_URL", "prompt": "Staging tenant URL (multi-env setups).", "required_for": "optional features"}, {"name": "BENCHLING_STAGING_API_KEY", "prompt": "Staging API key (multi-env setups).", "required_for": "optional features"}]
+metadata: {"version": "1.3", "skill-author": "K-Dense Inc.", "openclaw": {"primaryEnv": "BENCHLING_API_KEY", "envVars": [{"name": "BENCHLING_TENANT_URL", "required": true, "description": "Benchling tenant base URL."}, {"name": "BENCHLING_API_KEY", "required": false, "description": "API key auth (alternative to OAuth)."}, {"name": "BENCHLING_CLIENT_ID", "required": false, "description": "OAuth app client id."}, {"name": "BENCHLING_CLIENT_SECRET", "required": false, "description": "OAuth app client secret."}, {"name": "BENCHLING_PROD_TENANT_URL", "required": false, "description": "Production tenant URL (multi-env setups)."}, {"name": "BENCHLING_PROD_API_KEY", "required": false, "description": "Production API key (multi-env setups)."}, {"name": "BENCHLING_STAGING_TENANT_URL", "required": false, "description": "Staging tenant URL (multi-env setups)."}, {"name": "BENCHLING_STAGING_API_KEY", "required": false, "description": "Staging API key (multi-env setups)."}]}}
 ---
 
 # Benchling Integration

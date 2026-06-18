@@ -142,7 +142,7 @@ for p in range(5):
             if results.aic < best_aic:
                 best_aic = results.aic
                 best_order = (p, d, q)
-        except:
+        except (ValueError, np.linalg.LinAlgError):
             continue
 
 print(f"Best order: {best_order} with AIC: {best_aic:.2f}")
@@ -545,6 +545,13 @@ stl_result = stl.fit()
 
 fig = stl_result.plot()
 plt.show()
+
+# Multiple seasonalities, e.g., hourly data with daily and weekly patterns
+from statsmodels.tsa.seasonal import MSTL
+
+mstl_result = MSTL(hourly_series, periods=(24, 24 * 7)).fit()
+fig = mstl_result.plot()
+plt.show()
 ```
 
 ## Model Evaluation
@@ -653,7 +660,7 @@ from statsmodels.tsa.ardl import ARDL
 
 # ARDL(p, q) model
 # y depends on its own lags and lags of X
-model = ARDL(y, lags=2, exog=X, exog_lags=2)
+model = ARDL(y, lags=2, exog=X, order=2)
 results = model.fit()
 ```
 

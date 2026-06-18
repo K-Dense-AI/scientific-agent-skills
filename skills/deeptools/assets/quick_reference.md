@@ -41,6 +41,8 @@ plotFingerprint -b input.bam chip.bam -o fingerprint.png \
 | Organism | Assembly | Size |
 |----------|----------|------|
 | Human | hg38 | 2913022398 |
+| Human | T2T/CHM13CAT_v2 | 3117292070 |
+| Mouse | mm39 | 2654621783 |
 | Mouse | mm10 | 2652783500 |
 | Fly | dm6 | 142573017 |
 
@@ -49,6 +51,11 @@ plotFingerprint -b input.bam chip.bam -o fingerprint.png \
 - **RPGC**: 1× genome coverage (requires --effectiveGenomeSize)
 - **CPM**: Counts per million (for fixed bins)
 - **RPKM**: Reads per kb per million (for genes)
+
+## Notes
+
+- `--filterRNAstrand` assumes common dUTP-style reverse-stranded RNA-seq libraries.
+- `--ATACshift` uses only properly paired fragments and is equivalent to `--shift 4 -5 5 -4`.
 
 ## Typical Workflow
 

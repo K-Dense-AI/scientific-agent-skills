@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import spikeinterface.full as si
 import spikeinterface.widgets as sw
-import neuropixels_analysis as npa
 
 # High-quality settings
 plt.rcParams['figure.dpi'] = 150
@@ -23,16 +22,15 @@ plt.rcParams['font.family'] = 'sans-serif'
 ### Basic Drift Map
 
 ```python
-# Using npa
-npa.plot_drift(recording, output='drift_map.png')
+from spikeinterface.sortingcomponents.peak_detection import detect_peaks
+from spikeinterface.sortingcomponents.peak_localization import localize_peaks
 
-# Using SpikeInterface widgets
-from spikeinterface.preprocessing import detect_peaks, localize_peaks
-
-peaks = detect_peaks(recording, method='locally_exclusive')
+noise_levels = si.get_noise_levels(recording, return_in_uV=False)
+peaks = detect_peaks(recording, method='locally_exclusive', noise_levels=noise_levels,
+                     detect_threshold=5, radius_um=50.0)
 peak_locations = localize_peaks(recording, peaks, method='center_of_mass')
 
-sw.plot_drift_raster_map(
+si.plot_drift_raster_map(
     peaks=peaks,
     peak_locations=peak_locations,
     recording=recording,
@@ -43,28 +41,26 @@ plt.savefig('drift_raster.png', bbox_inches='tight')
 
 ### Motion Estimate Visualization
 
+`correct_motion(..., output_motion_info=True)` returns `(recording, motion_info)`. The
+`motion_info` dict can be plotted directly with the built-in widget:
+
 ```python
-motion_info = npa.estimate_motion(recording)
+rec_corrected, motion_info = si.correct_motion(
+    recording, preset='nonrigid_fast_and_accurate', output_motion_info=True, folder='motion/'
+)
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+# Built-in motion visualization (drift raster + motion field)
+sw.plot_motion_info(motion_info, recording=recording)
+plt.savefig('motion_analysis.png', dpi=300, bbox_inches='tight')
 
-# Motion over time
-ax = axes[0]
-for i in range(motion_info['motion'].shape[1]):
-    ax.plot(motion_info['temporal_bins'], motion_info['motion'][:, i], alpha=0.5)
-ax.set_xlabel('Time (s)')
-ax.set_ylabel('Motion (um)')
-ax.set_title('Estimated Motion')
-
-# Motion histogram
-ax = axes[1]
-ax.hist(motion_info['motion'].flatten(), bins=50, edgecolor='black')
-ax.set_xlabel('Motion (um)')
-ax.set_ylabel('Count')
-ax.set_title('Motion Distribution')
-
-plt.tight_layout()
-plt.savefig('motion_analysis.png', dpi=300)
+# Or inspect the Motion object directly
+motion = motion_info['motion']
+displacement = motion.displacement[0]          # (n_temporal_bins, n_spatial_bins)
+temporal_bins = motion.temporal_bins_s[0]
+plt.figure(figsize=(10, 4))
+plt.plot(temporal_bins, displacement, alpha=0.5)
+plt.xlabel('Time (s)'); plt.ylabel('Displacement (um)'); plt.title('Estimated Motion')
+plt.savefig('motion_traces.png', dpi=300, bbox_inches='tight')
 ```
 
 ## Waveform Plots
@@ -109,7 +105,9 @@ plt.savefig(f'unit_{unit_id}_probe.png')
 ### Metrics Overview
 
 ```python
-npa.plot_quality_metrics(analyzer, metrics, output='quality_overview.png')
+# Built-in quality-metrics widget (scatter matrix of all computed metrics)
+sw.plot_quality_metrics(analyzer)
+plt.savefig('quality_overview.png', dpi=300, bbox_inches='tight')
 ```
 
 ### Metrics Distribution
@@ -332,7 +330,9 @@ plt.savefig(f'unit_{unit_id}_isi_detailed.png', dpi=300)
 ### Unit Summary Panel
 
 ```python
-npa.plot_unit_summary(analyzer, unit_id, output=f'unit_{unit_id}_summary.png')
+# Built-in one-call summary (waveform, template, ACG, amplitudes, location)
+sw.plot_unit_summary(analyzer, unit_id=unit_id)
+plt.savefig(f'unit_{unit_id}_summary.png', dpi=300, bbox_inches='tight')
 ```
 
 ### Manual Multi-Panel Summary

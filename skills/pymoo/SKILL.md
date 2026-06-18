@@ -4,9 +4,7 @@ description: Multi-objective optimization framework. NSGA-II, NSGA-III, MOEA/D, 
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.10+ and pymoo (uv pip install). Optional matplotlib for visualization plots; optional autograd for gradient-based features; optional joblib for JoblibParallelization.
-metadata:
-  version: "1.1"
-  skill-author: K-Dense Inc.
+metadata: {"version": "1.1", "skill-author": "K-Dense Inc."}
 ---
 
 # Pymoo - Multi-Objective Optimization in Python

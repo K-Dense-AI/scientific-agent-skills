@@ -11,7 +11,7 @@ Retrieve Ensembl reference genome FTPs and metadata.
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `species` | str | Species in Genus_species format or shortcuts ('human', 'mouse') | Required |
-| `-w/--which` | str | File types to return: gtf, cdna, dna, cds, cdrna, pep | All |
+| `-w/--which` | str/list | File types to return: gtf, cdna, dna, cds, cdrna, pep | All |
 | `-r/--release` | int | Ensembl release number | Latest |
 | `-od/--out_dir` | str | Output directory path | None |
 | `-o/--out` | str | JSON file path for results | None |
@@ -27,6 +27,7 @@ Retrieve Ensembl reference genome FTPs and metadata.
 
 ### gget search
 Search for genes by name or description in Ensembl.
+Search includes Ensembl synonyms in current gget versions.
 
 **Parameters:**
 | Parameter | Type | Description | Default |
@@ -38,6 +39,7 @@ Search for genes by name or description in Ensembl.
 | `-ao/--andor` | str | 'or' (ANY term) or 'and' (ALL terms) | 'or' |
 | `-l/--limit` | int | Maximum results to return | None |
 | `-o/--out` | str | Output file path (CSV/JSON) | None |
+| `wrap_text` | bool | Python-only wrapped text display for wide results | False |
 
 **Returns:** ensembl_id, gene_name, ensembl_description, ext_ref_description, biotype, URL
 
@@ -140,18 +142,18 @@ Align multiple sequences using Muscle5.
 ---
 
 ### gget diamond
-Fast local protein/translated DNA alignment.
+Fast local protein alignment and translated nucleotide-to-protein alignment.
 
 **Parameters:**
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `query` | str/list | Query sequences or FASTA file | Required |
-| `--reference` | str/list | Reference sequences or FASTA file | Required |
-| `--sensitivity` | str | fast, mid-sensitive, sensitive, more-sensitive, very-sensitive, ultra-sensitive | very-sensitive |
-| `--threads` | int | CPU threads | 1 |
+| `-ref/--reference` | str/list | Reference sequences or FASTA file | Required |
+| `-s/--sensitivity` | str | fast, mid-sensitive, sensitive, more-sensitive, very-sensitive, ultra-sensitive | very-sensitive |
+| `-t/--threads` | int | CPU threads | 1 |
 | `--diamond_binary` | str | Path to DIAMOND installation | Auto-detect |
-| `--diamond_db` | str | Save database for reuse | None |
-| `--translated` | flag | Enable nucleotide-to-amino acid alignment | False |
+| `-db/--diamond_db` | str | Save database for reuse | None |
+| `-x/--translated` | flag | Enable nucleotide query to amino acid reference alignment | False |
 | `-o/--out` | str | Output file path | None |
 | `-csv` | flag | CSV format (CLI) | False |
 | `-q/--quiet` | flag | Suppress progress | False |
@@ -331,14 +333,15 @@ Retrieve disease/drug associations from OpenTargets.
 | `-r/--resource` | str | diseases, drugs, tractability, pharmacogenetics, expression, depmap, interactions | 'diseases' |
 | `-l/--limit` | int | Maximum results | None |
 | `-o/--out` | str | Output file path | None |
+| `--filters` | repeated key=value / dict | Exact-match filters using returned column names | None |
+| `-or/--or` | flag | Combine CLI filters with OR instead of AND | False |
 | `-csv` | flag | CSV format (CLI) | False |
 | `-q/--quiet` | flag | Suppress progress | False |
 
-**Resource-specific filters:**
-- drugs: `--filter_disease`
-- pharmacogenetics: `--filter_drug`
-- expression/depmap: `--filter_tissue`, `--filter_anat_sys`, `--filter_organ`
-- interactions: `--filter_protein_a`, `--filter_protein_b`, `--filter_gene_b`
+**Current notes:**
+- gget 0.30.5 rewrote this module for the newer OpenTargets API; output column/key names may differ from older releases.
+- The older `--filter_mode` argument was removed upstream. Use CLI `--or` or Python filter logic documented by the current API.
+- Prefer inspecting returned column names before writing filters, then filter with exact column names such as `protein_a_id` or `gene_b_id`.
 
 **Returns:** Disease/drug associations, tractability, pharmacogenetics, expression, DepMap, interactions
 
@@ -377,7 +380,7 @@ Plot cancer genomics heatmaps from cBioPortal.
 ### gget cosmic
 Search COSMIC database for cancer mutations.
 
-**Important:** License fees for commercial use. Requires COSMIC account.
+**Important:** License fees for commercial use. Requires COSMIC account. Avoid passing credentials directly on the command line on shared systems; prefer the interactive prompt or Python code that reads named environment variables.
 
 **Query parameters:**
 | Parameter | Type | Description | Default |
@@ -392,15 +395,67 @@ Search COSMIC database for cancer mutations.
 |-----------|------|-------------|---------|
 | `-d/--download_cosmic` | flag | Activate download mode | False |
 | `-gm/--gget_mutate` | flag | Create version for gget mutate | False |
-| `-cp/--cosmic_project` | str | cancer, census, cell_line, resistance, genome_screen, targeted_screen | None |
+| `-cp/--cosmic_project` | str | cancer, cancer_example, census, cell_line, resistance, genome_screen, targeted_screen | cancer |
 | `-cv/--cosmic_version` | str | COSMIC version | Latest |
 | `-gv/--grch_version` | int | Human reference genome (37 or 38) | None |
-| `--email` | str | COSMIC account email | Required |
-| `--password` | str | COSMIC account password | Required |
+| `--email` | str | COSMIC account email for non-interactive download | Prompt/env preferred |
+| `--password` | str | COSMIC account password for non-interactive download | Prompt/env preferred |
 
 **Note:** First-time users must download database
 
 **Returns:** Mutation data from COSMIC
+
+---
+
+### gget virus
+Download viral nucleotide sequences and metadata from INSDC sources via NCBI Virus.
+
+**Parameters:**
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `virus` | str | Virus taxon name, taxon ID, accession(s), or accession text file | Required unless `--download_all_accessions` |
+| `-a/--is_accession` | flag | Treat `virus` as accession input | False |
+| `--is_sars_cov2` | flag | Use optimized SARS-CoV-2 cached data path | False |
+| `--is_alphainfluenza` | flag | Use optimized Influenza A cached data path | False |
+| `--host` | str | Host organism name or NCBI Taxonomy ID | None |
+| `--nuc_completeness` | str | complete or partial | None |
+| `--min_seq_length` / `--max_seq_length` | int | Sequence length filters | None |
+| `--segment` | str | Segment filter for segmented viruses | None |
+| `--source_database` | str | genbank or refseq | None |
+| `--annotated` | bool | Include/exclude annotated sequences | None |
+| `--vaccine_strain` | bool | Include/exclude vaccine strain sequences | None |
+| `-g/--genbank_metadata` | flag | Fetch detailed GenBank metadata | False |
+| `--download_all_accessions` | flag | Apply filters across all viral accessions | False |
+| `--baseline` / `--merge-results` | path/flag | Resume or merge with previous metadata | None/False |
+| `-q/--quiet` | flag | Suppress progress | False |
+
+**Warning:** `--download_all_accessions` without restrictive filters can request the entire Viruses taxonomy and require many hours and substantial disk.
+
+**Returns:** FASTA, CSV, JSONL, optional GenBank metadata, and `command_summary.txt` in an output folder.
+
+---
+
+### gget 8cube
+Query 8cubeDB mouse snRNA-seq specificity and expression metrics.
+
+**Subcommands:**
+| Subcommand | Description | Required arguments |
+|------------|-------------|--------------------|
+| `specificity` | Gene-level psi/zeta specificity values | `genes` |
+| `psi_block` | Block-level specificity values | `genes`, `--analysis_level`, `--analysis_type` |
+| `expression` | Mean/variance normalized expression values | `genes`, `--analysis_level`, `--analysis_type` |
+
+**Common parameters:**
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `genes` | str/list | Gene symbols or Ensembl gene IDs | Required |
+| `-al/--analysis_level` | str | Biological grouping such as Kidney or Across_tissues | Required for psi_block/expression |
+| `-at/--analysis_type` | str | Partition type such as Sex:Celltype or Strain | Required for psi_block/expression |
+| `-csv/--csv` | flag | Return CSV instead of JSON (CLI) | False |
+| `-o/--out` | str | Output file path | None |
+| `-q/--quiet` | flag | Suppress progress | False |
+
+**Returns:** JSON/CSV on the CLI or DataFrame/JSON in Python.
 
 ---
 
@@ -412,16 +467,18 @@ Generate mutated nucleotide sequences.
 **Parameters:**
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `sequences` | str/list | FASTA file or sequences | Required |
-| `-m/--mutations` | str/df | CSV/TSV file or DataFrame | Required |
+| `sequences` | str/list | FASTA file or nucleotide sequence(s) | Required |
+| `-m/--mutations` | str/list/df | Mutation string/list, CSV/TSV file, or DataFrame | Required |
 | `-mc/--mut_column` | str | Mutation column name | 'mutation' |
 | `-sic/--seq_id_column` | str | Sequence ID column | 'seq_ID' |
-| `-mic/--mut_id_column` | str | Mutation ID column | None |
+| `-mic/--mut_id_column` | str | Mutation ID column | Same as mut_column |
 | `-k/--k` | int | Length of flanking sequences | 30 |
-| `-o/--out` | str | Output FASTA file path | stdout |
+| `-o/--out` | str | Output FASTA file path | None (return list/stdout) |
 | `-q/--quiet` | flag | Suppress progress | False |
 
 **Returns:** Mutated sequences in FASTA format
+
+**Note:** More complex variant-screening functionality moved upstream to the `kvar` project.
 
 ---
 
@@ -434,15 +491,17 @@ Generate text using OpenAI's API.
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `prompt` | str | Text input for generation | Required |
-| `api_key` | str | OpenAI API key | Required |
+| `api_key` | str | OpenAI API key; prefer reading from `OPENAI_API_KEY` | Required |
 | `model` | str | OpenAI model name | gpt-3.5-turbo |
 | `temperature` | float | Sampling temperature (0-2) | 1.0 |
 | `top_p` | float | Nucleus sampling | 1.0 |
 | `max_tokens` | int | Maximum tokens to generate | None |
 | `frequency_penalty` | float | Frequency penalty (0-2) | 0 |
 | `presence_penalty` | float | Presence penalty (0-2) | 0 |
+| `stop` | str | Stop sequence | None |
+| `logit_bias` | dict | Token bias map | None |
 
-**Important:** Free tier limited to 3 months. Set billing limits.
+**Important:** Do not hard-code API keys or pass real keys in examples. The upstream CLI accepts a key argument; Python code that reads `OPENAI_API_KEY` is safer for notebooks and scripts.
 
 **Returns:** Generated text string
 

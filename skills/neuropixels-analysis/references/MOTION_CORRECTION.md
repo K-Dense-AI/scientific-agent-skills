@@ -200,7 +200,7 @@ rec_corrected = rec_corrected.save(folder='preprocessed_motion_corrected/',
                                     format='binary', n_jobs=8)
 
 # Run spike sorting on corrected data
-sorting = si.run_sorter('kilosort4', rec_corrected, output_folder='ks4/')
+sorting = si.run_sorter('kilosort4', rec_corrected, folder='ks4/')
 ```
 
 ### Option 2: Let Kilosort Handle It
@@ -211,7 +211,7 @@ Kilosort 2.5+ has built-in drift correction:
 sorting = si.run_sorter(
     'kilosort4',
     rec,  # Not motion corrected
-    output_folder='ks4/',
+    folder='ks4/',
     nblocks=5,  # Non-rigid blocks for drift correction
     do_correction=True  # Enable Kilosort's drift correction
 )
@@ -221,7 +221,7 @@ sorting = si.run_sorter(
 
 ```python
 # Sort first
-sorting = si.run_sorter('kilosort4', rec, output_folder='ks4/')
+sorting = si.run_sorter('kilosort4', rec, folder='ks4/')
 
 # Then estimate motion from sorted spikes
 # (More accurate as it uses actual spike times)
