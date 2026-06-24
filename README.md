@@ -1,5 +1,14 @@
 # Scientific Agent Skills
 
+<p align="center">
+  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=scientific-agent-skills">
+    <img src="assets/atlas-cloud-logo.png" alt="Atlas Cloud" width="140" />
+  </a>
+  <br />
+  <sub><strong>Atlas Cloud</strong> Atlas Cloud provides OpenAI-compatible LLM APIs and async image/video generation APIs for scientific agent skills and multimodal research outputs.</sub>
+</p>
+
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![Version](https://img.shields.io/badge/Version-2.50.0-blue.svg)](pyproject.toml)
 [![Skills](https://img.shields.io/badge/Skills-147-brightgreen.svg)](#-whats-included)
