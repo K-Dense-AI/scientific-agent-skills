@@ -338,6 +338,18 @@ body {
 - ❌ "Timeline 2015-2024 annual" → "ONLY 3 key years"
 - ❌ "Compare 6 methods" → "ONLY 2: ours vs best"
 
+### Step 1: Audience and Venue Definition (MANDATORY)
+
+Confirm the target audience (academic peers / general public / decision-makers) and the display venue (conference hall, classroom, virtual). These two facts drive font sizes, colour contrast, and content density for the rest of the workflow.
+
+### Step 2: Section Outline (MANDATORY)
+
+Outline the 5-7 poster sections (Title, Introduction, Methods, Results, Discussion, Conclusions) with a single sentence per section. This outline is the source of truth for content allocation across the layout in later steps.
+
+#### Step 2a: Pre-Layout Review (MANDATORY)
+
+Review the outline for missing sections, redundant claims, and overlong abstracts. Trim anything that wouldn't survive a 2-meter read.
+
 ### Step 2b: Post-Generation Review (MANDATORY)
 
 **For EACH generated figure at 25% zoom:**
