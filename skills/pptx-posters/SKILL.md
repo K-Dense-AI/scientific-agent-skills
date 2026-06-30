@@ -338,7 +338,7 @@ body {
 - ❌ "Timeline 2015-2024 annual" → "ONLY 3 key years"
 - ❌ "Compare 6 methods" → "ONLY 2: ours vs best"
 
-### Step 2b: Post-Generation Review (MANDATORY)
+### Step 1: Post-Generation Review (MANDATORY)
 
 **For EACH generated figure at 25% zoom:**
 
@@ -357,7 +357,7 @@ body {
 - [ ] Complex multi-stage → SPLIT into 2-3 graphics
 - [ ] Multiple cases cramped → SPLIT into separate graphics
 
-### After Export
+### Step 2: After Export (MANDATORY)
 
 - [ ] NO content cut off at ANY of the 4 edges (check carefully)
 - [ ] All images display correctly
@@ -411,4 +411,3 @@ Available in `references/` directory:
 - `poster_content_guide.md`: Content organization and writing guidelines
 - `poster_design_principles.md`: Typography, color theory, and visual hierarchy
 - `poster_layout_design.md`: Layout principles and grid systems
-
