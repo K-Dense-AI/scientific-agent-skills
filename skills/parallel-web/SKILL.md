@@ -1,103 +1,79 @@
 ---
 name: parallel-web
-description: "All-in-one web toolkit powered by parallel-cli, with a strong emphasis on academic and scientific sources. Use this skill whenever the user needs to search the web, fetch/extract URL content, enrich data with web-sourced fields, or run deep research reports. Covers: web search (fast lookups, research, current info — prioritizing peer-reviewed papers, preprints, and scholarly databases), URL extraction (fetching pages, articles, academic PDFs), bulk data enrichment (adding fields to CSV/lists from the web), and deep research (exhaustive multi-source reports grounded in academic literature). Also handles setup, status checks, and result retrieval. Use this skill for ANY web-related task — even if the user doesn't mention 'parallel' or 'web' explicitly. If they want to look something up, fetch a page, enrich a dataset, investigate a topic, find academic papers, check citations, or review scientific literature, this is the skill to use."
-compatibility: Requires parallel-cli and internet access.
-required_environment_variables: [{"name": "PARALLEL_API_KEY", "prompt": "Parallel API key.", "required_for": "full functionality"}]
-metadata: {"version": "1.1", "author": "K-Dense, Inc.", "openclaw": {"primaryEnv": "PARALLEL_API_KEY", "envVars": [{"name": "PARALLEL_API_KEY", "required": true, "description": "Parallel API key."}]}}
+description: "All-in-one web toolkit powered by Google Deep Research (Vertex AI), with a strong emphasis on academic and scientific sources. Use this skill whenever the user needs to search the web, fetch/extract URL content, or run deep research reports. Covers: web search (fast lookups, research, current info — prioritizing peer-reviewed papers, preprints, and scholarly databases), URL extraction (fetching pages, articles, academic PDFs), and deep research (exhaustive multi-source reports grounded in academic literature). Also handles status checks and result retrieval by interaction ID. Use this skill for ANY web-related task — even if the user doesn't mention 'search' or 'web' explicitly. If they want to look something up, fetch a page, investigate a topic, find academic papers, check citations, or review scientific literature, this is the skill to use."
+compatibility: Requires google-genai (pip) and Vertex AI access.
+required_environment_variables: [{"name": "GOOGLE_CLOUD_PROJECT", "prompt": "GCP project ID for Vertex AI.", "required_for": "full functionality"}, {"name": "GOOGLE_APPLICATION_CREDENTIALS", "prompt": "Path to Vertex service-account JSON (or use ADC).", "required_for": "full functionality"}]
+metadata: {"version": "2.0", "author": "K-Dense, Inc.", "openclaw": {"primaryEnv": "GOOGLE_CLOUD_PROJECT", "envVars": [{"name": "GOOGLE_CLOUD_PROJECT", "required": true, "description": "GCP project ID."}, {"name": "GOOGLE_APPLICATION_CREDENTIALS", "required": false, "description": "Service-account JSON path. Not needed if using ADC."}]}}
 ---
 
-# Parallel Web Toolkit
+# Google Deep Research Web Toolkit
 
-A unified skill for all web-powered tasks: searching, extracting, enriching, and researching — with academic and scientific sources as the default priority.
+A unified skill for all web-powered tasks: searching, extracting, and researching — with academic and scientific sources as the default priority. Powered by Google Deep Research via Vertex AI.
 
 ## Routing — pick the right capability
 
-Read the user's request and match it to one of the capabilities below. For web search, extract, enrichment, and deep research, read the corresponding reference file for detailed instructions.
+Read the user's request and match it to one of the capabilities below. For web search, extract, and deep research, read the corresponding reference file for detailed instructions.
 
 | User wants to... | Capability | Where |
 |---|---|---|
 | Look something up, research a topic, find current info | **Web Search** | `references/web-search.md` |
 | Fetch content from a specific URL (webpage, article, PDF) | **Web Extract** | `references/web-extract.md` |
-| Add web-sourced fields to a list of companies/people/products | **Data Enrichment** | `references/data-enrichment.md` |
 | Get an exhaustive, multi-source report (user says "deep research", "exhaustive", "comprehensive") | **Deep Research** | `references/deep-research.md` |
-| Install or authenticate parallel-cli | **Setup** | Below |
-| Check status of a running research/enrichment task | **Status** | Below |
-| Retrieve completed research results by run ID | **Result** | Below |
+| Retrieve a research report by interaction ID (poll after timeout) | **Poll** | Below |
+| Install dependencies or verify auth | **Setup** | Below |
 
 ### Decision guide
 
-- **Default to Web Search** for a single lookup, research question, or "what is X?" query. It's fast and cost-effective. When the query touches a scientific or technical topic, include academic domains (see `references/web-search.md`) to surface peer-reviewed and preprint sources alongside general results.
-- **Use Web Extract** when the user provides a URL or asks you to read/fetch a specific page. Prefer this over the built-in WebFetch tool. Particularly useful for extracting full text from academic PDFs, preprint servers, and journal articles.
-- **Use Data Enrichment** when the user has **multiple entities** (a CSV, a list of companies/people/products, or even a short inline list) and wants to find or add the same kind of information for each one. The key signal is a repeated lookup across a set of items — e.g., "find the CEO for each of these companies" or "get the founding year for Apple, Stripe, and Anthropic." Even if the user doesn't say "enrich," use `parallel-cli enrich` whenever the task is the same query applied to multiple entities. Do NOT use Web Search in a loop for this — the enrichment pipeline handles batching, parallelism, and structured output automatically.
-- **Use Deep Research only** when the user explicitly asks for deep, exhaustive, or comprehensive research. It is 10-100x slower and more expensive than Web Search — never default to it. Deep research is especially valuable for literature reviews and multi-paper synthesis.
-- If `parallel-cli` is not found when running any command, follow the Setup section below.
+- **Default to Web Search** for a single lookup, research question, or "what is X?" query. It's fast and cost-effective.
+- **Use Web Extract** when the user provides a URL or asks you to read/fetch a specific page. Particularly useful for academic PDFs, preprint servers, and journal articles.
+- **Use Deep Research only** when the user explicitly asks for deep, exhaustive, or comprehensive research. It takes 5–20 minutes — never default to it.
+- Data enrichment (batch entity lookups) is **not available** in this skill version. If the user needs it, let them know and suggest an alternative approach.
 
 ### Academic source priority
 
-Across all capabilities, prefer academic and scientific sources when the query is technical or scientific in nature. This means:
+Across all capabilities, prefer academic and scientific sources when the query is technical or scientific in nature:
 - Peer-reviewed journal articles and conference proceedings over blog posts or news articles
 - Preprints (arXiv, bioRxiv, medRxiv) when peer-reviewed versions aren't available
 - Institutional and government sources (NIH, WHO, NASA, NIST) over commercial sites
 - Primary research over secondary summaries
 
-When citing academic sources, include author names and publication year where available (e.g., [Smith et al., 2025](url)) in addition to the standard citation format. If a DOI is present, prefer the DOI link.
-
-## Context chaining
-
-Several capabilities support multi-turn context via `interaction_id`. When a research or enrichment task completes, it returns an `interaction_id`. If the user asks a follow-up question related to that task, pass `--previous-interaction-id` to carry context forward automatically. This avoids restating what was already found.
+When citing academic sources, include author names and publication year where available in addition to the standard citation format.
 
 ---
 
 ## Setup
 
-If `parallel-cli` is not installed, install and authenticate:
+If `google-genai` is not installed, install it:
 
 ```bash
-curl -fsSL https://parallel.ai/install.sh | bash
+uv pip install google-genai
+# or: pip install google-genai
 ```
 
-If unable to install that way, use uv instead:
+Verify auth. The script needs `GOOGLE_CLOUD_PROJECT` and either `GOOGLE_APPLICATION_CREDENTIALS` (service-account JSON path) or Application Default Credentials (ADC via `gcloud auth application-default login`).
+
+Check if a `.env` file exists in the project root containing `GOOGLE_CLOUD_PROJECT` and `GOOGLE_APPLICATION_CREDENTIALS`. If so, load it before running:
 
 ```bash
-uv tool install "parallel-web-tools[cli]"
+dotenv -f .env run python scripts/google_research.py search "test" --fast
 ```
 
-Then authenticate. First, check if a `.env` file exists in the project root and contains `PARALLEL_API_KEY`. If so, load it with `dotenv`:
+If `dotenv` isn't available: `pip install python-dotenv[cli]` or `uv pip install python-dotenv[cli]`.
+
+If env vars are already in the environment, run directly:
 
 ```bash
-dotenv -f .env run parallel-cli auth
+python scripts/google_research.py search "test" --fast
 ```
 
-If `dotenv` isn't available, install it with `pip install python-dotenv[cli]` or `uv pip install python-dotenv[cli]`.
+---
 
-If there's no `.env` file or it doesn't contain the key, fall back to interactive login:
+## Poll a research result by interaction ID
+
+If a `research` command timed out, the script printed an `interaction_id` to stderr. Use it to fetch the completed report later:
 
 ```bash
-parallel-cli login
+python scripts/google_research.py poll "$INTERACTION_ID" -o "$FILENAME.md"
 ```
 
-Or set the key manually: `export PARALLEL_API_KEY="your-key"`
-
-Verify with:
-
-```bash
-parallel-cli auth
-```
-
-If `parallel-cli` is not found after install, add `~/.local/bin` to PATH.
-
-## Check task status
-
-```bash
-parallel-cli research status "$RUN_ID" --json
-```
-
-Report the current status to the user (running, completed, failed, etc.).
-
-## Get completed result
-
-```bash
-parallel-cli research poll "$RUN_ID" --json
-```
-
-Present results in a clear, organized format.
+Report the file path and offer to read the file if the user wants to review the results.
