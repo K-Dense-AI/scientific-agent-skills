@@ -63,9 +63,9 @@ Everything is code. PRs, issues, kanban boards — they're all markdown files in
 
 ### Templates for tracked documents
 
-- [Pull request record](markdown_templates/pull_request.md) — the PR description IS this file
-- [Issue record](markdown_templates/issue.md) — bug reports and feature requests as repo files
-- [Kanban board](markdown_templates/kanban.md) — sprint/project boards that merge with your code
+- [Pull request record](../templates/pull_request.md) — the PR description IS this file
+- [Issue record](../templates/issue.md) — bug reports and feature requests as repo files
+- [Kanban board](../templates/kanban.md) — sprint/project boards that merge with your code
 
 See [File conventions](#file-conventions-for-tracked-documents) for directory structure and naming.
 
@@ -490,28 +490,28 @@ One emoji per H2 heading, at the start. Use sparingly in body text for callouts 
 
 | Your content describes...                            | Add a...                 | Type file                                           |
 | ---------------------------------------------------- | ------------------------ | --------------------------------------------------- |
-| Steps in a process, workflow, decision logic         | **Flowchart**            | [flowchart.md](mermaid_diagrams/flowchart.md)       |
-| Who talks to whom and when (API calls, messages)     | **Sequence diagram**     | [sequence.md](mermaid_diagrams/sequence.md)         |
-| Class hierarchy, type relationships, interfaces      | **Class diagram**        | [class.md](mermaid_diagrams/class.md)               |
-| Status transitions, entity lifecycle, state machine  | **State diagram**        | [state.md](mermaid_diagrams/state.md)               |
-| Database schema, data model, entity relationships    | **ER diagram**           | [er.md](mermaid_diagrams/er.md)                     |
-| Project timeline, roadmap, task dependencies         | **Gantt chart**          | [gantt.md](mermaid_diagrams/gantt.md)               |
-| Parts of a whole, proportions, distribution          | **Pie chart**            | [pie.md](mermaid_diagrams/pie.md)                   |
-| Git branching strategy, merge/release flow           | **Git Graph**            | [git_graph.md](mermaid_diagrams/git_graph.md)       |
-| Concept hierarchy, brainstorm, topic map             | **Mindmap**              | [mindmap.md](mermaid_diagrams/mindmap.md)           |
-| Chronological events, milestones, history            | **Timeline**             | [timeline.md](mermaid_diagrams/timeline.md)         |
-| User experience, satisfaction scores, journey        | **User Journey**         | [user_journey.md](mermaid_diagrams/user_journey.md) |
-| Two-axis comparison, prioritization matrix           | **Quadrant chart**       | [quadrant.md](mermaid_diagrams/quadrant.md)         |
-| Requirements traceability, compliance mapping        | **Requirement diagram**  | [requirement.md](mermaid_diagrams/requirement.md)   |
-| System architecture at varying zoom levels           | **C4 diagram**           | [c4.md](mermaid_diagrams/c4.md)                     |
-| Flow magnitude, resource distribution, budgets       | **Sankey diagram**       | [sankey.md](mermaid_diagrams/sankey.md)             |
-| Numeric trends, bar charts, line charts              | **XY Chart**             | [xy_chart.md](mermaid_diagrams/xy_chart.md)         |
-| Component layout, spatial arrangement, layers        | **Block diagram**        | [block.md](mermaid_diagrams/block.md)               |
-| Work item tracking, status board, task columns       | **Kanban board**         | [kanban.md](mermaid_diagrams/kanban.md)             |
-| Binary protocol layout, data packet format           | **Packet diagram**       | [packet.md](mermaid_diagrams/packet.md)             |
-| Cloud infrastructure, service topology, networking   | **Architecture diagram** | [architecture.md](mermaid_diagrams/architecture.md) |
-| Multi-dimensional comparison, skills, radar analysis | **Radar chart**          | [radar.md](mermaid_diagrams/radar.md)               |
-| Hierarchical proportions, budget breakdown           | **Treemap**              | [treemap.md](mermaid_diagrams/treemap.md)           |
+| Steps in a process, workflow, decision logic         | **Flowchart**            | [flowchart.md](diagrams/flowchart.md)       |
+| Who talks to whom and when (API calls, messages)     | **Sequence diagram**     | [sequence.md](diagrams/sequence.md)         |
+| Class hierarchy, type relationships, interfaces      | **Class diagram**        | [class.md](diagrams/class.md)               |
+| Status transitions, entity lifecycle, state machine  | **State diagram**        | [state.md](diagrams/state.md)               |
+| Database schema, data model, entity relationships    | **ER diagram**           | [er.md](diagrams/er.md)                     |
+| Project timeline, roadmap, task dependencies         | **Gantt chart**          | [gantt.md](diagrams/gantt.md)               |
+| Parts of a whole, proportions, distribution          | **Pie chart**            | [pie.md](diagrams/pie.md)                   |
+| Git branching strategy, merge/release flow           | **Git Graph**            | [git_graph.md](diagrams/git_graph.md)       |
+| Concept hierarchy, brainstorm, topic map             | **Mindmap**              | [mindmap.md](diagrams/mindmap.md)           |
+| Chronological events, milestones, history            | **Timeline**             | [timeline.md](diagrams/timeline.md)         |
+| User experience, satisfaction scores, journey        | **User Journey**         | [user_journey.md](diagrams/user_journey.md) |
+| Two-axis comparison, prioritization matrix           | **Quadrant chart**       | [quadrant.md](diagrams/quadrant.md)         |
+| Requirements traceability, compliance mapping        | **Requirement diagram**  | [requirement.md](diagrams/requirement.md)   |
+| System architecture at varying zoom levels           | **C4 diagram**           | [c4.md](diagrams/c4.md)                     |
+| Flow magnitude, resource distribution, budgets       | **Sankey diagram**       | [sankey.md](diagrams/sankey.md)             |
+| Numeric trends, bar charts, line charts              | **XY Chart**             | [xy_chart.md](diagrams/xy_chart.md)         |
+| Component layout, spatial arrangement, layers        | **Block diagram**        | [block.md](diagrams/block.md)               |
+| Work item tracking, status board, task columns       | **Kanban board**         | [kanban.md](diagrams/kanban.md)             |
+| Binary protocol layout, data packet format           | **Packet diagram**       | [packet.md](diagrams/packet.md)             |
+| Cloud infrastructure, service topology, networking   | **Architecture diagram** | [architecture.md](diagrams/architecture.md) |
+| Multi-dimensional comparison, skills, radar analysis | **Radar chart**          | [radar.md](diagrams/radar.md)               |
+| Hierarchical proportions, budget breakdown           | **Treemap**              | [treemap.md](diagrams/treemap.md)           |
 
 > 💡 **Pick the right type, not the easy type.** Don't default to flowcharts for everything — a timeline is better than a flowchart for chronological events, a sequence diagram is better for service interactions, an ER diagram is better for data models. Scan the table above and match your content to the most specific type. **If you catch yourself writing a paragraph that describes a visual concept, stop and diagram it.**
 
@@ -612,15 +612,15 @@ Templates provide pre-built structures for common document types. Copy the templ
 
 | Document type                   | Template                                                                | Best for                                                                                              |
 | ------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Presentation / briefing         | [presentation.md](markdown_templates/presentation.md)                   | Slide-deck-style documents with speaker notes, structured sections, and visual flow                   |
-| Research paper / analysis       | [research_paper.md](markdown_templates/research_paper.md)               | Data-driven analysis, literature reviews, methodology + findings with heavy citations                 |
-| Project documentation           | [project_documentation.md](markdown_templates/project_documentation.md) | Software/product docs — architecture, getting started, API reference, contribution guide              |
-| Decision record (ADR/RFC)       | [decision_record.md](markdown_templates/decision_record.md)             | Recording why a decision was made — context, options evaluated, outcome, consequences                 |
-| How-to / tutorial guide         | [how_to_guide.md](markdown_templates/how_to_guide.md)                   | Step-by-step instructions with prerequisites, verification steps, and troubleshooting                 |
-| Status report / executive brief | [status_report.md](markdown_templates/status_report.md)                 | Progress updates, risk summaries, decisions needed — for leadership and stakeholders                  |
-| Pull request record             | [pull_request.md](markdown_templates/pull_request.md)                   | PR documentation with change inventory, testing evidence, rollback plan, and review notes             |
-| Issue record                    | [issue.md](markdown_templates/issue.md)                                 | Bug reports (reproduction steps, root cause) and feature requests (acceptance criteria, user stories) |
-| Kanban board                    | [kanban.md](markdown_templates/kanban.md)                               | Sprint/release/project work tracking with visual board, WIP limits, metrics, and blocked items        |
+| Presentation / briefing         | [presentation.md](../templates/presentation.md)                   | Slide-deck-style documents with speaker notes, structured sections, and visual flow                   |
+| Research paper / analysis       | [research_paper.md](../templates/research_paper.md)               | Data-driven analysis, literature reviews, methodology + findings with heavy citations                 |
+| Project documentation           | [project_documentation.md](../templates/project_documentation.md) | Software/product docs — architecture, getting started, API reference, contribution guide              |
+| Decision record (ADR/RFC)       | [decision_record.md](../templates/decision_record.md)             | Recording why a decision was made — context, options evaluated, outcome, consequences                 |
+| How-to / tutorial guide         | [how_to_guide.md](../templates/how_to_guide.md)                   | Step-by-step instructions with prerequisites, verification steps, and troubleshooting                 |
+| Status report / executive brief | [status_report.md](../templates/status_report.md)                 | Progress updates, risk summaries, decisions needed — for leadership and stakeholders                  |
+| Pull request record             | [pull_request.md](../templates/pull_request.md)                   | PR documentation with change inventory, testing evidence, rollback plan, and review notes             |
+| Issue record                    | [issue.md](../templates/issue.md)                                 | Bug reports (reproduction steps, root cause) and feature requests (acceptance criteria, user stories) |
+| Kanban board                    | [kanban.md](../templates/kanban.md)                               | Sprint/release/project work tracking with visual board, WIP limits, metrics, and blocked items        |
 
 ### File conventions for tracked documents
 
