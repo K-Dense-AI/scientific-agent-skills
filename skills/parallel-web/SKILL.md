@@ -26,7 +26,7 @@ Read the user's request and match it to one of the capabilities below. For web s
 
 - **Default to Web Search** for a single lookup, research question, or "what is X?" query. It's fast and cost-effective.
 - **Use Web Extract** when the user provides a URL or asks you to read/fetch a specific page. Particularly useful for academic PDFs, preprint servers, and journal articles.
-- **Use Deep Research only** when the user explicitly asks for deep, exhaustive, or comprehensive research. It takes 5–20 minutes — never default to it.
+- **Use Deep Research only** when the user explicitly asks for deep, exhaustive, or comprehensive research. It takes **15–30 minutes** — never default to it.
 - Data enrichment (batch entity lookups) is **not available** in this skill version. If the user needs it, let them know and suggest an alternative approach.
 
 ### Academic source priority
@@ -81,10 +81,15 @@ python scripts/google_research.py search "test" --fast
 
 ## Poll a research result by interaction ID
 
-If a `research` command timed out, the script printed an `interaction_id` to stderr. Use it to fetch the completed report later:
+Deep research uses a **two-step flow** (see `references/deep-research.md`):
+
+1. `research "$QUERY" --no-wait` — starts the job and prints `interaction_id` to stderr (seconds).
+2. `poll "$INTERACTION_ID" -o "$FILENAME.md" --timeout 1800` — waits for the report.
+
+If poll times out, research is **still running server-side**. Wait 2–3 minutes and re-run the same `poll` command. Total time may reach 30–60 minutes.
 
 ```bash
-python scripts/google_research.py poll "$INTERACTION_ID" -o "$FILENAME.md"
+python scripts/google_research.py poll "$INTERACTION_ID" -o "$FILENAME.md" --timeout 1800
 ```
 
 Report the file path and offer to read the file if the user wants to review the results.

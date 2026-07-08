@@ -4,8 +4,8 @@ Google Deep Research CLI — Vertex-backed replacement for parallel-cli.
 
 Subcommands:
   search    Fast factual lookup via deep-research-preview agent (Vertex)
-  research  Comprehensive cited report via deep-research-preview agent (Vertex; max not on Vertex yet)
-  poll      Fetch a completed (or interim) report by interaction_id
+  research  Start comprehensive deep research (--no-wait) or blocking wait (legacy)
+  poll      Wait for and fetch a report by interaction_id
   extract   Single-URL content fetch (gemini-2.5-flash + url_context via generate_content)
 
 Environment (Vertex AI — matches DendroForge production):
@@ -36,7 +36,8 @@ RESEARCH_AGENT_MAX = "deep-research-max-preview-04-2026"  # Gemini API only; use
 EXTRACT_MODEL = "gemini-2.5-flash"
 
 DEFAULT_POLL_INTERVAL = 10
-DEFAULT_RESEARCH_TIMEOUT = 900   # deep research takes 5-15 min
+DEFAULT_RESEARCH_TIMEOUT = 1800  # deep research often takes 15-30 min
+DEFAULT_POLL_GRACE_SLEEP = 120   # after poll timeout, wait then check once more
 DEFAULT_EXTRACT_TIMEOUT = 120
 DEFAULT_SEARCH_TIMEOUT = 600     # preview agent needs several minutes for search
 
@@ -278,7 +279,8 @@ def _interaction_to_report(
     if status != "completed":
         raise SystemExit(
             f"Interaction {interaction_id} status={status}; final report not ready.\n"
-            f"Wait and retry: python3 google_research.py poll {interaction_id} -o report.md\n"
+            f"Wait 2-3 minutes and retry:\n"
+            f"  python3 google_research.py poll {interaction_id} -o report.md --timeout {DEFAULT_RESEARCH_TIMEOUT}\n"
             f"For interim search notes: add --allow-interim"
         )
     raise SystemExit(f"No report text found (interaction_id={interaction_id}, status={status})")
@@ -639,6 +641,32 @@ def _write_output(content: str, output_path: str | None) -> None:
     print(content)
 
 
+def _poll_recovery_hint(interaction_id: str, output_path: str | None = None) -> str:
+    """Recovery command printed when poll times out but the job may still be running."""
+    out_flag = f" -o {output_path}" if output_path else " -o report.md"
+    return (
+        f"Research is still running server-side — timeout is NOT a failure.\n"
+        f"Wait 2-3 minutes, then retry:\n"
+        f"  python3 google_research.py poll {interaction_id}{out_flag} --timeout {DEFAULT_RESEARCH_TIMEOUT}\n"
+        f"Total job time may reach 30-60 minutes; re-run poll until completed."
+    )
+
+
+def _raise_poll_timeout(
+    label: str,
+    interaction_id: str,
+    *,
+    elapsed: float,
+    status: str | None,
+    output_path: str | None = None,
+) -> None:
+    raise SystemExit(
+        f"{label} timed out after {elapsed:.0f}s "
+        f"(interaction_id={interaction_id}, status={status}).\n"
+        + _poll_recovery_hint(interaction_id, output_path)
+    )
+
+
 def _poll_interaction(
     client: Any,
     interaction_id: str,
@@ -646,22 +674,52 @@ def _poll_interaction(
     timeout: int,
     poll_interval: int = DEFAULT_POLL_INTERVAL,
     label: str = "task",
+    grace_sleep: int = DEFAULT_POLL_GRACE_SLEEP,
+    output_path: str | None = None,
 ) -> Any:
-    """Poll an interaction until completed, failed, or timeout."""
+    """Poll an interaction until completed, failed, or timeout.
+
+    On timeout while still in_progress, sleeps ``grace_sleep`` seconds and checks
+    once more (catches jobs that finish shortly after the local wait limit).
+    """
     start = time.monotonic()
     last_status: str | None = None
     last_steps = 0
     last_heartbeat_min = -1
+    last_interaction: Any = None
+    last_seen_status: str | None = None
 
     while True:
         elapsed = time.monotonic() - start
         if elapsed >= timeout:
-            raise SystemExit(
-                f"{label} timed out after {elapsed:.0f}s (interaction_id={interaction_id})"
+            _eprint(
+                f"[{label}] timeout after {elapsed:.0f}s; "
+                f"grace check in {grace_sleep}s (interaction_id={interaction_id})"
+            )
+            time.sleep(grace_sleep)
+            grace_elapsed = time.monotonic() - start
+            interaction = client.interactions.get(interaction_id)
+            status = getattr(interaction, "status", None)
+            _eprint(f"[{label}] grace status={status} elapsed={grace_elapsed:.0f}s")
+            if status == "completed":
+                return interaction
+            if status in ("failed", "cancelled", "canceled"):
+                error = getattr(interaction, "error", None)
+                raise SystemExit(
+                    f"{label} {status}: {error} (interaction_id={interaction_id})"
+                )
+            _raise_poll_timeout(
+                label,
+                interaction_id,
+                elapsed=grace_elapsed,
+                status=status,
+                output_path=output_path,
             )
 
         interaction = client.interactions.get(interaction_id)
+        last_interaction = interaction
         status = getattr(interaction, "status", None)
+        last_seen_status = status
 
         if status != last_status:
             _eprint(f"[{label}] status={status} elapsed={elapsed:.0f}s id={interaction_id}")
@@ -684,6 +742,8 @@ def _poll_interaction(
             raise SystemExit(f"{label} {status}: {error} (interaction_id={interaction_id})")
 
         time.sleep(poll_interval)
+
+    return last_interaction  # pragma: no cover
 
 
 def _create_interaction_with_retry(client: Any, *, max_attempts: int = 5, **kwargs: Any) -> Any:
@@ -715,6 +775,43 @@ def _create_interaction_with_retry(client: Any, *, max_attempts: int = 5, **kwar
     raise last_error  # pragma: no cover
 
 
+def _start_research_interaction(
+    client: Any,
+    *,
+    agent: str,
+    query: str,
+    tools: list[dict[str, str]] | None,
+    label: str = "research",
+    verbose: bool = False,
+) -> str:
+    """Start a background Deep Research job and return its interaction_id."""
+    kwargs: dict[str, Any] = {
+        "agent": agent,
+        "input": query,
+        "background": True,
+        "stream": True,
+        "store": True,
+    }
+    if tools is not None:
+        kwargs["tools"] = tools
+
+    raw = _create_interaction_with_retry(client, **kwargs)
+
+    if hasattr(raw, "id"):
+        interaction_id = raw.id
+    else:
+        _eprint(f"[{label}] extracting interaction_id from stream...")
+        interaction_id = _interaction_id_from_stream(raw)
+
+    _eprint(f"[{label}] interaction_id={interaction_id}")
+    if verbose:
+        _eprint(
+            f"[{label}] verbose: job started server-side; "
+            f"poll with: python3 google_research.py poll {interaction_id} -o report.md --timeout {DEFAULT_RESEARCH_TIMEOUT}"
+        )
+    return interaction_id
+
+
 def _stream_and_collect(
     client: Any,
     *,
@@ -732,26 +829,15 @@ def _stream_and_collect(
     with no timeout between events, so we only read the stream long enough to
     get ``interaction_id``, then poll ``interactions.get()`` (reliable path).
     """
-    kwargs: dict[str, Any] = {
-        "agent": agent,
-        "input": query,
-        "background": True,
-        "stream": True,
-        "store": True,
-    }
-    if tools is not None:
-        kwargs["tools"] = tools
-
-    raw = _create_interaction_with_retry(client, **kwargs)
     start = time.monotonic()
-
-    if hasattr(raw, "id"):
-        interaction_id = raw.id
-    else:
-        _eprint(f"[{label}] extracting interaction_id from stream...")
-        interaction_id = _interaction_id_from_stream(raw)
-
-    _eprint(f"[{label}] interaction_id={interaction_id}")
+    interaction_id = _start_research_interaction(
+        client,
+        agent=agent,
+        query=query,
+        tools=tools,
+        label=label,
+        verbose=verbose,
+    )
     if verbose:
         _eprint(
             f"[{label}] verbose: polling for progress (stream not drained — "
@@ -898,6 +984,25 @@ def cmd_research(args: argparse.Namespace) -> None:
     agent = RESEARCH_AGENT_MAX if args.max else RESEARCH_AGENT
     if args.max:
         _eprint(f"[research] --max: trying {agent} (404s on Vertex; use without --max)")
+
+    if args.no_wait:
+        interaction_id = _start_research_interaction(
+            client,
+            agent=agent,
+            query=args.query,
+            tools=None,
+            label="research",
+            verbose=args.verbose,
+        )
+        out_flag = f" -o {args.output}" if args.output else " -o report.md"
+        _eprint(
+            f"[research] --no-wait: job started server-side (expected 15-30 min total).\n"
+            f"Poll when ready:\n"
+            f"  python3 google_research.py poll {interaction_id}{out_flag} "
+            f"--timeout {DEFAULT_RESEARCH_TIMEOUT}"
+        )
+        return
+
     body, sources, interaction_id = _stream_and_collect(
         client,
         agent=agent,
@@ -919,6 +1024,15 @@ def cmd_poll(args: argparse.Namespace) -> None:
     interaction = client.interactions.get(interaction_id)
     status = getattr(interaction, "status", None)
     _eprint(f"[poll] status={status}")
+
+    if status == "in_progress":
+        interaction = _poll_interaction(
+            client,
+            interaction_id,
+            timeout=args.timeout,
+            label="poll",
+            output_path=args.output,
+        )
 
     body, sources, _ = _interaction_to_report(
         interaction,
@@ -1005,14 +1119,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Try deep-research-max agent (Gemini API only; not available on Vertex yet)",
     )
     p_research.add_argument(
-        "--timeout", type=int, default=DEFAULT_RESEARCH_TIMEOUT, help="Poll timeout (seconds)"
+        "--timeout", type=int, default=DEFAULT_RESEARCH_TIMEOUT, help="Poll timeout (seconds); blocking mode only"
+    )
+    p_research.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="Start job and exit immediately with interaction_id (preferred; poll separately)",
     )
     p_research.add_argument("--verbose", action="store_true", help="Print all stream events and agent thoughts")
     p_research.set_defaults(func=cmd_research)
 
-    p_poll = sub.add_parser("poll", help="Fetch report by interaction_id (after research completes)")
+    p_poll = sub.add_parser("poll", help="Wait for and fetch report by interaction_id")
     p_poll.add_argument("interaction_id", help="Interaction ID from a prior research run")
     p_poll.add_argument("-o", "--output", help="Write markdown to file")
+    p_poll.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_RESEARCH_TIMEOUT,
+        help=f"Max seconds to poll while in_progress (default {DEFAULT_RESEARCH_TIMEOUT})",
+    )
     p_poll.add_argument(
         "--allow-interim",
         action="store_true",

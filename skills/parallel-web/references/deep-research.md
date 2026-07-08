@@ -4,35 +4,60 @@ Research topic: $ARGUMENTS
 
 ## When to use (vs web search)
 
-ONLY use this capability when the user explicitly requests deep/exhaustive research. Deep research takes 5–20 minutes and is significantly more expensive than web search. For normal "research X" requests, quick lookups, or fact-checking, use **web search** instead.
+ONLY use this capability when the user explicitly requests deep/exhaustive research. Deep research takes **15–30 minutes** (sometimes up to 60 minutes) and is significantly more expensive than web search. For normal "research X" requests, quick lookups, or fact-checking, use **web search** instead.
 
-## Command
+## Step 1: Start the research
+
+Frame the research objective to prioritize academic literature. If the user's query is scientific or technical, prepend context that steers toward scholarly sources — e.g., instead of `"effects of sleep deprivation"`, use `"peer-reviewed research and clinical studies on the effects of sleep deprivation"`.
 
 Choose a descriptive filename based on the topic (e.g., `mrna-vaccine-platforms-2026`, `gut-microbiome-depression`). Use lowercase with hyphens, no spaces.
 
 ```bash
-python scripts/google_research.py research "$ARGUMENTS" -o "$FILENAME.md" --timeout 1800
+python scripts/google_research.py research "$ARGUMENTS" --no-wait
 ```
 
 Important:
-- Use `--timeout 1800` (30 minutes) — academic queries regularly take 15+ minutes.
-- The command is **synchronous**: it handles polling internally. Do not run a separate poll step unless the command times out (see below).
-- The script prints `interaction_id` and progress to stderr. Note the `interaction_id` — you will need it if the command times out.
-- For scientific or technical queries, prepend context to steer toward scholarly sources. For example, instead of `"effects of sleep deprivation"`, use `"peer-reviewed research and clinical studies on the effects of sleep deprivation"`.
+- **Always use `--no-wait`.** This returns in seconds with an `interaction_id`. Do **NOT** run blocking `research` without `--no-wait` — it blocks for 15–30+ minutes and will time out in the coding agent's Bash tool (~2 min limit).
+- The script prints `interaction_id=ChBi...` to stderr. **Save this ID** — you need it for Step 2.
+- Immediately tell the user:
+  - Deep research has been kicked off
+  - Expected latency: **15–30 minutes** (up to ~60 minutes for complex academic queries)
+  - You will poll for the report in Step 2
 
-## If the command times out
+Tell them they can continue other work while polling runs (you may background the poll step).
 
-If the command exits with a timeout error, it will print the `interaction_id` and a recovery command. Wait a few minutes, then poll:
+## Step 2: Poll for results
 
 ```bash
-python scripts/google_research.py poll "$INTERACTION_ID" -o "$FILENAME.md"
+python scripts/google_research.py poll "$INTERACTION_ID" -o "$FILENAME.md" --timeout 1800
 ```
 
-Tell the user the research is still running server-side, and re-run `poll` again if it hasn't completed yet.
+Important:
+- Use `--timeout 1800` (30 minutes) per poll invocation.
+- The poll command waits synchronously, checking status every ~10s until `completed` or timeout.
+- Do **NOT** paste the full report stdout into chat — the `-o` file is the deliverable.
+
+### If the poll times out
+
+A poll timeout is **NOT a failure** — research continues server-side on Google.
+
+1. Tell the user the research is still running server-side.
+2. Wait **2–3 minutes**.
+3. Re-run the **same** poll command with the same `interaction_id`:
+
+```bash
+python scripts/google_research.py poll "$INTERACTION_ID" -o "$FILENAME.md" --timeout 1800
+```
+
+Total job time may reach **30–60 minutes**. Re-run poll until the command succeeds and `$FILENAME.md` exists. Do **NOT** tell the user research failed without retrying poll at least once.
+
+### If poll exits before Step 1 completed
+
+If you only have stderr from Step 1 and have not polled yet, use the `interaction_id` from `[research] interaction_id=...` in Step 2.
 
 ## What the output looks like
 
-The script writes a comprehensive markdown report to `$FILENAME.md` and prints it to stdout. The report contains:
+The script writes a comprehensive markdown report to `$FILENAME.md`. The report contains:
 - Full narrative with inline `[[N]](url)` citations
 - A `## Sources` section (often 50–100+ entries for deep queries)
 
@@ -42,7 +67,9 @@ There is no separate `.json` metadata file or executive summary — the markdown
 
 ## Response format
 
-**After the command completes:**
+**After Step 1:** Confirm research started; share expected latency and that you saved `interaction_id`.
+
+**After Step 2 (report ready):**
 
 1. **Brief summary** — relay the report's opening summary section (usually `## Summary` or the first paragraph). Do **not** paste the full report into chat.
 
@@ -72,4 +99,4 @@ There is no separate `.json` metadata file or executive summary — the markdown
 
 4. **Offer to read more** — ask if the user wants to review the full report. **Do NOT read the file into context unless the user asks** — reports are often 5,000–10,000+ words.
 
-5. **`interaction_id`** — note from stderr (`[research] interaction_id=...`) for potential follow-up or poll recovery.
+5. **`interaction_id`** — note from stderr for potential follow-up or poll recovery.
