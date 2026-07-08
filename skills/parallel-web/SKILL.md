@@ -27,7 +27,7 @@ Read the user's request and match it to one of the capabilities below. For web s
 - **Default to Web Search** for a single lookup, research question, or "what is X?" query. It's fast and cost-effective.
 - **Use Web Extract** when the user provides a URL or asks you to read/fetch a specific page. Particularly useful for academic PDFs, preprint servers, and journal articles.
 - **Use Deep Research only** when the user explicitly asks for deep, exhaustive, or comprehensive research. It takes **15–30 minutes** — never default to it.
-- Data enrichment (batch entity lookups) is **not available** in this skill version. If the user needs it, let them know and suggest an alternative approach.
+- Data enrichment (batch CSV/entity lookups) is **not available** in this skill version — there is no `enrich` command in `google_research.py`. Tell the user batch enrichment is unsupported for now. For small lists (roughly &lt;10 rows), use **web search** per entity; for large tables, ask the user to narrow the scope or split the task.
 
 ### Academic source priority
 
