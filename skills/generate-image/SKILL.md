@@ -1,14 +1,14 @@
 ---
 name: generate-image
-description: Generate or edit images using AI models (FLUX, Nano Banana 2). Use for general-purpose image generation including photos, illustrations, artwork, visual assets, concept art, and any image that is not a technical diagram or schematic. For flowcharts, circuits, pathways, and technical diagrams, use the scientific-schematics skill instead.
+description: Generate or edit images using AI models (FLUX, Nano Banana 2) through OpenRouter or Atlas Cloud. Use for general-purpose image generation including photos, illustrations, artwork, visual assets, concept art, and any image that is not a technical diagram or schematic. For flowcharts, circuits, pathways, and technical diagrams, use the scientific-schematics skill instead.
 license: MIT license
-compatibility: Requires an OpenRouter API key
+compatibility: Requires an OpenRouter API key, or an Atlas Cloud API key when using --provider atlascloud
 metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
 ---
 
 # Generate Image
 
-Generate and edit high-quality images using OpenRouter's image generation models including FLUX.2 Pro and Gemini 3.1 Flash Image Preview.
+Generate and edit high-quality images using OpenRouter's image generation models including FLUX.2 Pro and Gemini 3.1 Flash Image Preview, or Atlas Cloud's Nano Banana 2 media models.
 
 ## When to Use This Skill
 
@@ -38,13 +38,19 @@ python scripts/generate_image.py "A beautiful sunset over mountains"
 
 # Edit an existing image
 python scripts/generate_image.py "Make the sky purple" --input photo.jpg
+
+# Generate through Atlas Cloud
+python scripts/generate_image.py "A beautiful sunset over mountains" --provider atlascloud
+
+# Edit through Atlas Cloud
+python scripts/generate_image.py "Make the sky purple" --provider atlascloud --input photo.jpg
 ```
 
 This generates/edits an image and saves it as `generated_image.png` in the current directory.
 
 ## API Key Setup
 
-**CRITICAL**: The script requires an OpenRouter API key. Before running, check if the user has configured their API key:
+**CRITICAL**: The default OpenRouter provider requires an OpenRouter API key. Before running, check if the user has configured their API key:
 
 1. Look for a `.env` file in the project directory or parent directories
 2. Check for `OPENROUTER_API_KEY=<key>` in the `.env` file
@@ -54,6 +60,16 @@ This generates/edits an image and saves it as `generated_image.png` in the curre
    - Get an API key from: https://openrouter.ai/keys
 
 The script will automatically detect the `.env` file and provide clear error messages if the API key is missing.
+
+For Atlas Cloud, set either:
+
+```bash
+export ATLASCLOUD_API_KEY=your-api-key-here
+# or
+export ATLAS_CLOUD_API_KEY=your-api-key-here
+```
+
+Then add `--provider atlascloud`. The script also checks `.env` files for these variables.
 
 ## Model Selection
 
@@ -65,6 +81,10 @@ The script will automatically detect the `.env` file and provide clear error mes
 
 **Generation only**:
 - `black-forest-labs/flux.2-flex` - Fast and cheap, but not as high quality as pro
+
+**Atlas Cloud models**:
+- `google/nano-banana-2/text-to-image` - Default for `--provider atlascloud` generation
+- `google/nano-banana-2/edit` - Default for `--provider atlascloud --input` editing
 
 Select based on:
 - **Quality**: Use gemini-3.1-flash-image-preview or flux.2-pro
@@ -83,6 +103,11 @@ python scripts/generate_image.py "Your prompt here"
 python scripts/generate_image.py "A cat in space" --model "black-forest-labs/flux.2-pro"
 ```
 
+### Use Atlas Cloud
+```bash
+python scripts/generate_image.py "A cat in space" --provider atlascloud --aspect-ratio 16:9 --resolution 2k
+```
+
 ### Custom output path
 ```bash
 python scripts/generate_image.py "Abstract art" --output artwork.png
@@ -91,6 +116,11 @@ python scripts/generate_image.py "Abstract art" --output artwork.png
 ### Edit an existing image
 ```bash
 python scripts/generate_image.py "Make the background blue" --input photo.jpg
+```
+
+### Edit with Atlas Cloud
+```bash
+python scripts/generate_image.py "Make the background blue" --provider atlascloud --input photo.jpg --output edited.png
 ```
 
 ### Edit with a specific model
@@ -114,9 +144,15 @@ python scripts/generate_image.py "Image 2 description" --output image2.png
 
 - `prompt` (required): Text description of the image to generate, or editing instructions
 - `--input` or `-i`: Input image path for editing (enables edit mode)
-- `--model` or `-m`: OpenRouter model ID (default: google/gemini-3.1-flash-image-preview)
+- `--provider`: `openrouter` or `atlascloud` (default: openrouter)
+- `--model` or `-m`: Provider model ID (default: google/gemini-3.1-flash-image-preview; maps to Nano Banana 2 defaults for Atlas Cloud)
 - `--output` or `-o`: Output file path (default: generated_image.png)
-- `--api-key`: OpenRouter API key (overrides .env file)
+- `--api-key`: Provider API key (overrides environment or .env file)
+- `--aspect-ratio`: Atlas Cloud aspect ratio, such as `1:1`, `16:9`, or `9:16`
+- `--resolution`: Atlas Cloud resolution: `1k`, `2k`, or `4k`
+- `--output-format`: Atlas Cloud output format: `default`, `png`, or `jpeg`
+- `--poll-interval`: Seconds between Atlas Cloud prediction polls
+- `--timeout`: Maximum seconds to wait for Atlas Cloud completion
 
 ## Example Use Cases
 
@@ -161,8 +197,10 @@ If the script fails, read the error message and address the issue before retryin
 
 - Images are returned as base64-encoded data URLs and automatically saved as PNG files
 - The script supports both `images` and `content` response formats from different OpenRouter models
+- Atlas Cloud generation is asynchronous: the script submits a task, polls the prediction endpoint, and downloads the first output
 - Generation time varies by model (typically 5-30 seconds)
 - For image editing, the input image is encoded as base64 and sent to the model
+- For Atlas Cloud editing, the input image is uploaded temporarily through Atlas Cloud's media upload endpoint
 - Supported input image formats: PNG, JPEG, GIF, WebP
 - Check OpenRouter pricing for cost information: https://openrouter.ai/models
 
@@ -179,4 +217,3 @@ If the script fails, read the error message and address the issue before retryin
 - **generate-image**: Use for photos, illustrations, artwork, visual concepts
 - **scientific-slides**: Combine with generate-image for visually rich presentations
 - **latex-posters**: Use generate-image for poster visuals and hero images
-
