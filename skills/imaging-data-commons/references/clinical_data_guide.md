@@ -1,6 +1,6 @@
 # Clinical Data Guide for IDC
 
-**Tested with:** idc-index 0.11.7 (IDC data version v23)
+**Tested with:** idc-index 0.12.1 (IDC data version v24)
 
 Clinical data (demographics, diagnoses, therapies, lab tests, staging) accompanies many IDC imaging collections. This guide covers how to discover, access, and integrate clinical data with imaging data using `idc-index`.
 

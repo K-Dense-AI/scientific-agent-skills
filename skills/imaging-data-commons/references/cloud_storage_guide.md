@@ -205,7 +205,7 @@ IDC releases new data versions every 2-4 months. The versioning system ensures r
 
 ### How Versioning Works
 
-1. **Snapshots**: Each IDC version (v1, v2, ..., v23, etc.) represents a complete snapshot of all data at release time
+1. **Snapshots**: Each IDC version (v1, v2, ..., v24, etc.) represents a complete snapshot of all data at release time
 2. **UUID-based**: When data changes, new CRDC UUIDs are assigned; old UUIDs remain accessible
 3. **Cumulative buckets**: All versions coexist in the same buckets—old series folders
 
@@ -223,7 +223,7 @@ IDC releases new data versions every 2-4 months. The versioning system ensures r
 
 For querying version-specific metadata, BigQuery provides versioned tables. See `bigquery_guide.md` for details.
 - `bigquery-public-data.idc_current` — alias to latest version
-- `bigquery-public-data.idc_v23` — specific version (replace 23 with desired version)
+- `bigquery-public-data.idc_v24` — specific version (replace 24 with desired version)
 
 ### Reproducing a Previous Analysis
 
