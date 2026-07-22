@@ -1,0 +1,186 @@
+# Infant Looking Time: Age-by-Parameter Reference Table
+# Comprehensive timing and design parameters organized by age group.
+# All values include citations to primary sources.
+
+age_groups:
+ neonates:
+ age_range: "0-1 months"
+ habituation:
+ method: "Fixed-trial preferred (criterion-based difficult with neonates)"
+ fixed_trial_count: 8-12
+ criterion_if_used: "50% of first 3 trials"
+ source: "Slater, 1995"
+ trial_timing:
+ max_trial_duration_s: 60
+ look_away_criterion_s: 2-3
+ minimum_look_s: 1.0
+ inter_trial_interval_s: 2-3
+ source: "Slater, 1995; Colombo & Mitchell, 2009"
+ attention_getter:
+ duration_s: 3-5
+ type: "High-contrast animated pattern with sound"
+ source: "Expert consensus"
+ visual_capabilities:
+ acuity: "~20/400 to 20/600 (very poor)"
+ contrast_sensitivity: "Low; use high-contrast stimuli"
+ color_vision: "Limited; achromatic stimuli recommended"
+ optimal_distance_cm: 20-30
+ source: "Slater, 1995; Atkinson, 2000"
+ exclusion:
+ expected_rate_percent: 30-50
+ common_reasons:
+ - "Sleepiness"
+ - "Fussiness"
+ - "Inability to maintain fixation"
+ source: "Slater, 1995"
+
+ young_infants:
+ age_range: "1-3 months"
+ habituation:
+ method: "Criterion-based or fixed-trial"
+ fixed_trial_count: 8-10
+ criterion: "50% of first 3 trials over 3 consecutive trials"
+ max_trials: 25
+ source: "Colombo & Mitchell, 2009"
+ trial_timing:
+ max_trial_duration_s: 30-60
+ look_away_criterion_s: 2
+ minimum_look_s: 0.5-1.0
+ inter_trial_interval_s: 1-3
+ source: "Colombo & Mitchell, 2009"
+ attention_getter:
+ duration_s: 3-5
+ type: "Central animated stimulus with sound"
+ source: "Oakes, 2010"
+ visual_capabilities:
+ acuity: "~20/200 to 20/400"
+ contrast_sensitivity: "Improving"
+ color_vision: "Emerging; red-green discrimination present"
+ optimal_distance_cm: 30-50
+ source: "Atkinson, 2000"
+ exclusion:
+ expected_rate_percent: 25-40
+ source: "Oakes, 2010"
+
+ middle_infants:
+ age_range: "3-6 months"
+ habituation:
+ method: "Criterion-based (preferred)"
+ criterion: "50% of first 3 trials over 3 consecutive trials"
+ max_trials: 20-25
+ source: "Oakes, 2010; Colombo & Mitchell, 2009"
+ trial_timing:
+ max_trial_duration_s: 20-30
+ look_away_criterion_s: 2
+ minimum_look_s: 0.5
+ inter_trial_interval_s: 1-3
+ source: "Colombo & Mitchell, 2009"
+ preferential_looking:
+ trial_duration_s: 10-20
+ num_test_trials: 4-8
+ position_switches: "Equal left-right assignment"
+ source: "Oakes, 2010"
+ attention_getter:
+ duration_s: 3-5
+ type: "Central animated stimulus with sound"
+ source: "Oakes, 2010"
+ visual_capabilities:
+ acuity: "~20/100 to 20/200"
+ contrast_sensitivity: "Good"
+ color_vision: "Functional trichromacy"
+ optimal_distance_cm: 50-60
+ source: "Atkinson, 2000"
+ exclusion:
+ expected_rate_percent: 20-35
+ source: "Oakes, 2010"
+ preference_direction:
+ simple_stimuli: "Novelty preference expected"
+ complex_stimuli: "Familiarity preference possible"
+ brief_familiarization: "Familiarity preference likely"
+ source: "Hunter & Ames, 1988"
+
+ older_infants:
+ age_range: "6-12 months"
+ habituation:
+ method: "Criterion-based"
+ criterion: "50% of first 3 trials over 3 consecutive trials"
+ max_trials: 20
+ source: "Colombo & Mitchell, 2009"
+ trial_timing:
+ max_trial_duration_s: 15-20
+ look_away_criterion_s: 1-2
+ minimum_look_s: 0.5
+ inter_trial_interval_s: 1-3
+ source: "Colombo & Mitchell, 2009"
+ preferential_looking:
+ trial_duration_s: 8-15
+ num_test_trials: 4-8
+ position_switches: "Equal left-right assignment"
+ source: "Oakes, 2010"
+ attention_getter:
+ duration_s: 3-5
+ type: "Central animated stimulus with sound"
+ source: "Oakes, 2010"
+ exclusion:
+ expected_rate_percent: 15-30
+ source: "Oakes, 2010"
+ preference_direction:
+ default: "Novelty preference for most paradigms"
+ source: "Hunter & Ames, 1988"
+
+ toddlers:
+ age_range: "12-24 months"
+ habituation:
+ method: "Criterion-based"
+ criterion: "50% of first 3 trials over 3 consecutive trials"
+ max_trials: 15-20
+ source: "Colombo & Mitchell, 2009"
+ trial_timing:
+ max_trial_duration_s: 10-20
+ look_away_criterion_s: 1-2
+ minimum_look_s: 0.5
+ inter_trial_interval_s: 1-3
+ source: "Colombo & Mitchell, 2009"
+ preferential_looking:
+ trial_duration_s: 8-12
+ num_test_trials: 4-8
+ source: "Oakes, 2010"
+ attention_getter:
+ duration_s: 3-5
+ type: "Central animated stimulus with sound"
+ source: "Oakes, 2010"
+ exclusion:
+ expected_rate_percent: 10-25
+ source: "Oakes, 2010"
+ notes: >
+ Toddlers are more mobile and may require additional
+ strategies to maintain attention (e.g., sitting on
+ parent's lap, interactive elements between blocks).
+
+# Coding reliability standards (all ages)
+coding_reliability:
+ minimum_double_coded_proportion: 0.25
+ inter_coder_agreement_threshold: 0.90
+ cohens_kappa_threshold: 0.85
+ pearson_r_threshold: 0.90
+ source: "Oakes, 2010; Colombo & Mitchell, 2009"
+
+# VoE-specific parameters (all ages)
+violation_of_expectation:
+ familiarization_trials: 4-6
+ test_trials_per_event: 2-3
+ counterbalance_order: true
+ expected_effect: "Longer looking at unexpected event"
+ source: "Baillargeon, 1987; Spelke et al., 1992"
+
+# References
+references:
+ - "Atkinson, J. (2000). The Developing Visual Brain. Oxford University Press."
+ - "Baillargeon, R. (1987). Object permanence in 3.5- and 4.5-month-old infants. Developmental Psychology, 23(5), 655-664."
+ - "Cohen, L. B. (1976). Habituation of infant visual attention. In Habituation. Erlbaum."
+ - "Colombo, J., & Mitchell, D. W. (2009). Infant visual habituation. Neurobiology of Learning and Memory, 92(2), 225-234."
+ - "Fantz, R. L. (1964). Visual experience in infants. Science, 146(3644), 668-670."
+ - "Hunter, M. A., & Ames, E. W. (1988). A multifactor model of infant preferences. Advances in Infancy Research, 5, 69-95."
+ - "Oakes, L. M. (2010). Using habituation of looking time. Journal of Cognition and Development, 11(3), 255-268."
+ - "Slater, A. (1995). Visual perception and memory at birth. Advances in Infancy Research, 9, 107-162."
+ - "Spelke, E. S., et al. (1992). Origins of knowledge. Psychological Review, 99(4), 605-632."
