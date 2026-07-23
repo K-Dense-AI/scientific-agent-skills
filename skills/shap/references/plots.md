@@ -1,507 +1,406 @@
-# SHAP Visualization Reference
+# SHAP Plotting
 
-This document provides comprehensive information about all SHAP plotting functions, their parameters, use cases, and best practices for visualizing model explanations.
+This reference uses the SHAP 0.52 plotting API. Prefer `shap.plots.*` functions that consume `shap.Explanation` objects. Legacy functions such as `summary_plot`, `dependence_plot`, and top-level `force_plot` remain relevant to old code but lose metadata and should not anchor a new workflow.
 
-## Overview
+## Validate Before Plotting
 
-SHAP provides diverse visualization tools for explaining model predictions at both individual and global levels. Each plot type serves specific purposes in understanding feature importance, interactions, and prediction mechanisms.
+For every plot:
 
-## Plot Types
-
-### Waterfall Plots
-
-**Purpose**: Display explanations for individual predictions, showing how each feature moves the prediction from the baseline (expected value) toward the final prediction.
-
-**Function**: `shap.plots.waterfall(explanation, max_display=10, show=True)`
-
-**Key Parameters**:
-- `explanation`: Single row from an Explanation object (not multiple samples)
-- `max_display`: Number of features to show (default: 10); less impactful features collapse into a single "other features" term
-- `show`: Whether to display the plot immediately
-
-**Visual Elements**:
-- **X-axis**: Shows SHAP values (contribution to prediction)
-- **Starting point**: Model's expected value (baseline)
-- **Feature contributions**: Red bars (positive) or blue bars (negative) showing how each feature moves the prediction
-- **Feature values**: Displayed in gray to the left of feature names
-- **Ending point**: Final model prediction
-
-**When to Use**:
-- Explaining individual predictions in detail
-- Understanding which features drove a specific decision
-- Communicating model behavior for single instances (e.g., loan denial, diagnosis)
-- Debugging unexpected predictions
-
-**Important Notes**:
-- For XGBoost classifiers, predictions are explained in log-odds units (margin output before logistic transformation)
-- SHAP values sum to the difference between baseline and final prediction (additivity property)
-- Use scatter plots alongside waterfall plots to explore patterns across multiple samples
-
-**Example**:
 ```python
-import shap
-
-# Compute SHAP values
-explainer = shap.TreeExplainer(model)
-shap_values = explainer(X_test)
-
-# Plot waterfall for first prediction
-shap.plots.waterfall(shap_values[0])
-
-# Show more features
-shap.plots.waterfall(shap_values[0], max_display=20)
+print("values:", explanation.values.shape)
+print("base_values:", np.shape(explanation.base_values))
+print("data:", np.shape(explanation.data))
+print("features:", explanation.feature_names)
+print("outputs:", explanation.output_names)
 ```
 
-### Beeswarm Plots
+For multi-output tabular data, select one output:
 
-**Purpose**: Information-dense summary of how top features impact model output across the entire dataset, combining feature importance with value distributions.
-
-**Function**: `shap.plots.beeswarm(shap_values, max_display=10, order=Explanation.abs.mean(0), color=None, show=True)`
-
-**Key Parameters**:
-- `shap_values`: Explanation object containing multiple samples
-- `max_display`: Number of features to display (default: 10)
-- `order`: How to rank features
-  - `Explanation.abs.mean(0)`: Mean absolute SHAP values (default)
-  - `Explanation.abs.max(0)`: Maximum absolute values (highlights outlier impacts)
-- `color`: matplotlib colormap; defaults to red-blue scheme
-- `show`: Whether to display the plot immediately
-
-**Visual Elements**:
-- **Y-axis**: Features ranked by importance
-- **X-axis**: SHAP value (impact on model output)
-- **Each dot**: Single instance from dataset
-- **Dot position (X)**: SHAP value magnitude
-- **Dot color**: Original feature value (red = high, blue = low)
-- **Dot clustering**: Shows density/distribution of impacts
-
-**When to Use**:
-- Summarizing feature importance across entire datasets
-- Understanding both average and individual feature impacts
-- Identifying feature value patterns and their effects
-- Comparing global model behavior across features
-- Detecting nonlinear relationships (e.g., higher age → lower income likelihood)
-
-**Practical Variations**:
 ```python
-# Standard beeswarm plot
-shap.plots.beeswarm(shap_values)
-
-# Show more features
-shap.plots.beeswarm(shap_values, max_display=20)
-
-# Order by maximum absolute values (highlight outliers)
-shap.plots.beeswarm(shap_values, order=shap_values.abs.max(0))
-
-# Plot absolute SHAP values with fixed coloring
-shap.plots.beeswarm(shap_values.abs, color="shap_red")
-
-# Custom matplotlib colormap
-shap.plots.beeswarm(shap_values, color=plt.cm.viridis)
+class_exp = explanation[..., class_index]
+# or, when output names are populated:
+class_exp = explanation[..., "class_name"]
 ```
 
-### Bar Plots
+Most tabular plots expect either:
 
-**Purpose**: Display feature importance as mean absolute SHAP values, providing clean, simple visualizations of global feature impact.
+- one local row: `(features,)`; or
+- many rows: `(samples, features)`.
 
-**Function**: `shap.plots.bar(shap_values, max_display=10, clustering=None, clustering_cutoff=0.5, show=True)`
+Passing `(samples, features, outputs)` without selecting an output is a common source of misleading or failed plots.
 
-**Key Parameters**:
-- `shap_values`: Explanation object (can be single instance, global, or cohorts)
-- `max_display`: Maximum number of features/bars to show
-- `clustering`: Optional hierarchical clustering object from `shap.utils.hclust`
-- `clustering_cutoff`: Threshold for displaying clustering structure (0-1, default: 0.5)
+## Plot Selection
 
-**Plot Types**:
+| Question | Plot | Input |
+|---|---|---|
+| Which features have the greatest average absolute attribution? | `bar` | multi-row `Explanation` |
+| What are the direction, spread, and observed values of attributions? | `beeswarm` | multi-row `Explanation` |
+| How does one row move from baseline to output? | `waterfall` | one-row `Explanation` |
+| How does attribution vary with a feature value? | `scatter` | one feature column |
+| Are there sample-level explanation patterns? | `heatmap` | multi-row `Explanation` |
+| How do cohorts compare descriptively? | `bar` | `Cohorts` or dictionary |
+| Which tokens or regions contribute? | `text`, `image` | modality-specific `Explanation` |
+| Is an interactive additive layout useful? | `force` | one or multiple rows |
+| How do cumulative paths differ? | `decision` | arrays plus base value |
 
-#### Global Bar Plot
-Shows overall feature importance across all samples. Importance calculated as mean absolute SHAP value.
+No plot proves causality or fairness. A plot is an aggregation of attributions under a model, output, background, and masker.
+
+## Global Bar Plot
 
 ```python
-# Global feature importance
-explainer = shap.TreeExplainer(model)
-shap_values = explainer(X_test)
-shap.plots.bar(shap_values)
+ax = shap.plots.bar(
+    explanation,
+    max_display=20,
+    show=False,
+)
+ax.set_title("Mean absolute SHAP value")
+ax.figure.tight_layout()
+ax.figure.savefig("shap-bar.png", dpi=200, bbox_inches="tight")
+plt.close(ax.figure)
 ```
 
-#### Local Bar Plot
-Displays SHAP values for a single instance with feature values shown in gray.
+A multi-row explanation is aggregated by mean absolute attribution. A single row creates a local bar plot.
+
+### Cohort bar plot
 
 ```python
-# Single prediction explanation
-shap.plots.bar(shap_values[0])
+cohorts = explanation.cohorts(group_labels)
+ax = shap.plots.bar(cohorts.abs.mean(0), max_display=15, show=False)
+ax.figure.savefig("shap-cohorts.png", dpi=200, bbox_inches="tight")
+plt.close(ax.figure)
 ```
 
-#### Cohort Bar Plot
-Compares feature importance across subgroups by passing a dictionary of Explanation objects.
+Alternatively:
 
 ```python
-# Compare cohorts
-cohorts = {
-    "Group A": shap_values[mask_A],
-    "Group B": shap_values[mask_B]
-}
-shap.plots.bar(cohorts)
+ax = shap.plots.bar(
+    {
+        "Group A": explanation[group_labels == "A"],
+        "Group B": explanation[group_labels == "B"],
+    },
+    show=False,
+)
 ```
 
-**Feature Clustering**:
-Identifies redundant features using model-based clustering (more accurate than correlation-based methods).
+Use one shared explainer and background for direct cohort comparison. Include sample counts and uncertainty; different mean magnitudes can reflect feature distributions, performance, or model behavior.
+
+### Feature clustering
 
 ```python
-# Add feature clustering
-clustering = shap.utils.hclust(X_train, y_train)
-shap.plots.bar(shap_values, clustering=clustering)
-
-# Adjust clustering display threshold
-shap.plots.bar(shap_values, clustering=clustering, clustering_cutoff=0.3)
+clustering = shap.utils.hclust(X_background, y_background)
+ax = shap.plots.bar(
+    explanation,
+    clustering=clustering,
+    clustering_cutoff=0.5,
+    show=False,
+)
 ```
 
-**When to Use**:
-- Quick overview of global feature importance
-- Comparing feature importance across cohorts or models
-- Identifying redundant or correlated features
-- Clean, simple visualizations for presentations
+`hclust(X, y)` uses outcome-redundancy information and can be expensive. Do not compute it using held-out labels if that would contaminate the analysis.
 
-### Force Plots
+## Beeswarm Plot
 
-**Purpose**: Additive force visualization showing how features push prediction higher (red) or lower (blue) from baseline.
-
-**Function**: `shap.plots.force(base_value, shap_values, features, feature_names=None, out_names=None, link="identity", matplotlib=False, show=True)`
-
-**Key Parameters**:
-- `base_value`: Expected value (baseline prediction)
-- `shap_values`: SHAP values for sample(s)
-- `features`: Feature values for sample(s)
-- `feature_names`: Optional feature names
-- `link`: Transform function ("identity" or "logit")
-- `matplotlib`: Use matplotlib backend (default: interactive JavaScript)
-
-**Visual Elements**:
-- **Baseline**: Starting prediction (expected value)
-- **Red arrows**: Features pushing prediction higher
-- **Blue arrows**: Features pushing prediction lower
-- **Final value**: Resulting prediction
-
-**Interactive Features** (JavaScript mode):
-- Hover for detailed feature information
-- Multiple samples create stacked visualization
-- Can rotate for different perspectives
-
-**When to Use**:
-- Interactive exploration of predictions
-- Visualizing multiple predictions simultaneously
-- Presentations requiring interactive elements
-- Understanding prediction composition at a glance
-
-**Example**:
 ```python
-# Single prediction force plot
+ax = shap.plots.beeswarm(
+    explanation,
+    max_display=20,
+    alpha=0.7,
+    s=12,
+    group_remaining_features=True,
+    show=False,
+)
+ax.figure.savefig("shap-beeswarm.png", dpi=200, bbox_inches="tight")
+plt.close(ax.figure)
+```
+
+Current 0.52 controls include:
+
+- `order`: default `explanation.abs.mean(0)`;
+- `clustering` and `cluster_threshold`;
+- `ax`;
+- `log_scale`;
+- `color_bar`;
+- `s` for marker size;
+- `plot_size`;
+- `group_remaining_features`.
+
+Interpretation:
+
+- horizontal position: signed attribution in the explained output's units;
+- color: observed feature value when numeric display data are available;
+- vertical density/jitter: observations, not uncertainty;
+- row order: an aggregation rule, not causal importance.
+
+Useful alternatives:
+
+```python
+# Highlight features with rare large effects.
+shap.plots.beeswarm(
+    explanation,
+    order=explanation.abs.max(0),
+)
+
+# Absolute magnitude only; direction is intentionally removed.
+shap.plots.beeswarm(
+    explanation.abs,
+    color="shap_red",
+)
+```
+
+Do not interpret red as "risk" or blue as "protective" without first defining output and units.
+
+## Waterfall Plot
+
+```python
+ax = shap.plots.waterfall(
+    explanation[row_index],
+    max_display=15,
+    show=False,
+)
+ax.figure.savefig("shap-waterfall.png", dpi=200, bbox_inches="tight")
+plt.close(ax.figure)
+```
+
+Input must be one-dimensional. A waterfall shows how values move from the selected background's base value to the selected output for one row.
+
+Report:
+
+- why the row was selected;
+- baseline population and value;
+- output name and units;
+- final model output;
+- whether omitted features were grouped.
+
+Never describe the arrows as what would happen if a person changed a feature. They decompose a predictive output; they are not recourse or intervention estimates.
+
+## Scatter Plot
+
+```python
+ax = shap.plots.scatter(
+    explanation[:, "age"],
+    color=explanation[:, "bmi"],
+    alpha=0.5,
+    x_jitter="auto",
+    show=False,
+)
+ax.figure.savefig("shap-age-scatter.png", dpi=200, bbox_inches="tight")
+plt.close(ax.figure)
+```
+
+If `color=explanation` is passed, SHAP selects a likely interaction color automatically:
+
+```python
+shap.plots.scatter(explanation[:, "age"], color=explanation)
+```
+
+Vertical spread at one x-value can arise from:
+
+- interactions;
+- correlated features;
+- heterogeneous subgroups;
+- approximation noise;
+- model discontinuities.
+
+It does not by itself prove an interaction or causal effect.
+
+Current scatter features include categorical support, automatic jitter, percentile axis limits, a histogram, one-feature `ax` support, and overlay curves:
+
+```python
+shap.plots.scatter(
+    explanation[:, "age"],
+    xmin="percentile(1)",
+    xmax="percentile(99)",
+    hist=True,
+)
+```
+
+## Heatmap
+
+```python
+subset = explanation[:200]
+ax = shap.plots.heatmap(
+    subset,
+    max_display=20,
+    instance_order=subset.sum(1),
+    show=False,
+)
+ax.figure.savefig("shap-heatmap.png", dpi=200, bbox_inches="tight")
+plt.close(ax.figure)
+```
+
+Heatmaps are useful for sample-level patterns but can invite over-interpretation of visual clusters. Record:
+
+- row sampling and ordering;
+- any clustering method;
+- output and baseline;
+- whether colors share a fixed scale across panels.
+
+Use a subset for readability, but choose it before viewing explanations or document the selection rule.
+
+## Violin Plot
+
+```python
+shap.plots.violin(
+    explanation.values,
+    features=explanation.data,
+    feature_names=explanation.feature_names,
+    max_display=20,
+)
+```
+
+The violin API retains array-oriented parameters. Prefer beeswarm for the richest modern `Explanation` workflow; use violin when density is more important than individual points.
+
+## Force Plot
+
+The current API recommends passing an `Explanation`:
+
+```python
+shap.plots.force(explanation[row_index])
+```
+
+This returns a JavaScript visualization by default. Initialize notebook JavaScript if required:
+
+```python
+shap.plots.initjs()
+```
+
+For a static local plot:
+
+```python
 shap.plots.force(
-    shap_values.base_values[0],
-    shap_values.values[0],
-    X_test.iloc[0],
-    matplotlib=True
+    explanation[row_index],
+    matplotlib=True,
+    show=False,
 )
-
-# Multiple predictions (interactive)
-shap.plots.force(
-    shap_values.base_values,
-    shap_values.values,
-    X_test
-)
+plt.gcf().savefig("shap-force.png", dpi=200, bbox_inches="tight")
+plt.close(plt.gcf())
 ```
 
-### Scatter Plots (Dependence Plots)
+Use `link="logit"` only as a display transform when the additive values are in log-odds. It does not recompute probability-space SHAP values.
 
-**Purpose**: Show relationship between feature values and their SHAP values, revealing how feature values impact predictions.
+Stacked force plots can accept multiple rows but become hard to audit. Prefer heatmaps or cohort summaries for large samples.
 
-**Function**: `shap.plots.scatter(shap_values, color=None, hist=True, alpha=1, show=True)`
+## Decision Plot
 
-**Key Parameters**:
-- `shap_values`: Explanation object, can specify feature with subscript (e.g., `shap_values[:, "Age"]`)
-- `color`: Feature to use for coloring points (string name or Explanation object)
-- `hist`: Show histogram of feature values on y-axis
-- `alpha`: Point transparency (useful for dense plots)
-
-**Visual Elements**:
-- **X-axis**: Feature value
-- **Y-axis**: SHAP value (impact on prediction)
-- **Point color**: Another feature's value (for interaction detection)
-- **Histogram**: Distribution of feature values
-
-**When to Use**:
-- Understanding feature-prediction relationships
-- Detecting nonlinear effects
-- Identifying feature interactions
-- Validating or discovering patterns in model behavior
-- Exploring counterintuitive predictions from waterfall plots
-
-**Interaction Detection**:
-Color points by another feature to reveal interactions.
+Decision plots retain an array-oriented API:
 
 ```python
-# Basic dependence plot
-shap.plots.scatter(shap_values[:, "Age"])
-
-# Color by another feature to show interactions
-shap.plots.scatter(shap_values[:, "Age"], color=shap_values[:, "Education"])
-
-# Multiple features in one plot
-shap.plots.scatter(shap_values[:, ["Age", "Education", "Hours-per-week"]])
-
-# Increase transparency for dense data
-shap.plots.scatter(shap_values[:, "Age"], alpha=0.5)
-```
-
-### Heatmap Plots
-
-**Purpose**: Visualize SHAP values for multiple samples simultaneously, showing feature impacts across instances.
-
-**Function**: `shap.plots.heatmap(shap_values, instance_order=None, feature_values=None, max_display=10, show=True)`
-
-**Key Parameters**:
-- `shap_values`: Explanation object
-- `instance_order`: How to order instances (can be Explanation object for custom ordering)
-- `feature_values`: Display feature values on hover
-- `max_display`: Maximum features to display
-
-**Visual Elements**:
-- **Rows**: Individual instances/samples
-- **Columns**: Features
-- **Cell color**: SHAP value (red = positive, blue = negative)
-- **Intensity**: Magnitude of impact
-
-**When to Use**:
-- Comparing explanations across multiple instances
-- Identifying patterns in feature impacts
-- Understanding which features vary most across predictions
-- Detecting subgroups or clusters with similar explanation patterns
-
-**Example**:
-```python
-# Basic heatmap
-shap.plots.heatmap(shap_values)
-
-# Order instances by model output
-shap.plots.heatmap(shap_values, instance_order=shap_values.sum(1))
-
-# Show specific subset
-shap.plots.heatmap(shap_values[:100])
-```
-
-### Violin Plots
-
-**Purpose**: Similar to beeswarm plots but uses violin (kernel density) visualization instead of individual dots.
-
-**Function**: `shap.plots.violin(shap_values, features=None, feature_names=None, max_display=10, show=True)`
-
-**When to Use**:
-- Alternative to beeswarm when dataset is very large
-- Emphasizing distribution density over individual points
-- Cleaner visualization for presentations
-
-**Example**:
-```python
-shap.plots.violin(shap_values)
-```
-
-### Decision Plots
-
-**Purpose**: Show prediction paths through cumulative SHAP values, particularly useful for multiclass classification.
-
-**Function**: `shap.plots.decision(base_value, shap_values, features, feature_names=None, feature_order="importance", highlight=None, link="identity", show=True)`
-
-**Key Parameters**:
-- `base_value`: Expected value
-- `shap_values`: SHAP values for samples
-- `features`: Feature values
-- `feature_order`: How to order features ("importance" or list)
-- `highlight`: Indices of samples to highlight
-- `link`: Transform function
-
-**When to Use**:
-- Multiclass classification explanations
-- Understanding cumulative feature effects
-- Comparing prediction paths across samples
-- Identifying where predictions diverge
-
-**Example**:
-```python
-# Decision plot for multiple predictions
 shap.plots.decision(
-    shap_values.base_values,
-    shap_values.values,
-    X_test,
-    feature_names=X_test.columns.tolist()
-)
-
-# Highlight specific instances
-shap.plots.decision(
-    shap_values.base_values,
-    shap_values.values,
-    X_test,
-    highlight=[0, 5, 10]
+    base_value,
+    values,
+    features=X_display,
+    feature_names=feature_names,
+    highlight=highlight_rows,
+    show=False,
 )
 ```
 
-## Plot Selection Guide
+Before plotting, select one output and ensure a compatible scalar base value. Use decision plots for cumulative path comparison, not as a default multiclass plot.
 
-**For Individual Predictions**:
-- **Waterfall**: Best for detailed, sequential explanation
-- **Force**: Good for interactive exploration
-- **Bar (local)**: Simple, clean single-prediction importance
+## Text Plot
 
-**For Global Understanding**:
-- **Beeswarm**: Information-dense summary with value distributions
-- **Bar (global)**: Clean, simple importance ranking
-- **Violin**: Distribution-focused alternative to beeswarm
-
-**For Feature Relationships**:
-- **Scatter**: Understand feature-prediction relationships and interactions
-- **Heatmap**: Compare patterns across multiple instances
-
-**For Multiple Samples**:
-- **Heatmap**: Grid view of SHAP values
-- **Force (stacked)**: Interactive multi-sample visualization
-- **Decision**: Prediction paths for multiclass problems
-
-**For Cohort Comparison**:
-- **Bar (cohort)**: Clean comparison of feature importance
-- **Multiple beeswarms**: Side-by-side distribution comparisons
-
-## Visualization Best Practices
-
-**1. Start Global, Then Go Local**:
-- Begin with beeswarm or bar plot to understand global patterns
-- Dive into waterfall or scatter plots for specific instances or features
-
-**2. Use Multiple Plot Types**:
-- Different plots reveal different insights
-- Combine waterfall (individual) + scatter (relationship) + beeswarm (global)
-
-**3. Adjust max_display**:
-- Default (10) is good for presentations
-- Increase (20-30) for detailed analysis
-- Consider clustering for redundant features
-
-**4. Color Meaningfully**:
-- Use default red-blue for SHAP values (red = positive, blue = negative)
-- Color scatter plots by interacting features
-- Custom colormaps for specific domains
-
-**5. Consider Audience**:
-- Technical audience: Beeswarm, scatter, heatmap
-- Non-technical audience: Waterfall, bar, force plots
-- Interactive presentations: Force plots with JavaScript
-
-**6. Save High-Quality Figures**:
 ```python
-import matplotlib.pyplot as plt
-
-# Create plot
-shap.plots.beeswarm(shap_values, show=False)
-
-# Save with high DPI
-plt.savefig('shap_plot.png', dpi=300, bbox_inches='tight')
-plt.close()
+shap.plots.text(text_explanation)
 ```
 
-**7. Handle Large Datasets**:
-- Sample subset for visualization (e.g., `shap_values[:1000]`)
-- Use violin instead of beeswarm for very large datasets
-- Adjust alpha for scatter plots with many points
+For multi-output text:
 
-## Common Patterns and Workflows
-
-**Pattern 1: Complete Model Explanation**
 ```python
-# 1. Global importance
-shap.plots.beeswarm(shap_values)
-
-# 2. Top feature relationships
-for feature in top_features:
-    shap.plots.scatter(shap_values[:, feature])
-
-# 3. Example predictions
-for i in interesting_indices:
-    shap.plots.waterfall(shap_values[i])
+class_text = text_explanation[..., "anger"]
+shap.plots.text(class_text)
 ```
 
-**Pattern 2: Model Comparison**
-```python
-# Compute SHAP for multiple models
-shap_model1 = explainer1(X_test)
-shap_model2 = explainer2(X_test)
+Token merging and tokenizer special tokens affect presentation. Preserve the tokenizer and masker configuration.
 
-# Compare feature importance
-shap.plots.bar({
-    "Model 1": shap_model1,
-    "Model 2": shap_model2
-})
+## Image Plot
+
+```python
+shap.plots.image(image_explanation)
 ```
 
-**Pattern 3: Subgroup Analysis**
+Legacy examples may use `shap.image_plot`; prefer `shap.plots.image` for current code. Select only the outputs that were actually explained and label them explicitly.
+
+Image overlays show attribution under a masking method; they are not object localization or segmentation ground truth.
+
+## Group Difference and Monitoring
+
+`shap.plots.group_difference` plots differences in mean SHAP values between two groups. It is descriptive and should be paired with confidence intervals or resampling when decisions depend on the difference.
+
+`shap.plots.monitoring` visualizes attribution behavior over an ordered axis. For production drift, store numeric summaries and statistical checks as the source of truth; use the plot as a diagnostic.
+
+## Saving Figures Reliably
+
+Most modern matplotlib-backed plots return an `Axes` when `show=False`:
+
 ```python
-# Define cohorts
-male_mask = X_test['Sex'] == 'Male'
-female_mask = X_test['Sex'] == 'Female'
-
-# Compare cohorts
-shap.plots.bar({
-    "Male": shap_values[male_mask],
-    "Female": shap_values[female_mask]
-})
-
-# Separate beeswarm plots
-shap.plots.beeswarm(shap_values[male_mask])
-shap.plots.beeswarm(shap_values[female_mask])
+def save_axes(ax, path):
+    figure = ax.figure
+    figure.tight_layout()
+    figure.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(figure)
 ```
 
-**Pattern 4: Debugging Predictions**
+If a plot does not return an axis, capture the current figure immediately:
+
 ```python
-# Identify outliers or errors
-errors = (model.predict(X_test) != y_test)
-error_indices = np.where(errors)[0]
-
-# Explain errors
-for idx in error_indices[:5]:
-    print(f"Sample {idx}:")
-    shap.plots.waterfall(shap_values[idx])
-
-    # Explore key features
-    shap.plots.scatter(shap_values[:, "Key_Feature"])
+shap.plots.heatmap(explanation, show=False)
+figure = plt.gcf()
+figure.savefig("plot.png", dpi=200, bbox_inches="tight")
+plt.close(figure)
 ```
 
-## Integration with Notebooks and Reports
+Do not call another plotting function before capturing the figure.
 
-**Jupyter Notebooks**:
-- Interactive force plots work seamlessly
-- Use `show=True` (default) for inline display
-- Combine with markdown explanations
+## Publication and Accessibility
 
-**Static Reports**:
-- Use matplotlib backend for force plots
-- Save figures programmatically
-- Prefer waterfall and bar plots for clarity
+- Put output units in the x-axis label or caption.
+- Define the baseline population in the caption.
+- Include sample size and aggregation.
+- Use direct labels in addition to color.
+- Avoid red/green-only encodings.
+- Keep consistent axis limits for panels intended for comparison.
+- Export vector formats (`.svg` or `.pdf`) when journal workflows allow.
+- Do not expose identifiers or sensitive raw values in local plot labels.
 
-**Web Applications**:
-- Export force plots as HTML
-- Use shap.save_html() for interactive visualizations
-- Consider generating plots on-demand
+## Common Failures
 
-## Troubleshooting Visualizations
+### "Waterfall requires a scalar explanation"
 
-**Issue**: Plots don't display
-- **Solution**: Ensure matplotlib backend is set correctly; use `plt.show()` if needed
+Select one row and one output:
 
-**Issue**: Too many features cluttering plot
-- **Solution**: Reduce `max_display` parameter or use feature clustering
+```python
+shap.plots.waterfall(explanation[row_index, ..., output_index])
+```
 
-**Issue**: Colors reversed or confusing
-- **Solution**: Check model output type (probability vs. log-odds) and use appropriate link function
+For tabular data, the clearer sequence is:
 
-**Issue**: Slow plotting with large datasets
-- **Solution**: Sample subset of data; use `shap_values[:1000]` for visualization
+```python
+class_exp = explanation[..., output_index]
+shap.plots.waterfall(class_exp[row_index])
+```
 
-**Issue**: Feature names missing
-- **Solution**: Ensure feature_names are in Explanation object or pass explicitly to plot functions
+### Missing feature names
+
+Use a DataFrame through preprocessing where possible, or pass `feature_names` when creating the explainer. Verify order before assigning names manually.
+
+### No colors in beeswarm
+
+Color requires usable feature data in `explanation.data` or `display_data`. An explanation built from values alone cannot recover original feature values.
+
+### Figures overlap in loops
+
+Use `show=False`, save the returned axis/figure, and close it every iteration.
+
+### Plot and prediction disagree
+
+Check output selection and units. For example, raw XGBoost margins are not probabilities. Reconstruct the exact explained output before changing plot settings.
+
+## Sources
+
+- Plot API: https://shap.readthedocs.io/en/latest/api.html#plots
+- Beeswarm: https://shap.readthedocs.io/en/latest/generated/shap.plots.beeswarm.html
+- Bar: https://shap.readthedocs.io/en/latest/generated/shap.plots.bar.html
+- Waterfall: https://shap.readthedocs.io/en/latest/generated/shap.plots.waterfall.html
+- Scatter: https://shap.readthedocs.io/en/latest/generated/shap.plots.scatter.html
+- Force: https://shap.readthedocs.io/en/latest/generated/shap.plots.force.html
+- Plot examples: https://shap.readthedocs.io/en/latest/api_examples.html#plots

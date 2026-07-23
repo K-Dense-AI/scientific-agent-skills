@@ -1,350 +1,227 @@
 ---
 name: latchbio-integration
-description: Latch platform for bioinformatics workflows. Build pipelines with Latch SDK, @workflow/@task decorators, deploy serverless workflows, LatchFile/LatchDir, Nextflow/Snakemake integration.
-license: Unknown
-metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
+description: Build, register, debug, and operate bioinformatics workflows on Latch using the Python SDK, CLI, Latch Data and Registry, Nextflow, Snakemake, programmatic execution, and Latch MCP. Use when authoring or deploying Latch workflows, configuring resources or interfaces, moving data, integrating Registry, or launching and monitoring runs.
+license: MIT
+allowed-tools: Read Write Edit Bash
+compatibility: Requires network access and a Latch account. The current stable SDK requires Python 3.9+; Python 3.12 is recommended. Uses uv for installation. Docker is needed for local image builds, while remote registration is the CLI default.
+metadata:
+  version: "2.0"
+  skill-author: K-Dense Inc.
 ---
 
 # LatchBio Integration
 
-## Overview
+## Current Baseline
 
-Latch is a Python framework for building and deploying bioinformatics workflows as serverless pipelines. Built on Flyte, create workflows with @workflow/@task decorators, manage cloud data with LatchFile/LatchDir, configure resources, and integrate Nextflow/Snakemake pipelines.
+This skill targets **Latch SDK 2.76.8**, released July 10, 2026. The package
+metadata supports Python 3.9–3.12 and declares Python 3.9+.
 
-## Core Capabilities
+Treat the installed package and its changelog as authoritative when a guide
+disagrees with the SDK. Some Latch guides retain older Python ranges or
+compatibility-specific pre-release pins, especially the Snakemake v2 tutorial.
+Never combine commands or imports from different tracks without checking their
+version requirements.
 
-The Latch platform provides four main areas of functionality:
+## When to Use
 
-### 1. Workflow Creation and Deployment
-- Define serverless workflows using Python decorators
-- Support for native Python, Nextflow, and Snakemake pipelines
-- Automatic containerization with Docker
-- Auto-generated no-code user interfaces
-- Version control and reproducibility
+Use this skill to:
 
-### 2. Data Management
-- Cloud storage abstractions (LatchFile, LatchDir)
-- Structured data organization with Registry (Projects → Tables → Records)
-- Type-safe data operations with links and enums
-- Automatic file transfer between local and cloud
-- Glob pattern matching for file selection
+- Create or maintain Python SDK workflows and task graphs
+- Package and register Python, Nextflow, or Snakemake pipelines
+- Configure task CPU, memory, storage, GPU, caching, retries, and timeouts
+- Work with Latch Data through `LPath`, `LatchFile`, `LatchDir`, or the CLI
+- Read or update Latch Registry projects, tables, and records
+- Design workflow forms, launch plans, samplesheets, messages, and result links
+- Stage and debug workflow images with `latch register --staging` and `latch develop`
+- Launch and monitor workflows through Python or Latch MCP
+- Discover and use ready-to-run Latch workflows
 
-### 3. Resource Configuration
-- Pre-configured task decorators (@small_task, @large_task, @small_gpu_task, @large_gpu_task)
-- Custom resource specifications (CPU, memory, GPU, storage)
-- GPU support (K80, V100, A100)
-- Timeout and storage configuration
-- Cost optimization strategies
+## Route to the Right Reference
 
-### 4. Verified Workflows
-- Production-ready pre-built pipelines
-- Bulk RNA-seq, DESeq2, pathway analysis
-- AlphaFold and ColabFold for protein structure prediction
-- Single-cell tools (ArchR, scVelo, emptyDropsR)
-- CRISPR analysis, phylogenetics, and more
+Read only the references needed for the task:
 
-## Quick Start
+| Need | Reference |
+|---|---|
+| Python workflows, tasks, maps, conditions, caching | `references/workflow-creation.md` |
+| `LPath`, legacy file types, Latch URLs, data CLI | `references/data-management.md` |
+| Registry reads, transactions, samplesheets | `references/registry.md` |
+| CPU, memory, storage, GPU, dynamic resources | `references/resource-configuration.md` |
+| Nextflow and Snakemake packaging | `references/nextflow-snakemake.md` |
+| Metadata, forms, launch plans, messages, automations | `references/ui-and-automation.md` |
+| Registration, development, execution, monitoring | `references/operations-and-debugging.md` |
+| Ready-to-use workflows and `latch.verified` | `references/verified-workflows.md` |
+| Remote MCP setup and tool workflow | `references/latch-mcp.md` |
 
-### Installation and Setup
+Before relying on a symbol, run `scripts/inspect_latch_sdk.py` against the
+target SDK version. It performs local imports only and does not authenticate or
+make network requests.
+
+## Installation and Authentication
+
+For a reproducible environment:
 
 ```bash
-# Install Latch SDK
-uv pip install latch
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install "latch==2.76.8"
+```
 
-# Login to Latch
+On Windows, use WSL for the documented Linux workflow tooling.
+
+Authenticate through the supported OAuth flow; do not read, print, copy, or
+parse `~/.latch/token` manually:
+
+```bash
 latch login
-
-# Initialize a new workflow
-latch init my-workflow
-
-# Register workflow to platform
-latch register my-workflow
+latch workspace
 ```
 
-**Prerequisites:**
-- Docker installed and running
-- Latch account credentials
-- Python 3.8+
+Select a workspace non-interactively when its numeric ID is already known:
 
-### Basic Workflow Example
+```bash
+latch workspace --id 12345
+```
+
+`latch login` credentials are for the SDK and CLI. Latch MCP uses a separate
+OAuth authorization and its credentials cannot be reused for general SDK
+access.
+
+## Fast Path
+
+Create and remotely register the maintained subprocess template:
+
+```bash
+latch init covid-wf --template subprocess
+latch register --yes --open covid-wf
+```
+
+Remote image building is the default. Use `--no-remote` only when a local
+Docker daemon is available and a local build is intentional.
+
+## Minimal Python Workflow
+
+Keep workflow bodies declarative: invoke tasks and return their promises.
+Perform computation and side effects inside tasks.
 
 ```python
-from latch import workflow, small_task
-from latch.types import LatchFile
+from latch import small_task, workflow
+
 
 @small_task
-def process_file(input_file: LatchFile) -> LatchFile:
-    """Process a single file"""
-    # Processing logic
-    return output_file
+def reverse_complement(sequence: str) -> str:
+    table = str.maketrans("ACGTacgt", "TGCAtgca")
+    return sequence.translate(table)[::-1]
+
 
 @workflow
-def my_workflow(input_file: LatchFile) -> LatchFile:
-    """
-    My bioinformatics workflow
-
-    Args:
-        input_file: Input data file
-    """
-    return process_file(input_file=input_file)
+def reverse_complement_workflow(sequence: str) -> str:
+    """Return the reverse complement of a DNA sequence."""
+    return reverse_complement(sequence=sequence)
 ```
 
-## When to Use This Skill
+Use `@workflow(metadata)` when the generated interface needs custom labels,
+sections, validation rules, samplesheets, or documentation links. Use `LatchFile` or
+`LatchDir` for automatic task input staging and output upload; use `LPath` for
+imperative remote path operations.
 
-This skill should be used when encountering any of the following scenarios:
+## Recommended Development Lifecycle
 
-**Workflow Development:**
-- "Create a Latch workflow for RNA-seq analysis"
-- "Deploy my pipeline to Latch"
-- "Convert my Nextflow pipeline to Latch"
-- "Add GPU support to my workflow"
-- Working with `@workflow`, `@task` decorators
+1. **Inspect compatibility**
+   - Confirm the installed SDK and Python version.
+   - Identify whether the project is Python, Nextflow, the legacy Snakemake
+     flag path, or the separately pinned Snakemake v2 tutorial track.
 
-**Data Management:**
-- "Organize my sequencing data in Latch Registry"
-- "How do I use LatchFile and LatchDir?"
-- "Set up sample tracking in Latch"
-- Working with `latch:///` paths
+2. **Define a typed interface**
+   - Annotate every workflow and task input and output.
+   - Keep module import time free of network calls, data mutations, and secret
+     retrieval. Isolate documented exceptions such as `workflow_reference`,
+     which resolves the active workspace when its decorator is evaluated.
+   - Use dataclasses and enums for structured parameters.
 
-**Resource Configuration:**
-- "Configure GPU for AlphaFold on Latch"
-- "My task is running out of memory"
-- "How do I optimize workflow costs?"
-- Working with task decorators
+3. **Configure metadata and resources**
+   - Match metadata parameter keys to the workflow signature.
+   - Start with named task decorators, then use `custom_task` only when measured
+     requirements justify it.
 
-**Verified Workflows:**
-- "Run AlphaFold on Latch"
-- "Use DESeq2 for differential expression"
-- "Available pre-built workflows"
-- Using `latch.verified` module
+4. **Validate in the execution image**
 
-## Detailed Documentation
+   Fresh Nextflow and Snakemake projects must generate their
+   version-compatible Python entrypoint before staging. In SDK 2.76.8, the
+   staging branch does not generate one from `--nf-script` or `--snakefile`.
 
-This skill includes comprehensive reference documentation organized by capability:
+   ```bash
+   latch register --staging .
+   latch develop .
+   ```
 
-### references/workflow-creation.md
-**Read this for:**
-- Creating and registering workflows
-- Task definition and decorators
-- Supporting Python, Nextflow, Snakemake
-- Launch plans and conditional sections
-- Workflow execution (CLI and programmatic)
-- Multi-step and parallel pipelines
-- Troubleshooting registration issues
+   Re-run staging registration after changing the Dockerfile or dependencies.
+   Edits made inside the development container are not synced back.
 
-**Key topics:**
-- `latch init` and `latch register` commands
-- `@workflow` and `@task` decorators
-- LatchFile and LatchDir basics
-- Type annotations and docstrings
-- Launch plans with preset parameters
-- Conditional UI sections
+5. **Register deliberately**
 
-### references/data-management.md
-**Read this for:**
-- Cloud storage with LatchFile and LatchDir
-- Registry system (Projects, Tables, Records)
-- Linked records and relationships
-- Enum and typed columns
-- Bulk operations and transactions
-- Integration with workflows
-- Account and workspace management
+   ```bash
+   latch register --yes --open .
+   ```
 
-**Key topics:**
-- `latch:///` path format
-- File transfer and glob patterns
-- Creating and querying Registry tables
-- Column types (string, number, file, link, enum)
-- Record CRUD operations
-- Workflow-Registry integration
+   Useful controls:
 
-### references/resource-configuration.md
-**Read this for:**
-- Task resource decorators
-- Custom CPU, memory, GPU configuration
-- GPU types (K80, V100, A100)
-- Timeout and storage settings
-- Resource optimization strategies
-- Cost-effective workflow design
-- Monitoring and debugging
+   ```bash
+   latch register --workspace-id 12345 .
+   latch register --mark-as-release .
+   latch register --workflow-module wf.custom_entrypoint .
+   ```
 
-**Key topics:**
-- `@small_task`, `@large_task`, `@small_gpu_task`, `@large_gpu_task`
-- `@custom_task` with precise specifications
-- Multi-GPU configuration
-- Resource selection by workload type
-- Platform limits and quotas
+   Duplicate registration exits with status `2`; it is not the same as a build
+   failure.
 
-### references/verified-workflows.md
-**Read this for:**
-- Pre-built production workflows
-- Bulk RNA-seq and DESeq2
-- AlphaFold and ColabFold
-- Single-cell analysis (ArchR, scVelo)
-- CRISPR editing analysis
-- Pathway enrichment
-- Integration with custom workflows
+6. **Launch only after reviewing cost and parameters**
+   - Prefer the Console or Latch MCP for interactive operation.
+   - Prefer `latch_cli.services.launch.launch_v2` for Python automation.
+   - Do not use the deprecated `latch launch` CLI as a new integration pattern.
 
-**Key topics:**
-- `latch.verified` module imports
-- Available verified workflows
-- Workflow parameters and options
-- Combining verified and custom steps
-- Version management
+7. **Monitor and verify**
+   - Check terminal status, task logs, result links, and scientific outputs.
+   - Treat successful orchestration as necessary but not sufficient scientific
+     validation.
 
-## Common Workflow Patterns
+## Operational Safety
 
-### Complete RNA-seq Pipeline
+- Ask for confirmation before launching paid compute, especially GPU or large
+  batch runs.
+- Ask for confirmation before `LPath.rmr`, `latch rmr`, Registry deletion, or
+  overwriting shared destinations.
+- Never log secrets, SDK tokens, signed URLs, or secret values.
+- Call `get_secret()` only inside a task, use the returned value only for its
+  intended service, and never return it as workflow output.
+- Do not pass untrusted strings through shell commands. Prefer argument lists
+  with `subprocess.run(..., check=True)`.
+- Pin the SDK and workflow dependencies for releases. Upgrade only after
+  reviewing the changelog and re-running staging tests.
+- Treat generated files as generated: customize the documented extension file
+  rather than editing output that the CLI will overwrite.
 
-```python
-from latch import workflow, small_task, large_task
-from latch.types import LatchFile, LatchDir
+## Inspect the Installed SDK
 
-@small_task
-def quality_control(fastq: LatchFile) -> LatchFile:
-    """Run FastQC"""
-    return qc_output
+From this skill directory:
 
-@large_task
-def alignment(fastq: LatchFile, genome: str) -> LatchFile:
-    """STAR alignment"""
-    return bam_output
-
-@small_task
-def quantification(bam: LatchFile) -> LatchFile:
-    """featureCounts"""
-    return counts
-
-@workflow
-def rnaseq_pipeline(
-    input_fastq: LatchFile,
-    genome: str,
-    output_dir: LatchDir
-) -> LatchFile:
-    """RNA-seq analysis pipeline"""
-    qc = quality_control(fastq=input_fastq)
-    aligned = alignment(fastq=qc, genome=genome)
-    return quantification(bam=aligned)
+```bash
+uv run --no-project --python 3.12 --with "latch==2.76.8" \
+  python scripts/inspect_latch_sdk.py
 ```
 
-### GPU-Accelerated Workflow
+Use JSON output for automated comparisons:
 
-```python
-from latch import workflow, small_task, large_gpu_task
-from latch.types import LatchFile
-
-@small_task
-def preprocess(input_file: LatchFile) -> LatchFile:
-    """Prepare data"""
-    return processed
-
-@large_gpu_task
-def gpu_computation(data: LatchFile) -> LatchFile:
-    """GPU-accelerated analysis"""
-    return results
-
-@workflow
-def gpu_pipeline(input_file: LatchFile) -> LatchFile:
-    """Pipeline with GPU tasks"""
-    preprocessed = preprocess(input_file=input_file)
-    return gpu_computation(data=preprocessed)
+```bash
+uv run --no-project --python 3.12 --with "latch==2.76.8" \
+  python scripts/inspect_latch_sdk.py --json
 ```
 
-### Registry-Integrated Workflow
+## Authoritative Sources
 
-```python
-from latch import workflow, small_task
-from latch.registry.table import Table
-from latch.registry.record import Record
-from latch.types import LatchFile
-
-@small_task
-def process_and_track(sample_id: str, table_id: str) -> str:
-    """Process sample and update Registry"""
-    # Get sample from registry
-    table = Table.get(table_id=table_id)
-    records = Record.list(table_id=table_id, filter={"sample_id": sample_id})
-    sample = records[0]
-
-    # Process
-    input_file = sample.values["fastq_file"]
-    output = process(input_file)
-
-    # Update registry
-    sample.update(values={"status": "completed", "result": output})
-    return "Success"
-
-@workflow
-def registry_workflow(sample_id: str, table_id: str):
-    """Workflow integrated with Registry"""
-    return process_and_track(sample_id=sample_id, table_id=table_id)
-```
-
-## Best Practices
-
-### Workflow Design
-1. Use type annotations for all parameters
-2. Write clear docstrings (appear in UI)
-3. Start with standard task decorators, scale up if needed
-4. Break complex workflows into modular tasks
-5. Implement proper error handling
-
-### Data Management
-6. Use consistent folder structures
-7. Define Registry schemas before bulk entry
-8. Use linked records for relationships
-9. Store metadata in Registry for traceability
-
-### Resource Configuration
-10. Right-size resources (don't over-allocate)
-11. Use GPU only when algorithms support it
-12. Monitor execution metrics and optimize
-13. Design for parallel execution when possible
-
-### Development Workflow
-14. Test locally with Docker before registration
-15. Use version control for workflow code
-16. Document resource requirements
-17. Profile workflows to determine actual needs
-
-## Troubleshooting
-
-### Common Issues
-
-**Registration Failures:**
-- Ensure Docker is running
-- Check authentication with `latch login`
-- Verify all dependencies in Dockerfile
-- Use `--verbose` flag for detailed logs
-
-**Resource Problems:**
-- Out of memory: Increase memory in task decorator
-- Timeouts: Increase timeout parameter
-- Storage issues: Increase ephemeral storage_gib
-
-**Data Access:**
-- Use correct `latch:///` path format
-- Verify file exists in workspace
-- Check permissions for shared workspaces
-
-**Type Errors:**
-- Add type annotations to all parameters
-- Use LatchFile/LatchDir for file/directory parameters
-- Ensure workflow return type matches actual return
-
-## Additional Resources
-
-- **Official Documentation**: https://docs.latch.bio
-- **GitHub Repository**: https://github.com/latchbio/latch
-- **Slack Community**: Join Latch SDK workspace
-- **API Reference**: https://docs.latch.bio/api/latch.html
-- **Blog**: https://blog.latch.bio
-
-## Support
-
-For issues or questions:
-1. Check documentation links above
-2. Search GitHub issues
-3. Ask in Slack community
-4. Contact support@latch.bio
-
+- Documentation index: https://wiki.latch.bio/llms.txt
+- Workflow and SDK guides: https://wiki.latch.bio/workflows/overview
+- SDK API reference: https://wiki.latch.bio/reference/sdk
+- PyPI package: https://pypi.org/project/latch/
+- SDK 2.76.8 release source: https://github.com/latchbio/latch/tree/0faa9dcd8186444ac008f50adf95d43f0fa30e06
+- SDK changelog: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/CHANGELOG.md
+- Latch Console: https://console.latch.bio

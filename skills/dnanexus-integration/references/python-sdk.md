@@ -1,523 +1,528 @@
-# DNAnexus Python SDK (dxpy)
+# Python SDK (`dxpy`)
 
-## Overview
+## Baseline
 
-The dxpy library provides Python bindings to interact with the DNAnexus Platform. It's available both within the DNAnexus Execution Environment (for apps running on the platform) and for external scripts accessing the API.
+This reference was verified against `dxpy==0.410.0` (released 2026-07-14).
+PyPI declares Python 3.8 or newer. This repository recommends Python 3.11+.
 
-## Installation
+For a project:
 
 ```bash
-# Install dxpy
-pip install dxpy
-
-# Or using conda
-conda install -c bioconda dxpy
+uv add "dxpy==0.410.0"
 ```
 
-**Requirements**: Python 3.8 or higher
+For an isolated script:
+
+```bash
+uv run --with "dxpy==0.410.0" "script.py"
+```
+
+Inspect the installed API without authenticating:
+
+```bash
+uv run --with "dxpy==0.410.0" \
+  "skills/dnanexus-integration/scripts/inspect_dxpy.py" --strict
+```
 
 ## Authentication
 
-### Login
+`dxpy` uses the same configuration sources as `dx`. Prefer `dx login` for
+interactive work and named secret injection for automation.
 
-```bash
-# Login via command line
-dx login
-```
+Never print:
 
-### API Token
+- `DX_SECURITY_CONTEXT`
+- API token values
+- `dxpy.SECURITY_CONTEXT`
+- full process environments
 
-```python
-import dxpy
+See `authentication.md` for configuration precedence and safe diagnosis.
 
-# Set authentication token
-dxpy.set_security_context({
-    "auth_token_type": "Bearer",
-    "auth_token": "YOUR_API_TOKEN"
-})
-```
+## Handler Model
 
-### Environment Variables
+Use handlers for objects and executions:
 
-```bash
-# Set token via environment
-export DX_SECURITY_CONTEXT='{"auth_token": "YOUR_TOKEN", "auth_token_type": "Bearer"}'
-```
+| Class | Purpose |
+|---|---|
+| `DXFile` | File object |
+| `DXRecord` | Structured metadata record |
+| `DXApplet` | Project-local executable |
+| `DXApp` | Versioned app |
+| `DXWorkflow` | Native workflow |
+| `DXJob` | App/appet execution |
+| `DXAnalysis` | Workflow execution |
+| `DXProject` | Project/data container |
 
-## Core Classes
-
-### DXFile
-
-Handler for file objects.
+Create handlers from IDs:
 
 ```python
 import dxpy
 
-# Get file handler
-file_obj = dxpy.DXFile("file-xxxx")
-
-# Get file info
-desc = file_obj.describe()
-print(f"Name: {desc['name']}")
-print(f"Size: {desc['size']} bytes")
-
-# Download file
-dxpy.download_dxfile(file_obj.get_id(), "local_file.txt")
-
-# Read file contents
-with file_obj.open_file() as f:
-    contents = f.read()
-
-# Update metadata
-file_obj.set_properties({"key": "value"})
-file_obj.add_tags(["tag1", "tag2"])
-file_obj.rename("new_name.txt")
-
-# Close file
-file_obj.close()
-```
-
-### DXRecord
-
-Handler for record objects.
-
-```python
-# Create record
-record = dxpy.new_dxrecord(
-    name="metadata",
-    types=["Metadata"],
-    details={"key": "value"},
-    project="project-xxxx",
-    close=True
-)
-
-# Get record handler
-record = dxpy.DXRecord("record-xxxx")
-
-# Get details
-details = record.get_details()
-
-# Update details (must be open)
-record.set_details({"updated": True})
-record.close()
-```
-
-### DXApplet
-
-Handler for applet objects.
-
-```python
-# Get applet
-applet = dxpy.DXApplet("applet-xxxx")
-
-# Get applet info
-desc = applet.describe()
-print(f"Name: {desc['name']}")
-print(f"Version: {desc.get('version', 'N/A')}")
-
-# Run applet
-job = applet.run({
-    "input1": {"$dnanexus_link": "file-yyyy"},
-    "param1": "value"
-})
-```
-
-### DXApp
-
-Handler for app objects.
-
-```python
-# Get app by name
-app = dxpy.DXApp(name="my-app")
-
-# Or by ID
+file_obj = dxpy.DXFile("file-xxxx", project="project-xxxx")
+applet = dxpy.DXApplet("applet-xxxx", project="project-xxxx")
 app = dxpy.DXApp("app-xxxx")
-
-# Run app
-job = app.run({
-    "input": {"$dnanexus_link": "file-yyyy"}
-})
-```
-
-### DXWorkflow
-
-Handler for workflow objects.
-
-```python
-# Create workflow
-workflow = dxpy.new_dxworkflow(
-    name="My Pipeline",
-    project="project-xxxx"
-)
-
-# Add stage
-stage = workflow.add_stage(
-    dxpy.DXApplet("applet-xxxx"),
-    name="Step 1"
-)
-
-# Set stage input
-stage.set_input("input1", {"$dnanexus_link": "file-yyyy"})
-
-# Close workflow
-workflow.close()
-
-# Run workflow
-analysis = workflow.run({})
-```
-
-### DXJob
-
-Handler for job objects.
-
-```python
-# Get job
+workflow = dxpy.DXWorkflow("workflow-xxxx", project="project-xxxx")
 job = dxpy.DXJob("job-xxxx")
-
-# Get job info
-desc = job.describe()
-print(f"State: {desc['state']}")
-print(f"Name: {desc['name']}")
-
-# Wait for completion
-job.wait_on_done()
-
-# Get output
-output = desc.get("output", {})
-
-# Terminate job
-job.terminate()
-```
-
-### DXProject
-
-Handler for project objects.
-
-```python
-# Get project
+analysis = dxpy.DXAnalysis("analysis-xxxx")
 project = dxpy.DXProject("project-xxxx")
-
-# Get project info
-desc = project.describe()
-print(f"Name: {desc['name']}")
-print(f"Region: {desc.get('region', 'N/A')}")
-
-# List folder contents
-contents = project.list_folder("/data")
-print(f"Objects: {contents['objects']}")
-print(f"Folders: {contents['folders']}")
 ```
 
-## High-Level Functions
-
-### File Operations
+For an ID or link whose class is not known:
 
 ```python
-# Upload file
-file_obj = dxpy.upload_local_file(
-    "local_file.txt",
+handler = dxpy.get_handler(id_or_link, project="project-xxxx")
+```
+
+`get_handler()` accepts a string ID or a mapping containing a DNAnexus link.
+
+## Links
+
+Create a data-object link:
+
+```python
+link = dxpy.dxlink("file-xxxx")
+```
+
+Include project context for a project-qualified link:
+
+```python
+link = dxpy.dxlink("file-xxxx", "project-xxxx")
+```
+
+Create a job-based output reference:
+
+```python
+output_reference = job.get_output_ref("aligned_bam")
+```
+
+Do not wrap a job output reference with `dxpy.dxlink()`. It is already a valid
+reference.
+
+## Describe
+
+```python
+import dxpy
+
+description = dxpy.describe(
+    "file-xxxx",
+    fields={"name", "size", "state", "archivalState"},
+)
+```
+
+Handler:
+
+```python
+description = dxpy.DXFile(
+    "file-xxxx",
     project="project-xxxx",
-    folder="/data",
-    name="uploaded_file.txt"
+).describe(
+    fields={"name", "size", "state"}
 )
-
-# Download file
-dxpy.download_dxfile("file-xxxx", "downloaded.txt")
-
-# Upload string as file
-file_obj = dxpy.upload_string("Hello World", project="project-xxxx")
 ```
 
-### Creating Data Objects
+Request only needed fields. Object descriptions can contain PHI or internal
+metadata.
+
+## Files
+
+### Upload
+
+Verified signature:
+
+```text
+upload_local_file(
+    filename=None,
+    file=None,
+    media_type=None,
+    keep_open=False,
+    wait_on_close=False,
+    use_existing_dxfile=None,
+    show_progress=False,
+    write_buffer_size=None,
+    multithread=True,
+    **kwargs
+)
+```
+
+Example:
 
 ```python
-# New file
-file_obj = dxpy.new_dxfile(
+remote_file = dxpy.upload_local_file(
+    "results.vcf.gz",
     project="project-xxxx",
-    name="output.txt"
-)
-file_obj.write("content")
-file_obj.close()
-
-# New record
-record = dxpy.new_dxrecord(
-    name="metadata",
-    details={"key": "value"},
-    project="project-xxxx"
+    folder="/results",
+    properties={"sample_id": "S001"},
+    tags=["validated"],
+    wait_on_close=True,
 )
 ```
 
-### Search Functions
+Exactly one of `filename` or `file` is required. `wait_on_close=True` is useful
+when the next operation requires a closed object.
+
+### Download
 
 ```python
-# Find data objects
+dxpy.download_dxfile(
+    "file-xxxx",
+    "results.vcf.gz",
+    project="project-xxxx",
+    show_progress=True,
+)
+```
+
+`project` can affect which project/billing context is used for the download.
+
+### Stream
+
+```python
+with dxpy.open_dxfile(
+    "file-xxxx",
+    project="project-xxxx",
+) as remote_stream:
+    prefix = remote_stream.read(4096)
+```
+
+`DXFile.open_file()` does not exist in dxpy 0.410.0. Use
+`dxpy.open_dxfile()`.
+
+### Upload a string
+
+```python
+report = dxpy.upload_string(
+    '{"status":"ok"}\n',
+    project="project-xxxx",
+    folder="/reports",
+    name="status.json",
+    media_type="application/json",
+    wait_on_close=True,
+)
+```
+
+Do not use this for credentials or sensitive diagnostic dumps.
+
+## Search
+
+### Data objects
+
+Verified signature includes:
+
+```text
+find_data_objects(
+    classname=None,
+    state=None,
+    visibility=None,
+    name=None,
+    name_mode="exact",
+    properties=None,
+    typename=None,
+    tags=None,
+    project=None,
+    folder=None,
+    recurse=None,
+    describe=False,
+    limit=None,
+    region=None,
+    archival_state=None,
+    return_handler=False,
+    ...
+)
+```
+
+Example:
+
+```python
 results = dxpy.find_data_objects(
     classname="file",
-    name="*.fastq",
     project="project-xxxx",
-    folder="/raw_data",
-    describe=True
+    folder="/results",
+    recurse=True,
+    name="*.vcf.gz",
+    name_mode="glob",
+    state="closed",
+    describe={
+        "fields": {
+            "name": True,
+            "size": True,
+            "archivalState": True,
+        }
+    },
+    limit=200,
 )
 
 for result in results:
-    print(f"{result['describe']['name']}: {result['id']}")
+    description = result["describe"]
+    print(result["id"], description["name"])
+```
 
-# Find projects
-projects = dxpy.find_projects(
-    name="*analysis*",
-    describe=True
-)
+Important:
 
-# Find jobs
-jobs = dxpy.find_jobs(
+- Searches return generators.
+- `name_mode` defaults to exact.
+- `tags` means all specified tags.
+- `tag` is deprecated.
+- `describe=True` returns full default descriptions; a field mapping is safer.
+- Omitted `limit` means dxpy keeps paging until all matching results are read.
+- Scope broad searches by project/folder/time.
+
+Timestamps accept:
+
+- Epoch milliseconds
+- Negative milliseconds relative to now
+- Relative strings such as `"-2d"` or `"-1w"`
+
+### Executions
+
+```python
+executions = dxpy.find_executions(
     project="project-xxxx",
-    created_after="2025-01-01",
-    state="failed"
+    state="failed",
+    created_after="-2d",
+    include_subjobs=True,
+    include_restarted=True,
+    describe={"fields": {"name": True, "failureReason": True}},
+    limit=100,
+)
+```
+
+Use:
+
+- `find_executions()` for jobs and analyses
+- `find_jobs()` for jobs only
+- `find_analyses()` for analyses only
+
+`find_executions()` supports `classname="job"` or
+`classname="analysis"`.
+
+## Projects and Folders
+
+```python
+project = dxpy.DXProject("project-xxxx")
+
+project.new_folder(
+    "/analysis/run-001/results",
+    parents=True,
 )
 
-# Find apps
-apps = dxpy.find_apps(
-    category="Read Mapping"
+contents = project.list_folder(
+    "/analysis/run-001",
+    describe={"fields": {"name": True, "state": True}},
 )
 ```
 
-### Links and References
+Move exact IDs:
 
 ```python
-# Create link to data object
-link = dxpy.dxlink("file-xxxx")
-# Returns: {"$dnanexus_link": "file-xxxx"}
-
-# Create link with project
-link = dxpy.dxlink("file-xxxx", "project-yyyy")
-
-# Get job output reference (for chaining jobs)
-output_ref = job.get_output_ref("output_name")
-```
-
-## API Methods
-
-### Direct API Calls
-
-For operations not covered by high-level functions:
-
-```python
-# Call API method directly
-result = dxpy.api.project_new({
-    "name": "New Project",
-    "description": "Created via API"
-})
-
-project_id = result["id"]
-
-# File describe
-file_desc = dxpy.api.file_describe("file-xxxx")
-
-# System find data objects
-results = dxpy.api.system_find_data_objects({
-    "class": "file",
-    "project": "project-xxxx",
-    "name": {"regexp": ".*\\.bam$"}
-})
-```
-
-### Common API Methods
-
-```python
-# Project operations
-dxpy.api.project_invite("project-xxxx", {"invitee": "user-yyyy", "level": "VIEW"})
-dxpy.api.project_new_folder("project-xxxx", {"folder": "/new_folder"})
-
-# File operations
-dxpy.api.file_close("file-xxxx")
-dxpy.api.file_remove("file-xxxx")
-
-# Job operations
-dxpy.api.job_terminate("job-xxxx")
-dxpy.api.job_get_log("job-xxxx")
-```
-
-## App Development Functions
-
-### Entry Points
-
-```python
-import dxpy
-
-@dxpy.entry_point('main')
-def main(input1, input2):
-    """Main entry point for app"""
-    # Process inputs
-    result = process(input1, input2)
-
-    # Return outputs
-    return {
-        "output1": result
-    }
-
-# Required at end of app code
-dxpy.run()
-```
-
-### Creating Subjobs
-
-```python
-# Spawn subjob within app
-subjob = dxpy.new_dxjob(
-    fn_input={"input": value},
-    fn_name="helper_function"
+project.move(
+    "/analysis/run-001/final",
+    objects=["file-xxxx", "record-yyyy"],
 )
-
-# Get output reference
-output_ref = subjob.get_output_ref("result")
-
-@dxpy.entry_point('helper_function')
-def helper_function(input):
-    # Process
-    return {"result": output}
 ```
 
-## Error Handling
-
-### Exception Types
+Clone:
 
 ```python
-import dxpy
-from dxpy.exceptions import DXError, DXAPIError
+source = dxpy.DXFile("file-xxxx", project="project-source")
+cloned = source.clone(
+    project="project-destination",
+    folder="/imports",
+)
+```
+
+Delete only after explicit confirmation:
+
+```python
+project.remove_objects(["file-xxxx"], force=False)
+```
+
+Do not use `force=True` merely to hide a target-resolution error.
+
+## Records
+
+```python
+record = dxpy.new_dxrecord(
+    project="project-xxxx",
+    folder="/metadata",
+    name="run-001",
+    types=["RunMetadata"],
+    details={
+        "pipeline": "rna-seq",
+        "version": "2.4.1",
+    },
+    close=True,
+)
+```
+
+For an open mutable record:
+
+```python
+record = dxpy.DXRecord("record-xxxx", project="project-xxxx")
+details = record.get_details()
+details["status"] = "done"
+record.set_details(details)
+record.close()
+```
+
+`set_details()` replaces the details mapping supplied to the call. Avoid
+read-modify-write races on shared open records.
+
+## Run Executables
+
+App/appet runs return `DXJob`:
+
+```python
+job = dxpy.DXApplet(
+    "applet-xxxx",
+    project="project-xxxx",
+).run(
+    {"reads": dxpy.dxlink("file-xxxx")},
+    project="project-xxxx",
+    folder="/runs/run-001",
+    name="S001 alignment",
+    tags=["alignment"],
+    properties={"sample_id": "S001"},
+    priority="normal",
+    cost_limit=25,
+)
+```
+
+Workflow runs return `DXAnalysis`:
+
+```python
+analysis = dxpy.DXWorkflow(
+    "workflow-xxxx",
+    project="project-xxxx",
+).run(
+    {
+        "0.reads": dxpy.dxlink(
+            "file-xxxx",
+            "project-xxxx",
+        )
+    },
+    project="project-xxxx",
+    folder="/runs/run-002",
+    cost_limit=50,
+)
+```
+
+Useful run arguments in dxpy 0.410.0 include:
+
+- `project`, `folder`, `name`
+- `tags`, `properties`, `details`
+- `instance_type`, `stage_instance_types`
+- `stage_folders`, `rerun_stages`
+- `depends_on`
+- `priority`, `head_job_on_demand`
+- `ignore_reuse`, `ignore_reuse_stages`
+- `cost_limit`
+- `max_tree_spot_wait_time`, `max_job_spot_wait_time`
+- `preserve_job_outputs`
+- `detailed_job_metrics`
+- `system_requirements`
+
+Billable runs and reuse changes need explicit review.
+
+## Wait and Output
+
+```python
+from dxpy.exceptions import DXError, DXJobFailureError
 
 try:
-    file_obj = dxpy.DXFile("file-xxxx")
-    desc = file_obj.describe()
-except DXAPIError as e:
-    print(f"API Error: {e}")
-    print(f"Status Code: {e.code}")
-except DXError as e:
-    print(f"General Error: {e}")
+    job.wait_on_done(interval=5, timeout=3600)
+except DXJobFailureError:
+    failure = job.describe(
+        fields={
+            "state": True,
+            "failureReason": True,
+            "failureMessage": True,
+        }
+    )
+    raise RuntimeError(
+        f"{failure.get('failureReason')}: "
+        f"{failure.get('failureMessage')}"
+    ) from None
+except DXError as error:
+    raise RuntimeError(f"wait failed: {error}") from error
+
+outputs = job.describe(fields={"output": True})["output"]
 ```
 
-### Common Exceptions
+Defaults for `DXJob.wait_on_done()` and `DXAnalysis.wait_on_done()` are a
+two-second poll interval and a seven-day timeout. Set an explicit timeout that
+matches the caller's needs.
 
-- `DXAPIError`: API request failed
-- `DXError`: General DNAnexus error
-- `ResourceNotFound`: Object doesn't exist
-- `PermissionDenied`: Insufficient permissions
-- `InvalidInput`: Invalid input parameters
-
-## Utility Functions
-
-### Getting Handlers
+To chain jobs, avoid waiting:
 
 ```python
-# Get handler from ID/link
-handler = dxpy.get_handler("file-xxxx")
-# Returns DXFile, DXRecord, etc. based on object class
-
-# Bind handler to project
-handler = dxpy.DXFile("file-xxxx", project="project-yyyy")
-```
-
-### Describe Methods
-
-```python
-# Describe any object
-desc = dxpy.describe("file-xxxx")
-print(desc)
-
-# Describe with fields
-desc = dxpy.describe("file-xxxx", fields={"name": True, "size": True})
-```
-
-## Configuration
-
-### Setting Project Context
-
-```python
-# Set default project
-dxpy.set_workspace_id("project-xxxx")
-
-# Get current project
-project_id = dxpy.WORKSPACE_ID
-```
-
-### Setting Region
-
-```python
-# Set API server
-dxpy.set_api_server_info(host="api.dnanexus.com", port=443)
-```
-
-## Best Practices
-
-1. **Use High-Level Functions**: Prefer `upload_local_file()` over manual file creation
-2. **Handler Reuse**: Create handlers once and reuse them
-3. **Batch Operations**: Use find functions to process multiple objects
-4. **Error Handling**: Always wrap API calls in try-except blocks
-5. **Close Objects**: Remember to close files and records after modifications
-6. **Project Context**: Set workspace context for apps
-7. **API Token Security**: Never hardcode tokens in source code
-8. **Describe Fields**: Request only needed fields to reduce latency
-9. **Search Filters**: Use specific filters to narrow search results
-10. **Link Format**: Use `dxpy.dxlink()` for consistent link creation
-
-## Common Patterns
-
-### Upload and Process Pattern
-
-```python
-# Upload input
-input_file = dxpy.upload_local_file("data.txt", project="project-xxxx")
-
-# Run analysis
-job = dxpy.DXApplet("applet-xxxx").run({
-    "input": dxpy.dxlink(input_file.get_id())
-})
-
-# Wait and download result
-job.wait_on_done()
-output_id = job.describe()["output"]["result"]["$dnanexus_link"]
-dxpy.download_dxfile(output_id, "result.txt")
-```
-
-### Batch File Processing
-
-```python
-# Find all FASTQ files
-files = dxpy.find_data_objects(
-    classname="file",
-    name="*.fastq",
-    project="project-xxxx"
+downstream = dxpy.DXApplet("applet-next").run(
+    {"input": job.get_output_ref("result")},
+    project="project-xxxx",
 )
-
-# Process each file
-jobs = []
-for file_result in files:
-    job = dxpy.DXApplet("applet-xxxx").run({
-        "input": dxpy.dxlink(file_result["id"])
-    })
-    jobs.append(job)
-
-# Wait for all jobs
-for job in jobs:
-    job.wait_on_done()
-    print(f"Job {job.get_id()} completed")
 ```
 
-### Workflow with Dependencies
+## Exceptions
+
+Current public dxpy exception classes include:
+
+- `DXError`: base SDK error
+- `DXAPIError`: non-200 API response
+- `DXJobFailureError`: job/analysis wait detected failure
+- `DXSearchError`: invalid or failed search
+- `DXFileError`: file operation failure
+- `DXChecksumMismatchError`: transfer integrity failure
+
+API error names such as `ResourceNotFound`, `PermissionDenied`, and
+`InvalidInput` are usually represented by `DXAPIError.name`; they are not
+top-level dxpy exception classes in 0.410.0.
 
 ```python
-# Job 1
-job1 = applet1.run({"input": data})
+from dxpy.exceptions import DXAPIError
 
-# Job 2 depends on job1 output
-job2 = applet2.run({
-    "input": job1.get_output_ref("result")
-})
-
-# Job 3 depends on job2
-job3 = applet3.run({
-    "input": job2.get_output_ref("processed")
-})
-
-# Wait for final result
-job3.wait_on_done()
+try:
+    description = dxpy.describe("file-xxxx")
+except DXAPIError as error:
+    print(f"DNAnexus API error: {error.name} (HTTP {error.code})")
+    raise
 ```
+
+Do not dump `error.details` blindly; it can contain sensitive object metadata.
+
+## Low-Level API Bindings
+
+Generated wrappers are available under `dxpy.api`, for example:
+
+```python
+response = dxpy.api.system_find_data_objects(
+    {
+        "class": "file",
+        "scope": {
+            "project": "project-xxxx",
+            "folder": "/results",
+            "recurse": True,
+        },
+        "name": {"glob": "*.bam"},
+        "limit": 100,
+    }
+)
+```
+
+Prefer high-level search/handler methods unless a required field is unavailable
+there. Low-level methods expose API pagination, request shapes, and destructive
+options directly.
+
+Never construct arbitrary API method names, hosts, or request bodies from
+untrusted input.
+
+## Reliability Checklist
+
+- Pin the tested dxpy version.
+- Pass explicit project/folder context.
+- Bound searches and polling.
+- Use links and output references, not hand-built mappings.
+- Wait for file closure when required.
+- Catch specific SDK exceptions.
+- Retry only documented transient failures with backoff.
+- Preserve request IDs from API errors for support, but redact object metadata.
+- Never log credentials or whole environments.
+- Require confirmation for billable/destructive operations.
+- Test SDK assumptions with `scripts/inspect_dxpy.py` after upgrades.

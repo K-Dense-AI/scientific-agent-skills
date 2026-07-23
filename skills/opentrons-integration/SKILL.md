@@ -1,570 +1,326 @@
 ---
 name: opentrons-integration
-description: Official Opentrons Protocol API for OT-2 and Flex robots. Use when writing protocols specifically for Opentrons hardware with full access to Protocol API v2 features. Best for production Opentrons protocols, official API compatibility. For multi-vendor automation or broader equipment control use pylabrobot.
-license: Unknown
-metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
+description: Author, review, migrate, simulate, and troubleshoot official Opentrons Python Protocol API v2 protocols for Flex and OT-2 robots. Use for robot-specific liquid handling, deck and labware setup, pipettes, modules, runtime parameters, liquid classes, and Opentrons App analysis. Use pylabrobot instead when one workflow must support multiple robot vendors.
+license: MIT
+compatibility: Requires Python 3.10+ and uv for local simulation. Flex examples target opentrons 9.1.1 and API 2.29; the separate OT-2 line targets API 2.28 and uses opentrons 9.0.0 as its local compatibility simulator. Physical execution requires compatible hardware, current robot software, and the appropriate Opentrons App.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+metadata:
+  version: "2.0"
+  skill-author: "K-Dense Inc."
 ---
 
 # Opentrons Integration
 
 ## Overview
 
-Opentrons is a Python-based lab automation platform for Flex and OT-2 robots. Write Protocol API v2 protocols for liquid handling, control hardware modules (heater-shaker, thermocycler), manage labware, for automated pipetting workflows.
+Create production-minded Python Protocol API v2 protocols for Opentrons Flex and
+OT-2. This skill covers protocol structure, hardware and deck configuration,
+liquid handling, runtime customization, module control, simulation, and safe
+deployment.
 
-## When to Use This Skill
+The verified baseline as of **2026-07-23** is:
 
-This skill should be used when:
-- Writing Opentrons Protocol API v2 protocols in Python
-- Automating liquid handling workflows on Flex or OT-2 robots
-- Controlling hardware modules (temperature, magnetic, heater-shaker, thermocycler)
-- Setting up labware configurations and deck layouts
-- Implementing complex pipetting operations (serial dilutions, plate replication, PCR setup)
-- Managing tip usage and optimizing protocol efficiency
-- Working with multi-channel pipettes for 96-well plate operations
-- Simulating and testing protocols before robot execution
+- `opentrons==9.1.1` for reproducible Flex simulation.
+- `opentrons==9.0.0` for local OT-2 API 2.28 compatibility simulation.
+- Flex supports API levels 2.15 through 2.29 on current software.
+- OT-2 supports API levels 2.0 through 2.28 on current software.
+- API 2.29 is Flex-only at this baseline. Do not put `2.29` in an OT-2 protocol.
 
-## Core Capabilities
+Read `references/sources.md` for the upstream documentation used for this
+snapshot. Recheck the official versioning page before targeting newer robot
+software.
 
-### 1. Protocol Structure and Metadata
+## Safety Boundary
 
-Every Opentrons protocol follows a standard structure:
+Opentrons protocols control physical equipment. Never treat successful Python
+syntax or local simulation as permission to run on a robot.
+
+Before live execution:
+
+1. Simulate locally with the same pinned `opentrons` version used for authoring.
+2. Import the protocol into the correct Opentrons App and require successful
+   analysis.
+3. Verify robot model, software, pipettes, mounts, modules, adapters, labware
+   definitions, deck fixtures, tip count, source volumes, dead volumes, and
+   destination capacity.
+4. Review the run preview and deck map with the operator.
+5. Perform a slow dry run with nonhazardous liquid when geometry, custom
+   labware, partial tip pickup, or gripper moves are new.
+6. Keep the emergency stop accessible and follow site-specific biosafety,
+   chemical-safety, and contamination-control procedures.
+
+Simulation cannot verify physical calibration, liquid properties, meniscus
+behavior, labware manufacturing tolerances, cap or seal removal, tubing, or all
+possible collisions.
+
+## Choose the Right Interface
+
+Use this skill for Python files imported into the Opentrons App and run through
+the Protocol API.
+
+- Use **Protocol Designer** for supported no-code workflows.
+- Use **PyLabRobot** for a hardware-agnostic workflow spanning vendors.
+- Treat the robot's HTTP API as a separate integration surface. If direct HTTP
+  control is explicitly required, use the OpenAPI document served by the target
+  robot and do not infer endpoints from Protocol API methods.
+
+## Required Intake
+
+Do not write final protocol code until these facts are known:
+
+- Robot: Flex or OT-2, plus installed robot software.
+- Pipette model, volume range, channel count, and mount.
+- Modules and generations; Flex Gripper or Stacker availability.
+- Exact labware API load names and custom definition files, if any.
+- Deck fixtures: Flex trash bin, waste chute, staging slots, or Stackers.
+- Source volumes, destination volumes, dead volume, mixing needs, and liquid
+  characteristics.
+- Tip policy: contamination boundaries, reuse policy, filters, partial pickup,
+  and total tips.
+- Operator interventions, incubation timing, runtime parameters, and output
+  files.
+- Acceptance criteria: tolerated volume error, required controls, and dry-run
+  plan.
+
+If any physical configuration is uncertain, produce a parameterized draft and
+an explicit assumptions list rather than guessing.
+
+## Install and Simulate
+
+Flex:
+
+```bash
+uv run --with "opentrons==9.1.1" opentrons_simulate protocol.py
+```
+
+OT-2 API 2.28:
+
+```bash
+uv run --with "opentrons==9.0.0" opentrons_simulate protocol.py
+```
+
+The 9.1.1 package intentionally rejects OT-2 protocols after the Flex/OT-2
+release-line split. Always complete OT-2 analysis in the current OT-2 App.
+
+For a dedicated Flex environment:
+
+```bash
+uv venv --python 3.10
+uv pip install --python .venv/bin/python -r skills/opentrons-integration/requirements-flex.txt
+.venv/bin/opentrons_simulate protocol.py
+```
+
+Use `requirements-ot2.txt` instead for an OT-2 compatibility environment. On
+Windows, invoke the executable from `.venv\Scripts\opentrons_simulate.exe`.
+Local simulation is for Python protocols; import Protocol Designer JSON files
+into the appropriate Opentrons App instead.
+
+## Protocol Skeletons
+
+### Flex, API 2.29
+
+For Flex, `requirements` is mandatory. Put `apiLevel` only in `requirements`,
+not in both `metadata` and `requirements`.
 
 ```python
 from opentrons import protocol_api
 
-# Metadata
 metadata = {
-    'protocolName': 'My Protocol',
-    'author': 'Name <email@example.com>',
-    'description': 'Protocol description',
-    'apiLevel': '2.19'  # Use latest available API version
+    "protocolName": "Flex transfer",
+    "author": "Your Name",
+    "description": "Transfer buffer into a plate.",
 }
+requirements = {"robotType": "Flex", "apiLevel": "2.29"}
 
-# Requirements (optional)
-requirements = {
-    'robotType': 'Flex',  # or 'OT-2'
-    'apiLevel': '2.19'
+
+def run(protocol: protocol_api.ProtocolContext) -> None:
+    tips = protocol.load_labware(
+        "opentrons_flex_96_tiprack_200ul", "D1"
+    )
+    reservoir = protocol.load_labware("nest_12_reservoir_15ml", "D2")
+    plate = protocol.load_labware("nest_96_wellplate_200ul_flat", "C2")
+    protocol.load_trash_bin("A3")
+    pipette = protocol.load_instrument(
+        "flex_1channel_1000", "left", tip_racks=[tips]
+    )
+
+    pipette.transfer(
+        100,
+        reservoir["A1"],
+        plate["A1"],
+        new_tip="always",
+    )
+```
+
+### OT-2, API 2.28
+
+For OT-2 API 2.15 and later, a `requirements` block is recommended. OT-2 has a
+fixed trash in slot 12; do not call `load_trash_bin()`.
+
+```python
+from opentrons import protocol_api
+
+metadata = {
+    "protocolName": "OT-2 transfer",
+    "author": "Your Name",
 }
+requirements = {"robotType": "OT-2", "apiLevel": "2.28"}
 
-# Run function
-def run(protocol: protocol_api.ProtocolContext):
-    # Protocol commands go here
-    pass
-```
 
-**Key elements:**
-- Import `protocol_api` from `opentrons`
-- Define `metadata` dict with protocolName, author, description, apiLevel
-- Optional `requirements` dict for robot type and API version
-- Implement `run()` function receiving `ProtocolContext` as parameter
-- All protocol logic goes inside the `run()` function
-
-### 2. Loading Hardware
-
-**Loading Instruments (Pipettes):**
-
-```python
-def run(protocol: protocol_api.ProtocolContext):
-    # Load pipette on specific mount
-    left_pipette = protocol.load_instrument(
-        'p1000_single_flex',  # Instrument name
-        'left',               # Mount: 'left' or 'right'
-        tip_racks=[tip_rack]  # List of tip rack labware objects
+def run(protocol: protocol_api.ProtocolContext) -> None:
+    tips = protocol.load_labware("opentrons_96_tiprack_300ul", "1")
+    reservoir = protocol.load_labware("nest_12_reservoir_15ml", "2")
+    plate = protocol.load_labware("nest_96_wellplate_200ul_flat", "3")
+    pipette = protocol.load_instrument(
+        "p300_single_gen2", "left", tip_racks=[tips]
     )
+    pipette.transfer(100, reservoir["A1"], plate["A1"])
 ```
 
-Common pipette names:
-- Flex: `p50_single_flex`, `p1000_single_flex`, `p50_multi_flex`, `p1000_multi_flex`
-- OT-2: `p20_single_gen2`, `p300_single_gen2`, `p1000_single_gen2`, `p20_multi_gen2`, `p300_multi_gen2`
-
-**Loading Labware:**
-
-```python
-# Load labware directly on deck
-plate = protocol.load_labware(
-    'corning_96_wellplate_360ul_flat',  # Labware API name
-    'D1',                                # Deck slot (Flex: A1-D3, OT-2: 1-11)
-    label='Sample Plate'                 # Optional display label
-)
-
-# Load tip rack
-tip_rack = protocol.load_labware('opentrons_flex_96_tiprack_1000ul', 'C1')
-
-# Load labware on adapter
-adapter = protocol.load_adapter('opentrons_flex_96_tiprack_adapter', 'B1')
-tips = adapter.load_labware('opentrons_flex_96_tiprack_200ul')
-```
-
-**Loading Modules:**
-
-```python
-# Temperature module
-temp_module = protocol.load_module('temperature module gen2', 'D3')
-temp_plate = temp_module.load_labware('corning_96_wellplate_360ul_flat')
-
-# Magnetic module
-mag_module = protocol.load_module('magnetic module gen2', 'C2')
-mag_plate = mag_module.load_labware('nest_96_wellplate_100ul_pcr_full_skirt')
-
-# Heater-Shaker module
-hs_module = protocol.load_module('heaterShakerModuleV1', 'D1')
-hs_plate = hs_module.load_labware('corning_96_wellplate_360ul_flat')
-
-# Thermocycler module (takes up specific slots automatically)
-tc_module = protocol.load_module('thermocyclerModuleV2')
-tc_plate = tc_module.load_labware('nest_96_wellplate_100ul_pcr_full_skirt')
-```
-
-### 3. Liquid Handling Operations
-
-**Basic Operations:**
-
-```python
-# Pick up tip
-pipette.pick_up_tip()
-
-# Aspirate (draw liquid in)
-pipette.aspirate(
-    volume=100,           # Volume in µL
-    location=source['A1'] # Well or location object
-)
-
-# Dispense (expel liquid)
-pipette.dispense(
-    volume=100,
-    location=dest['B1']
-)
-
-# Drop tip
-pipette.drop_tip()
-
-# Return tip to rack
-pipette.return_tip()
-```
-
-**Complex Operations:**
-
-```python
-# Transfer (combines pick_up, aspirate, dispense, drop_tip)
-pipette.transfer(
-    volume=100,
-    source=source_plate['A1'],
-    dest=dest_plate['B1'],
-    new_tip='always'  # 'always', 'once', or 'never'
-)
-
-# Distribute (one source to multiple destinations)
-pipette.distribute(
-    volume=50,
-    source=reservoir['A1'],
-    dest=[plate['A1'], plate['A2'], plate['A3']],
-    new_tip='once'
-)
-
-# Consolidate (multiple sources to one destination)
-pipette.consolidate(
-    volume=50,
-    source=[plate['A1'], plate['A2'], plate['A3']],
-    dest=reservoir['A1'],
-    new_tip='once'
-)
-```
-
-**Advanced Techniques:**
-
-```python
-# Mix (aspirate and dispense in same location)
-pipette.mix(
-    repetitions=3,
-    volume=50,
-    location=plate['A1']
-)
+Use the lowest API level that provides every required feature when a protocol
+must run across a mixed software fleet. Use the current maximum only when the
+workflow needs its behavior or capabilities.
 
-# Air gap (prevent dripping)
-pipette.aspirate(100, source['A1'])
-pipette.air_gap(20)  # 20µL air gap
-pipette.dispense(120, dest['A1'])
-
-# Blow out (expel remaining liquid)
-pipette.blow_out(location=dest['A1'].top())
-
-# Touch tip (remove droplets on tip exterior)
-pipette.touch_tip(location=plate['A1'])
-```
-
-**Flow Rate Control:**
-
-```python
-# Set flow rates (µL/s)
-pipette.flow_rate.aspirate = 150
-pipette.flow_rate.dispense = 300
-pipette.flow_rate.blow_out = 400
-```
-
-### 4. Accessing Wells and Locations
-
-**Well Access Methods:**
-
-```python
-# By name
-well_a1 = plate['A1']
-
-# By index
-first_well = plate.wells()[0]
-
-# All wells
-all_wells = plate.wells()  # Returns list
-
-# By rows
-rows = plate.rows()  # Returns list of lists
-row_a = plate.rows()[0]  # All wells in row A
-
-# By columns
-columns = plate.columns()  # Returns list of lists
-column_1 = plate.columns()[0]  # All wells in column 1
-
-# Wells by name (dictionary)
-wells_dict = plate.wells_by_name()  # {'A1': Well, 'A2': Well, ...}
-```
-
-**Location Methods:**
-
-```python
-# Top of well (default: 1mm below top)
-pipette.aspirate(100, well.top())
-pipette.aspirate(100, well.top(z=5))  # 5mm above top
-
-# Bottom of well (default: 1mm above bottom)
-pipette.aspirate(100, well.bottom())
-pipette.aspirate(100, well.bottom(z=2))  # 2mm above bottom
-
-# Center of well
-pipette.aspirate(100, well.center())
-```
-
-### 5. Hardware Module Control
-
-**Temperature Module:**
-
-```python
-# Set temperature
-temp_module.set_temperature(celsius=4)
-
-# Wait for temperature
-temp_module.await_temperature(celsius=4)
-
-# Deactivate
-temp_module.deactivate()
-
-# Check status
-current_temp = temp_module.temperature  # Current temperature
-target_temp = temp_module.target  # Target temperature
-```
-
-**Magnetic Module:**
-
-```python
-# Engage (raise magnets)
-mag_module.engage(height_from_base=10)  # mm from labware base
-
-# Disengage (lower magnets)
-mag_module.disengage()
-
-# Check status
-is_engaged = mag_module.status  # 'engaged' or 'disengaged'
-```
-
-**Heater-Shaker Module:**
-
-```python
-# Set temperature
-hs_module.set_target_temperature(celsius=37)
-
-# Wait for temperature
-hs_module.wait_for_temperature()
-
-# Set shake speed
-hs_module.set_and_wait_for_shake_speed(rpm=500)
-
-# Close labware latch
-hs_module.close_labware_latch()
-
-# Open labware latch
-hs_module.open_labware_latch()
-
-# Deactivate heater
-hs_module.deactivate_heater()
-
-# Deactivate shaker
-hs_module.deactivate_shaker()
-```
-
-**Thermocycler Module:**
-
-```python
-# Open lid
-tc_module.open_lid()
-
-# Close lid
-tc_module.close_lid()
-
-# Set lid temperature
-tc_module.set_lid_temperature(celsius=105)
-
-# Set block temperature
-tc_module.set_block_temperature(
-    temperature=95,
-    hold_time_seconds=30,
-    hold_time_minutes=0.5,
-    block_max_volume=50  # µL per well
-)
-
-# Execute profile (PCR cycling)
-profile = [
-    {'temperature': 95, 'hold_time_seconds': 30},
-    {'temperature': 57, 'hold_time_seconds': 30},
-    {'temperature': 72, 'hold_time_seconds': 60}
-]
-tc_module.execute_profile(
-    steps=profile,
-    repetitions=30,
-    block_max_volume=50
-)
-
-# Deactivate
-tc_module.deactivate_lid()
-tc_module.deactivate_block()
-```
-
-**Absorbance Plate Reader:**
-
-```python
-# Initialize and read
-result = plate_reader.read(wavelengths=[450, 650])
-
-# Access readings
-absorbance_data = result  # Dict with wavelength keys
-```
-
-### 6. Liquid Tracking and Labeling
-
-**Define Liquids:**
-
-```python
-# Define liquid types
-water = protocol.define_liquid(
-    name='Water',
-    description='Ultrapure water',
-    display_color='#0000FF'  # Hex color code
-)
-
-sample = protocol.define_liquid(
-    name='Sample',
-    description='Cell lysate sample',
-    display_color='#FF0000'
-)
-```
-
-**Load Liquids into Wells:**
-
-```python
-# Load liquid into specific wells
-reservoir['A1'].load_liquid(liquid=water, volume=50000)  # µL
-plate['A1'].load_liquid(liquid=sample, volume=100)
-
-# Mark wells as empty
-plate['B1'].load_empty()
-```
-
-### 7. Protocol Control and Utilities
-
-**Execution Control:**
-
-```python
-# Pause protocol
-protocol.pause(msg='Replace tip box and resume')
-
-# Delay
-protocol.delay(seconds=60)
-protocol.delay(minutes=5)
-
-# Comment (appears in logs)
-protocol.comment('Starting serial dilution')
-
-# Home robot
-protocol.home()
-```
-
-**Conditional Logic:**
-
-```python
-# Check if simulating
-if protocol.is_simulating():
-    protocol.comment('Running in simulation mode')
-else:
-    protocol.comment('Running on actual robot')
-```
-
-**Rail Lights (Flex only):**
-
-```python
-# Turn lights on
-protocol.set_rail_lights(on=True)
-
-# Turn lights off
-protocol.set_rail_lights(on=False)
-```
-
-### 8. Multi-Channel and 8-Channel Pipetting
-
-When using multi-channel pipettes:
-
-```python
-# Load 8-channel pipette
-multi_pipette = protocol.load_instrument(
-    'p300_multi_gen2',
-    'left',
-    tip_racks=[tips]
-)
-
-# Access entire column with single well reference
-multi_pipette.transfer(
-    volume=100,
-    source=source_plate['A1'],  # Accesses entire column 1
-    dest=dest_plate['A1']       # Dispenses to entire column 1
-)
-
-# Use rows() for row-wise operations
-for row in plate.rows():
-    multi_pipette.transfer(100, reservoir['A1'], row[0])
-```
-
-### 9. Common Protocol Patterns
-
-**Serial Dilution:**
-
-```python
-def run(protocol: protocol_api.ProtocolContext):
-    # Load labware
-    tips = protocol.load_labware('opentrons_flex_96_tiprack_200ul', 'D1')
-    reservoir = protocol.load_labware('nest_12_reservoir_15ml', 'D2')
-    plate = protocol.load_labware('corning_96_wellplate_360ul_flat', 'D3')
-
-    # Load pipette
-    p300 = protocol.load_instrument('p300_single_flex', 'left', tip_racks=[tips])
-
-    # Add diluent to all wells except first
-    p300.transfer(100, reservoir['A1'], plate.rows()[0][1:])
-
-    # Serial dilution across row
-    p300.transfer(
-        100,
-        plate.rows()[0][:11],  # Source: wells 0-10
-        plate.rows()[0][1:],   # Dest: wells 1-11
-        mix_after=(3, 50),     # Mix 3x with 50µL after dispense
-        new_tip='always'
-    )
-```
-
-**Plate Replication:**
-
-```python
-def run(protocol: protocol_api.ProtocolContext):
-    # Load labware
-    tips = protocol.load_labware('opentrons_flex_96_tiprack_1000ul', 'C1')
-    source = protocol.load_labware('corning_96_wellplate_360ul_flat', 'D1')
-    dest = protocol.load_labware('corning_96_wellplate_360ul_flat', 'D2')
-
-    # Load pipette
-    p1000 = protocol.load_instrument('p1000_single_flex', 'left', tip_racks=[tips])
-
-    # Transfer from all wells in source to dest
-    p1000.transfer(
-        100,
-        source.wells(),
-        dest.wells(),
-        new_tip='always'
-    )
-```
-
-**PCR Setup:**
-
-```python
-def run(protocol: protocol_api.ProtocolContext):
-    # Load thermocycler
-    tc_mod = protocol.load_module('thermocyclerModuleV2')
-    tc_plate = tc_mod.load_labware('nest_96_wellplate_100ul_pcr_full_skirt')
-
-    # Load tips and reagents
-    tips = protocol.load_labware('opentrons_flex_96_tiprack_200ul', 'C1')
-    reagents = protocol.load_labware('opentrons_24_tuberack_nest_1.5ml_snapcap', 'D1')
-
-    # Load pipette
-    p300 = protocol.load_instrument('p300_single_flex', 'left', tip_racks=[tips])
-
-    # Open thermocycler lid
-    tc_mod.open_lid()
-
-    # Distribute master mix
-    p300.distribute(
-        20,
-        reagents['A1'],
-        tc_plate.wells(),
-        new_tip='once'
-    )
-
-    # Add samples (example for first 8 wells)
-    for i, well in enumerate(tc_plate.wells()[:8]):
-        p300.transfer(5, reagents.wells()[i+1], well, new_tip='always')
-
-    # Run PCR
-    tc_mod.close_lid()
-    tc_mod.set_lid_temperature(105)
-
-    # PCR profile
-    tc_mod.set_block_temperature(95, hold_time_seconds=180)
-
-    profile = [
-        {'temperature': 95, 'hold_time_seconds': 15},
-        {'temperature': 60, 'hold_time_seconds': 30},
-        {'temperature': 72, 'hold_time_seconds': 30}
-    ]
-    tc_mod.execute_profile(steps=profile, repetitions=35, block_max_volume=25)
-
-    tc_mod.set_block_temperature(72, hold_time_minutes=5)
-    tc_mod.set_block_temperature(4)
-
-    tc_mod.deactivate_lid()
-    tc_mod.open_lid()
-```
-
-## Best Practices
-
-1. **Always specify API level**: Use the latest stable API version in metadata
-2. **Use meaningful labels**: Label labware for easier identification in logs
-3. **Check tip availability**: Ensure sufficient tips for protocol completion
-4. **Add comments**: Use `protocol.comment()` for debugging and logging
-5. **Simulate first**: Always test protocols in simulation before running on robot
-6. **Handle errors gracefully**: Add pauses for manual intervention when needed
-7. **Consider timing**: Use delays when protocols require incubation periods
-8. **Track liquids**: Use liquid tracking for better setup validation
-9. **Optimize tip usage**: Use `new_tip='once'` when appropriate to save tips
-10. **Control flow rates**: Adjust flow rates for viscous or volatile liquids
-
-## Troubleshooting
-
-**Common Issues:**
-
-- **Out of tips**: Verify tip rack capacity matches protocol requirements
-- **Labware collisions**: Check deck layout for spatial conflicts
-- **Volume errors**: Ensure volumes don't exceed well or pipette capacities
-- **Module not responding**: Verify module is properly connected and firmware is updated
-- **Inaccurate volumes**: Calibrate pipettes and check for air bubbles
-- **Protocol fails in simulation**: Check API version compatibility and labware definitions
-
-## Resources
-
-For detailed API documentation, see `references/api_reference.md` in this skill directory.
-
-For example protocol templates, see `scripts/` directory.
-
+## Authoring Workflow
+
+### 1. Select robot and API level
+
+Check the maximum supported API in the App under the robot's advanced settings.
+Map every requested feature to its minimum API level using
+`references/api_reference.md`.
+
+Important gates:
+
+- 2.20: CSV runtime parameters, liquid presence detection, expanded partial
+  nozzle layouts.
+- 2.21: Absorbance Plate Reader.
+- 2.22: current labware-level liquid loading methods.
+- 2.23: meniscus locations and labware lids.
+- 2.24: liquid classes and liquid-class complex commands.
+- 2.25: Flex Stacker and Flex 96-Channel 200 µL pipette.
+- 2.27: dynamic pipetting and concurrent module actions.
+- 2.28: 20 µL Flex tips, improved partial-tip return, and thermocycler ramp rate.
+- 2.29: step grouping; Flex only at the verified baseline.
+
+### 2. Build the deck explicitly
+
+- Use exact load names from the official Labware Library.
+- Load Flex trash bins or the waste chute explicitly.
+- Account for module footprints, staging slots, Stacker shuttles, gripper paths,
+  and tall-labware adjacency.
+- Load labware on adapters or module contexts in the documented order.
+- Never substitute a similarly named labware definition; geometry and offsets
+  are part of the protocol's safety model.
+
+See `references/modules_and_deck.md`.
+
+### 3. Select pipettes and tips
+
+Current load names are:
+
+- Flex: `flex_1channel_50`, `flex_1channel_1000`,
+  `flex_8channel_50`, `flex_8channel_1000`,
+  `flex_96channel_200`, `flex_96channel_1000`.
+- OT-2 GEN2: `p20_single_gen2`, `p20_multi_gen2`,
+  `p300_single_gen2`, `p300_multi_gen2`, `p1000_single_gen2`.
+
+Check that every requested volume is within the configured pipette and tip
+range. A 100 nL operation is not an Opentrons pipetting task.
+
+### 4. Choose a liquid-handling layer
+
+- Use `aspirate()`, `dispense()`, `mix()`, `air_gap()`, `blow_out()`, and
+  `touch_tip()` for explicit control.
+- Use `transfer()`, `distribute()`, and `consolidate()` for standard movements.
+- On Flex, consider `transfer_with_liquid_class()`,
+  `distribute_with_liquid_class()`, or `consolidate_with_liquid_class()` for
+  Opentrons-verified aqueous, volatile, or viscous behavior.
+- Use dynamic start/end locations or `dynamic_mix()` only when API 2.27+ and the
+  geometry has been reviewed.
+
+Model contamination boundaries before optimizing tips. Never reuse a tip across
+unrelated samples merely to reduce consumables. See
+`references/liquid_handling.md`.
+
+### 5. Add setup information and runtime controls
+
+Use `define_liquid()` and labware-level `load_liquid()` or
+`load_liquid_by_well()` to improve setup visualization. Do not use deprecated
+`Well.load_liquid()` in new API 2.22+ protocols.
+
+Define operator-controlled values in `add_parameters()` and read them from
+`protocol.params`. Validate ranges and use defaults that produce a safe,
+meaningful simulation. CSV parameters have no default and only one CSV
+parameter can be selected per run.
+
+### 6. Budget resources
+
+Before simulation, calculate:
+
+- Tips or tip sets required under every branch.
+- Source volume = delivered volume + mixing loss + disposal volume + dead
+  volume + a justified reserve.
+- Maximum destination volume after every addition and mix.
+- Number of module, adapter, trash, and staging positions.
+- Incubation and module timing, including concurrent tasks.
+
+### 7. Validate in layers
+
+1. Compile: `python -m py_compile protocol.py`.
+2. Simulate with the pinned package.
+3. Inspect the run log for command count, tip changes, pauses, and unexpected
+   locations.
+4. Import into the appropriate App and require successful analysis.
+5. Check protocol visualization, runtime parameter defaults, deck map, module
+   setup, and labware offsets.
+6. Perform an operator-reviewed dry run before first use.
+
+See `references/validation_and_operations.md`.
+
+## Common Failure Modes
+
+- Using old names such as `p300_single_flex`; use current `flex_*` load names.
+- Declaring `apiLevel` in both `metadata` and `requirements`.
+- Using API 2.29 for OT-2.
+- Forgetting a Flex trash bin or waste chute.
+- Loading a Magnetic Module on Flex; use supported Flex magnetic hardware.
+- Calling `read(wavelengths=...)` on the plate reader; call `initialize()` first,
+  then `read()`.
+- Using deprecated `Well.load_liquid()` instead of labware-level methods.
+- Assuming simulation verifies calibration, liquid height, or physical
+  clearances.
+- Passing an unsafe well to a partial-nozzle pipette, which can place tips
+  outside labware and cause a crash.
+- Using `new_tip="once"` across samples with incompatible contamination
+  requirements.
+
+## Bundled Templates
+
+| File | Purpose |
+| --- | --- |
+| `scripts/basic_protocol_template.py` | Minimal Flex 2.29 transfer with current names |
+| `scripts/ot2_basic_protocol_template.py` | Minimal OT-2 2.28 transfer |
+| `scripts/serial_dilution_template.py` | Full-plate 1:2 dilution with an 8-channel Flex pipette |
+| `scripts/pcr_setup_template.py` | Flex PCR setup and Thermocycler cycling |
+| `scripts/runtime_parameters_template.py` | Safe numeric and Boolean runtime parameters |
+| `scripts/absorbance_reader_template.py` | Correct Flex plate-reader initialization and read workflow |
+
+Templates are starting points, not validated assays. Replace volumes, labware,
+liquids, timing, and tip policies only after checking hardware compatibility and
+the wet-lab method.
+
+## Reference Guide
+
+| Reference | Use it for |
+| --- | --- |
+| `references/api_reference.md` | Current load names, version gates, and high-value methods |
+| `references/protocol_authoring.md` | Requirements, labware, runtime parameters, and design workflow |
+| `references/liquid_handling.md` | Command selection, liquid classes, sensing, and partial tips |
+| `references/modules_and_deck.md` | Module compatibility, deck fixtures, gripper, and Stacker |
+| `references/validation_and_operations.md` | Simulation, App analysis, dry runs, and troubleshooting |
+| `references/migration-api-2-19-to-2-29.md` | Updating older protocols and this skill's former patterns |
+| `references/sources.md` | Official documentation and release sources |

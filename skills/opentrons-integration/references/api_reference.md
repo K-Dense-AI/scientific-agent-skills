@@ -1,366 +1,382 @@
-# Opentrons Python Protocol API v2 Reference
+# Opentrons Protocol API v2 Quick Reference
 
-## Protocol Context Methods
+Verified against `opentrons==9.1.1` and the official documentation on
+2026-07-23. This is a curated authoring reference, not a replacement for the
+[ProtocolContext API reference](https://docs.opentrons.com/python-api/reference/protocols/)
+and its linked class references.
 
-### Labware Management
+## Version Baseline
 
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `load_labware(name, location, label=None, namespace=None, version=None)` | Load labware onto deck | Labware object |
-| `load_adapter(name, location, namespace=None, version=None)` | Load adapter onto deck | Labware object |
-| `load_labware_from_definition(definition, location, label=None)` | Load custom labware from JSON | Labware object |
-| `load_labware_on_adapter(name, adapter, label=None)` | Load labware on adapter | Labware object |
-| `load_labware_by_name(name, location, label=None, namespace=None, version=None)` | Alternative load method | Labware object |
-| `load_lid_stack(load_name, location, quantity=None)` | Load lid stack (Flex only) | Labware object |
+| Robot | Supported API range on current software | Recommended maximum for new robot-specific protocols |
+| --- | --- | --- |
+| Flex | 2.15–2.29 | 2.29 |
+| OT-2 | 2.0–2.28 | 2.28 |
 
-### Instrument Management
+API versions are independent of the installed Python package and robot software.
+Choose the lowest API level that includes every required feature. A protocol
+specifying a higher level than the robot supports will fail analysis.
 
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `load_instrument(instrument_name, mount, tip_racks=None, replace=False)` | Load pipette | InstrumentContext |
-
-### Module Management
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `load_module(module_name, location=None, configuration=None)` | Load hardware module | ModuleContext |
-
-### Liquid Management
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `define_liquid(name, description=None, display_color=None)` | Define liquid type | Liquid object |
-
-### Execution Control
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `pause(msg=None)` | Pause protocol execution | None |
-| `resume()` | Resume after pause | None |
-| `delay(seconds=0, minutes=0, msg=None)` | Delay execution | None |
-| `comment(msg)` | Add comment to protocol log | None |
-| `home()` | Home all axes | None |
-| `set_rail_lights(on)` | Control rail lights (Flex only) | None |
-
-### Protocol Properties
-
-| Property | Description | Type |
-|----------|-------------|------|
-| `deck` | Deck layout | Deck object |
-| `fixed_trash` | Fixed trash location (OT-2) | TrashBin object |
-| `loaded_labwares` | Dictionary of loaded labware | Dict |
-| `loaded_instruments` | Dictionary of loaded instruments | Dict |
-| `loaded_modules` | Dictionary of loaded modules | Dict |
-| `is_simulating()` | Check if protocol is simulating | Bool |
-| `bundled_data` | Access to bundled data files | Dict |
-| `params` | Runtime parameters | ParametersContext |
-
-## Instrument Context (Pipette) Methods
-
-### Tip Management
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `pick_up_tip(location=None, presses=None, increment=None)` | Pick up tip | InstrumentContext |
-| `drop_tip(location=None, home_after=True)` | Drop tip in trash | InstrumentContext |
-| `return_tip(home_after=True)` | Return tip to rack | InstrumentContext |
-| `reset_tipracks()` | Reset tip tracking | None |
-
-### Liquid Handling - Basic
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `aspirate(volume=None, location=None, rate=1.0)` | Aspirate liquid | InstrumentContext |
-| `dispense(volume=None, location=None, rate=1.0, push_out=None)` | Dispense liquid | InstrumentContext |
-| `blow_out(location=None)` | Expel remaining liquid | InstrumentContext |
-| `touch_tip(location=None, radius=1.0, v_offset=-1.0, speed=60.0)` | Remove droplets from tip | InstrumentContext |
-| `mix(repetitions=1, volume=None, location=None, rate=1.0)` | Mix liquid | InstrumentContext |
-| `air_gap(volume=None, height=None)` | Create air gap | InstrumentContext |
-
-### Liquid Handling - Complex
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `transfer(volume, source, dest, **kwargs)` | Transfer liquid | InstrumentContext |
-| `distribute(volume, source, dest, **kwargs)` | Distribute from one to many | InstrumentContext |
-| `consolidate(volume, source, dest, **kwargs)` | Consolidate from many to one | InstrumentContext |
-
-**transfer(), distribute(), consolidate() kwargs:**
-- `new_tip`: 'always', 'once', or 'never'
-- `trash`: True/False - trash tips after use
-- `touch_tip`: True/False - touch tip after aspirate/dispense
-- `blow_out`: True/False - blow out after dispense
-- `mix_before`: (repetitions, volume) tuple
-- `mix_after`: (repetitions, volume) tuple
-- `disposal_volume`: Extra volume for contamination prevention
-- `carryover`: True/False - enable multi-transfer for large volumes
-- `gradient`: (start_concentration, end_concentration) for gradients
-
-### Movement and Positioning
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `move_to(location, force_direct=False, minimum_z_height=None, speed=None)` | Move to location | InstrumentContext |
-| `home()` | Home pipette axes | None |
-
-### Pipette Properties
-
-| Property | Description | Type |
-|----------|-------------|------|
-| `default_speed` | Default movement speed | Float |
-| `min_volume` | Minimum pipette volume | Float |
-| `max_volume` | Maximum pipette volume | Float |
-| `current_volume` | Current volume in tip | Float |
-| `has_tip` | Check if tip is attached | Bool |
-| `name` | Pipette name | String |
-| `model` | Pipette model | String |
-| `mount` | Mount location | String |
-| `channels` | Number of channels | Int |
-| `tip_racks` | Associated tip racks | List |
-| `trash_container` | Trash location | TrashBin object |
-| `starting_tip` | Starting tip for protocol | Well object |
-| `flow_rate` | Flow rate settings | FlowRates object |
-
-### Flow Rate Properties
-
-Access via `pipette.flow_rate`:
-
-| Property | Description | Units |
-|----------|-------------|-------|
-| `aspirate` | Aspirate flow rate | µL/s |
-| `dispense` | Dispense flow rate | µL/s |
-| `blow_out` | Blow out flow rate | µL/s |
-
-## Labware Methods
-
-### Well Access
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `wells()` | Get all wells | List[Well] |
-| `wells_by_name()` | Get wells dictionary | Dict[str, Well] |
-| `rows()` | Get wells by row | List[List[Well]] |
-| `columns()` | Get wells by column | List[List[Well]] |
-| `rows_by_name()` | Get rows dictionary | Dict[str, List[Well]] |
-| `columns_by_name()` | Get columns dictionary | Dict[str, List[Well]] |
-
-### Labware Properties
-
-| Property | Description | Type |
-|----------|-------------|------|
-| `name` | Labware name | String |
-| `parent` | Parent location | Location object |
-| `quirks` | Labware quirks list | List |
-| `magdeck_engage_height` | Magnetic module height | Float |
-| `uri` | Labware URI | String |
-| `calibrated_offset` | Calibration offset | Point |
-
-## Well Methods and Properties
-
-### Liquid Operations
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `load_liquid(liquid, volume)` | Load liquid into well | None |
-| `load_empty()` | Mark well as empty | None |
-| `from_center_cartesian(x, y, z)` | Get location from center | Location |
-
-### Location Methods
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `top(z=0)` | Get location at top of well | Location |
-| `bottom(z=0)` | Get location at bottom of well | Location |
-| `center()` | Get location at center of well | Location |
-
-### Well Properties
-
-| Property | Description | Type |
-|----------|-------------|------|
-| `diameter` | Well diameter (circular) | Float |
-| `length` | Well length (rectangular) | Float |
-| `width` | Well width (rectangular) | Float |
-| `depth` | Well depth | Float |
-| `max_volume` | Maximum volume | Float |
-| `display_name` | Display name | String |
-| `has_tip` | Check if tip present | Bool |
-
-## Module Contexts
-
-### Temperature Module
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `set_temperature(celsius)` | Set target temperature | None |
-| `await_temperature(celsius)` | Wait for temperature | None |
-| `deactivate()` | Turn off temperature control | None |
-| `load_labware(name, label=None, namespace=None, version=None)` | Load labware on module | Labware |
-
-**Properties:**
-- `temperature`: Current temperature (°C)
-- `target`: Target temperature (°C)
-- `status`: 'idle', 'holding', 'cooling', or 'heating'
-- `labware`: Loaded labware
-
-### Magnetic Module
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `engage(height_from_base=None, offset=None, height=None)` | Engage magnets | None |
-| `disengage()` | Disengage magnets | None |
-| `load_labware(name, label=None, namespace=None, version=None)` | Load labware on module | Labware |
-
-**Properties:**
-- `status`: 'engaged' or 'disengaged'
-- `labware`: Loaded labware
-
-### Heater-Shaker Module
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `set_target_temperature(celsius)` | Set heater target | None |
-| `wait_for_temperature()` | Wait for temperature | None |
-| `set_and_wait_for_temperature(celsius)` | Set and wait | None |
-| `deactivate_heater()` | Turn off heater | None |
-| `set_and_wait_for_shake_speed(rpm)` | Set shake speed | None |
-| `deactivate_shaker()` | Turn off shaker | None |
-| `open_labware_latch()` | Open latch | None |
-| `close_labware_latch()` | Close latch | None |
-| `load_labware(name, label=None, namespace=None, version=None)` | Load labware on module | Labware |
-
-**Properties:**
-- `temperature`: Current temperature (°C)
-- `target_temperature`: Target temperature (°C)
-- `current_speed`: Current shake speed (rpm)
-- `target_speed`: Target shake speed (rpm)
-- `labware_latch_status`: 'idle_open', 'idle_closed', 'opening', 'closing'
-- `status`: Module status
-- `labware`: Loaded labware
-
-### Thermocycler Module
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `open_lid()` | Open lid | None |
-| `close_lid()` | Close lid | None |
-| `set_lid_temperature(celsius)` | Set lid temperature | None |
-| `deactivate_lid()` | Turn off lid heater | None |
-| `set_block_temperature(temperature, hold_time_seconds=0, hold_time_minutes=0, ramp_rate=None, block_max_volume=None)` | Set block temperature | None |
-| `deactivate_block()` | Turn off block | None |
-| `execute_profile(steps, repetitions, block_max_volume=None)` | Run temperature profile | None |
-| `load_labware(name, label=None, namespace=None, version=None)` | Load labware on module | Labware |
-
-**Profile step format:**
 ```python
-{'temperature': 95, 'hold_time_seconds': 30, 'hold_time_minutes': 0}
+metadata = {
+    "protocolName": "Example",
+    "author": "Your Name",
+    "description": "Purpose and scope.",
+}
+requirements = {"robotType": "Flex", "apiLevel": "2.29"}
 ```
 
-**Properties:**
-- `block_temperature`: Current block temperature (°C)
-- `block_target_temperature`: Target block temperature (°C)
-- `lid_temperature`: Current lid temperature (°C)
-- `lid_target_temperature`: Target lid temperature (°C)
-- `lid_position`: 'open', 'closed', 'in_between'
-- `ramp_rate`: Block temperature ramp rate (°C/s)
-- `status`: Module status
-- `labware`: Loaded labware
+Rules:
 
-### Absorbance Plate Reader Module
+- Flex always requires `requirements`.
+- `requirements` is recommended for OT-2 protocols using API 2.15+.
+- Put `apiLevel` in exactly one place. When using `requirements`, remove it from
+  `metadata`.
+- `run(protocol: protocol_api.ProtocolContext)` is the required entry point.
 
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `initialize(mode, wavelengths)` | Initialize reader | None |
-| `read(export_filename=None)` | Read plate | Dict |
-| `close_lid()` | Close lid | None |
-| `open_lid()` | Open lid | None |
-| `load_labware(name, label=None, namespace=None, version=None)` | Load labware on module | Labware |
+## Features Added After API 2.19
 
-**Read modes:**
-- `'single'`: Single wavelength
-- `'multi'`: Multiple wavelengths
+| API | High-value additions |
+| --- | --- |
+| 2.20 | CSV runtime parameters; liquid presence detection; row, single, and partial-column nozzle layouts |
+| 2.21 | `AbsorbanceReaderContext` and `absorbanceReaderV1` |
+| 2.22 | `Labware.load_liquid()`, `load_liquid_by_well()`, and `load_empty()`; robot motor control |
+| 2.23 | `Well.meniscus()`; labware lids and lid moves |
+| 2.24 | Liquid classes; advanced liquid-class complex commands; absolute flow-rate options |
+| 2.25 | `FlexStackerContext`; `flexStackerModuleV1`; `flex_96channel_200` |
+| 2.26 | Liquid-class support for `flex_96channel_200` |
+| 2.27 | Concurrent module actions; dynamic aspirate, dispense, and mix; `capture_image()`; explicit liquid-class tips |
+| 2.28 | Flex 20 µL tips; partial-tip return; thermocycler ramp rate; empty tip-rack tracking |
+| 2.29 | Protocol step grouping |
 
-**Properties:**
-- `is_lid_on`: Lid status
-- `labware`: Loaded labware
+See
+[Versioning](https://docs.opentrons.com/python-api/versioning/) for complete
+behavior changes and robot-software mappings.
 
-## Common Labware API Names
+## Pipette Load Names
 
-### Plates
+### Flex
 
-- `corning_96_wellplate_360ul_flat`
-- `nest_96_wellplate_100ul_pcr_full_skirt`
-- `nest_96_wellplate_200ul_flat`
-- `biorad_96_wellplate_200ul_pcr`
-- `appliedbiosystems_384_wellplate_40ul`
+| Pipette | Nominal range | Load name |
+| --- | ---: | --- |
+| 1-Channel 50 µL | 1–50 µL | `flex_1channel_50` |
+| 1-Channel 1000 µL | 5–1000 µL | `flex_1channel_1000` |
+| 8-Channel 50 µL | 1–50 µL | `flex_8channel_50` |
+| 8-Channel 1000 µL | 5–1000 µL | `flex_8channel_1000` |
+| 96-Channel 200 µL | 1–200 µL | `flex_96channel_200` |
+| 96-Channel 1000 µL | 5–1000 µL | `flex_96channel_1000` |
 
-### Reservoirs
+The 96-channel pipette occupies both mounts. From API 2.16 onward its `mount`
+argument is optional.
 
-- `nest_12_reservoir_15ml`
-- `nest_1_reservoir_195ml`
-- `usascientific_12_reservoir_22ml`
+### OT-2 GEN2
 
-### Tip Racks
+| Pipette | Nominal range | Load name |
+| --- | ---: | --- |
+| P20 single | 1–20 µL | `p20_single_gen2` |
+| P20 multi | 1–20 µL | `p20_multi_gen2` |
+| P300 single | 20–300 µL | `p300_single_gen2` |
+| P300 multi | 20–300 µL | `p300_multi_gen2` |
+| P1000 single | 100–1000 µL | `p1000_single_gen2` |
 
-**Flex:**
-- `opentrons_flex_96_tiprack_50ul`
-- `opentrons_flex_96_tiprack_200ul`
-- `opentrons_flex_96_tiprack_1000ul`
+GEN1 OT-2 pipettes have different load names. Check
+[Loading Pipettes](https://docs.opentrons.com/python-api/pipettes/loading/)
+instead of guessing.
 
-**OT-2:**
-- `opentrons_96_tiprack_20ul`
-- `opentrons_96_tiprack_300ul`
-- `opentrons_96_tiprack_1000ul`
+## Flex Tip Compatibility
 
-### Tube Racks
+| Pipette family | Compatible Flex tip-rack capacities |
+| --- | --- |
+| `flex_1channel_50`, `flex_8channel_50` | 20 µL, 50 µL |
+| `flex_96channel_200` | 20 µL, 50 µL, 200 µL |
+| `flex_1channel_1000`, `flex_8channel_1000`, `flex_96channel_1000` | 50 µL, 200 µL, 1000 µL |
 
-- `opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical`
-- `opentrons_24_tuberack_nest_1.5ml_snapcap`
-- `opentrons_24_tuberack_nest_1.5ml_screwcap`
-- `opentrons_15_tuberack_falcon_15ml_conical`
+Filter-tip load names insert `_filtertiprack_`, for example
+`opentrons_flex_96_filtertiprack_200ul`.
 
-### Adapters
+Full-rack pickup by a Flex 96-channel pipette requires the Flex tip-rack
+adapter. Partial pickup by that pipette must use a rack directly on the deck,
+without the adapter.
 
-- `opentrons_flex_96_tiprack_adapter`
-- `opentrons_96_deep_well_adapter`
-- `opentrons_aluminum_flat_bottom_plate`
+## ProtocolContext
 
-## Error Handling
+### Hardware and deck
 
-Common exceptions:
-
-- `OutOfTipsError`: No tips available
-- `LabwareNotLoadedError`: Labware not loaded on deck
-- `InvalidContainerError`: Invalid labware specification
-- `InstrumentNotLoadedError`: Pipette not loaded
-- `InvalidVolumeError`: Volume out of range
-
-## Simulation and Debugging
-
-Check simulation status:
 ```python
-if protocol.is_simulating():
-    protocol.comment('Running in simulation')
+labware = protocol.load_labware(load_name, location, label=None)
+adapter = protocol.load_adapter(load_name, location)
+module = protocol.load_module(module_name, location=None)
+pipette = protocol.load_instrument(
+    instrument_name,
+    mount,
+    tip_racks=[tiprack],
+)
+trash = protocol.load_trash_bin("A3")  # Flex, API 2.16+
+chute = protocol.load_waste_chute()     # Flex, fixed at D3
 ```
 
-Access bundled data files:
+Useful methods:
+
+- `load_labware_from_definition(definition, location, label=None)`
+- `move_labware(labware, new_location, use_gripper=...)`
+- `load_lid_stack(load_name, location, quantity)`
+- `move_lid(source_location, new_location, use_gripper=...)`
+- `define_liquid(name, description=None, display_color=None)`
+- `get_liquid_class(name, version=None)` — API 2.24+
+- `define_liquid_class(name, properties, display_name)` — API 2.24+
+
+### Execution and organization
+
+- `comment(msg)` — adds analysis-time text to the run log.
+- `pause(msg=None)` — waits for the operator to resume in the App/touchscreen.
+- `delay(seconds=0, minutes=0, msg=None)` — blocking delay.
+- `home()` — homes robot axes.
+- `is_simulating()` — identify local or App analysis.
+- `group_steps(name, description=None)` — context manager, API 2.29.
+- `create_and_start_step_group(name, description=None)` — returns a group whose
+  `end_group()` method closes it, API 2.29.
+- `capture_image()` — captures from the built-in camera, API 2.27.
+
+Step groups only organize source and visualization; they do not change
+execution.
+
+## InstrumentContext
+
+### Tips
+
 ```python
-data_file = protocol.bundled_data['data.csv']
-with open(data_file) as f:
-    data = f.read()
+pipette.pick_up_tip()
+pipette.drop_tip()
+pipette.return_tip()
+pipette.reset_tipracks()
 ```
 
-## Version Compatibility
+In API 2.28+, `tiprack.set_empty()` can mark a rack empty so returned tips may be
+tracked there. Only return tips when the protocol's contamination policy allows
+it.
 
-API Level compatibility:
+### Building-block commands
 
-| API Level | Features |
-|-----------|----------|
-| 2.19 | Latest features, Flex support |
-| 2.18 | Absorbance plate reader |
-| 2.17 | Liquid tracking improvements |
-| 2.16 | Flex 8-channel partial tip pickup |
-| 2.15 | Heater-Shaker Gen1 |
-| 2.13 | Temperature Module Gen2 |
-| 2.0-2.12 | Core OT-2 functionality |
+```python
+pipette.aspirate(volume, source)
+pipette.dispense(volume, destination, push_out=5)
+pipette.air_gap(volume)
+pipette.blow_out(destination.top())
+pipette.touch_tip(destination)
+pipette.mix(repetitions, volume, destination)
+pipette.move_to(destination.top())
+```
 
-Always use the latest stable API version for new protocols.
+Use `rate=` as a multiplier of the pipette's configured flow rate, or supported
+absolute flow-rate arguments when the API level provides them. Do not supply
+both forms for the same action.
+
+API 2.27 adds `end_location` and `movement_delay` to aspirate and dispense, plus
+`dynamic_mix()` for start-to-end movement during repeated aspiration and
+dispensing.
+
+### Complex commands
+
+```python
+pipette.transfer(volume, source, destination, new_tip="always")
+pipette.distribute(volume, source, destinations, new_tip="once")
+pipette.consolidate(volume, sources, destination, new_tip="always")
+```
+
+Common options include:
+
+- `new_tip`: `"always"`, `"once"`, or `"never"`; newer API levels add
+  additional policies for some commands.
+- `mix_before=(repetitions, volume)`
+- `mix_after=(repetitions, volume)`
+- `touch_tip=True`
+- `blow_out=True`
+- `blowout_location=...`
+- `disposal_volume=...`
+- `trash_location=...`
+
+Supported options differ by command and API level. Check the exact signature in
+the
+[Instrument API reference](https://docs.opentrons.com/python-api/reference/instruments/)
+before using uncommon options.
+
+### Liquid-class commands, Flex only
+
+```python
+water = protocol.get_liquid_class("water")
+
+pipette.transfer_with_liquid_class(
+    liquid_class=water,
+    volume=50,
+    source=reservoir["A1"],
+    dest=plate["A1"],
+    new_tip="always",
+    trash_location=trash,
+)
+```
+
+Related methods are `distribute_with_liquid_class()` and
+`consolidate_with_liquid_class()`. Opentrons-verified classes include water,
+80% ethanol, and 50% glycerol. Compatibility depends on the exact Flex pipette
+and tip combination.
+
+## Labware and Wells
+
+### Accessors
+
+```python
+plate["A1"]
+plate.wells()
+plate.wells_by_name()
+plate.rows()
+plate.rows_by_name()
+plate.columns()
+plate.columns_by_name()
+```
+
+Labware iteration is generally column-major. Use named wells or explicit lists
+when order is safety-critical.
+
+### Locations
+
+```python
+well.top(z=-1)
+well.bottom(z=2)
+well.center()
+well.meniscus(z=0, target="start")  # API 2.23+
+```
+
+`meniscus()` depends on declared or measured liquid volume. Validate liquid
+height behavior on hardware before relying on it for low-volume aspiration.
+
+### Liquid setup visualization, API 2.22+
+
+```python
+buffer = protocol.define_liquid(
+    name="Buffer",
+    description="Assay buffer",
+    display_color="#1F77B4",
+)
+
+reservoir.load_liquid(
+    wells=["A1"],
+    volume=10_000,
+    liquid=buffer,
+)
+
+plate.load_liquid_by_well(
+    volumes={"A1": 50, "B1": 50},
+    liquid=buffer,
+)
+
+plate.load_empty(wells=["A2", "B2"])
+```
+
+`Well.load_liquid()` is deprecated for API 2.22+ protocols.
+
+## Runtime Parameters
+
+Define parameters outside `run()`:
+
+```python
+def add_parameters(parameters: protocol_api.ParameterContext) -> None:
+    parameters.add_int(
+        variable_name="sample_count",
+        display_name="Sample count",
+        default=8,
+        minimum=1,
+        maximum=96,
+    )
+    parameters.add_bool(
+        variable_name="dry_run",
+        display_name="Dry run",
+        default=False,
+    )
+```
+
+Read them during execution:
+
+```python
+sample_count = protocol.params.sample_count
+dry_run = protocol.params.dry_run
+```
+
+Methods:
+
+- `add_bool(...)`
+- `add_int(...)`
+- `add_float(...)`
+- `add_str(...)`
+- `add_csv_file(...)` — API 2.20+, no default, at most one CSV parameter per
+  run.
+
+Parameter display names are limited to 30 characters and descriptions to 100
+characters. Numeric parameters require either a min/max range or fixed choices.
+
+## Liquid Presence and Height
+
+Flex pressure-sensing pipettes support:
+
+- `detect_liquid_presence(well)`
+- `require_liquid_presence(well)`
+- `measure_liquid_height(well)`
+- `liquid_presence_detection=True` in `load_instrument()`
+- Runtime toggling with `pipette.liquid_presence_detection`
+
+Detection requires a fresh, dry, empty tip. It can add substantial run time,
+and not every channel on a multi-channel pipette contains a pressure sensor.
+
+## Partial Nozzle Layouts
+
+```python
+from opentrons.protocol_api import ALL, COLUMN
+
+pipette.configure_nozzle_layout(
+    style=COLUMN,
+    start="A12",
+    tip_racks=[partial_tip_rack],
+)
+
+# Restore full-rack pickup later.
+pipette.configure_nozzle_layout(
+    style=ALL,
+    tip_racks=[full_tip_rack],
+)
+```
+
+Available constants include `ALL`, `COLUMN`, `ROW`, `SINGLE`, and
+`PARTIAL_COLUMN`, subject to pipette and API support. An incorrect target well
+can place nozzles outside the labware and cause a physical crash. Follow the
+deck-edge and tip-rack-adapter rules in
+[Partial Tip Pickup](https://docs.opentrons.com/python-api/pipettes/partial-tip-pickup/).
+
+## Module Load Names
+
+| Module | Load name | Minimum API |
+| --- | --- | ---: |
+| Temperature Module GEN1 | `temperature module` | 2.0 |
+| Temperature Module GEN2 | `temperature module gen2` | 2.3 |
+| Thermocycler GEN1 | `thermocycler module` | 2.0 |
+| Thermocycler GEN2 | `thermocyclerModuleV2` | 2.13 |
+| Heater-Shaker GEN1 | `heaterShakerModuleV1` | 2.13 |
+| Magnetic Block GEN1 | `magneticBlockV1` | 2.15 |
+| Absorbance Plate Reader | `absorbanceReaderV1` | 2.21 |
+| Flex Stacker | `flexStackerModuleV1` | 2.25 |
+
+Module availability also depends on robot model and physical generation. See
+`modules_and_deck.md` before choosing a load name.
+
+## Simulation Entrypoints
+
+```bash
+# Flex API 2.29
+uv run --with "opentrons==9.1.1" opentrons_simulate protocol.py
+
+# OT-2 API 2.28 compatibility simulation
+uv run --with "opentrons==9.0.0" opentrons_simulate protocol.py
+```
+
+Python integrations may use `opentrons.simulate.simulate()` with an opened
+protocol file. `opentrons==9.1.1` rejects OT-2 protocols after the release-line
+split, so complete OT-2 validation in the current OT-2 App. Do not use
+`opentrons_execute` from a workstation as a substitute for App analysis and
+controlled robot operation.

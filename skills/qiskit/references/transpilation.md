@@ -1,286 +1,333 @@
-# Circuit Transpilation and Optimization
+# Target-Aware Transpilation
 
-Transpilation is the process of rewriting a quantum circuit to match the topology and gate set of a specific quantum device, while optimizing for execution on noisy quantum computers.
+Transpilation rewrites an abstract circuit into an **instruction set architecture (ISA) circuit** that satisfies a specific backend `Target`:
 
-## Why Transpilation?
+- only supported instructions,
+- valid qubit operands and connectivity,
+- backend timing and control-flow constraints,
+- an explicit virtual-to-physical qubit layout.
 
-**Problem**: Abstract quantum circuits may use gates not available on hardware and assume all-to-all qubit connectivity.
+IBM Runtime V2 primitives require ISA circuits. They do not perform layout, routing, and basis translation automatically.
 
-**Solution**: Transpilation transforms circuits to:
-1. Use only hardware-native gates (basis gates)
-2. Respect physical qubit connectivity
-3. Minimize circuit depth and gate count
-4. Optimize for reduced errors on noisy devices
+## Recommended Entry Point
 
-## Basic Transpilation
-
-### Simple Transpile
+Use a preset staged pass manager:
 
 ```python
-from qiskit import QuantumCircuit, transpile
+from qiskit.transpiler import generate_preset_pass_manager
 
-qc = QuantumCircuit(3)
-qc.h(0)
-qc.cx(0, 1)
-qc.cx(1, 2)
-
-# Transpile for a specific backend
-transpiled_qc = transpile(qc, backend=backend)
-```
-
-### Optimization Levels
-
-Choose optimization level 0-3:
-
-```python
-# Level 0: No optimization (fastest)
-qc_0 = transpile(qc, backend=backend, optimization_level=0)
-
-# Level 1: Light optimization
-qc_1 = transpile(qc, backend=backend, optimization_level=1)
-
-# Level 2: Moderate optimization (default)
-qc_2 = transpile(qc, backend=backend, optimization_level=2)
-
-# Level 3: Heavy optimization (slowest, best results)
-qc_3 = transpile(qc, backend=backend, optimization_level=3)
-```
-
-**Qiskit SDK v2.2** provides **83x faster transpilation** compared to competitors.
-
-## Transpilation Stages
-
-The transpiler pipeline consists of six stages:
-
-### 1. Init Stage
-- Validates circuit instructions
-- Translates multi-qubit gates to standard form
-
-### 2. Layout Stage
-- Maps virtual qubits to physical qubits
-- Considers qubit connectivity and error rates
-
-```python
-from qiskit.transpiler import CouplingMap
-
-# Define custom coupling
-coupling = CouplingMap([(0, 1), (1, 2), (2, 3)])
-qc_transpiled = transpile(qc, coupling_map=coupling)
-```
-
-### 3. Routing Stage
-- Inserts SWAP gates to satisfy connectivity constraints
-- Minimizes additional SWAP overhead
-
-### 4. Translation Stage
-- Converts gates to hardware basis gates
-- Typical basis: {RZ, SX, X, CX}
-
-```python
-# Specify basis gates
-basis_gates = ['cx', 'id', 'rz', 'sx', 'x']
-qc_transpiled = transpile(qc, basis_gates=basis_gates)
-```
-
-### 5. Optimization Stage
-- Reduces gate count and circuit depth
-- Applies gate cancellation and commutation rules
-- Uses **virtual permutation elision** (levels 2-3)
-- Finds separable operations to decompose
-
-### 6. Scheduling Stage
-- Adds timing information for pulse-level control
-
-## Advanced Optimization Features
-
-### Virtual Permutation Elision
-
-At optimization levels 2-3, Qiskit analyzes commutation structure to eliminate unnecessary SWAP gates by tracking virtual qubit permutations.
-
-### Gate Cancellation
-
-Identifies and removes pairs of gates that cancel:
-- X-X → I
-- H-H → I
-- CNOT-CNOT → I
-
-### Numerical Decomposition
-
-Splits two-qubit gates that can be expressed as separable one-qubit operations.
-
-## Common Transpilation Parameters
-
-### Initial Layout
-
-Specify which physical qubits to use:
-
-```python
-# Use specific physical qubits
-initial_layout = [0, 2, 4]  # Maps circuit qubits 0,1,2 to physical qubits 0,2,4
-qc_transpiled = transpile(qc, backend=backend, initial_layout=initial_layout)
-```
-
-### Approximation Degree
-
-Trade accuracy for fewer gates (0.0 = max approximation, 1.0 = no approximation):
-
-```python
-# Allow 5% approximation error for fewer gates
-qc_transpiled = transpile(qc, backend=backend, approximation_degree=0.95)
-```
-
-### Seed for Reproducibility
-
-```python
-qc_transpiled = transpile(qc, backend=backend, seed_transpiler=42)
-```
-
-### Scheduling Method
-
-```python
-# Add timing constraints
-qc_transpiled = transpile(
-    qc,
+pass_manager = generate_preset_pass_manager(
     backend=backend,
-    scheduling_method='alap'  # As Late As Possible
+    optimization_level=1,
+    seed_transpiler=17,
+)
+isa_circuit = pass_manager.run(circuit)
+```
+
+The pass manager can be reused for circuits targeting the same backend snapshot:
+
+```python
+isa_circuits = pass_manager.run(circuits)
+```
+
+`qiskit.transpile()` remains a convenient wrapper, but a pass manager is easier to reuse, inspect, and customize.
+
+## The BackendV2 Target
+
+`backend.target` is the source of supported operations and constraints:
+
+```python
+print("backend:", backend.name)
+print("qubits:", backend.num_qubits)
+print("operations:", sorted(backend.operation_names))
+print("coupling map:", backend.coupling_map)
+print("target:", backend.target)
+```
+
+Do not use these removed or legacy BackendV1 access patterns:
+
+```python
+# Do not use in Qiskit 2.x code:
+# backend.configuration().basis_gates
+# backend.properties()
+# BackendProperties
+```
+
+For a synthetic target:
+
+```python
+from qiskit.transpiler import CouplingMap, Target
+
+target = Target.from_configuration(
+    basis_gates=["cz", "sx", "rz"],
+    coupling_map=CouplingMap.from_line(5),
+)
+pass_manager = generate_preset_pass_manager(
+    target=target,
+    optimization_level=1,
+    seed_transpiler=17,
+)
+isa_circuit = pass_manager.run(circuit)
+```
+
+Prefer one coherent `backend` or `target`. Combining a backend with separate `basis_gates` or `coupling_map` inputs creates competing sources of truth and is discouraged.
+
+## Preset Optimization Levels
+
+| Level | Typical intent |
+|---:|---|
+| 0 | Minimal transformation needed to satisfy the target |
+| 1 | Light optimization with relatively low compilation cost |
+| 2 | More optimization and search |
+| 3 | Heavier optimization and search; highest classical cost |
+
+Higher does not guarantee a better experimental result. Compare levels using the same circuit, target snapshot, and seed:
+
+```python
+compiled = {}
+for level in (0, 1, 2, 3):
+    manager = generate_preset_pass_manager(
+        backend=backend,
+        optimization_level=level,
+        seed_transpiler=17,
+    )
+    compiled[level] = manager.run(circuit)
+```
+
+Start with levels 1 and 3 for a bounded comparison. Evaluate target-native two-qubit operations, depth, estimated duration when available, and downstream result quality.
+
+## Transpiler Stages
+
+A preset `StagedPassManager` has six conceptual stages:
+
+1. **init**: validate and synthesize high-level operations.
+2. **layout**: map virtual qubits to physical qubits.
+3. **routing**: add routing operations to satisfy connectivity.
+4. **translation**: convert to target-supported instructions.
+5. **optimization**: simplify and resynthesize the target circuit.
+6. **scheduling**: apply hardware-aware timing passes when configured.
+
+Qiskit 2.x scheduling does not restore `qiskit.pulse`; that module was removed.
+
+Inspect the generated manager:
+
+```python
+print(pass_manager)
+print(pass_manager.property_set)
+```
+
+The property set is primarily a pass-development and debugging interface; do not build long-term application logic around undocumented keys.
+
+## Layouts and Observables
+
+Transpilation can permute logical qubits. Estimator observables must be mapped to the final physical layout:
+
+```python
+from qiskit.quantum_info import SparsePauliOp
+
+observable = SparsePauliOp.from_list([("ZZ", 1.0)])
+isa_circuit = pass_manager.run(circuit)
+isa_observable = observable.apply_layout(isa_circuit.layout)
+```
+
+Submit the mapped observable:
+
+```python
+pub = (isa_circuit, isa_observable, parameter_values)
+```
+
+Do not manually guess the permutation from a circuit drawing. Use `isa_circuit.layout`.
+
+For a list of observables:
+
+```python
+isa_observables = [
+    observable.apply_layout(isa_circuit.layout)
+    for observable in observables
+]
+```
+
+## Parameterized Workloads
+
+Transpile the parameterized circuit once:
+
+```python
+parameterized_isa = pass_manager.run(parameterized_circuit)
+isa_observable = observable.apply_layout(parameterized_isa.layout)
+
+for values in optimizer_values:
+    pub = (parameterized_isa, isa_observable, [values])
+    result = estimator.run([pub], precision=0.03).result()[0]
+```
+
+This avoids repeated layout and routing. Retranspile only when the circuit structure, target, selected backend feature set, or compilation strategy changes.
+
+## Initial Layouts
+
+Use an explicit layout only when calibration analysis or a reproducibility requirement justifies it:
+
+```python
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=2,
+    initial_layout=[3, 5, 8],
+    seed_transpiler=17,
 )
 ```
 
-## Transpiling for Simulators
+An explicit layout bypasses the preset layout-selection logic. Confirm every physical qubit and interaction is supported by the target.
 
-Even for simulators, transpilation can optimize circuits:
+## Approximate Synthesis
+
+`approximation_degree` trades unitary fidelity for potentially cheaper circuits:
+
+```python
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=3,
+    approximation_degree=0.99,
+    seed_transpiler=17,
+)
+```
+
+Treat approximation as an experimental parameter. Compare ideal-unitary error, native two-qubit count, and hardware outcome. Do not describe `0.99` as a universal one-percent error bound for the whole algorithm.
+
+## Reproducibility
+
+Set the transpiler seed explicitly:
+
+```python
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=3,
+    seed_transpiler=17,
+)
+```
+
+Qiskit 2.5 also supports `QISKIT_TRANSPILER_SEED`, but an explicit argument is clearer in reproducible code.
+
+Record:
+
+- Qiskit version,
+- backend name and target/calibration timestamp if available,
+- optimization level,
+- seed,
+- all non-default pass-manager arguments,
+- input and output QPY artifacts,
+- output layout and structural metrics.
+
+A fixed seed stabilizes stochastic compiler choices; it does not freeze changing backend calibration data or package behavior across releases.
+
+## Analyze Compiled Circuits
+
+```python
+def two_qubit_instruction_count(circuit):
+    return sum(
+        len(item.qubits) == 2
+        for item in circuit.data
+    )
+
+print("logical depth:", circuit.depth())
+print("ISA depth:", isa_circuit.depth())
+print("ISA size:", isa_circuit.size())
+print("ISA operations:", isa_circuit.count_ops())
+print("two-qubit instructions:", two_qubit_instruction_count(isa_circuit))
+print("layout:", isa_circuit.layout)
+```
+
+Count all two-qubit instructions rather than only `cx`; current targets may use `cz`, `ecr`, `rzz`, or other operations.
+
+Circuit metrics are proxies. Calibration-aware quality depends on which physical qubits and operations were selected.
+
+## Verify ISA Compatibility
+
+Runtime rejects circuits that do not satisfy the target. A practical preflight is:
+
+1. Compile using the exact backend.
+2. Confirm the compiled width fits `backend.num_qubits`.
+3. Inspect every instruction name and qubit tuple against `backend.target`.
+4. Submit only the pass-manager output.
+
+For advanced validation, use target APIs rather than a hardcoded basis list.
+
+## Fake Backends and Aer
+
+Test target-aware compilation without consuming QPU time:
+
+```python
+from qiskit.transpiler import generate_preset_pass_manager
+from qiskit_ibm_runtime.fake_provider import FakeSherbrooke
+
+fake_backend = FakeSherbrooke()
+pass_manager = generate_preset_pass_manager(
+    backend=fake_backend,
+    optimization_level=1,
+    seed_transpiler=17,
+)
+isa_circuit = pass_manager.run(circuit)
+```
+
+Fake-backend availability can change between Runtime releases. List the installed fake-provider exports rather than assuming an old tutorial backend exists.
+
+For an Aer noise model derived from a real backend:
 
 ```python
 from qiskit_aer import AerSimulator
 
-simulator = AerSimulator()
-qc_optimized = transpile(qc, backend=simulator, optimization_level=3)
-
-# Compare gate counts
-print(f"Original: {qc.size()} gates")
-print(f"Optimized: {qc_optimized.size()} gates")
+noisy_simulator = AerSimulator.from_backend(backend)
+simulator_pass_manager = generate_preset_pass_manager(
+    backend=noisy_simulator,
+    optimization_level=1,
+    seed_transpiler=17,
+)
+simulator_circuit = simulator_pass_manager.run(circuit)
 ```
 
-## Target-Aware Transpilation
+An Aer model is an approximation of the calibration data used to create it; it is not a faithful predictor of every QPU effect.
 
-Use `Target` objects for detailed backend specifications:
+## Dynamic Circuits and Fractional Gates
 
-```python
-from qiskit.transpiler import Target
-
-# Transpile with target specification
-qc_transpiled = transpile(qc, target=backend.target)
-```
-
-## Circuit Analysis After Transpilation
+Backend capabilities can depend on how the backend is requested:
 
 ```python
-qc_transpiled = transpile(qc, backend=backend, optimization_level=3)
-
-# Analyze results
-print(f"Depth: {qc_transpiled.depth()}")
-print(f"Gate count: {qc_transpiled.size()}")
-print(f"Operations: {qc_transpiled.count_ops()}")
-
-# Check two-qubit gate count (major error source)
-two_qubit_gates = qc_transpiled.count_ops().get('cx', 0)
-print(f"Two-qubit gates: {two_qubit_gates}")
-```
-
-**Qiskit produces circuits with 29% fewer two-qubit gates** than leading alternatives, significantly reducing errors.
-
-## Multiple Circuit Transpilation
-
-Transpile multiple circuits efficiently:
-
-```python
-circuits = [qc1, qc2, qc3]
-transpiled_circuits = transpile(
-    circuits,
-    backend=backend,
-    optimization_level=3
+backend = service.backend(
+    backend_name,
+    use_fractional_gates=True,
 )
 ```
 
-## Pre-transpilation Best Practices
+Fractional-gate support and dynamic-control support have evolved across Runtime versions. Inspect the returned target and current feature-compatibility documentation instead of assuming both are available for every backend and option combination.
 
-### 1. Design with Hardware Topology in Mind
+If a circuit uses `if_else`, `while_loop`, `switch_case`, `for_loop`, or classical expressions:
 
-Consider backend coupling map when designing circuits:
+- confirm the operations are present in `backend.operation_names`,
+- compile against that returned backend object,
+- check mitigation and fractional-gate compatibility,
+- test the full branch behavior.
 
-```python
-# Check backend coupling
-print(backend.coupling_map)
+## Custom Pass Managers
 
-# Design circuits that align with coupling
-```
-
-### 2. Use Native Gates When Possible
-
-Some backends support gates beyond {CX, RZ, SX, X}:
+Customize only after measuring a limitation in preset output:
 
 ```python
-# Check available basis gates
-print(backend.configuration().basis_gates)
+from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import RemoveBarriers
+
+cleanup = PassManager([RemoveBarriers()])
+cleaned = cleanup.run(circuit)
 ```
 
-### 3. Minimize Two-Qubit Gates
+For target-aware custom pipelines, use `StagedPassManager` or modify a generated preset stage. Every custom transformation must preserve circuit semantics, parameters, control flow, and global phase as appropriate.
 
-Two-qubit gates have significantly higher error rates:
-- Design algorithms to minimize CNOT gates
-- Use gate identities to reduce counts
+Write regression tests based on operator/state equivalence for small circuits and application-level outputs for larger circuits.
 
-### 4. Test with Simulators First
+## Common Failures
 
-```python
-from qiskit_aer import AerSimulator
-
-# Test transpilation locally
-sim_backend = AerSimulator.from_backend(backend)
-qc_test = transpile(qc, backend=sim_backend, optimization_level=3)
-```
-
-## Transpilation for Different Providers
-
-### IBM Quantum
-
-```python
-from qiskit_ibm_runtime import QiskitRuntimeService
-
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-qc_transpiled = transpile(qc, backend=backend)
-```
-
-### IonQ
-
-```python
-# IonQ has all-to-all connectivity, different basis gates
-basis_gates = ['gpi', 'gpi2', 'ms']
-qc_transpiled = transpile(qc, basis_gates=basis_gates)
-```
-
-### Amazon Braket
-
-Transpilation depends on specific device (Rigetti, IonQ, etc.)
-
-## Performance Tips
-
-1. **Cache transpiled circuits** - Transpilation is expensive, reuse when possible
-2. **Use appropriate optimization level** - Level 3 is slow but best for production
-3. **Leverage v2.2 speed improvements** - Update to latest Qiskit for 83x speedup
-4. **Parallelize transpilation** - Qiskit automatically parallelizes when transpiling multiple circuits
-
-## Common Issues and Solutions
-
-### Issue: Circuit too deep after transpilation
-**Solution**: Use higher optimization level or redesign circuit with fewer layers
-
-### Issue: Too many SWAP gates inserted
-**Solution**: Adjust initial_layout to better match qubit topology
-
-### Issue: Transpilation takes too long
-**Solution**: Reduce optimization level or update to Qiskit v2.2+ for speed improvements
-
-### Issue: Unexpected gate decompositions
-**Solution**: Check basis_gates and consider specifying custom decomposition rules
+- **Circuit not ISA-compatible**: submit the pass-manager output, not the abstract input.
+- **Wrong expectation value**: map the observable through `isa_circuit.layout`.
+- **Too many routing operations**: compare layout methods, seeds, initial layouts, and circuit connectivity.
+- **Compilation is slow**: lower the optimization level or reduce repeated transpilation.
+- **BackendV1 attribute error**: replace `configuration()` and `properties()` access with BackendV2 target and direct attributes.
+- **Unknown instruction**: inspect the exact backend target; do not use a generic basis copied from another device.
+- **Dynamic-circuit rejection**: verify target control-flow operations and incompatible backend feature flags.
+- **Non-reproducible comparison**: fix the seed and backend snapshot, and store all compiler settings.

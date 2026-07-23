@@ -1,277 +1,400 @@
-# Qiskit Primitives
+# V2 Primitives and PUBs
 
-Primitives are the fundamental building blocks for executing quantum circuits. Qiskit provides two main primitives: **Sampler** (for measuring bitstrings) and **Estimator** (for computing expectation values).
+Qiskit primitives standardize two core tasks:
 
-## Primitive Types
+- **Sampler** executes measured circuits and returns shot-resolved classical data.
+- **Estimator** computes expectation values of observables for states prepared by circuits.
 
-### Sampler
-Calculates probabilities or quasi-probabilities of bitstrings from quantum circuits. Use when you need:
-- Measurement outcomes
-- Output probability distributions
-- Sampling from quantum states
+Use V2 interfaces. Their unit of work is a **Primitive Unified Bloc (PUB)**.
 
-### Estimator
-Computes expectation values of observables for quantum circuits. Use when you need:
-- Energy calculations
-- Observable measurements
-- Variational algorithm optimization
+## Implementations
 
-## V2 Interface (Current Standard)
+| Implementation | Use |
+|---|---|
+| `StatevectorSampler` | Exact statevector evolution plus finite-shot sampling on the local CPU |
+| `StatevectorEstimator` | Local statevector expectation values |
+| Aer `SamplerV2` / `EstimatorV2` | High-performance and noisy local simulation |
+| Runtime `SamplerV2` / `EstimatorV2` | IBM QPUs and IBM Runtime services |
+| `BackendSamplerV2` / `BackendEstimatorV2` | Adapt a `BackendV2` that lacks native primitives |
 
-Qiskit uses V2 primitives (BaseSamplerV2, BaseEstimatorV2) as the current standard. V1 primitives are legacy.
+The V2 `run()` structure is shared, but options are implementation-specific. Do not pass Runtime resilience options to statevector or Aer primitives.
 
-## Sampler Primitive
+## Sampler PUBs
 
-### StatevectorSampler (Local Simulation)
+A Sampler PUB contains:
+
+1. One circuit with measurements.
+2. Optional parameter values.
+
+Pass shots at the `run()` level unless a specific current API requires otherwise.
+
+### One Circuit
 
 ```python
 from qiskit import QuantumCircuit
 from qiskit.primitives import StatevectorSampler
 
-# Create circuit
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-qc.measure_all()
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.measure_all()
 
-# Run with Sampler
-sampler = StatevectorSampler()
-result = sampler.run([qc], shots=1024).result()
+sampler = StatevectorSampler(seed=11)
+primitive_result = sampler.run([circuit], shots=1024).result()
+pub_result = primitive_result[0]
 
-# Access results
-counts = result[0].data.meas.get_counts()
-print(counts)  # e.g., {'00': 523, '11': 501}
+counts = pub_result.data.meas.get_counts()
+bitstrings = pub_result.data.meas.get_bitstrings()
+metadata = pub_result.metadata
 ```
+
+`meas` is the name of the classical register created by `measure_all()`.
 
 ### Multiple Circuits
 
 ```python
-qc1 = QuantumCircuit(2)
-qc1.h(0)
-qc1.measure_all()
+circuit_x = QuantumCircuit(1)
+circuit_x.x(0)
+circuit_x.measure_all()
 
-qc2 = QuantumCircuit(2)
-qc2.x(0)
-qc2.measure_all()
+circuit_h = QuantumCircuit(1)
+circuit_h.h(0)
+circuit_h.measure_all()
 
-# Run multiple circuits
-sampler = StatevectorSampler()
-job = sampler.run([qc1, qc2], shots=1000)
-results = job.result()
-
-# Access individual results
-counts1 = results[0].data.meas.get_counts()
-counts2 = results[1].data.meas.get_counts()
+result = sampler.run([circuit_x, circuit_h], shots=512).result()
+counts_x = result[0].data.meas.get_counts()
+counts_h = result[1].data.meas.get_counts()
 ```
 
-### Using Parameters
+Each input PUB produces one `PubResult`.
+
+### Parameter Sweep
 
 ```python
+import numpy as np
+from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
+from qiskit.primitives import StatevectorSampler
 
-theta = Parameter('θ')
-qc = QuantumCircuit(1)
-qc.ry(theta, 0)
-qc.measure_all()
+theta = Parameter("theta")
+circuit = QuantumCircuit(1)
+circuit.ry(theta, 0)
+circuit.measure_all()
 
-# Run with parameter values
-sampler = StatevectorSampler()
-param_values = [[0], [np.pi/4], [np.pi/2]]
-result = sampler.run([(qc, param_values)], shots=1024).result()
+values = [[0.0], [np.pi / 2], [np.pi]]
+sampler = StatevectorSampler(seed=11)
+pub_result = sampler.run(
+    [(circuit, values)],
+    shots=256,
+).result()[0]
+
+for index, value in enumerate(values):
+    counts = pub_result.data.meas.get_counts(index)
+    print(value[0], counts)
 ```
 
-## Estimator Primitive
+For a shaped `BitArray`, pass an index to `get_counts()` when results must remain separated by parameter point. Calling it without an index can aggregate over axes.
 
-### StatevectorEstimator (Local Simulation)
+## Multiple Classical Registers
+
+Sampler data fields use register names:
+
+```python
+from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
+from qiskit.primitives import StatevectorSampler
+
+qubits = QuantumRegister(2, "q")
+left = ClassicalRegister(1, "left")
+right = ClassicalRegister(1, "right")
+circuit = QuantumCircuit(qubits, left, right)
+circuit.h(qubits[0])
+circuit.cx(qubits[0], qubits[1])
+circuit.measure(qubits[0], left[0])
+circuit.measure(qubits[1], right[0])
+
+pub_result = StatevectorSampler(seed=11).run(
+    [circuit],
+    shots=256,
+).result()[0]
+
+left_counts = pub_result.data.left.get_counts()
+right_counts = pub_result.data.right.get_counts()
+```
+
+Do not assume every result has `.data.meas`. Inspect `circuit.cregs` or `pub_result.data`.
+
+## Estimator PUBs
+
+An Estimator PUB contains:
+
+1. One circuit, normally without final measurements.
+2. One observable or an array of observables.
+3. Optional parameter values.
+
+### One Circuit and Observable
 
 ```python
 from qiskit import QuantumCircuit
 from qiskit.primitives import StatevectorEstimator
 from qiskit.quantum_info import SparsePauliOp
 
-# Create circuit WITHOUT measurements
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
 
-# Define observable
-observable = SparsePauliOp(["ZZ", "XX"])
+observable = SparsePauliOp.from_list(
+    [
+        ("ZZ", 1.0),
+        ("XX", 0.5),
+    ]
+)
 
-# Run Estimator
 estimator = StatevectorEstimator()
-result = estimator.run([(qc, observable)]).result()
+pub_result = estimator.run(
+    [(circuit, observable)]
+).result()[0]
 
-# Access expectation values
-exp_value = result[0].data.evs
-print(f"Expectation value: {exp_value}")
+expectation_values = pub_result.data.evs
+standard_deviations = pub_result.data.stds
 ```
+
+`SparsePauliOp` labels are little-endian with respect to qubit indices: the rightmost label character acts on qubit 0.
+
+### Parameter Sweep
+
+```python
+import numpy as np
+from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter
+from qiskit.primitives import StatevectorEstimator
+from qiskit.quantum_info import SparsePauliOp
+
+theta = Parameter("theta")
+circuit = QuantumCircuit(2)
+circuit.ry(theta, 0)
+circuit.cx(0, 1)
+
+observable = SparsePauliOp.from_list([("ZI", 1.0), ("XX", 0.5)])
+values = [[0.0], [np.pi / 4], [np.pi / 2]]
+
+pub_result = StatevectorEstimator().run(
+    [(circuit, observable, values)]
+).result()[0]
+
+print(pub_result.data.evs)
+```
+
+The final axis of `values` corresponds to `list(circuit.parameters)`.
 
 ### Multiple Observables
 
 ```python
-from qiskit.quantum_info import SparsePauliOp
+observables = [
+    [SparsePauliOp.from_list([("ZZ", 1.0)])],
+    [SparsePauliOp.from_list([("XX", 1.0)])],
+]
 
-qc = QuantumCircuit(2)
-qc.h(0)
-
-obs1 = SparsePauliOp(["ZZ"])
-obs2 = SparsePauliOp(["XX"])
-
-estimator = StatevectorEstimator()
-result = estimator.run([(qc, obs1), (qc, obs2)]).result()
-
-ev1 = result[0].data.evs
-ev2 = result[1].data.evs
+pub_result = StatevectorEstimator().run(
+    [(circuit, observables, values)]
+).result()[0]
+assert pub_result.data.evs.shape == (2, len(values))
 ```
 
-### Parameterized Estimator
+Estimator V2 broadcasts observable and parameter arrays. For nontrivial shapes, build a small test first and assert the output shape rather than relying on intuition.
+
+## Precision and Shots
+
+- Sampler controls finite sampling with `shots`.
+- Estimator controls target accuracy with `precision`.
+- `StatevectorEstimator` is exact at its default precision of zero for supported circuits and Pauli observables.
+- Runtime may translate requested precision into a shot and randomization budget.
+- Runtime twirling settings can affect how shots are allocated.
 
 ```python
-from qiskit.circuit import Parameter
-import numpy as np
-
-theta = Parameter('θ')
-qc = QuantumCircuit(1)
-qc.ry(theta, 0)
-
-observable = SparsePauliOp(["Z"])
-
-# Run with multiple parameter values
-estimator = StatevectorEstimator()
-param_values = [[0], [np.pi/4], [np.pi/2], [np.pi]]
-result = estimator.run([(qc, observable, param_values)]).result()
+pub_result = runtime_estimator.run(
+    [(isa_circuit, isa_observable)],
+    precision=0.02,
+).result()[0]
 ```
 
-## IBM Quantum Runtime Primitives
+Record requested precision, realized metadata, primitive options, and usage. Do not compare two experiments solely by nominal shot count when mitigation or twirling differs.
 
-For running on real hardware, use runtime primitives:
+## Runtime Sampler V2
 
-### Runtime Sampler
+Runtime circuits must already satisfy the selected backend's ISA:
 
 ```python
+from qiskit import QuantumCircuit
+from qiskit.transpiler import generate_preset_pass_manager
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
 
 service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
+backend = service.least_busy(
+    operational=True,
+    simulator=False,
+    min_num_qubits=2,
+)
 
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-qc.measure_all()
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.measure_all()
 
-# Run on real hardware
-sampler = Sampler(backend)
-job = sampler.run([qc], shots=1024)
-result = job.result()
-counts = result[0].data.meas.get_counts()
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=11,
+)
+isa_circuit = pass_manager.run(circuit)
+
+sampler = Sampler(
+    mode=backend,
+    options={"default_shots": 1024},
+)
+job = sampler.run([isa_circuit])
+print(job.job_id())
+counts = job.result()[0].data.meas.get_counts()
 ```
 
-### Runtime Estimator
+Sampler noise-management options include dynamical decoupling, twirling, execution, environment, and simulator settings. Sampler does not expose Estimator resilience levels.
+
+## Runtime Estimator V2
+
+Map observables through the final circuit layout:
 
 ```python
-from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2 as Estimator
 from qiskit.quantum_info import SparsePauliOp
+from qiskit_ibm_runtime import EstimatorV2 as Estimator
 
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
+observable = SparsePauliOp.from_list([("ZZ", 1.0)])
+isa_observable = observable.apply_layout(isa_circuit.layout)
 
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-
-observable = SparsePauliOp(["ZZ"])
-
-# Run on real hardware
-estimator = Estimator(backend)
-job = estimator.run([(qc, observable)])
-result = job.result()
-exp_value = result[0].data.evs
+estimator = Estimator(
+    mode=backend,
+    options={"resilience_level": 1},
+)
+job = estimator.run(
+    [(isa_circuit, isa_observable)],
+    precision=0.02,
+)
+print(job.job_id())
+pub_result = job.result()[0]
+print(pub_result.data.evs, pub_result.data.stds)
 ```
 
-## Sessions for Iterative Workloads
-
-Sessions group multiple jobs to reduce queue wait times:
+For a parameterized circuit, transpile once and include values in the PUB:
 
 ```python
-from qiskit_ibm_runtime import Session
-
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-
-with Session(backend=backend) as session:
-    sampler = Sampler(session=session)
-
-    # Run multiple jobs in session
-    job1 = sampler.run([qc1], shots=1024)
-    result1 = job1.result()
-
-    job2 = sampler.run([qc2], shots=1024)
-    result2 = job2.result()
+pub = (isa_circuit, isa_observable, parameter_values)
+pub_result = estimator.run([pub], precision=0.02).result()[0]
 ```
 
-## Batch Mode for Parallel Jobs
+## Runtime Options
 
-Batch mode runs independent jobs in parallel:
+Set options with a dictionary, an options dataclass, direct attributes, or `.update()`:
 
 ```python
-from qiskit_ibm_runtime import Batch
+from qiskit_ibm_runtime import EstimatorOptions, EstimatorV2 as Estimator
 
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
+options = EstimatorOptions(
+    resilience_level=2,
+    resilience={
+        "zne_mitigation": True,
+        "zne": {"noise_factors": [1, 3, 5]},
+    },
+)
+estimator = Estimator(mode=backend, options=options)
 
-with Batch(backend=backend) as batch:
-    sampler = Sampler(session=batch)
-
-    # Submit multiple independent jobs
-    job1 = sampler.run([qc1], shots=1024)
-    job2 = sampler.run([qc2], shots=1024)
-
-    # Retrieve results when ready
-    result1 = job1.result()
-    result2 = job2.result()
+estimator.options.default_precision = 0.02
+estimator.options.update(
+    dynamical_decoupling={
+        "enable": True,
+        "sequence_type": "XpXm",
+    }
+)
 ```
 
-## Result Processing
+Current Estimator resilience levels are `0`, `1`, and `2`; there is no level 3. Advanced features can be incompatible with each other, especially fractional gates, gate twirling, PEA, PEC, and gate-folding ZNE. Consult the current options guide before combining them.
 
-### Sampler Results
+Do not use the old shared `Options()` object or `.set_options()`.
+
+## Job, Batch, and Session Modes
 
 ```python
-result = sampler.run([qc], shots=1024).result()
+from qiskit_ibm_runtime import (
+    Batch,
+    EstimatorV2 as Estimator,
+    SamplerV2 as Sampler,
+    Session,
+)
 
-# Get counts
-counts = result[0].data.meas.get_counts()
+# Job mode
+sampler = Sampler(mode=backend)
+job = sampler.run([isa_circuit], shots=1024)
 
-# Get probabilities
-probs = {k: v/1024 for k, v in counts.items()}
+# Batch mode: independent jobs
+with Batch(backend=backend, max_time="10m") as batch:
+    sampler = Sampler(mode=batch)
+    batch_jobs = [
+        sampler.run([circuit], shots=1024)
+        for circuit in isa_circuits
+    ]
 
-# Get metadata
-metadata = result[0].metadata
+# Session mode: iterative jobs; unavailable on the Open Plan
+with Session(backend=backend, max_time="20m") as session:
+    estimator = Estimator(mode=session)
+    session_jobs = [
+        estimator.run([pub], precision=0.03)
+        for pub in iterative_pubs
+    ]
 ```
 
-### Estimator Results
+Create the primitive with `mode=batch` or `mode=session`. Passing the backend instead runs in job mode even inside a context.
+
+## Adapting a Backend
+
+Use backend primitives when a provider exposes `BackendV2` but no native V2 primitive:
 
 ```python
-result = estimator.run([(qc, observable)]).result()
+from qiskit.primitives import BackendEstimatorV2, BackendSamplerV2
 
-# Expectation value
-exp_val = result[0].data.evs
-
-# Standard deviation (if available)
-std_dev = result[0].data.stds
-
-# Metadata
-metadata = result[0].metadata
+sampler = BackendSamplerV2(backend=backend)
+estimator = BackendEstimatorV2(backend=backend)
 ```
 
-## Differences from V1 Primitives
+Provider behavior, result quality, and options differ. Transpile for the backend target and read the provider documentation.
 
-**V2 Improvements:**
-- More flexible parameter binding
-- Better result structure
-- Improved performance
-- Cleaner API design
+## Result Handling Checklist
 
-**Migration from V1:**
-- Use `StatevectorSampler` instead of `Sampler`
-- Use `StatevectorEstimator` instead of `Estimator`
-- Result access changed from `.result().quasi_dists[0]` to `.result()[0].data.meas.get_counts()`
+For every result:
+
+1. Match each `PubResult` to its input PUB.
+2. Use the actual classical-register field for Sampler output.
+3. Preserve array dimensions for parameter and observable sweeps.
+4. Store metadata alongside values or counts.
+5. Store the job ID before blocking on `result()`.
+6. Record package versions, backend name, seeds, precision or shots, and all non-default options.
+7. Treat mitigated expectation values as estimates with method-dependent bias and overhead.
+
+## Migration Traps
+
+| Old pattern | Current pattern |
+|---|---|
+| `Sampler()` or `Estimator()` V1 | Explicit V2 implementation |
+| `.quasi_dists` | Shot-resolved `BitArray`, such as `.data.meas.get_counts()` |
+| `.values` | `.result()[i].data.evs` |
+| Parallel circuit/observable/value lists | One or more PUB tuples |
+| Shared `Options()` | `SamplerOptions`, `EstimatorOptions`, dictionaries, or `.options.update()` |
+| `backend=` / `session=` primitive arguments | `mode=` |
+| Runtime auto-transpilation | Explicit ISA circuit preparation |
+| Unmapped observables | `observable.apply_layout(isa_circuit.layout)` |
+
+## Common Errors
+
+- **No `meas` field**: the circuit has a differently named register or no measurements.
+- **Shape/broadcast error**: check `circuit.parameters`, the last parameter-value axis, and observable-array shape.
+- **Circuit not ISA-compatible**: transpile against the exact backend target before Runtime execution.
+- **Observable qubit mismatch**: apply the circuit layout and confirm the resulting width.
+- **Unsupported option**: options are implementation- and version-specific.
+- **Session rejected**: Open Plan workloads must use job or batch mode.
+- **Unexpected cost**: mitigation, twirling, and precision settings can multiply circuit and shot counts.

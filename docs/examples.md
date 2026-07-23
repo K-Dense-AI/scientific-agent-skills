@@ -1696,7 +1696,7 @@ Expected Output:
 - `biopython` - Sequence processing
 - `pysam` - BAM file handling
 - `phylogenetics` - MAFFT/IQ-TREE/FastTree tree building
-- `etetoolkit` - Phylogenetic trees
+- `etetoolkit` - Existing-tree analysis, annotation, and visualization
 - `scikit-bio` - Microbial ecology
 - `networkx` - Co-occurrence networks
 - `statsmodels` - Diversity statistics
@@ -1744,12 +1744,13 @@ Step 4: Statistical comparison of communities
   * LEfSe for differential abundance testing
 - Identify taxa enriched or depleted in each condition
 
-Step 5: Build phylogenetic tree with ETE Toolkit
+Step 5: Infer, then analyze a phylogenetic tree
 - Extract 16S rRNA sequences (or marker genes)
-- Align sequences (MUSCLE/MAFFT equivalent)
-- Build phylogenetic tree (neighbor-joining or maximum likelihood)
-- Visualize tree colored by sample or environment
-- Root tree with outgroup
+- Align sequences with MAFFT or another domain-appropriate aligner
+- Infer the tree with IQ-TREE 2, FastTree, or another explicit method
+- Load the resulting Newick into ETE 4 with the matching parser
+- Validate tip identity and support scale, then root with a justified outgroup
+- Annotate and visualize the tree by sample or environment
 
 Step 6: Co-occurrence network analysis
 - Calculate pairwise correlations between taxa
@@ -1842,7 +1843,7 @@ Expected Output:
 - `biopython` - Sequence analysis
 - `pysam` - Genome assembly analysis
 - `phylogenetics` - Core-genome alignment and ML phylogenies
-- `etetoolkit` - Phylogenetic analysis
+- `etetoolkit` - Existing-tree analysis, annotation, and visualization
 - `polars-bio` - Fast genomic interval operations on assemblies
 - `scikit-learn` - Resistance prediction
 - `networkx` - Transmission networks
@@ -1889,12 +1890,13 @@ Step 4: Resistance mechanism annotation
 - Query UniProt for detailed mechanism descriptions
 - Link genes to antibiotic classes affected
 
-Step 5: Build phylogenetic tree with ETE Toolkit
+Step 5: Infer, then analyze a phylogenetic tree
 - Extract core genome SNPs
 - Concatenate SNP alignments
-- Build maximum likelihood tree
-- Root with outgroup or midpoint rooting
-- Annotate tree with:
+- Infer a maximum-likelihood tree with IQ-TREE 2 or another explicit method
+- Load the resulting Newick into ETE 4 and validate labels/support
+- Root with a justified outgroup or documented midpoint rooting
+- Annotate and visualize the tree with:
   * Resistance profiles
   * Sequence types
   * Collection date and location
@@ -2675,15 +2677,10 @@ Expected Output:
 
 ### Example 21: Variational Quantum Eigensolver for Molecular Ground States
 
-**Objective**: Use quantum computing to calculate molecular electronic structure and ground state energies for drug design applications.
+**Objective**: Build and benchmark a reproducible VQE workflow for a small, classically verifiable molecular ground-state problem before considering larger chemistry applications.
 
 **Skills Used**:
-- `qiskit` - IBM quantum computing framework
-- `pennylane` - Quantum machine learning
-- `cirq` - Google quantum circuits
-- `qutip` - Quantum dynamics simulation
-- `rdkit` - Molecular structure input
-- `sympy` - Symbolic Hamiltonian construction
+- `qiskit` - Qiskit Nature mapping, V2 primitives, target-aware transpilation, simulation, and IBM Runtime execution
 - `matplotlib` - Energy landscape visualization
 - `scientific-visualization` - Publication figures
 - `scientific-writing` - Quantum chemistry reports
@@ -2692,74 +2689,68 @@ Expected Output:
 
 ```bash
 Step 1: Define molecular system
-- Load molecular structure with RDKit (small drug molecule)
-- Extract atomic coordinates and nuclear charges
-- Define basis set (STO-3G, 6-31G for small molecules)
-- Calculate number of qubits needed (2 qubits per orbital)
+- Start with H2 or another small molecule that can be solved exactly
+- Record geometry, units, charge, spin, and basis set
+- Choose any active-space and freeze-core approximations explicitly
+- Calculate spin-orbital and qubit counts after all reductions
 
 Step 2: Construct molecular Hamiltonian
-- Use Qiskit Nature to generate fermionic Hamiltonian
-- Apply Jordan-Wigner transformation to qubit Hamiltonian
-- Use SymPy to symbolically verify Hamiltonian terms
-- Calculate number of Pauli terms
+- Use the pinned Qiskit Nature and PySCF integration
+- Generate the second-quantized electronic Hamiltonian
+- Apply a current mapper such as Jordan-Wigner directly
+- Record coefficients, Pauli-term count, nuclear repulsion, and mapper
 
-Step 3: Design variational ansatz with Qiskit
-- Choose ansatz type: UCCSD, hardware-efficient, or custom
-- Define circuit depth and entanglement structure
-- Calculate circuit parameters (variational angles)
-- Estimate circuit resources (gates, depth)
+Step 3: Establish classical and exact-quantum baselines
+- Compute Hartree-Fock and exact diagonalization results where tractable
+- Run StatevectorEstimator with the same mapped Hamiltonian
+- Confirm energy conventions and avoid adding nuclear repulsion twice
+- Define an accuracy target before using noisy simulation or hardware
 
-Step 4: Implement VQE algorithm
-- Initialize variational parameters randomly
-- Define cost function: <ψ(θ)|H|ψ(θ)>
-- Choose classical optimizer (COBYLA, SPSA, L-BFGS-B)
-- Set convergence criteria
+Step 4: Design and validate the ansatz
+- Compare a chemistry-motivated ansatz with a shallow hardware-efficient ansatz
+- Record parameter order, initial state, depth, and two-qubit operations
+- Use a current optimizer object and bounded evaluation budget
+- Verify the small-circuit state and expectation values locally
 
-Step 5: Run quantum simulation with PennyLane
-- Configure quantum device (simulator or real hardware)
-- Execute variational circuits
-- Measure expectation values of Hamiltonian terms
-- Update parameters iteratively
+Step 5: Implement VQE with V2 primitives
+- Use StatevectorEstimator for the ideal development loop
+- Pass parameter arrays through Estimator PUBs
+- Compile the parameterized circuit once rather than once per iteration
+- Save convergence history, primitive metadata, and package versions
 
-Step 6: Error mitigation
-- Implement readout error mitigation
-- Apply zero-noise extrapolation
-- Use measurement error correction
-- Estimate uncertainty in energy values
+Step 6: Progress from noise model to IBM QPU
+- Build a recorded Aer/fake-backend baseline
+- Select an accessible BackendV2 by width and target capabilities
+- Generate an ISA circuit and apply its layout to every observable
+- Use job or batch mode; use sessions only on eligible plans
 
-Step 7: Quantum dynamics with QuTiP
-- Simulate molecular dynamics on quantum computer
-- Calculate time evolution of molecular system
-- Study non-adiabatic transitions
-- Visualize wavefunction dynamics
+Step 7: Evaluate mitigation rather than assuming benefit
+- Compare Runtime Estimator resilience levels 0 and 1 or 2
+- Record requested precision, realized uncertainty, and workload overhead
+- Compare both results with the exact small-system baseline
+- Report cases where mitigation does not improve the estimate
 
-Step 8: Compare with classical methods
-- Run classical HF and DFT calculations for reference
-- Compare VQE results with CCSD(T) (gold standard)
-- Analyze quantum advantage for this system
-- Quantify accuracy vs computational cost
+Step 8: Analyze resources and reproducibility
+- Report logical and ISA depth, layout, and native two-qubit operations
+- Store QPY circuits, backend, job IDs, seeds, options, and version pins
+- Separate ideal, modeled-noise, and hardware results
+- Quantify total optimizer evaluations and QPU usage
 
-Step 9: Scale to larger molecules
-- Design circuits for larger drug candidates
-- Estimate resources for pharmaceutical applications
-- Identify molecules where quantum advantage is expected
-- Plan for near-term quantum hardware capabilities
-
-Step 10: Generate quantum chemistry report
+Step 9: Generate quantum chemistry report
 - Energy convergence plots
 - Circuit diagrams and ansatz visualizations
-- Comparison with classical methods
-- Resource estimates for target molecules
-- Discussion of quantum advantage timeline
+- Comparison with exact and classical chemistry baselines
+- Accuracy, uncertainty, and execution-cost accounting
+- Limitations on extrapolating from small molecules to applications
 - Publication-quality figures
 - Export comprehensive report
 
 Expected Output:
-- Molecular ground state energies from VQE
-- Optimized variational circuits
-- Comparison with classical chemistry methods
-- Resource estimates for drug molecules
-- Quantum chemistry analysis report
+- Reproducible ideal, noisy, and optional hardware VQE results
+- Logical and ISA circuits with mapped observables
+- Comparison with exact and classical baselines
+- Mitigation A/B analysis with uncertainty and cost
+- Versioned quantum chemistry workflow report
 ```
 
 ---
@@ -2897,10 +2888,10 @@ Expected Output:
 
 ```bash
 Step 1: Load and parse FCS files
-- Use flowio to read FCS 3.0/3.1 files
-- Extract channel names and metadata
-- Load compensation matrix from file
-- Parse keywords (patient ID, tube, date)
+- Use flowio to read FCS 2.0/3.0/3.1 files
+- Extract channel names and normalized metadata (lowercase keys without `$`)
+- Read and validate spill/spillover metadata; FlowIO does not apply it
+- Allowlist needed sample/tube/date fields and protect identifying metadata
 
 Step 2: Quality control
 - Check for acquisition anomalies (time vs events)
@@ -2910,7 +2901,7 @@ Step 2: Quality control
 - Document QC metrics per sample
 
 Step 3: Compensation and transformation
-- Apply compensation matrix
+- Apply the validated matrix with a higher-level cytometry tool
 - Transform data (biexponential/logicle)
 - Verify compensation with single-stain controls
 - Visualize spillover reduction

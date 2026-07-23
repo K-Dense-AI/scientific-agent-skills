@@ -1,229 +1,446 @@
 #!/usr/bin/env python3
-"""
-Tree operations helper script for common ETE toolkit tasks.
+"""Validated command-line tree operations for ETE 4."""
 
-Provides command-line interface for basic tree operations like:
-- Format conversion
-- Rooting (outgroup, midpoint)
-- Pruning
-- Basic statistics
-- ASCII visualization
-"""
+from __future__ import annotations
 
 import argparse
+import json
+import statistics
 import sys
+from collections import Counter
 from pathlib import Path
+from typing import Any
 
 try:
-    from ete3 import Tree
-except ImportError:
-    print("Error: ete3 not installed. Install with: pip install ete3")
-    sys.exit(1)
+    import ete4
+    from ete4 import Tree
+    from ete4.parser.newick import NewickError
+except ImportError as exc:
+    raise SystemExit(
+        'ETE 4 is required. Install it with: uv pip install "ete4==4.4.0"'
+    ) from exc
 
 
-def load_tree(tree_file, format_num=0):
-    """Load tree from file."""
+ParserSpec = int | str
+
+
+class UserInputError(ValueError):
+    """An actionable problem with command-line input or tree content."""
+
+
+def parser_spec(value: str) -> ParserSpec:
+    """Parse numeric Newick parser IDs while retaining named aliases."""
+    text = value.strip()
     try:
-        return Tree(str(tree_file), format=format_num)
-    except Exception as e:
-        print(f"Error loading tree: {e}")
-        sys.exit(1)
+        return int(text)
+    except ValueError:
+        if not text:
+            raise argparse.ArgumentTypeError("parser cannot be empty")
+        return text
 
 
-def convert_format(tree_file, output, in_format=0, out_format=1):
-    """Convert tree between Newick formats."""
-    tree = load_tree(tree_file, in_format)
-    tree.write(outfile=str(output), format=out_format)
-    print(f"Converted {tree_file} (format {in_format}) → {output} (format {out_format})")
+def comma_separated(value: str) -> list[str]:
+    """Parse a comma-separated property list."""
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def reroot_tree(tree_file, output, outgroup=None, midpoint=False, format_num=0):
-    """Reroot tree by outgroup or midpoint."""
-    tree = load_tree(tree_file, format_num)
+def load_tree(path: Path, parser: ParserSpec) -> Tree:
+    """Load one Newick tree from a UTF-8 text file."""
+    if not path.is_file():
+        raise UserInputError(f"input tree does not exist or is not a file: {path}")
 
-    if midpoint:
-        midpoint_node = tree.get_midpoint_outgroup()
-        tree.set_outgroup(midpoint_node)
-        print(f"Rerooted tree using midpoint method")
-    elif outgroup:
+    try:
+        with path.open(encoding="utf-8") as handle:
+            return Tree(handle, parser=parser)
+    except (OSError, ValueError, TypeError, NewickError) as exc:
+        raise UserInputError(
+            f"could not parse {path} with Newick parser {parser!r}: {exc}"
+        ) from exc
+
+
+def save_tree(
+    tree: Tree,
+    path: Path,
+    parser: ParserSpec,
+    props: list[str],
+) -> None:
+    """Serialize a tree after validating its destination directory."""
+    if not path.parent.is_dir():
+        raise UserInputError(f"output directory does not exist: {path.parent}")
+
+    try:
+        newick = tree.write(
+            parser=parser,
+            props=props,
+            format_root_node=True,
+        )
+        path.write_text(newick.rstrip("\n") + "\n", encoding="utf-8")
+    except (OSError, ValueError, TypeError, NewickError) as exc:
+        raise UserInputError(
+            f"could not write {path} with Newick parser {parser!r}: {exc}"
+        ) from exc
+
+
+def numeric_summary(values: list[float]) -> dict[str, float] | None:
+    """Return basic descriptive statistics for a numeric list."""
+    if not values:
+        return None
+    return {
+        "minimum": min(values),
+        "maximum": max(values),
+        "mean": statistics.fmean(values),
+        "median": statistics.median(values),
+    }
+
+
+def tree_stats(tree: Tree, source: Path) -> dict[str, Any]:
+    """Calculate structural, branch-length, and support diagnostics."""
+    nodes = list(tree.traverse())
+    leaves = list(tree.leaves())
+    internal = [node for node in nodes if not node.is_leaf]
+    names = [leaf.name for leaf in leaves]
+    duplicate_names = sorted(
+        name for name, count in Counter(names).items() if name is not None and count > 1
+    )
+    unnamed_leaf_ids = [list(leaf.id) for leaf in leaves if not leaf.name]
+
+    branch_lengths = [
+        float(node.dist) for node in nodes if not node.is_root and node.dist is not None
+    ]
+    support_values = [
+        float(node.support)
+        for node in internal
+        if not node.is_root and node.support is not None
+    ]
+
+    farthest_leaf, farthest_distance = tree.get_farthest_leaf()
+
+    return {
+        "source": str(source),
+        "ete_version": ete4.__version__,
+        "leaf_count": len(leaves),
+        "internal_node_count": len(internal),
+        "total_node_count": len(nodes),
+        "root_child_count": len(tree.children),
+        "polytomy_count": sum(len(node.children) > 2 for node in internal),
+        "unary_node_count": sum(len(node.children) == 1 for node in internal),
+        "duplicate_leaf_names": duplicate_names,
+        "unnamed_leaf_ids": unnamed_leaf_ids,
+        "branch_lengths": numeric_summary(branch_lengths),
+        "internal_support": numeric_summary(support_values),
+        "farthest_leaf": farthest_leaf.name,
+        "farthest_leaf_distance": float(farthest_distance),
+    }
+
+
+def print_stats(stats: dict[str, Any], as_json: bool) -> None:
+    """Print statistics as JSON or readable text."""
+    if as_json:
+        print(json.dumps(stats, indent=2, sort_keys=True))
+        return
+
+    print(f"File: {stats['source']}")
+    print(f"ETE version: {stats['ete_version']}")
+    print(f"Leaves: {stats['leaf_count']}")
+    print(f"Internal nodes: {stats['internal_node_count']}")
+    print(f"Total nodes: {stats['total_node_count']}")
+    print(f"Root children: {stats['root_child_count']}")
+    print(f"Polytomies: {stats['polytomy_count']}")
+    print(f"Unary nodes: {stats['unary_node_count']}")
+    print(f"Farthest leaf: {stats['farthest_leaf']!r}")
+    print(f"Farthest distance: {stats['farthest_leaf_distance']:.6g}")
+
+    for label, key in (
+        ("Branch lengths", "branch_lengths"),
+        ("Internal support", "internal_support"),
+    ):
+        summary = stats[key]
+        if summary is None:
+            print(f"{label}: none")
+        else:
+            print(
+                f"{label}: min={summary['minimum']:.6g}, "
+                f"median={summary['median']:.6g}, "
+                f"mean={summary['mean']:.6g}, "
+                f"max={summary['maximum']:.6g}"
+            )
+
+    print(f"Duplicate leaf names: {stats['duplicate_leaf_names'] or 'none'}")
+    print(f"Unnamed leaf IDs: {stats['unnamed_leaf_ids'] or 'none'}")
+
+
+def resolve_unique_node(tree: Tree, name: str) -> Tree:
+    """Resolve exactly one named node."""
+    matches = list(tree.search_nodes(name=name))
+    if not matches:
+        raise UserInputError(f"node not found: {name!r}")
+    if len(matches) > 1:
+        raise UserInputError(
+            f"node name is ambiguous ({len(matches)} matches): {name!r}"
+        )
+    return matches[0]
+
+
+def read_keep_names(values: list[str] | None, file_path: Path | None) -> list[str]:
+    """Read requested names from arguments or a one-name-per-line file."""
+    if file_path is not None:
+        if not file_path.is_file():
+            raise UserInputError(f"taxon file does not exist: {file_path}")
         try:
-            outgroup_node = tree & outgroup
-            tree.set_outgroup(outgroup_node)
-            print(f"Rerooted tree using outgroup: {outgroup}")
-        except Exception as e:
-            print(f"Error: Could not find outgroup '{outgroup}': {e}")
-            sys.exit(1)
+            names = [
+                line.strip()
+                for line in file_path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+        except OSError as exc:
+            raise UserInputError(
+                f"could not read taxon file {file_path}: {exc}"
+            ) from exc
     else:
-        print("Error: Must specify either --outgroup or --midpoint")
-        sys.exit(1)
+        names = values or []
 
-    tree.write(outfile=str(output), format=format_num)
-    print(f"Saved rerooted tree to: {output}")
-
-
-def prune_tree(tree_file, output, keep_taxa, preserve_length=True, format_num=0):
-    """Prune tree to keep only specified taxa."""
-    tree = load_tree(tree_file, format_num)
-
-    # Read taxa list
-    taxa_file = Path(keep_taxa)
-    if taxa_file.exists():
-        with open(taxa_file) as f:
-            taxa = [line.strip() for line in f if line.strip()]
-    else:
-        taxa = [t.strip() for t in keep_taxa.split(",")]
-
-    print(f"Pruning tree to {len(taxa)} taxa")
-
-    try:
-        tree.prune(taxa, preserve_branch_length=preserve_length)
-        tree.write(outfile=str(output), format=format_num)
-        print(f"Pruned tree saved to: {output}")
-        print(f"Retained {len(tree)} leaves")
-    except Exception as e:
-        print(f"Error pruning tree: {e}")
-        sys.exit(1)
+    duplicates = sorted(name for name, count in Counter(names).items() if count > 1)
+    if not names:
+        raise UserInputError("at least one taxon must be requested")
+    if duplicates:
+        raise UserInputError(f"duplicate requested taxa: {duplicates}")
+    return names
 
 
-def tree_stats(tree_file, format_num=0):
-    """Display tree statistics."""
-    tree = load_tree(tree_file, format_num)
-
-    print(f"\n=== Tree Statistics ===")
-    print(f"File: {tree_file}")
-    print(f"Number of leaves: {len(tree)}")
-    print(f"Total nodes: {len(list(tree.traverse()))}")
-
-    farthest_leaf, distance = tree.get_farthest_leaf()
-    print(f"Tree depth: {distance:.4f}")
-    print(f"Farthest leaf: {farthest_leaf.name}")
-
-    # Branch length statistics
-    branch_lengths = [node.dist for node in tree.traverse() if not node.is_root()]
-    if branch_lengths:
-        print(f"\nBranch length statistics:")
-        print(f"  Mean: {sum(branch_lengths)/len(branch_lengths):.4f}")
-        print(f"  Min: {min(branch_lengths):.4f}")
-        print(f"  Max: {max(branch_lengths):.4f}")
-
-    # Support values
-    supports = [node.support for node in tree.traverse() if not node.is_leaf() and hasattr(node, 'support')]
-    if supports:
-        print(f"\nSupport value statistics:")
-        print(f"  Mean: {sum(supports)/len(supports):.2f}")
-        print(f"  Min: {min(supports):.2f}")
-        print(f"  Max: {max(supports):.2f}")
-
-    print()
+def validate_requested_names(tree: Tree, requested: list[str]) -> None:
+    """Require every requested name to resolve to exactly one tree node."""
+    counts = Counter(tree.leaf_names())
+    missing = sorted(name for name in requested if counts[name] == 0)
+    ambiguous = sorted(name for name in requested if counts[name] > 1)
+    if missing:
+        raise UserInputError(f"requested leaves are absent: {missing}")
+    if ambiguous:
+        raise UserInputError(f"requested leaf names are duplicated: {ambiguous}")
 
 
-def show_ascii(tree_file, format_num=0, show_internal=True):
-    """Display tree as ASCII art."""
-    tree = load_tree(tree_file, format_num)
-    print(tree.get_ascii(show_internal=show_internal))
+def command_stats(args: argparse.Namespace) -> None:
+    tree = load_tree(args.input, args.parser)
+    print_stats(tree_stats(tree, args.input), args.json)
 
 
-def list_leaves(tree_file, format_num=0):
-    """List all leaf names."""
-    tree = load_tree(tree_file, format_num)
-    for leaf in tree:
-        print(leaf.name)
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="ETE toolkit tree operations helper",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Convert format
-  %(prog)s convert input.nw output.nw --in-format 0 --out-format 1
-
-  # Midpoint root
-  %(prog)s reroot input.nw output.nw --midpoint
-
-  # Reroot with outgroup
-  %(prog)s reroot input.nw output.nw --outgroup "Outgroup_species"
-
-  # Prune tree
-  %(prog)s prune input.nw output.nw --keep-taxa "speciesA,speciesB,speciesC"
-
-  # Show statistics
-  %(prog)s stats input.nw
-
-  # Display as ASCII
-  %(prog)s ascii input.nw
-
-  # List all leaves
-  %(prog)s leaves input.nw
-        """
+def command_ascii(args: argparse.Namespace) -> None:
+    tree = load_tree(args.input, args.parser)
+    print(
+        tree.to_str(
+            show_internal=not args.no_internal,
+            compact=args.compact,
+            props=args.props,
+        )
     )
 
-    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
-    # Convert command
-    convert_parser = subparsers.add_parser("convert", help="Convert tree format")
-    convert_parser.add_argument("input", help="Input tree file")
-    convert_parser.add_argument("output", help="Output tree file")
-    convert_parser.add_argument("--in-format", type=int, default=0, help="Input format (default: 0)")
-    convert_parser.add_argument("--out-format", type=int, default=1, help="Output format (default: 1)")
+def command_leaves(args: argparse.Namespace) -> None:
+    tree = load_tree(args.input, args.parser)
+    for name in tree.leaf_names():
+        print("" if name is None else name)
 
-    # Reroot command
-    reroot_parser = subparsers.add_parser("reroot", help="Reroot tree")
-    reroot_parser.add_argument("input", help="Input tree file")
-    reroot_parser.add_argument("output", help="Output tree file")
-    reroot_parser.add_argument("--outgroup", help="Outgroup taxon name")
-    reroot_parser.add_argument("--midpoint", action="store_true", help="Use midpoint rooting")
-    reroot_parser.add_argument("--format", type=int, default=0, help="Newick format (default: 0)")
 
-    # Prune command
-    prune_parser = subparsers.add_parser("prune", help="Prune tree to specified taxa")
-    prune_parser.add_argument("input", help="Input tree file")
-    prune_parser.add_argument("output", help="Output tree file")
-    prune_parser.add_argument("--keep-taxa", required=True,
-                              help="Taxa to keep (comma-separated or file path)")
-    prune_parser.add_argument("--no-preserve-length", action="store_true",
-                              help="Don't preserve branch lengths")
-    prune_parser.add_argument("--format", type=int, default=0, help="Newick format (default: 0)")
+def command_convert(args: argparse.Namespace) -> None:
+    tree = load_tree(args.input, args.input_parser)
+    save_tree(tree, args.output, args.output_parser, args.props)
+    print(f"Wrote {args.output}")
 
-    # Stats command
-    stats_parser = subparsers.add_parser("stats", help="Display tree statistics")
-    stats_parser.add_argument("input", help="Input tree file")
-    stats_parser.add_argument("--format", type=int, default=0, help="Newick format (default: 0)")
 
-    # ASCII command
-    ascii_parser = subparsers.add_parser("ascii", help="Display tree as ASCII art")
-    ascii_parser.add_argument("input", help="Input tree file")
-    ascii_parser.add_argument("--format", type=int, default=0, help="Newick format (default: 0)")
-    ascii_parser.add_argument("--no-internal", action="store_true",
-                              help="Don't show internal node names")
+def command_reroot(args: argparse.Namespace) -> None:
+    tree = load_tree(args.input, args.parser)
+    if args.midpoint:
+        tree.set_midpoint_outgroup(topological=args.topological)
+        method = (
+            "topological midpoint" if args.topological else "branch-length midpoint"
+        )
+    else:
+        if args.topological:
+            raise UserInputError("--topological applies only to --midpoint")
+        outgroup = resolve_unique_node(tree, args.outgroup)
+        tree.set_outgroup(outgroup)
+        method = f"outgroup {args.outgroup!r}"
 
-    # Leaves command
-    leaves_parser = subparsers.add_parser("leaves", help="List all leaf names")
-    leaves_parser.add_argument("input", help="Input tree file")
-    leaves_parser.add_argument("--format", type=int, default=0, help="Newick format (default: 0)")
+    save_tree(tree, args.output, args.output_parser or args.parser, args.props)
+    print(f"Rerooted with {method}; wrote {args.output}")
 
-    args = parser.parse_args()
 
-    if not args.command:
-        parser.print_help()
-        sys.exit(1)
+def command_prune(args: argparse.Namespace) -> None:
+    tree = load_tree(args.input, args.parser)
+    names = read_keep_names(args.keep, args.keep_file)
+    validate_requested_names(tree, names)
+    tree.prune(names, preserve_branch_length=args.preserve_branch_length)
+    save_tree(tree, args.output, args.output_parser or args.parser, args.props)
+    print(f"Retained {len(names)} leaves; wrote {args.output}")
 
-    # Execute command
-    if args.command == "convert":
-        convert_format(args.input, args.output, args.in_format, args.out_format)
-    elif args.command == "reroot":
-        reroot_tree(args.input, args.output, args.outgroup, args.midpoint, args.format)
-    elif args.command == "prune":
-        prune_tree(args.input, args.output, args.keep_taxa,
-                   not args.no_preserve_length, args.format)
-    elif args.command == "stats":
-        tree_stats(args.input, args.format)
-    elif args.command == "ascii":
-        show_ascii(args.input, args.format, not args.no_internal)
-    elif args.command == "leaves":
-        list_leaves(args.input, args.format)
+
+def command_compare(args: argparse.Namespace) -> None:
+    tree_a = load_tree(args.tree_a, args.parser_a)
+    tree_b = load_tree(args.tree_b, args.parser_b)
+
+    for label, tree in (("tree_a", tree_a), ("tree_b", tree_b)):
+        names = list(tree.leaf_names())
+        unnamed_count = sum(not name for name in names)
+        if unnamed_count:
+            raise UserInputError(f"{label} has {unnamed_count} unnamed leaves")
+        counts = Counter(names)
+        duplicates = sorted(
+            name for name, count in counts.items() if name is not None and count > 1
+        )
+        if duplicates:
+            raise UserInputError(f"{label} has duplicate leaf names: {duplicates}")
+
+    (
+        rf,
+        max_rf,
+        common,
+        _edges_a,
+        _edges_b,
+        discarded_a,
+        discarded_b,
+    ) = tree_a.robinson_foulds(
+        tree_b,
+        unrooted_trees=args.unrooted,
+        min_support_t1=args.min_support_a,
+        min_support_t2=args.min_support_b,
+    )
+
+    result = {
+        "tree_a": str(args.tree_a),
+        "tree_b": str(args.tree_b),
+        "unrooted": args.unrooted,
+        "rf": rf,
+        "max_rf": max_rf,
+        "normalized_rf": rf / max_rf if max_rf else 0.0,
+        "common_leaf_count": len(common),
+        "common_leaves": sorted(common),
+        "discarded_edge_count_a": len(discarded_a),
+        "discarded_edge_count_b": len(discarded_b),
+    }
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Validated ETE 4 tree operations",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s (ETE {ete4.__version__})",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    stats = subparsers.add_parser("stats", help="report tree diagnostics")
+    stats.add_argument("input", type=Path)
+    stats.add_argument("--parser", type=parser_spec, default=0)
+    stats.add_argument("--json", action="store_true")
+    stats.set_defaults(handler=command_stats)
+
+    ascii_parser = subparsers.add_parser("ascii", help="print a terminal tree")
+    ascii_parser.add_argument("input", type=Path)
+    ascii_parser.add_argument("--parser", type=parser_spec, default=0)
+    ascii_parser.add_argument(
+        "--props",
+        type=comma_separated,
+        default=["name"],
+        help="comma-separated node properties to display (default: name)",
+    )
+    ascii_parser.add_argument("--compact", action="store_true")
+    ascii_parser.add_argument("--no-internal", action="store_true")
+    ascii_parser.set_defaults(handler=command_ascii)
+
+    leaves = subparsers.add_parser("leaves", help="print leaf names")
+    leaves.add_argument("input", type=Path)
+    leaves.add_argument("--parser", type=parser_spec, default=0)
+    leaves.set_defaults(handler=command_leaves)
+
+    convert = subparsers.add_parser("convert", help="convert Newick parsers")
+    convert.add_argument("input", type=Path)
+    convert.add_argument("output", type=Path)
+    convert.add_argument("--input-parser", type=parser_spec, default=0)
+    convert.add_argument("--output-parser", type=parser_spec, default=1)
+    convert.add_argument(
+        "--props",
+        type=comma_separated,
+        default=[],
+        help="comma-separated NHX properties to retain (default: none)",
+    )
+    convert.set_defaults(handler=command_convert)
+
+    reroot = subparsers.add_parser("reroot", help="reroot by outgroup or midpoint")
+    reroot.add_argument("input", type=Path)
+    reroot.add_argument("output", type=Path)
+    reroot.add_argument("--parser", type=parser_spec, default=0)
+    reroot.add_argument("--output-parser", type=parser_spec)
+    rooting = reroot.add_mutually_exclusive_group(required=True)
+    rooting.add_argument("--outgroup", help="unique node name to use as outgroup")
+    rooting.add_argument("--midpoint", action="store_true")
+    reroot.add_argument(
+        "--topological",
+        action="store_true",
+        help="use edge counts instead of branch lengths for midpoint rooting",
+    )
+    reroot.add_argument(
+        "--props",
+        type=comma_separated,
+        default=[],
+        help="comma-separated NHX properties to write (default: none)",
+    )
+    reroot.set_defaults(handler=command_reroot)
+
+    prune = subparsers.add_parser("prune", help="retain selected leaves")
+    prune.add_argument("input", type=Path)
+    prune.add_argument("output", type=Path)
+    prune.add_argument("--parser", type=parser_spec, default=0)
+    prune.add_argument("--output-parser", type=parser_spec)
+    selection = prune.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--keep", nargs="+", help="leaf names to retain")
+    selection.add_argument(
+        "--keep-file",
+        type=Path,
+        help="UTF-8 file with one leaf name per line",
+    )
+    prune.add_argument(
+        "--preserve-branch-length",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    prune.add_argument(
+        "--props",
+        type=comma_separated,
+        default=[],
+        help="comma-separated NHX properties to write (default: none)",
+    )
+    prune.set_defaults(handler=command_prune)
+
+    compare = subparsers.add_parser(
+        "compare",
+        help="calculate Robinson-Foulds distance",
+    )
+    compare.add_argument("tree_a", type=Path)
+    compare.add_argument("tree_b", type=Path)
+    compare.add_argument("--parser-a", type=parser_spec, default=0)
+    compare.add_argument("--parser-b", type=parser_spec, default=0)
+    compare.add_argument("--unrooted", action="store_true")
+    compare.add_argument("--min-support-a", type=float, default=0.0)
+    compare.add_argument("--min-support-b", type=float, default=0.0)
+    compare.set_defaults(handler=command_compare)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        args.handler(args)
+    except UserInputError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:  # Preserve unexpected ETE failures for CLI users.
+        print(f"unexpected ETE error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

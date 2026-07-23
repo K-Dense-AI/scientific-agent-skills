@@ -1,272 +1,259 @@
 ---
 name: qiskit
-description: IBM quantum computing framework. Use when targeting IBM Quantum hardware, working with Qiskit Runtime for production workloads, or needing IBM optimization tools. Best for IBM hardware execution, quantum error mitigation, and enterprise quantum computing. For Google hardware use cirq; for gradient-based quantum ML use pennylane; for open quantum system simulations use qutip.
-license: Apache-2.0 license
-metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
+description: Build, simulate, transpile, and execute quantum circuits with Qiskit and IBM Quantum Runtime. Use for Qiskit 2.x circuits and operators, V2 Sampler or Estimator primitives, target-aware transpilation, local or noisy simulation, IBM QPU execution, Runtime sessions or batches, error mitigation, and Qiskit ecosystem packages.
+license: Apache-2.0
+compatibility: Python 3.10+ on a supported 64-bit platform. Local SDK workflows need qiskit; noisy simulation needs qiskit-aer; IBM QPU access needs qiskit-ibm-runtime, network access, an IBM Quantum Platform account, and an API key.
+metadata:
+  version: "2.0"
+  skill-author: K-Dense Inc.
 ---
 
 # Qiskit
 
-## Overview
+Use current Qiskit 2.x APIs to build circuits, prepare hardware-compatible instruction set architecture (ISA) circuits, and execute them through V2 primitives.
 
-Qiskit is the world's most popular open-source quantum computing framework with 13M+ downloads. Build quantum circuits, optimize for hardware, execute on simulators or real quantum computers, and analyze results. Supports IBM Quantum (100+ qubit systems), IonQ, Amazon Braket, and other providers.
+This skill was verified on **2026-07-23** against the PyPI releases `qiskit==2.5.0`, `qiskit-ibm-runtime==0.48.0`, and `qiskit-aer==0.17.2`. Check [references/sources.md](references/sources.md) before changing pins or documenting newly released behavior.
 
-**Key Features:**
-- 83x faster transpilation than competitors
-- 29% fewer two-qubit gates in optimized circuits
-- Backend-agnostic execution (local simulators or cloud hardware)
-- Comprehensive algorithm libraries for optimization, chemistry, and ML
+## Choose the Right Path
 
-## Quick Start
+| Goal | Recommended interface |
+|---|---|
+| Exact local sampling | `qiskit.primitives.StatevectorSampler` |
+| Exact local expectation values | `qiskit.primitives.StatevectorEstimator` |
+| High-performance or noisy simulation | Qiskit Aer |
+| IBM QPU sampling | `qiskit_ibm_runtime.SamplerV2` |
+| IBM QPU expectation values and mitigation | `qiskit_ibm_runtime.EstimatorV2` |
+| Backend without native primitives | `BackendSamplerV2` or `BackendEstimatorV2` |
+| Open-system or master-equation dynamics | Prefer QuTiP |
+| Differentiable quantum machine learning | Prefer PennyLane unless Qiskit integration is required |
 
-### Installation
+## Installation
+
+Create an isolated environment and install only the components needed:
 
 ```bash
-uv pip install qiskit
-uv pip install "qiskit[visualization]" matplotlib
+uv venv --python 3.13
+source .venv/bin/activate
+
+# Core SDK plus plotting support
+uv pip install "qiskit[visualization]==2.5.0"
+
+# Add only when needed
+uv pip install "qiskit-ibm-runtime==0.48.0"
+uv pip install "qiskit-aer==0.17.2"
 ```
 
-### First Circuit
+Do not install `qiskit-terra`; it was superseded by the `qiskit` distribution. Qiskit Runtime, Aer, Nature, Machine Learning, Optimization, and Algorithms are separate distributions.
+
+For IBM account setup, CI-safe credential handling, optional packages, and environment repair, read [references/setup.md](references/setup.md).
+
+## Core Workflow
+
+Follow this sequence for every hardware-oriented workload:
+
+1. **Map** the problem to a circuit and, for Estimator, one or more observables.
+2. **Optimize** the parameterized circuit once for the selected backend.
+3. **Apply the layout** to every observable.
+4. **Execute** ISA circuits through a V2 primitive using Primitive Unified Blocs (PUBs).
+5. **Analyze** register-aware results, metadata, uncertainty, and resource usage.
+
+Do not bind and retranspile a parameterized circuit inside every optimizer iteration. Transpile the parameterized circuit once, then pass parameter arrays in PUBs.
+
+## Quick Local Sampling
 
 ```python
 from qiskit import QuantumCircuit
 from qiskit.primitives import StatevectorSampler
 
-# Create Bell state (entangled qubits)
-qc = QuantumCircuit(2)
-qc.h(0)           # Hadamard on qubit 0
-qc.cx(0, 1)       # CNOT from qubit 0 to 1
-qc.measure_all()  # Measure both qubits
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.measure_all()  # creates the classical register named "meas"
 
-# Run locally
-sampler = StatevectorSampler()
-result = sampler.run([qc], shots=1024).result()
-counts = result[0].data.meas.get_counts()
-print(counts)  # {'00': ~512, '11': ~512}
+sampler = StatevectorSampler(seed=7)
+pub_result = sampler.run([circuit], shots=1024).result()[0]
+counts = pub_result.data.meas.get_counts()
+print(counts)
 ```
 
-### Visualization
+Sampler V2 preserves shots and classical-register structure. Access the register by its actual name; `measure_all()` uses `meas`.
+
+## Quick Local Estimation
 
 ```python
-from qiskit.visualization import plot_histogram
+import numpy as np
+from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter
+from qiskit.primitives import StatevectorEstimator
+from qiskit.quantum_info import SparsePauliOp
 
-qc.draw('mpl')           # Circuit diagram
-plot_histogram(counts)   # Results histogram
+theta = Parameter("theta")
+circuit = QuantumCircuit(2)
+circuit.ry(theta, 0)
+circuit.cx(0, 1)
+
+observable = SparsePauliOp.from_list([("ZZ", 1.0), ("XX", 0.5)])
+parameter_values = [[0.0], [np.pi / 4], [np.pi / 2]]
+
+estimator = StatevectorEstimator(seed=7)
+pub = (circuit, observable, parameter_values)
+pub_result = estimator.run([pub]).result()[0]
+print(pub_result.data.evs)
 ```
 
-## Core Capabilities
+Estimator circuits should not contain final measurements. PUB arrays broadcast; verify circuit parameter order before constructing large sweeps.
 
-### 1. Setup and Installation
-For detailed installation, authentication, and IBM Quantum account setup:
-- **See `references/setup.md`**
+## IBM QPU Sampling
 
-Topics covered:
-- Installation with uv
-- Python environment setup
-- IBM Quantum account and API token configuration
-- Local vs. cloud execution
-
-### 2. Building Quantum Circuits
-For constructing quantum circuits with gates, measurements, and composition:
-- **See `references/circuits.md`**
-
-Topics covered:
-- Creating circuits with QuantumCircuit
-- Single-qubit gates (H, X, Y, Z, rotations, phase gates)
-- Multi-qubit gates (CNOT, SWAP, Toffoli)
-- Measurements and barriers
-- Circuit composition and properties
-- Parameterized circuits for variational algorithms
-
-### 3. Primitives (Sampler and Estimator)
-For executing quantum circuits and computing results:
-- **See `references/primitives.md`**
-
-Topics covered:
-- **Sampler**: Get bitstring measurements and probability distributions
-- **Estimator**: Compute expectation values of observables
-- V2 interface (StatevectorSampler, StatevectorEstimator)
-- IBM Quantum Runtime primitives for hardware
-- Sessions and Batch modes
-- Parameter binding
-
-### 4. Transpilation and Optimization
-For optimizing circuits and preparing for hardware execution:
-- **See `references/transpilation.md`**
-
-Topics covered:
-- Why transpilation is necessary
-- Optimization levels (0-3)
-- Six transpilation stages (init, layout, routing, translation, optimization, scheduling)
-- Advanced features (virtual permutation elision, gate cancellation)
-- Common parameters (initial_layout, approximation_degree, seed)
-- Best practices for efficient circuits
-
-### 5. Visualization
-For displaying circuits, results, and quantum states:
-- **See `references/visualization.md`**
-
-Topics covered:
-- Circuit drawings (text, matplotlib, LaTeX)
-- Result histograms
-- Quantum state visualization (Bloch sphere, state city, QSphere)
-- Backend topology and error maps
-- Customization and styling
-- Saving publication-quality figures
-
-### 6. Hardware Backends
-For running on simulators and real quantum computers:
-- **See `references/backends.md`**
-
-Topics covered:
-- IBM Quantum backends and authentication
-- Backend properties and status
-- Running on real hardware with Runtime primitives
-- Job management and queuing
-- Session mode (iterative algorithms)
-- Batch mode (parallel jobs)
-- Local simulators (StatevectorSampler, Aer)
-- Third-party providers (IonQ, Amazon Braket)
-- Error mitigation strategies
-
-### 7. Qiskit Patterns Workflow
-For implementing the four-step quantum computing workflow:
-- **See `references/patterns.md`**
-
-Topics covered:
-- **Map**: Translate problems to quantum circuits
-- **Optimize**: Transpile for hardware
-- **Execute**: Run with primitives
-- **Post-process**: Extract and analyze results
-- Complete VQE example
-- Session vs. Batch execution
-- Common workflow patterns
-
-### 8. Quantum Algorithms and Applications
-For implementing specific quantum algorithms:
-- **See `references/algorithms.md`**
-
-Topics covered:
-- **Optimization**: VQE, QAOA, Grover's algorithm
-- **Chemistry**: Molecular ground states, excited states, Hamiltonians
-- **Machine Learning**: Quantum kernels, VQC, QNN
-- **Algorithm libraries**: Qiskit Nature, Qiskit ML, Qiskit Optimization
-- Physics simulations and benchmarking
-
-## Workflow Decision Guide
-
-**If you need to:**
-
-- Install Qiskit or set up IBM Quantum account → `references/setup.md`
-- Build a new quantum circuit → `references/circuits.md`
-- Understand gates and circuit operations → `references/circuits.md`
-- Run circuits and get measurements → `references/primitives.md`
-- Compute expectation values → `references/primitives.md`
-- Optimize circuits for hardware → `references/transpilation.md`
-- Visualize circuits or results → `references/visualization.md`
-- Execute on IBM Quantum hardware → `references/backends.md`
-- Connect to third-party providers → `references/backends.md`
-- Implement end-to-end quantum workflow → `references/patterns.md`
-- Build specific algorithm (VQE, QAOA, etc.) → `references/algorithms.md`
-- Solve chemistry or optimization problems → `references/algorithms.md`
-
-## Best Practices
-
-### Development Workflow
-
-1. **Start with simulators**: Test locally before using hardware
-   ```python
-   from qiskit.primitives import StatevectorSampler
-   sampler = StatevectorSampler()
-   ```
-
-2. **Always transpile**: Optimize circuits before execution
-   ```python
-   from qiskit import transpile
-   qc_optimized = transpile(qc, backend=backend, optimization_level=3)
-   ```
-
-3. **Use appropriate primitives**:
-   - Sampler for bitstrings (optimization algorithms)
-   - Estimator for expectation values (chemistry, physics)
-
-4. **Choose execution mode**:
-   - Session: Iterative algorithms (VQE, QAOA)
-   - Batch: Independent parallel jobs
-   - Single job: One-off experiments
-
-### Performance Optimization
-
-- Use optimization_level=3 for production
-- Minimize two-qubit gates (major error source)
-- Test with noisy simulators before hardware
-- Save and reuse transpiled circuits
-- Monitor convergence in variational algorithms
-
-### Hardware Execution
-
-- Check backend status before submitting
-- Use least_busy() for testing
-- Save job IDs for later retrieval
-- Apply error mitigation (resilience_level)
-- Start with fewer shots, increase for final runs
-
-## Common Patterns
-
-### Pattern 1: Simple Circuit Execution
+This example assumes credentials were saved securely as described in [references/setup.md](references/setup.md). It never embeds or prints an API key.
 
 ```python
-from qiskit import QuantumCircuit, transpile
-from qiskit.primitives import StatevectorSampler
-
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-qc.measure_all()
-
-sampler = StatevectorSampler()
-result = sampler.run([qc], shots=1024).result()
-counts = result[0].data.meas.get_counts()
-```
-
-### Pattern 2: Hardware Execution with Transpilation
-
-```python
+from qiskit import QuantumCircuit
+from qiskit.transpiler import generate_preset_pass_manager
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
-from qiskit import transpile
 
 service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
+backend = service.least_busy(
+    operational=True,
+    simulator=False,
+    min_num_qubits=2,
+)
 
-qc_optimized = transpile(qc, backend=backend, optimization_level=3)
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.measure_all()
 
-sampler = Sampler(backend)
-job = sampler.run([qc_optimized], shots=1024)
-result = job.result()
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=7,
+)
+isa_circuit = pass_manager.run(circuit)
+
+sampler = Sampler(mode=backend)
+job = sampler.run([isa_circuit], shots=1024)
+print("job_id:", job.job_id())
+counts = job.result()[0].data.meas.get_counts()
 ```
 
-### Pattern 3: Variational Algorithm (VQE)
+Save the job ID before waiting for results so the job can be retrieved later.
+
+## IBM QPU Estimation
+
+Runtime Estimator requires both an ISA circuit and observables mapped through the transpiler layout:
 
 ```python
-from qiskit_ibm_runtime import Session, EstimatorV2 as Estimator
-from scipy.optimize import minimize
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import SparsePauliOp
+from qiskit.transpiler import generate_preset_pass_manager
+from qiskit_ibm_runtime import EstimatorV2 as Estimator
 
-with Session(backend=backend) as session:
-    estimator = Estimator(session=session)
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+observable = SparsePauliOp.from_list([("ZZ", 1.0)])
 
-    def cost_function(params):
-        bound_qc = ansatz.assign_parameters(params)
-        qc_isa = transpile(bound_qc, backend=backend)
-        result = estimator.run([(qc_isa, hamiltonian)]).result()
-        return result[0].data.evs
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=7,
+)
+isa_circuit = pass_manager.run(circuit)
+isa_observable = observable.apply_layout(isa_circuit.layout)
 
-    result = minimize(cost_function, initial_params, method='COBYLA')
+estimator = Estimator(
+    mode=backend,
+    options={"resilience_level": 1},
+)
+pub_result = estimator.run(
+    [(isa_circuit, isa_observable)],
+    precision=0.02,
+).result()[0]
+print(pub_result.data.evs, pub_result.data.stds)
 ```
 
-## Additional Resources
+Error mitigation is not guaranteed to improve every workload and increases cost. Record the complete options and result metadata.
 
-- **Official Docs**: https://quantum.ibm.com/docs
-- **Qiskit Textbook**: https://qiskit.org/learn
-- **API Reference**: https://docs.quantum.ibm.com/api/qiskit
-- **Patterns Guide**: https://quantum.cloud.ibm.com/docs/en/guides/intro-to-patterns
+## Non-Negotiable Qiskit 2.x Rules
 
+- Use V2 primitive interfaces and PUB inputs. Do not write new V1 `Sampler`, `Estimator`, or `QuantumInstance` code.
+- Runtime primitives accept ISA circuits; they do not perform layout, routing, and basis translation for you.
+- Apply the transpiler layout to Estimator observables with `observable.apply_layout(isa_circuit.layout)`.
+- Use `mode=backend`, `mode=session`, or `mode=batch` for Runtime primitives.
+- Use `EstimatorV2` for resilience levels and expectation-value mitigation. Sampler has different noise-management options and no Estimator-style resilience levels.
+- Treat `BackendV2.target`, `backend.operation_names`, `backend.coupling_map`, and direct backend attributes as the source of hardware constraints. Do not use `backend.configuration()` or `BackendProperties`.
+- Read Sampler output by classical register name. Bitstrings are displayed most-significant bit first; Qiskit qubit 0 is conventionally the least-significant bit.
+- Use a fixed `seed_transpiler` when comparing compilation settings. A simulator seed does not make QPU results deterministic.
+- `qiskit.pulse` was removed in Qiskit 2.0. Use supported fractional gates for IBM hardware or Qiskit Dynamics for pulse-model research.
+- QPY is the Qiskit-native circuit serialization format. Do not use Python pickle for untrusted circuit artifacts.
+
+See [references/migration.md](references/migration.md) for a detailed old-to-current API map.
+
+## Execution Modes
+
+Choose based on workload shape and account plan:
+
+- **Job mode**: one-off work; instantiate a primitive with `mode=backend`.
+- **Batch mode**: independent jobs submitted together; available on the Open Plan.
+- **Session mode**: iterative jobs that benefit from prioritized follow-on execution; unavailable on the Open Plan.
+
+```python
+from qiskit_ibm_runtime import Batch, SamplerV2 as Sampler
+
+with Batch(backend=backend, max_time="10m") as batch:
+    sampler = Sampler(mode=batch)
+    jobs = [sampler.run([circuit], shots=1024) for circuit in isa_circuits]
+
+results = [job.result() for job in jobs]
+```
+
+Close sessions and batches after submission. Exiting their context stops new submissions but allows accepted jobs to finish, subject to service limits.
+
+## Reference Map
+
+Read only the files needed for the current task:
+
+| Topic | Reference |
+|---|---|
+| Versions, installation, authentication, CI | [references/setup.md](references/setup.md) |
+| Circuits, parameters, control flow, QPY | [references/circuits.md](references/circuits.md) |
+| V2 PUBs, broadcasting, local and Runtime results | [references/primitives.md](references/primitives.md) |
+| Targets, ISA circuits, layouts, pass managers | [references/transpilation.md](references/transpilation.md) |
+| IBM backends, modes, jobs, Aer, mitigation | [references/backends.md](references/backends.md) |
+| End-to-end map/optimize/execute/analyze patterns | [references/patterns.md](references/patterns.md) |
+| Algorithms, addons, Nature, ML, Optimization | [references/algorithms.md](references/algorithms.md) |
+| Circuit, result, state, and backend plots | [references/visualization.md](references/visualization.md) |
+| Qiskit 0.x/1.x and Runtime migration | [references/migration.md](references/migration.md) |
+| Testing, reproducibility, and troubleshooting | [references/testing.md](references/testing.md) |
+| Upstream docs, release notes, and version baseline | [references/sources.md](references/sources.md) |
+
+## Bundled Scripts
+
+Run from the skill directory:
+
+```bash
+# Installed-package and legacy-environment checks; no network or credential reads
+python scripts/check_environment.py
+
+# Runnable V2 local Sampler and Estimator example
+python scripts/run_local_primitives.py --shots 1024 --seed 7
+
+# Read-only IBM backend capability inspection; uses saved credentials
+python scripts/inspect_runtime.py --min-qubits 5
+```
+
+The Runtime inspection script selects or inspects a backend but never submits a quantum job.
+
+## Final Checklist
+
+Before returning Qiskit code:
+
+1. Confirm package versions and Python compatibility.
+2. Run locally with statevector primitives or Aer.
+3. Verify parameter order, observable qubit count, and classical-register names.
+4. Transpile against the exact `BackendV2` target and inspect depth and two-qubit operations.
+5. Apply the final layout to every observable.
+6. Estimate QPU cost and choose job, batch, or session mode.
+7. Save job IDs, package versions, seeds, backend name, primitive options, and result metadata.
+8. Never expose API keys in source, logs, notebooks, or version control.

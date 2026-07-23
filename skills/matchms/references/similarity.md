@@ -1,380 +1,413 @@
-# Matchms Similarity Functions Reference
+# Similarity and Scores (matchms 0.33.1)
 
-This document provides detailed information about all similarity scoring methods available in matchms.
+Use this reference to select a similarity class, interpret its output, extract
+top hits, or scale a comparison. The authoritative API is
+[`matchms.similarity`](https://matchms.readthedocs.io/en/latest/api/matchms.similarity.html).
 
-## Overview
-
-Matchms provides multiple similarity functions for comparing mass spectra. Use `calculate_scores()` to compute pairwise similarities between reference and query spectra collections.
+## Core Calculation
 
 ```python
 from matchms import calculate_scores
 from matchms.similarity import CosineGreedy
 
-scores = calculate_scores(references=library_spectra,
-                         queries=query_spectra,
-                         similarity_function=CosineGreedy())
+metric = CosineGreedy(tolerance=0.02)
+scores = calculate_scores(
+    references=reference_spectra,
+    queries=query_spectra,
+    similarity_function=metric,
+    array_type="numpy",
+    is_symmetric=False,
+)
 ```
 
-## Peak-Based Similarity Functions
+Set `is_symmetric=True` only when references and queries are the same collection
+in the same order and the metric is symmetric.
 
-These functions compare mass spectra based on their peak patterns (m/z and intensity values).
+## Understand the Output Before Indexing
 
-### CosineGreedy
+`Scores.scores` is a `sparsestack.StackedSparseArray`, not a plain two-dimensional
+NumPy array. Its shape is `(n_references, n_queries, n_score_fields)`.
 
-**Description**: Calculates cosine similarity between two spectra using a fast greedy matching algorithm. Peaks are matched within a specified tolerance, and similarity is computed based on matched peak intensities.
+Cosine-family methods produce two fields:
 
-**When to use**:
-- Fast similarity calculations for large datasets
-- General-purpose spectral matching
-- When speed is prioritized over mathematically optimal matching
-
-**Parameters**:
-- `tolerance` (float, default=0.1): Maximum m/z difference for peak matching (Daltons)
-- `mz_power` (float, default=0.0): Exponent for m/z weighting (0 = no weighting)
-- `intensity_power` (float, default=1.0): Exponent for intensity weighting
-
-**Example**:
 ```python
-from matchms.similarity import CosineGreedy
+print(scores.score_names)
+# ('CosineGreedy_score', 'CosineGreedy_matches')
 
-similarity_func = CosineGreedy(tolerance=0.1, mz_power=0.0, intensity_power=1.0)
-scores = calculate_scores(references, queries, similarity_func)
+similarities = scores.to_array("CosineGreedy_score")
+matched_peaks = scores.to_array("CosineGreedy_matches")
 ```
 
-**Output**: Similarity score between 0.0 and 1.0, plus number of matched peaks.
+Scalar methods such as `FlashSimilarity`, `PrecursorMzMatch`, and
+`FingerprintSimilarity` produce one field named after the class.
 
----
+### Top hits for one query
 
-### CosineHungarian
-
-**Description**: Calculates cosine similarity using the Hungarian algorithm for optimal peak matching. Provides mathematically optimal peak assignments but is slower than CosineGreedy.
-
-**When to use**:
-- When optimal peak matching is required
-- High-quality reference library comparisons
-- Research requiring reproducible, mathematically rigorous results
-
-**Parameters**:
-- `tolerance` (float, default=0.1): Maximum m/z difference for peak matching
-- `mz_power` (float, default=0.0): Exponent for m/z weighting
-- `intensity_power` (float, default=1.0): Exponent for intensity weighting
-
-**Example**:
 ```python
-from matchms.similarity import CosineHungarian
+score_name = "CosineGreedy_score"
+matches_name = "CosineGreedy_matches"
 
-similarity_func = CosineHungarian(tolerance=0.1)
-scores = calculate_scores(references, queries, similarity_func)
+ranked = scores.scores_by_query(query_spectrum, name=score_name, sort=True)
+for reference, value in ranked[:10]:
+    print(
+        reference.get("spectrum_id"),
+        float(value[score_name]),
+        int(value[matches_name]),
+    )
 ```
 
-**Output**: Optimal similarity score between 0.0 and 1.0, plus matched peaks.
+The first tuple item is the actual reference `Spectrum`, not an integer index.
+The second item can be a structured NumPy record containing every score field.
 
-**Note**: Slower than CosineGreedy; use for smaller datasets or when accuracy is critical.
+### Iterate stored pairs
 
----
-
-### ModifiedCosine
-
-**Description**: Extends cosine similarity by accounting for precursor m/z differences. Allows peaks to match after applying a mass shift based on the difference between precursor masses. Useful for comparing spectra of related compounds (isotopes, adducts, analogs).
-
-**When to use**:
-- Comparing spectra from different precursor masses
-- Identifying structural analogs or derivatives
-- Cross-ionization mode comparisons
-- When precursor mass differences are meaningful
-
-**Parameters**:
-- `tolerance` (float, default=0.1): Maximum m/z difference for peak matching after shift
-- `mz_power` (float, default=0.0): Exponent for m/z weighting
-- `intensity_power` (float, default=1.0): Exponent for intensity weighting
-
-**Example**:
 ```python
-from matchms.similarity import ModifiedCosine
-
-similarity_func = ModifiedCosine(tolerance=0.1)
-scores = calculate_scores(references, queries, similarity_func)
+for reference, query, values in scores:
+    print(reference.get("id"), query.get("id"), values)
 ```
 
-**Requirements**: Both spectra must have valid precursor_mz metadata.
+Iteration covers stored coordinates. After sparse filtering, that may be only a
+subset of the Cartesian product.
 
----
+## Peak-Based Cosine Methods
 
-### NeutralLossesCosine
+All cosine classes below use:
 
-**Description**: Calculates similarity based on neutral loss patterns rather than fragment m/z values. Neutral losses are derived by subtracting fragment m/z from precursor m/z. Particularly useful for identifying compounds with similar fragmentation patterns.
+```text
+tolerance=0.1, mz_power=0.0, intensity_power=1.0
+```
 
-**When to use**:
-- Comparing fragmentation patterns across different precursor masses
-- Identifying compounds with similar neutral loss profiles
-- Complementary to regular cosine scoring
-- Metabolite identification and classification
+unless noted otherwise. Tolerance is in daltons for these classes.
 
-**Parameters**:
-- `tolerance` (float, default=0.1): Maximum neutral loss difference for matching
-- `mz_power` (float, default=0.0): Exponent for loss value weighting
-- `intensity_power` (float, default=1.0): Exponent for intensity weighting
+### `CosineGreedy`
 
-**Example**:
+Greedily assigns candidate peak pairs within tolerance.
+
+Use for:
+
+- routine spectral-library comparisons;
+- a transparent baseline;
+- moderate collections where exact assignment is not essential.
+
+Output fields: `CosineGreedy_score`, `CosineGreedy_matches`.
+
+### `CosineHungarian`
+
+Uses optimal assignment rather than greedy assignment.
+
+Use for:
+
+- benchmarking peak-assignment effects;
+- smaller datasets;
+- cases where greedy ambiguity materially affects results.
+
+It is computationally more expensive than `CosineGreedy`.
+
+### `CosineLinear`
+
+Added in 0.33.0 as a linear-scaling cosine implementation.
+
+Use when:
+
+- cosine is the intended metric;
+- matrix size makes assignment cost important; and
+- you have benchmarked agreement and runtime on representative spectra.
+
+Output fields: `CosineLinear_score`, `CosineLinear_matches`.
+
+## Modified Cosine
+
+Modified cosine allows unshifted peak matches and matches shifted by the
+difference in precursor m/z. Both spectra need valid `precursor_mz`.
+
+### `ModifiedCosineGreedy`
+
+```python
+from matchms.similarity import ModifiedCosineGreedy
+
+metric = ModifiedCosineGreedy(tolerance=0.02)
+```
+
+This is the current name for the implementation formerly called
+`ModifiedCosine`. It uses greedy assignment.
+
+### `ModifiedCosineHungarian`
+
+```python
+from matchms.similarity import ModifiedCosineHungarian
+
+metric = ModifiedCosineHungarian(tolerance=0.02)
+```
+
+Use for exact modified-cosine assignment in benchmarks or method development.
+It is slower than the greedy variant.
+
+Do not infer that a shifted match proves a specific chemical transformation.
+Inspect precursor delta, adduct/charge compatibility, shifted peaks, and
+orthogonal annotations.
+
+## Neutral-Loss Cosine
+
 ```python
 from matchms.similarity import NeutralLossesCosine
-from matchms.filtering import add_losses
 
-# First add losses to spectra
-spectra_with_losses = [add_losses(s) for s in spectra]
-
-similarity_func = NeutralLossesCosine(tolerance=0.1)
-scores = calculate_scores(references_with_losses, queries_with_losses, similarity_func)
+metric = NeutralLossesCosine(
+    tolerance=0.02,
+    ignore_peaks_above_precursor=True,
+)
 ```
 
-**Requirements**:
-- Both spectra must have valid precursor_mz metadata
-- Use `add_losses()` filter to compute neutral losses before scoring
+`NeutralLossesCosine` computes losses from `precursor_mz - fragment_mz`.
+Both spectra require precursor m/z. Do not call the removed `add_losses()`
+filter; losses are computed on demand in current matchms.
 
----
+Output fields: `NeutralLossesCosine_score`,
+`NeutralLossesCosine_matches`.
 
-## Structural Similarity Functions
+## Fast Matrix-Oriented Methods
 
-These functions compare molecular structures rather than spectral peaks.
+### `BlinkCosine`
 
-### FingerprintSimilarity
+BLINK-style approximate cosine:
 
-**Description**: Calculates similarity between molecular fingerprints derived from chemical structures (SMILES or InChI). Supports multiple fingerprint types and similarity metrics.
-
-**When to use**:
-- Structural similarity without spectral data
-- Combining structural and spectral similarity
-- Pre-filtering candidates before spectral matching
-- Structure-activity relationship studies
-
-**Parameters**:
-- `fingerprint_type` (str, default="daylight"): Type of fingerprint
-  - `"daylight"`: Daylight fingerprint
-  - `"morgan1"`, `"morgan2"`, `"morgan3"`: Morgan fingerprints with radius 1, 2, or 3
-- `similarity_measure` (str, default="jaccard"): Similarity metric
-  - `"jaccard"`: Jaccard index (intersection / union)
-  - `"dice"`: Dice coefficient (2 * intersection / (size1 + size2))
-  - `"cosine"`: Cosine similarity
-
-**Example**:
 ```python
-from matchms.similarity import FingerprintSimilarity
-from matchms.filtering import add_fingerprint
+from matchms.similarity import BlinkCosine
 
-# Add fingerprints to spectra
-spectra_with_fps = [add_fingerprint(s, fingerprint_type="morgan2", nbits=2048)
-                    for s in spectra]
-
-similarity_func = FingerprintSimilarity(similarity_measure="jaccard")
-scores = calculate_scores(references_with_fps, queries_with_fps, similarity_func)
+metric = BlinkCosine(
+    tolerance=0.01,
+    bin_width=0.001,
+    min_relative_intensity=0.01,
+    top_k=None,
+    batch_size=1024,
+    sparse_score_min=0.0,
+)
 ```
 
-**Requirements**:
-- Spectra must have valid SMILES or InChI metadata
-- Use `add_fingerprint()` filter to compute fingerprints
-- Requires rdkit library
+Important parameters include peak preprocessing, precursor cropping, batch
+size, and sparse score minimum. Output contains a float32 score and matched-peak
+count. Validate approximation behavior against `CosineGreedy` on a subset
+before changing production workflows.
 
----
+### `FlashSimilarity`
 
-## Metadata-Based Similarity Functions
+Fast matrix scoring based on the Flash Entropy approach:
 
-These functions compare metadata fields rather than spectral or structural data.
-
-### MetadataMatch
-
-**Description**: Compares user-defined metadata fields between spectra. Supports exact matching for categorical data and tolerance-based matching for numerical data.
-
-**When to use**:
-- Filtering by experimental conditions (collision energy, retention time)
-- Instrument-specific matching
-- Combining metadata constraints with spectral similarity
-- Custom metadata-based filtering
-
-**Parameters**:
-- `field` (str): Metadata field name to compare
-- `matching_type` (str, default="exact"): Matching method
-  - `"exact"`: Exact string/value match
-  - `"difference"`: Absolute difference for numerical values
-  - `"relative_difference"`: Relative difference for numerical values
-- `tolerance` (float, optional): Maximum difference for numerical matching
-
-**Example (Exact matching)**:
 ```python
-from matchms.similarity import MetadataMatch
+from matchms.similarity import FlashSimilarity
 
-# Match by instrument type
-similarity_func = MetadataMatch(field="instrument_type", matching_type="exact")
-scores = calculate_scores(references, queries, similarity_func)
+entropy = FlashSimilarity(
+    score_type="spectral_entropy",
+    matching_mode="fragment",
+    tolerance=0.02,
+)
+
+fast_modified_cosine = FlashSimilarity(
+    score_type="cosine",
+    matching_mode="hybrid",
+    tolerance=0.02,
+)
 ```
 
-**Example (Numerical matching)**:
+Current choices:
+
+- `score_type`: `spectral_entropy` or `cosine`
+- `matching_mode`: `fragment`, `neutral_loss`, or `hybrid`
+- optional preprocessing: precursor removal, noise cutoff, peak merging, dtype,
+  and identity precursor tolerance
+
+`pair()` exists but emits a warning because it is not the optimized use. Call
+`calculate_scores()` so matchms uses the matrix path. Flash output is a scalar
+field named `FlashSimilarity`, not a score/matches pair.
+
+### `BinnedEmbeddingSimilarity`
+
 ```python
-# Match retention time within 0.5 minutes
-similarity_func = MetadataMatch(field="retention_time",
-                                matching_type="difference",
-                                tolerance=0.5)
-scores = calculate_scores(references, queries, similarity_func)
+from matchms.similarity import BinnedEmbeddingSimilarity
+
+metric = BinnedEmbeddingSimilarity(
+    similarity="cosine",
+    max_mz=1005,
+    bin_width=1.0,
+    intensity_power=1.0,
+)
 ```
 
-**Output**: Returns 1.0 (match) or 0.0 (no match) for exact matching. For numerical matching, returns similarity score based on difference.
+This creates fixed-width binned spectral embeddings. Bin width controls both
+resolution and dimensionality. The class also supports approximate-neighbor
+indexing through the current PyNNDescent backend; use it only after checking
+recall against exact neighbors.
 
----
+## Candidate and Metadata Matches
 
-### PrecursorMzMatch
+These methods are useful as gates or additional evidence. They are not
+substitutes for peak-pattern similarity.
 
-**Description**: Binary matching based on precursor m/z values. Returns True/False based on whether precursor masses match within specified tolerance.
+### `PrecursorMzMatch`
 
-**When to use**:
-- Pre-filtering spectral libraries by precursor mass
-- Fast mass-based candidate selection
-- Combining with other similarity metrics
-- Isobaric compound identification
-
-**Parameters**:
-- `tolerance` (float, default=0.1): Maximum m/z difference for matching
-- `tolerance_type` (str, default="Dalton"): Tolerance unit
-  - `"Dalton"`: Absolute mass difference
-  - `"ppm"`: Parts per million (relative)
-
-**Example**:
 ```python
 from matchms.similarity import PrecursorMzMatch
 
-# Match precursor within 0.1 Da
-similarity_func = PrecursorMzMatch(tolerance=0.1, tolerance_type="Dalton")
-scores = calculate_scores(references, queries, similarity_func)
-
-# Match precursor within 10 ppm
-similarity_func = PrecursorMzMatch(tolerance=10, tolerance_type="ppm")
-scores = calculate_scores(references, queries, similarity_func)
+absolute = PrecursorMzMatch(tolerance=0.02, tolerance_type="Dalton")
+relative = PrecursorMzMatch(tolerance=10, tolerance_type="ppm")
 ```
 
-**Output**: 1.0 (match) or 0.0 (no match)
+Output field: `PrecursorMzMatch` (boolean).
 
-**Requirements**: Both spectra must have valid precursor_mz metadata.
+### `ParentMassMatch`
 
----
-
-### ParentMassMatch
-
-**Description**: Binary matching based on parent mass (neutral mass) values. Similar to PrecursorMzMatch but uses calculated parent mass instead of precursor m/z.
-
-**When to use**:
-- Comparing spectra from different ionization modes
-- Adduct-independent matching
-- Neutral mass-based library searches
-
-**Parameters**:
-- `tolerance` (float, default=0.1): Maximum mass difference for matching
-- `tolerance_type` (str, default="Dalton"): Tolerance unit ("Dalton" or "ppm")
-
-**Example**:
 ```python
 from matchms.similarity import ParentMassMatch
 
-similarity_func = ParentMassMatch(tolerance=0.1, tolerance_type="Dalton")
-scores = calculate_scores(references, queries, similarity_func)
+metric = ParentMassMatch(tolerance=0.02)
 ```
 
-**Output**: 1.0 (match) or 0.0 (no match)
+Requires `parent_mass`. Output field: `ParentMassMatch` (boolean). The current
+constructor does not expose a ppm mode.
 
-**Requirements**: Both spectra must have valid parent_mass metadata.
+### `MetadataMatch`
 
----
+```python
+from matchms.similarity import MetadataMatch
 
-## Combining Multiple Similarity Functions
+same_mode = MetadataMatch(field="ionmode", matching_type="equal_match")
+near_rt = MetadataMatch(
+    field="retention_time",
+    matching_type="difference",
+    tolerance=0.2,
+)
+```
 
-Combine multiple similarity metrics for robust compound identification:
+Current matching types are `equal_match` and `difference`. Older examples that
+use `matching_type="exact"` are invalid.
+
+### `IntersectMz`
+
+`IntersectMz(scaling=1.0)` is a simple m/z-intersection score useful in tests or
+specialized workflows. It is not a drop-in replacement for tolerance-aware,
+intensity-weighted spectral scoring.
+
+## Molecular Fingerprint Similarity
+
+`FingerprintSimilarity` compares molecular fingerprints derived from known
+structures. It therefore measures structure similarity, not spectral
+similarity.
+
+```python
+from matchms import Fingerprints, calculate_scores
+from matchms.similarity import FingerprintSimilarity
+
+fp_store = Fingerprints(
+    fingerprint_algorithm="morgan2",
+    fingerprint_method="bit",
+    nbits=2048,
+)
+fp_store.compute_fingerprints(spectra)
+
+usable = []
+for spectrum in spectra:
+    fingerprint = fp_store.get_fingerprint_by_spectrum(spectrum)
+    if fingerprint is not None:
+        spectrum.set("fingerprint", fingerprint)
+        usable.append(spectrum)
+
+scores = calculate_scores(
+    usable,
+    usable,
+    FingerprintSimilarity(similarity_measure="jaccard"),
+    is_symmetric=True,
+)
+```
+
+Similarity measures are `jaccard`, `dice`, and `cosine`.
+
+The old `add_fingerprint()` filter still satisfies the 0.33.1
+`FingerprintSimilarity` interface, but it is marked for removal in matchms 1.0.
+The `Fingerprints` bridge above avoids calling that deprecated filter while
+remaining compatible with the current similarity class.
+
+## Efficient Precursor-Gated Search
+
+Filter score coordinates before calculating an expensive spectral metric:
 
 ```python
 from matchms import calculate_scores
-from matchms.similarity import CosineGreedy, ModifiedCosine, FingerprintSimilarity
+from matchms.similarity import ModifiedCosineGreedy, PrecursorMzMatch
 
-# Calculate multiple similarity scores
-cosine_scores = calculate_scores(refs, queries, CosineGreedy())
-modified_cosine_scores = calculate_scores(refs, queries, ModifiedCosine())
-fingerprint_scores = calculate_scores(refs, queries, FingerprintSimilarity())
-
-# Combine scores with weights
-for i, query in enumerate(queries):
-    for j, ref in enumerate(refs):
-        combined_score = (0.5 * cosine_scores.scores[j, i] +
-                         0.3 * modified_cosine_scores.scores[j, i] +
-                         0.2 * fingerprint_scores.scores[j, i])
+scores = calculate_scores(
+    references,
+    queries,
+    PrecursorMzMatch(tolerance=10, tolerance_type="ppm"),
+    array_type="sparse",
+)
+scores.filter_by_range(name="PrecursorMzMatch", low=0.5)
+scores.calculate(
+    ModifiedCosineGreedy(tolerance=0.02),
+    array_type="sparse",
+    join_type="left",
+)
 ```
 
-## Accessing Scores Results
+After `filter_by_range`, the second calculation can operate on retained
+coordinates. Confirm `scores.score_names` and stored-coordinate counts after
+each stage. An overly narrow precursor gate can remove valid analogs or
+different adducts.
 
-The `Scores` object provides multiple methods to access results:
+The `Pipeline` class formalizes the same pattern and can persist a YAML
+workflow. See `workflows.md`.
+
+## Filtering and Exporting Scores
 
 ```python
-# Get best matches for a query
-best_matches = scores.scores_by_query(query_spectrum, sort=True)[:10]
+print(scores.score_names)
 
-# Get scores as numpy array
-score_array = scores.scores
+scores.filter_by_range(
+    name="ModifiedCosineGreedy_score",
+    low=0.6,
+    above_operator=">=",
+)
 
-# Get scores as pandas DataFrame
-import pandas as pd
-df = scores.to_dataframe()
-
-# Filter by threshold
-high_scores = [(i, j, score) for i, j, score in scores.to_list() if score > 0.7]
-
-# Save scores
+dense = scores.to_array("ModifiedCosineGreedy_score")
+coo = scores.to_coo("ModifiedCosineGreedy_score")
 scores.to_json("scores.json")
-scores.to_pickle("scores.pkl")
 ```
 
-## Performance Considerations
+`filter_by_range()` mutates the stored score coordinates. Preserve an unfiltered
+copy or serialize first when alternative thresholds must be compared.
 
-**Fast methods** (large datasets):
-- CosineGreedy
-- PrecursorMzMatch
-- ParentMassMatch
+Dense arrays require memory proportional to
+`n_references * n_queries`. A sparse container is most useful only when a mask
+or score threshold leaves relatively few stored pairs.
 
-**Slow methods** (smaller datasets or high accuracy):
-- CosineHungarian
-- ModifiedCosine (slower than CosineGreedy)
-- NeutralLossesCosine
-- FingerprintSimilarity (requires fingerprint computation)
+## Combining Metrics
 
-**Recommendation**: For large-scale library searches, use PrecursorMzMatch to pre-filter candidates, then apply CosineGreedy or ModifiedCosine to filtered results.
+Do not directly index `scores.scores[j, i]` and assume a scalar. Extract named
+layers:
 
-## Common Similarity Workflows
-
-### Standard Library Matching
 ```python
-from matchms.similarity import CosineGreedy
-
-scores = calculate_scores(library_spectra, query_spectra,
-                         CosineGreedy(tolerance=0.1))
+cosine = scores.to_array("CosineGreedy_score")
+matches = scores.to_array("CosineGreedy_matches")
 ```
 
-### Multi-Metric Matching
-```python
-from matchms.similarity import CosineGreedy, ModifiedCosine, FingerprintSimilarity
+If combining metrics:
 
-# Spectral similarity
-cosine = calculate_scores(refs, queries, CosineGreedy())
-modified = calculate_scores(refs, queries, ModifiedCosine())
+- define whether missing/filtered pairs are zero, missing, or excluded;
+- normalize only when score semantics justify it;
+- fit or justify weights on an appropriate validation set;
+- avoid leaking query identities into tuning;
+- retain each component score in the output; and
+- report the exact formula and package version.
 
-# Structural similarity
-fingerprint = calculate_scores(refs, queries, FingerprintSimilarity())
-```
+## Interpretation Checklist
 
-### Precursor-Filtered Matching
-```python
-from matchms.similarity import PrecursorMzMatch, CosineGreedy
+- Was identical preprocessing applied to references and queries?
+- Is the tolerance appropriate for the instrument and calibration?
+- Are precursor m/z, charge, ion mode, and adduct metadata valid?
+- How many peaks matched, and what fraction of each spectrum do they represent?
+- Is the hit driven by one dominant/common fragment?
+- Are collision energy and acquisition conditions comparable?
+- Is the query actually present in the searched library?
+- Was the threshold validated on representative positives and negatives?
+- Has the top hit been inspected with a mirror plot?
 
-# First filter by precursor mass
-mass_filter = calculate_scores(refs, queries, PrecursorMzMatch(tolerance=0.1))
-
-# Then calculate cosine only for matching precursors
-cosine_scores = calculate_scores(refs, queries, CosineGreedy())
-```
-
-## Further Reading
-
-For detailed API documentation, parameter descriptions, and mathematical formulations, see:
-https://matchms.readthedocs.io/en/latest/api/matchms.similarity.html
+A high score ranks a candidate under a chosen metric. It does not, by itself,
+establish compound identity.

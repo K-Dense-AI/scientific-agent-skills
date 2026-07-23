@@ -1,605 +1,311 @@
 ---
 name: flowio
-description: Parse FCS (Flow Cytometry Standard) files v2.0-3.1. Extract events as NumPy arrays, read metadata/channels, convert to CSV/DataFrame, for flow cytometry data preprocessing.
+description: Read, inspect, and write Flow Cytometry Standard (FCS) 2.0, 3.0, and 3.1 files with FlowIO. Use for low-level FCS metadata and channel inspection, NumPy event extraction, multi-dataset files, table export, and FCS 3.1 creation; use FlowKit for compensation, cytometry transforms, gating, or FlowJo workspaces.
+allowed-tools:
+  - Read
+  - Write
+  - Bash
 license: BSD-3-Clause license
-metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
+compatibility: Requires Python 3.9-3.13, uv, and FlowIO 1.4.0. NumPy is installed with FlowIO; pandas is optional for DataFrame workflows. Runtime parsing is local and needs no credentials or network access.
+metadata: {"version": "2.0", "skill-author": "K-Dense Inc."}
 ---
 
-# FlowIO: Flow Cytometry Standard File Handler
+# FlowIO
 
-## Overview
+## Purpose
 
-FlowIO is a lightweight Python library for reading and writing Flow Cytometry Standard (FCS) files. Parse FCS metadata, extract event data, and create new FCS files with minimal dependencies. The library supports FCS versions 2.0, 3.0, and 3.1, making it ideal for backend services, data pipelines, and basic cytometry file operations.
+Use FlowIO as a lightweight, low-level reader and writer for Flow Cytometry
+Standard files. Examples in this skill target **FlowIO 1.4.0**, the current
+stable release verified on 2026-07-23.
 
-## When to Use This Skill
+FlowIO is appropriate for:
 
-This skill should be used when:
+- Reading FCS 2.0, 3.0, and 3.1 files
+- Inspecting HEADER, TEXT, ANALYSIS, and channel metadata
+- Retrieving event data as a two-dimensional NumPy array
+- Reading legacy files that contain multiple datasets
+- Writing list-mode, single-precision FCS 3.1 files
+- Preparing data for pandas, machine-learning, or downstream cytometry tools
 
-- FCS files requiring parsing or metadata extraction
-- Flow cytometry data needing conversion to NumPy arrays
-- Event data requiring export to FCS format
-- Multi-dataset FCS files needing separation
-- Channel information extraction (scatter, fluorescence, time)
-- Cytometry file validation or inspection
-- Pre-processing workflows before advanced analysis
+FlowIO does **not** perform compensation, logicle/biexponential transforms,
+gating, clustering, or FlowJo workspace processing. Use FlowKit or another
+analysis package for those tasks.
 
-**Related Tools:** For advanced flow cytometry analysis including compensation, gating, and FlowJo/GatingML support, recommend FlowKit library as a companion to FlowIO.
+## Install
 
-## Installation
+Create or activate a Python environment, then install the verified release:
 
 ```bash
-uv pip install flowio
+uv pip install "flowio==1.4.0"
 ```
 
-Requires Python 3.9 or later.
+Confirm the runtime version:
 
-## Quick Start
+```bash
+uv run python -c "import flowio; print(flowio.__version__)"
+```
 
-### Basic File Reading
+FlowIO 1.4.0 supports Python 3.9 through 3.13 and depends on NumPy.
+
+## Operating Workflow
+
+1. **Clarify the operation.** Distinguish metadata inventory, event extraction,
+   file repair, conversion, and downstream biological analysis.
+2. **Inspect before loading events.** Use `only_text=True` for metadata-only
+   work, especially with large or unfamiliar files.
+3. **Choose event semantics explicitly.** Use `as_array(preprocess=True)` for
+   gain/log/time scaling from FCS metadata, or `preprocess=False` for values as
+   encoded in the DATA segment. Record the choice.
+4. **Keep parsing strict by default.** Do not automatically suppress offset
+   errors. Relax checks only for a known vendor-format defect, and review the
+   resulting event data.
+5. **Treat metadata as potentially sensitive.** FCS TEXT values can include
+   sample, subject, operator, and instrument identifiers. Export only fields
+   needed for the task.
+6. **Validate writes by reopening them.** Check event/channel counts, labels,
+   metadata, and representative values after any FCS export.
+
+## Critical Semantics
+
+### TEXT keys are normalized
+
+`FlowData.text` stores keys in lowercase and strips the leading `$` from
+standard FCS keywords:
 
 ```python
 from flowio import FlowData
 
-# Read FCS file
-flow_data = FlowData('experiment.fcs')
-
-# Access basic information
-print(f"FCS Version: {flow_data.version}")
-print(f"Events: {flow_data.event_count}")
-print(f"Channels: {flow_data.pnn_labels}")
-
-# Get event data as NumPy array
-events = flow_data.as_array()  # Shape: (events, channels)
+flow = FlowData("sample.fcs", only_text=True)
+acquisition_date = flow.text.get("date")
+instrument = flow.text.get("cyt")
+next_dataset = int(flow.text.get("nextdata", "0"))
 ```
 
-### Creating FCS Files
+Do not look up `"$DATE"`, `"$CYT"`, or other uppercase dollar-prefixed keys.
+TEXT values remain strings. FlowIO 1.4.0 also removes every `$` character from
+the decoded TEXT segment, including `$` characters inside values; preserve the
+original file when exact metadata fidelity matters.
+
+### Events have two representations
+
+- `flow.events` is the unprocessed, flattened one-dimensional event array.
+- `flow.as_array()` returns shape `(event_count, channel_count)` as a NumPy
+  `float64` array.
+- `flow.as_array(preprocess=True)` applies FCS gain, logarithmic, and time
+  scaling. It does not apply compensation or logicle/biexponential display
+  transforms.
+- `flow.as_array(preprocess=False)` reshapes the encoded event values without
+  those scaling steps.
+
+`as_array()` creates another in-memory array. FlowIO does not provide chunked
+or memory-mapped event access.
+
+### Channel numbering uses two conventions
+
+- NumPy columns and `fluoro_indices`, `scatter_indices`, and `time_index` use
+  zero-based indices.
+- `flow.channels` uses FCS parameter numbers beginning at 1.
+- `null_channels` contains the PnN label strings supplied through
+  `null_channel_list`, including supplied labels that were not found.
+- `pns_labels` always matches `pnn_labels` in length; missing optional PnS
+  labels appear as empty strings.
+
+### Writing is intentionally limited
+
+`create_fcs()` requires:
+
+- An already-open binary file handle
+- Flattened one-dimensional event data in row-major event/channel order
+- One PnN name per channel
+- Optional PnS names and string-valued metadata via `metadata_dict`
+
+It writes FCS 3.1 list-mode (`$MODE=L`) single-precision float
+(`$DATATYPE=F`) data. Required interpretation keywords are generated by
+FlowIO and cannot be overridden through metadata.
+
+## Quick Start: Read an FCS File
 
 ```python
-import numpy as np
-from flowio import create_fcs
+from pathlib import Path
 
-# Prepare data
-data = np.array([[100, 200, 50], [150, 180, 60]])  # 2 events, 3 channels
-channels = ['FSC-A', 'SSC-A', 'FL1-A']
+from flowio import FlowData
 
-# Create FCS file
-create_fcs('output.fcs', data, channels)
+flow = FlowData(Path("sample.fcs"))
+events = flow.as_array(preprocess=True)
+
+print(
+    {
+        "version": flow.version,
+        "events": flow.event_count,
+        "channels": flow.channel_count,
+        "shape": events.shape,
+        "pnn": flow.pnn_labels,
+        "pns": flow.pns_labels,
+        "date": flow.text.get("date"),
+        "instrument": flow.text.get("cyt"),
+    }
+)
 ```
 
-## Core Workflows
-
-### Reading and Parsing FCS Files
-
-The FlowData class provides the primary interface for reading FCS files.
-
-**Standard Reading:**
+For metadata only:
 
 ```python
 from flowio import FlowData
 
-# Basic reading
-flow = FlowData('sample.fcs')
-
-# Access attributes
-version = flow.version              # '3.0', '3.1', etc.
-event_count = flow.event_count      # Number of events
-channel_count = flow.channel_count  # Number of channels
-pnn_labels = flow.pnn_labels        # Short channel names
-pns_labels = flow.pns_labels        # Descriptive stain names
-
-# Get event data
-events = flow.as_array()            # Preprocessed (gain, log scaling applied)
-raw_events = flow.as_array(preprocess=False)  # Raw data
+flow = FlowData("sample.fcs", only_text=True)
+print(flow.version, flow.event_count, flow.pnn_labels)
 ```
 
-**Memory-Efficient Metadata Reading:**
+Do not call `as_array()` on a metadata-only instance because its event data was
+not loaded.
 
-When only metadata is needed (no event data):
+Prefer a path or `Path` over a caller-owned file handle. `FlowData` closes a
+provided handle after parsing. In FlowIO 1.4.0,
+`read_multiple_data_sets(handle)` can fail after the first dataset because the
+handle has been closed; pass a filesystem path for multi-dataset files.
 
-```python
-# Only parse TEXT segment, skip DATA and ANALYSIS
-flow = FlowData('sample.fcs', only_text=True)
+## Quick Start: Read Multiple Datasets
 
-# Access metadata
-metadata = flow.text  # Dictionary of TEXT segment keywords
-print(metadata.get('$DATE'))  # Acquisition date
-print(metadata.get('$CYT'))   # Instrument name
-```
-
-**Handling Problematic Files:**
-
-Some FCS files have offset discrepancies or errors:
-
-```python
-# Ignore offset discrepancies between HEADER and TEXT sections
-flow = FlowData('problematic.fcs', ignore_offset_discrepancy=True)
-
-# Use HEADER offsets instead of TEXT offsets
-flow = FlowData('problematic.fcs', use_header_offsets=True)
-
-# Ignore offset errors entirely
-flow = FlowData('problematic.fcs', ignore_offset_error=True)
-```
-
-**Excluding Null Channels:**
-
-```python
-# Exclude specific channels during parsing
-flow = FlowData('sample.fcs', null_channel_list=['Time', 'Null'])
-```
-
-### Extracting Metadata and Channel Information
-
-FCS files contain rich metadata in the TEXT segment.
-
-**Common Metadata Keywords:**
-
-```python
-flow = FlowData('sample.fcs')
-
-# File-level metadata
-text_dict = flow.text
-acquisition_date = text_dict.get('$DATE', 'Unknown')
-instrument = text_dict.get('$CYT', 'Unknown')
-data_type = flow.data_type  # 'I', 'F', 'D', 'A'
-
-# Channel metadata
-for i in range(flow.channel_count):
-    pnn = flow.pnn_labels[i]      # Short name (e.g., 'FSC-A')
-    pns = flow.pns_labels[i]      # Descriptive name (e.g., 'Forward Scatter')
-    pnr = flow.pnr_values[i]      # Range/max value
-    print(f"Channel {i}: {pnn} ({pns}), Range: {pnr}")
-```
-
-**Channel Type Identification:**
-
-FlowIO automatically categorizes channels:
-
-```python
-# Get indices by channel type
-scatter_idx = flow.scatter_indices    # [0, 1] for FSC, SSC
-fluoro_idx = flow.fluoro_indices      # [2, 3, 4] for FL channels
-time_idx = flow.time_index            # Index of time channel (or None)
-
-# Access specific channel types
-events = flow.as_array()
-scatter_data = events[:, scatter_idx]
-fluorescence_data = events[:, fluoro_idx]
-```
-
-**ANALYSIS Segment:**
-
-If present, access processed results:
-
-```python
-if flow.analysis:
-    analysis_keywords = flow.analysis  # Dictionary of ANALYSIS keywords
-    print(analysis_keywords)
-```
-
-### Creating New FCS Files
-
-Generate FCS files from NumPy arrays or other data sources.
-
-**Basic Creation:**
-
-```python
-import numpy as np
-from flowio import create_fcs
-
-# Create event data (rows=events, columns=channels)
-events = np.random.rand(10000, 5) * 1000
-
-# Define channel names
-channel_names = ['FSC-A', 'SSC-A', 'FL1-A', 'FL2-A', 'Time']
-
-# Create FCS file
-create_fcs('output.fcs', events, channel_names)
-```
-
-**With Descriptive Channel Names:**
-
-```python
-# Add optional descriptive names (PnS)
-channel_names = ['FSC-A', 'SSC-A', 'FL1-A', 'FL2-A', 'Time']
-descriptive_names = ['Forward Scatter', 'Side Scatter', 'FITC', 'PE', 'Time']
-
-create_fcs('output.fcs',
-           events,
-           channel_names,
-           opt_channel_names=descriptive_names)
-```
-
-**With Custom Metadata:**
-
-```python
-# Add TEXT segment metadata
-metadata = {
-    '$SRC': 'Python script',
-    '$DATE': '19-OCT-2025',
-    '$CYT': 'Synthetic Instrument',
-    '$INST': 'Laboratory A'
-}
-
-create_fcs('output.fcs',
-           events,
-           channel_names,
-           opt_channel_names=descriptive_names,
-           metadata=metadata)
-```
-
-**Note:** FlowIO exports as FCS 3.1 with single-precision floating-point data.
-
-### Exporting Modified Data
-
-Modify existing FCS files and re-export them.
-
-**Approach 1: Using write_fcs() Method:**
-
-```python
-from flowio import FlowData
-
-# Read original file
-flow = FlowData('original.fcs')
-
-# Write with updated metadata
-flow.write_fcs('modified.fcs', metadata={'$SRC': 'Modified data'})
-```
-
-**Approach 2: Extract, Modify, and Recreate:**
-
-For modifying event data:
-
-```python
-from flowio import FlowData, create_fcs
-
-# Read and extract data
-flow = FlowData('original.fcs')
-events = flow.as_array(preprocess=False)
-
-# Modify event data
-events[:, 0] = events[:, 0] * 1.5  # Scale first channel
-
-# Create new FCS file with modified data
-create_fcs('modified.fcs',
-           events,
-           flow.pnn_labels,
-           opt_channel_names=flow.pns_labels,
-           metadata=flow.text)
-```
-
-### Handling Multi-Dataset FCS Files
-
-Some FCS files contain multiple datasets in a single file.
-
-**Detecting Multi-Dataset Files:**
-
-```python
-from flowio import FlowData, MultipleDataSetsError
-
-try:
-    flow = FlowData('sample.fcs')
-except MultipleDataSetsError:
-    print("File contains multiple datasets")
-    # Use read_multiple_data_sets() instead
-```
-
-**Reading All Datasets:**
+Use the standalone helper rather than manually interpreting `$NEXTDATA`
+offsets:
 
 ```python
 from flowio import read_multiple_data_sets
 
-# Read all datasets from file
-datasets = read_multiple_data_sets('multi_dataset.fcs')
-
-print(f"Found {len(datasets)} datasets")
-
-# Process each dataset
-for i, dataset in enumerate(datasets):
-    print(f"\nDataset {i}:")
-    print(f"  Events: {dataset.event_count}")
-    print(f"  Channels: {dataset.pnn_labels}")
-
-    # Get event data for this dataset
-    events = dataset.as_array()
-    print(f"  Shape: {events.shape}")
-    print(f"  Mean values: {events.mean(axis=0)}")
+datasets = read_multiple_data_sets("legacy-multi-dataset.fcs")
+for index, dataset in enumerate(datasets):
+    values = dataset.as_array(preprocess=True)
+    print(index, dataset.event_count, dataset.pnn_labels, values.shape)
 ```
 
-**Reading Specific Dataset:**
+The FCS 3.1 specification deprecated multiple datasets in one file, but FlowIO
+can read legacy files that use them.
 
-```python
-from flowio import FlowData
-
-# Read first dataset (nextdata_offset=0)
-first_dataset = FlowData('multi.fcs', nextdata_offset=0)
-
-# Read second dataset using NEXTDATA offset from first
-next_offset = int(first_dataset.text['$NEXTDATA'])
-if next_offset > 0:
-    second_dataset = FlowData('multi.fcs', nextdata_offset=next_offset)
-```
-
-## Data Preprocessing
-
-FlowIO applies standard FCS preprocessing transformations when `preprocess=True`.
-
-**Preprocessing Steps:**
-
-1. **Gain Scaling:** Multiply values by PnG (gain) keyword
-2. **Logarithmic Transformation:** Apply PnE exponential transformation if present
-   - Formula: `value = a * 10^(b * raw_value)` where PnE = "a,b"
-3. **Time Scaling:** Convert time values to appropriate units
-
-**Controlling Preprocessing:**
-
-```python
-# Preprocessed data (default)
-preprocessed = flow.as_array(preprocess=True)
-
-# Raw data (no transformations)
-raw = flow.as_array(preprocess=False)
-```
-
-## Error Handling
-
-Handle common FlowIO exceptions appropriately.
-
-```python
-from flowio import (
-    FlowData,
-    FCSParsingError,
-    DataOffsetDiscrepancyError,
-    MultipleDataSetsError
-)
-
-try:
-    flow = FlowData('sample.fcs')
-    events = flow.as_array()
-
-except FCSParsingError as e:
-    print(f"Failed to parse FCS file: {e}")
-    # Try with relaxed parsing
-    flow = FlowData('sample.fcs', ignore_offset_error=True)
-
-except DataOffsetDiscrepancyError as e:
-    print(f"Offset discrepancy detected: {e}")
-    # Use ignore_offset_discrepancy parameter
-    flow = FlowData('sample.fcs', ignore_offset_discrepancy=True)
-
-except MultipleDataSetsError as e:
-    print(f"Multiple datasets detected: {e}")
-    # Use read_multiple_data_sets instead
-    from flowio import read_multiple_data_sets
-    datasets = read_multiple_data_sets('sample.fcs')
-
-except Exception as e:
-    print(f"Unexpected error: {e}")
-```
-
-## Common Use Cases
-
-### Inspecting FCS File Contents
-
-Quick exploration of FCS file structure:
-
-```python
-from flowio import FlowData
-
-flow = FlowData('unknown.fcs')
-
-print("=" * 50)
-print(f"File: {flow.name}")
-print(f"Version: {flow.version}")
-print(f"Size: {flow.file_size:,} bytes")
-print("=" * 50)
-
-print(f"\nEvents: {flow.event_count:,}")
-print(f"Channels: {flow.channel_count}")
-
-print("\nChannel Information:")
-for i, (pnn, pns) in enumerate(zip(flow.pnn_labels, flow.pns_labels)):
-    ch_type = "scatter" if i in flow.scatter_indices else \
-              "fluoro" if i in flow.fluoro_indices else \
-              "time" if i == flow.time_index else "other"
-    print(f"  [{i}] {pnn:10s} | {pns:30s} | {ch_type}")
-
-print("\nKey Metadata:")
-for key in ['$DATE', '$BTIM', '$ETIM', '$CYT', '$INST', '$SRC']:
-    value = flow.text.get(key, 'N/A')
-    print(f"  {key:15s}: {value}")
-```
-
-### Batch Processing Multiple Files
-
-Process a directory of FCS files:
+## Quick Start: Create an FCS 3.1 File
 
 ```python
 from pathlib import Path
-from flowio import FlowData
-import pandas as pd
 
-# Find all FCS files
-fcs_files = list(Path('data/').glob('*.fcs'))
-
-# Extract summary information
-summaries = []
-for fcs_path in fcs_files:
-    try:
-        flow = FlowData(str(fcs_path), only_text=True)
-        summaries.append({
-            'filename': fcs_path.name,
-            'version': flow.version,
-            'events': flow.event_count,
-            'channels': flow.channel_count,
-            'date': flow.text.get('$DATE', 'N/A')
-        })
-    except Exception as e:
-        print(f"Error processing {fcs_path.name}: {e}")
-
-# Create summary DataFrame
-df = pd.DataFrame(summaries)
-print(df)
-```
-
-### Converting FCS to CSV
-
-Export event data to CSV format:
-
-```python
-from flowio import FlowData
-import pandas as pd
-
-# Read FCS file
-flow = FlowData('sample.fcs')
-
-# Convert to DataFrame
-df = pd.DataFrame(
-    flow.as_array(),
-    columns=flow.pnn_labels
-)
-
-# Add metadata as attributes
-df.attrs['fcs_version'] = flow.version
-df.attrs['instrument'] = flow.text.get('$CYT', 'Unknown')
-
-# Export to CSV
-df.to_csv('output.csv', index=False)
-print(f"Exported {len(df)} events to CSV")
-```
-
-### Filtering Events and Re-exporting
-
-Apply filters and save filtered data:
-
-```python
+import numpy as np
 from flowio import FlowData, create_fcs
-import numpy as np
 
-# Read original file
-flow = FlowData('sample.fcs')
-events = flow.as_array(preprocess=False)
+values = np.asarray(
+    [[100.0, 200.0, 50.0], [150.0, 180.0, 60.0]],
+    dtype=np.float32,
+)
+pnn_labels = ["FSC-A", "SSC-A", "FITC-A"]
+pns_labels = ["Forward scatter", "Side scatter", "CD3"]
 
-# Apply filtering (example: threshold on first channel)
-fsc_idx = 0
-threshold = 500
-mask = events[:, fsc_idx] > threshold
-filtered_events = events[mask]
+output = Path("output.fcs")
+with output.open("xb") as handle:
+    create_fcs(
+        handle,
+        values.ravel(order="C"),
+        pnn_labels,
+        opt_channel_names=pns_labels,
+        metadata_dict={
+            "date": "23-JUL-2026",
+            "cyt": "Example instrument",
+            "src": "Validated NumPy array",
+        },
+    )
 
-print(f"Original events: {len(events)}")
-print(f"Filtered events: {len(filtered_events)}")
-
-# Create new FCS file with filtered data
-create_fcs('filtered.fcs',
-           filtered_events,
-           flow.pnn_labels,
-           opt_channel_names=flow.pns_labels,
-           metadata={**flow.text, '$SRC': 'Filtered data'})
+roundtrip = FlowData(output)
+assert roundtrip.event_count == values.shape[0]
+assert roundtrip.pnn_labels == pnn_labels
+np.testing.assert_allclose(
+    roundtrip.as_array(preprocess=False),
+    values,
+    rtol=1e-6,
+    atol=1e-6,
+)
 ```
 
-### Extracting Specific Channels
+Metadata keys may be supplied in mixed case or with `$`, but lowercase keys
+without `$` match FlowIO's normalized representation and are less error-prone.
+Metadata values must be strings.
 
-Extract and process specific channels:
+## Copy or Rewrite an Existing File
+
+Use `write_fcs()` when the event data does not need to change:
 
 ```python
 from flowio import FlowData
-import numpy as np
 
-flow = FlowData('sample.fcs')
-events = flow.as_array()
+flow = FlowData("source.fcs")
 
-# Extract fluorescence channels only
-fluoro_indices = flow.fluoro_indices
-fluoro_data = events[:, fluoro_indices]
-fluoro_names = [flow.pnn_labels[i] for i in fluoro_indices]
+# Preserve selected source metadata (cyt, date, and spill/spillover when present).
+flow.write_fcs("copy.fcs")
 
-print(f"Fluorescence channels: {fluoro_names}")
-print(f"Shape: {fluoro_data.shape}")
-
-# Calculate statistics per channel
-for i, name in enumerate(fluoro_names):
-    channel_data = fluoro_data[:, i]
-    print(f"\n{name}:")
-    print(f"  Mean: {channel_data.mean():.2f}")
-    print(f"  Median: {np.median(channel_data):.2f}")
-    print(f"  Std Dev: {channel_data.std():.2f}")
+# Write only required metadata plus the custom fields supplied here.
+flow.write_fcs("deidentified.fcs", metadata={"src": "Deidentified export"})
 ```
 
-## Best Practices
+Passing `metadata=None` preserves FlowIO's selected defaults. Passing any
+dictionary, including `{}`, replaces those defaults rather than merging with
+them. `write_fcs()` always produces FCS 3.1 floating-point output; non-float
+source events are preprocessed before writing. It opens the destination for
+overwrite, so reject an existing output path before calling it unless
+replacement is intentional. For floating-point sources it can preserve encoded
+events while dropping PnG or `timestep`, changing later
+`as_array(preprocess=True)` results. Validate both raw and preprocessed
+round-trips.
 
-1. **Memory Efficiency:** Use `only_text=True` when event data is not needed
-2. **Error Handling:** Wrap file operations in try-except blocks for robust code
-3. **Multi-Dataset Detection:** Check for MultipleDataSetsError and use appropriate function
-4. **Preprocessing Control:** Explicitly set `preprocess` parameter based on analysis needs
-5. **Offset Issues:** If parsing fails, try `ignore_offset_discrepancy=True` parameter
-6. **Channel Validation:** Verify channel counts and names match expectations before processing
-7. **Metadata Preservation:** When modifying files, preserve original TEXT segment keywords
+Use `create_fcs()` instead when event values, event count, or channel layout
+changes.
 
-## Advanced Topics
+## Bundled Inspector
 
-### Understanding FCS File Structure
+`scripts/inspect_fcs.py` inventories one or more datasets without network
+access. By default it reads metadata only, emits structural fields and channel
+labels without full TEXT/ANALYSIS values, and refuses files above a
+configurable size limit.
 
-FCS files consist of four segments:
+Set `FLOWIO_SKILL_DIR` to the installed skill directory. From this repository's
+root, use `skills/flowio`:
 
-1. **HEADER:** FCS version and byte offsets for other segments
-2. **TEXT:** Key-value metadata pairs (delimiter-separated)
-3. **DATA:** Raw event data (binary/float/ASCII format)
-4. **ANALYSIS** (optional): Results from data processing
+```bash
+FLOWIO_SKILL_DIR="skills/flowio"
 
-Access these segments via FlowData attributes:
-- `flow.header` - HEADER segment
-- `flow.text` - TEXT segment keywords
-- `flow.events` - DATA segment (as bytes)
-- `flow.analysis` - ANALYSIS segment keywords (if present)
+# Metadata and channel inventory
+uv run --no-project --with "flowio==1.4.0" \
+  python "$FLOWIO_SKILL_DIR/scripts/inspect_fcs.py" sample.fcs
 
-### Detailed API Reference
+# Include all normalized TEXT metadata; review output for identifiers
+uv run --no-project --with "flowio==1.4.0" \
+  python "$FLOWIO_SKILL_DIR/scripts/inspect_fcs.py" sample.fcs --include-text
 
-For comprehensive API documentation including all parameters, methods, exceptions, and FCS keyword reference, consult the detailed reference file:
+# Load events and compute finite-value statistics using FlowIO preprocessing
+uv run --no-project --with "flowio==1.4.0" \
+  python "$FLOWIO_SKILL_DIR/scripts/inspect_fcs.py" sample.fcs --stats
 
-**Read:** `references/api_reference.md`
-
-The reference includes:
-- Complete FlowData class documentation
-- All utility functions (read_multiple_data_sets, create_fcs)
-- Exception classes and handling
-- FCS file structure details
-- Common TEXT segment keywords
-- Extended example workflows
-
-When working with complex FCS operations or encountering unusual file formats, load this reference for detailed guidance.
-
-## Integration Notes
-
-**NumPy Arrays:** All event data is returned as NumPy ndarrays with shape (events, channels)
-
-**Pandas DataFrames:** Easily convert to DataFrames for analysis:
-```python
-import pandas as pd
-df = pd.DataFrame(flow.as_array(), columns=flow.pnn_labels)
+# Compute statistics from encoded values instead
+uv run --no-project --with "flowio==1.4.0" \
+  python "$FLOWIO_SKILL_DIR/scripts/inspect_fcs.py" sample.fcs --stats --raw
 ```
 
-**FlowKit Integration:** For advanced analysis (compensation, gating, FlowJo support), use FlowKit library which builds on FlowIO's parsing capabilities
+Use `--help` for output files, input/array memory limits, null-channel labels,
+and controlled offset-recovery options.
 
-**Web Applications:** FlowIO's minimal dependencies make it ideal for web backend services processing FCS uploads
+## References
 
-## Troubleshooting
+Read only the reference needed for the current task:
 
-**Problem:** "Offset discrepancy error"
-**Solution:** Use `ignore_offset_discrepancy=True` parameter
+- `references/api_reference.md` — exact FlowIO 1.4.0 public API and signatures
+- `references/workflows.md` — inventory, DataFrame/CSV, batch, write, and
+  round-trip patterns
+- `references/fcs_semantics.md` — FCS structure, metadata normalization,
+  preprocessing equations, indexing, and writer behavior
+- `references/troubleshooting.md` — offset failures, multi-dataset files,
+  memory limits, validation, security, and privacy
+- `references/sources.md` — authoritative upstream docs, release notes, source,
+  and FCS 3.1 publications used for this refresh
 
-**Problem:** "Multiple datasets error"
-**Solution:** Use `read_multiple_data_sets()` function instead of FlowData constructor
+## Non-Negotiable Checks
 
-**Problem:** Out of memory with large files
-**Solution:** Use `only_text=True` for metadata-only operations, or process events in chunks
-
-**Problem:** Unexpected channel counts
-**Solution:** Check for null channels; use `null_channel_list` parameter to exclude them
-
-**Problem:** Cannot modify event data in place
-**Solution:** FlowIO doesn't support direct modification; extract data, modify, then use `create_fcs()` to save
-
-## Summary
-
-FlowIO provides essential FCS file handling capabilities for flow cytometry workflows. Use it for parsing, metadata extraction, and file creation. For simple file operations and data extraction, FlowIO is sufficient. For complex analysis including compensation and gating, integrate with FlowKit or other specialized tools.
-
+- Never claim FlowIO applies compensation or gating.
+- Never treat `as_array(preprocess=True)` as raw acquisition values.
+- Never pass a two-dimensional array or a path directly to `create_fcs()`.
+- Never assume TEXT keys retain `$` or uppercase spelling.
+- Never silence offset errors without documenting why and validating the data.
+- Never describe FlowIO event loading as streaming or chunked.

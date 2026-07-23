@@ -1,533 +1,386 @@
-# Qiskit Patterns: The Four-Step Workflow
+# End-to-End Qiskit Patterns
 
-Qiskit Patterns provide a general framework for solving domain-specific quantum computing problems in four stages: Map, Optimize, Execute, and Post-process.
+Use a four-stage workflow:
 
-## Overview
-
-The patterns framework enables seamless composition of quantum capabilities and supports heterogeneous computing infrastructure (CPU/GPU/QPU). Execute locally, through cloud services, or via Qiskit Serverless.
-
-## The Four Steps
-
-```
-Problem → [Map] → [Optimize] → [Execute] → [Post-process] → Solution
+```text
+Map -> Optimize -> Execute -> Analyze
 ```
 
-### 1. Map
-Translate classical problems into quantum circuits and operators
+Keep these stages separate so circuit construction, compilation, paid execution, and interpretation can each be tested and reproduced.
 
-### 2. Optimize
-Prepare circuits for target hardware through transpilation
+## Pattern 1: Local Bell-State Baseline
 
-### 3. Execute
-Run circuits on quantum hardware using primitives
+### Map
 
-### 4. Post-process
-Extract and refine results with classical computation
-
-## Step 1: Map
-
-### Goal
-Transform domain-specific problems into quantum representations (circuits, operators, Hamiltonians).
-
-### Key Decisions
-
-**Choose Output Type:**
-- **Sampler**: For bitstring outputs (optimization, search)
-- **Estimator**: For expectation values (chemistry, physics)
-
-**Design Circuit Structure:**
 ```python
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter
-import numpy as np
 
-# Example: Parameterized circuit for VQE
-def create_ansatz(num_qubits, depth):
-    qc = QuantumCircuit(num_qubits)
-    params = []
-
-    for d in range(depth):
-        # Rotation layer
-        for i in range(num_qubits):
-            theta = Parameter(f'θ_{d}_{i}')
-            params.append(theta)
-            qc.ry(theta, i)
-
-        # Entanglement layer
-        for i in range(num_qubits - 1):
-            qc.cx(i, i + 1)
-
-    return qc, params
-
-ansatz, params = create_ansatz(num_qubits=4, depth=2)
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.measure_all()
 ```
 
-### Considerations
+### Optimize
 
-- **Hardware topology**: Design with backend coupling map in mind
-- **Gate efficiency**: Minimize two-qubit gates
-- **Measurement basis**: Determine required measurements
-
-### Domain-Specific Examples
-
-**Chemistry: Molecular Hamiltonian**
-```python
-from qiskit_nature.second_q.drivers import PySCFDriver
-from qiskit_nature.second_q.mappers import JordanWignerMapper
-
-# Define molecule
-driver = PySCFDriver(atom='H 0 0 0; H 0 0 0.735', basis='sto3g')
-problem = driver.run()
-
-# Map to qubit Hamiltonian
-mapper = JordanWignerMapper()
-hamiltonian = mapper.map(problem.hamiltonian)
-```
-
-**Optimization: QAOA Circuit**
-```python
-from qiskit.circuit import QuantumCircuit, Parameter
-
-def qaoa_circuit(graph, p):
-    """Create QAOA circuit for MaxCut problem"""
-    num_qubits = len(graph.nodes())
-    qc = QuantumCircuit(num_qubits)
-
-    # Initial superposition
-    qc.h(range(num_qubits))
-
-    # Alternating layers
-    betas = [Parameter(f'β_{i}') for i in range(p)]
-    gammas = [Parameter(f'γ_{i}') for i in range(p)]
-
-    for i in range(p):
-        # Problem Hamiltonian
-        for edge in graph.edges():
-            qc.cx(edge[0], edge[1])
-            qc.rz(2 * gammas[i], edge[1])
-            qc.cx(edge[0], edge[1])
-
-        # Mixer Hamiltonian
-        qc.rx(2 * betas[i], range(num_qubits))
-
-    return qc
-```
-
-## Step 2: Optimize
-
-### Goal
-Transform abstract circuits to hardware-compatible ISA (Instruction Set Architecture) circuits.
-
-### Transpilation
+Local statevector primitives accept abstract circuits. A pass manager is still useful for testing the same workflow shape:
 
 ```python
-from qiskit import transpile
+from qiskit.transpiler import generate_preset_pass_manager
 
-# Basic transpilation
-qc_isa = transpile(qc, backend=backend, optimization_level=3)
-
-# With specific initial layout
-qc_isa = transpile(
-    qc,
-    backend=backend,
-    optimization_level=3,
-    initial_layout=[0, 2, 4, 6],  # Map to specific physical qubits
-    seed_transpiler=42  # Reproducibility
+pass_manager = generate_preset_pass_manager(
+    optimization_level=1,
+    seed_transpiler=31,
 )
+compiled = pass_manager.run(circuit)
 ```
 
-### Pre-optimization Tips
+### Execute
 
-1. **Test with simulators first**:
 ```python
-from qiskit_aer import AerSimulator
+from qiskit.primitives import StatevectorSampler
 
-sim = AerSimulator.from_backend(backend)
-qc_test = transpile(qc, sim, optimization_level=3)
-print(f"Estimated depth: {qc_test.depth()}")
+sampler = StatevectorSampler(seed=31)
+pub_result = sampler.run([compiled], shots=2048).result()[0]
 ```
 
-2. **Analyze transpilation results**:
+### Analyze
+
 ```python
-print(f"Original gates: {qc.size()}")
-print(f"Transpiled gates: {qc_isa.size()}")
-print(f"Two-qubit gates: {qc_isa.count_ops().get('cx', 0)}")
+counts = pub_result.data.meas.get_counts()
+total = sum(counts.values())
+probabilities = {
+    bitstring: count / total
+    for bitstring, count in counts.items()
+}
+
+unexpected = sum(
+    probability
+    for state, probability in probabilities.items()
+    if state not in {"00", "11"}
+)
+print(probabilities, unexpected)
 ```
 
-3. **Consider circuit cutting** for large circuits:
+Use this ideal baseline before adding a noise model or QPU.
+
+## Pattern 2: IBM QPU Sampling
+
+### Map
+
 ```python
-# For circuits too large for available hardware
-# Use circuit cutting techniques to split into smaller subcircuits
+from qiskit import QuantumCircuit
+
+circuit = QuantumCircuit(3)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.cx(1, 2)
+circuit.measure_all()
 ```
 
-## Step 3: Execute
-
-### Goal
-Run ISA circuits on quantum hardware using primitives.
-
-### Using Sampler
+### Select and Optimize
 
 ```python
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit.transpiler import generate_preset_pass_manager
+from qiskit_ibm_runtime import QiskitRuntimeService
 
 service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
+backend = service.least_busy(
+    operational=True,
+    simulator=False,
+    min_num_qubits=circuit.num_qubits,
+)
 
-# Transpile first
-qc_isa = transpile(qc, backend=backend, optimization_level=3)
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=31,
+)
+isa_circuit = pass_manager.run(circuit)
 
-# Execute
-sampler = Sampler(backend)
-job = sampler.run([qc_isa], shots=10000)
-result = job.result()
-counts = result[0].data.meas.get_counts()
+print("depth:", isa_circuit.depth())
+print("operations:", isa_circuit.count_ops())
+print("layout:", isa_circuit.layout)
 ```
 
-### Using Estimator
+### Execute
+
+```python
+from qiskit_ibm_runtime import SamplerV2 as Sampler
+
+sampler = Sampler(mode=backend)
+job = sampler.run([isa_circuit], shots=4096)
+job_id = job.job_id()
+print("job_id:", job_id)
+pub_result = job.result()[0]
+```
+
+### Analyze
+
+```python
+counts = pub_result.data.meas.get_counts()
+shots = sum(counts.values())
+ghz_support = (
+    counts.get("000", 0) + counts.get("111", 0)
+) / shots
+
+record = {
+    "job_id": job_id,
+    "backend": backend.name,
+    "shots": shots,
+    "ghz_support": ghz_support,
+    "result_metadata": pub_result.metadata,
+}
+```
+
+Do not present GHZ support as state fidelity without a justified measurement protocol.
+
+## Pattern 3: Parameter Sweep with One Compilation
+
+Build and compile one parameterized circuit:
+
+```python
+import numpy as np
+from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter
+from qiskit.transpiler import generate_preset_pass_manager
+
+theta = Parameter("theta")
+circuit = QuantumCircuit(2)
+circuit.ry(theta, 0)
+circuit.cx(0, 1)
+circuit.measure_all()
+
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=31,
+)
+isa_circuit = pass_manager.run(circuit)
+
+parameter_values = np.linspace(0, np.pi, 21).reshape(-1, 1)
+```
+
+Submit values through one PUB:
+
+```python
+sampler = Sampler(mode=backend)
+pub_result = sampler.run(
+    [(isa_circuit, parameter_values)],
+    shots=1024,
+).result()[0]
+
+counts_by_point = [
+    pub_result.data.meas.get_counts(index)
+    for index in range(len(parameter_values))
+]
+```
+
+This preserves a consistent layout and avoids repeated compilation.
+
+## Pattern 4: Variational Estimator Loop
+
+Use a parameterized ansatz and map the observable after compilation:
+
+```python
+import numpy as np
+from qiskit.circuit.library import efficient_su2
+from qiskit.quantum_info import SparsePauliOp
+from qiskit.transpiler import generate_preset_pass_manager
+
+ansatz = efficient_su2(
+    num_qubits=2,
+    reps=1,
+    entanglement="linear",
+)
+hamiltonian = SparsePauliOp.from_list(
+    [
+        ("ZI", 1.0),
+        ("IZ", 1.0),
+        ("XX", 0.2),
+    ]
+)
+
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=31,
+)
+isa_ansatz = pass_manager.run(ansatz)
+isa_hamiltonian = hamiltonian.apply_layout(isa_ansatz.layout)
+initial_point = np.zeros(ansatz.num_parameters)
+```
+
+Run iterative Estimator calls. Session mode requires an eligible paid plan:
+
+```python
+from scipy.optimize import minimize
+from qiskit_ibm_runtime import EstimatorV2 as Estimator, Session
+
+history = []
+
+with Session(backend=backend, max_time="20m") as session:
+    estimator = Estimator(
+        mode=session,
+        options={"resilience_level": 1},
+    )
+
+    def objective(parameters):
+        pub = (
+            isa_ansatz,
+            isa_hamiltonian,
+            [parameters],
+        )
+        pub_result = estimator.run(
+            [pub],
+            precision=0.03,
+        ).result()[0]
+        value = float(np.asarray(pub_result.data.evs).reshape(-1)[0])
+        history.append(
+            {
+                "parameters": parameters.copy(),
+                "value": value,
+                "metadata": pub_result.metadata,
+            }
+        )
+        return value
+
+    optimum = minimize(
+        objective,
+        initial_point,
+        method="COBYLA",
+        options={"maxiter": 25},
+    )
+```
+
+For Open Plan access, instantiate `Estimator(mode=backend)` and use job mode. The circuit remains compiled once in either case.
+
+## Pattern 5: Independent Experiments in a Batch
+
+Compile all circuits against the same target:
+
+```python
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=31,
+)
+isa_circuits = pass_manager.run(circuits)
+```
+
+Submit independent jobs:
+
+```python
+from qiskit_ibm_runtime import Batch, SamplerV2 as Sampler
+
+with Batch(backend=backend, max_time="10m") as batch:
+    sampler = Sampler(mode=batch)
+    jobs = [
+        sampler.run([circuit], shots=2048)
+        for circuit in isa_circuits
+    ]
+
+job_records = [
+    {
+        "job_id": job.job_id(),
+        "result": job.result(),
+    }
+    for job in jobs
+]
+```
+
+Keep the job list aligned with an explicit experiment manifest.
+
+## Pattern 6: Ideal, Noisy, and Hardware Ladder
+
+Evaluate in three stages:
+
+1. `StatevectorSampler` or `StatevectorEstimator`.
+2. Aer or a fake backend using a recorded noise/target snapshot.
+3. The selected QPU with the same logical inputs and analysis.
+
+Do not force every stage to use identical compiled circuits: simulator and QPU targets differ. Preserve the same logical circuit and compile separately for each target.
+
+Compare:
+
+- ideal application metric,
+- noisy-model application metric,
+- QPU application metric,
+- compiler layout and native operation counts,
+- uncertainty and metadata.
+
+Avoid claiming a noise model predicts QPU output merely because the two results are close once.
+
+## Pattern 7: Mitigation A/B Test
+
+Run an unmitigated baseline:
 
 ```python
 from qiskit_ibm_runtime import EstimatorV2 as Estimator
-from qiskit.quantum_info import SparsePauliOp
 
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-
-# Transpile
-qc_isa = transpile(qc, backend=backend, optimization_level=3)
-
-# Define observable
-observable = SparsePauliOp(["ZZZZ", "XXXX"])
-
-# Execute
-estimator = Estimator(backend)
-job = estimator.run([(qc_isa, observable)])
-result = job.result()
-expectation_value = result[0].data.evs
+baseline_estimator = Estimator(
+    mode=backend,
+    options={"resilience_level": 0},
+)
+baseline = baseline_estimator.run(
+    [(isa_circuit, isa_observable)],
+    precision=0.03,
+).result()[0]
 ```
 
-### Execution Modes
+Run a mitigated configuration:
 
-**Session Mode (Iterative):**
 ```python
-from qiskit_ibm_runtime import Session
-
-with Session(backend=backend) as session:
-    sampler = Sampler(session=session)
-
-    # Multiple iterations
-    for iteration in range(max_iterations):
-        qc_iteration = update_circuit(params[iteration])
-        qc_isa = transpile(qc_iteration, backend=backend)
-
-        job = sampler.run([qc_isa], shots=1000)
-        result = job.result()
-
-        # Update parameters
-        params[iteration + 1] = optimize_params(result)
+mitigated_estimator = Estimator(
+    mode=backend,
+    options={"resilience_level": 2},
+)
+mitigated = mitigated_estimator.run(
+    [(isa_circuit, isa_observable)],
+    precision=0.03,
+).result()[0]
 ```
 
-**Batch Mode (Parallel):**
-```python
-from qiskit_ibm_runtime import Batch
+Compare both against a justified ideal or classically verifiable reference. Report uncertainty, usage, and total circuit/shot overhead. Do not assume the mitigated value is closer.
 
-with Batch(backend=backend) as batch:
-    sampler = Sampler(session=batch)
+## Experiment Manifest
 
-    # Submit all jobs at once
-    jobs = []
-    for qc in circuit_list:
-        qc_isa = transpile(qc, backend=backend)
-        job = sampler.run([qc_isa], shots=1000)
-        jobs.append(job)
-
-    # Collect results
-    results = [job.result() for job in jobs]
-```
-
-### Error Mitigation
+Persist enough information to reconstruct the workflow:
 
 ```python
-from qiskit_ibm_runtime import Options
+from importlib.metadata import version
 
-options = Options()
-options.resilience_level = 2  # 0=none, 1=light, 2=moderate, 3=heavy
-options.optimization_level = 3
-
-sampler = Sampler(backend, options=options)
-```
-
-## Step 4: Post-process
-
-### Goal
-Extract meaningful results from quantum measurements using classical computation.
-
-### Result Processing
-
-**For Sampler (Bitstrings):**
-```python
-counts = result[0].data.meas.get_counts()
-
-# Convert to probabilities
-total_shots = sum(counts.values())
-probabilities = {state: count/total_shots for state, count in counts.items()}
-
-# Find most probable state
-max_state = max(counts, key=counts.get)
-print(f"Most probable state: {max_state} ({counts[max_state]}/{total_shots})")
-```
-
-**For Estimator (Expectation Values):**
-```python
-expectation_value = result[0].data.evs
-std_dev = result[0].data.stds  # Standard deviation
-
-print(f"Energy: {expectation_value} ± {std_dev}")
-```
-
-### Domain-Specific Post-Processing
-
-**Chemistry: Ground State Energy**
-```python
-def post_process_chemistry(result, nuclear_repulsion):
-    """Extract ground state energy"""
-    electronic_energy = result[0].data.evs
-    total_energy = electronic_energy + nuclear_repulsion
-    return total_energy
-```
-
-**Optimization: MaxCut Solution**
-```python
-def post_process_maxcut(counts, graph):
-    """Find best cut from measurement results"""
-    def compute_cut_value(bitstring, graph):
-        cut_value = 0
-        for edge in graph.edges():
-            if bitstring[edge[0]] != bitstring[edge[1]]:
-                cut_value += 1
-        return cut_value
-
-    # Find bitstring with maximum cut
-    best_cut = 0
-    best_string = None
-
-    for bitstring, count in counts.items():
-        cut = compute_cut_value(bitstring, graph)
-        if cut > best_cut:
-            best_cut = cut
-            best_string = bitstring
-
-    return best_string, best_cut
-```
-
-### Advanced Post-Processing
-
-**Error Mitigation Post-Processing:**
-```python
-# Apply additional classical error mitigation
-from qiskit.result import marginal_counts
-
-# Marginalize to relevant qubits
-relevant_qubits = [0, 1, 2]
-marginal = marginal_counts(counts, indices=relevant_qubits)
-```
-
-**Statistical Analysis:**
-```python
-import numpy as np
-
-def analyze_results(results_list):
-    """Analyze multiple runs for statistics"""
-    energies = [r[0].data.evs for r in results_list]
-
-    mean_energy = np.mean(energies)
-    std_energy = np.std(energies)
-    confidence_interval = 1.96 * std_energy / np.sqrt(len(energies))
-
-    return {
-        'mean': mean_energy,
-        'std': std_energy,
-        '95% CI': (mean_energy - confidence_interval, mean_energy + confidence_interval)
-    }
-```
-
-**Visualization:**
-```python
-from qiskit.visualization import plot_histogram
-import matplotlib.pyplot as plt
-
-# Visualize results
-plot_histogram(counts, figsize=(12, 6))
-plt.title("Measurement Results")
-plt.show()
-```
-
-## Complete Example: VQE for Chemistry
-
-```python
-from qiskit import QuantumCircuit, transpile
-from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2 as Estimator, Session
-from qiskit.quantum_info import SparsePauliOp
-from scipy.optimize import minimize
-import numpy as np
-
-# 1. MAP: Create parameterized circuit
-def create_ansatz(num_qubits):
-    qc = QuantumCircuit(num_qubits)
-    params = []
-
-    for i in range(num_qubits):
-        theta = f'θ_{i}'
-        params.append(theta)
-        qc.ry(theta, i)
-
-    for i in range(num_qubits - 1):
-        qc.cx(i, i + 1)
-
-    return qc, params
-
-# Define Hamiltonian (example: H2 molecule)
-hamiltonian = SparsePauliOp(["IIZZ", "ZZII", "XXII", "IIXX"], coeffs=[0.3, 0.3, 0.1, 0.1])
-
-# 2. OPTIMIZE: Connect and prepare
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-
-ansatz, param_names = create_ansatz(num_qubits=4)
-
-# 3. EXECUTE: Run VQE
-def cost_function(params):
-    # Bind parameters
-    bound_circuit = ansatz.assign_parameters({param_names[i]: params[i] for i in range(len(params))})
-
-    # Transpile
-    qc_isa = transpile(bound_circuit, backend=backend, optimization_level=3)
-
-    # Execute
-    job = estimator.run([(qc_isa, hamiltonian)])
-    result = job.result()
-    energy = result[0].data.evs
-
-    return energy
-
-with Session(backend=backend) as session:
-    estimator = Estimator(session=session)
-
-    # Classical optimization loop
-    initial_params = np.random.random(len(param_names)) * 2 * np.pi
-    result = minimize(cost_function, initial_params, method='COBYLA')
-
-# 4. POST-PROCESS: Extract ground state energy
-ground_state_energy = result.fun
-optimized_params = result.x
-
-print(f"Ground state energy: {ground_state_energy}")
-print(f"Optimized parameters: {optimized_params}")
-```
-
-## Best Practices
-
-### 1. Iterate Locally First
-Test the full workflow with simulators before using hardware:
-```python
-from qiskit.primitives import StatevectorEstimator
-
-estimator = StatevectorEstimator()
-# Test workflow locally
-```
-
-### 2. Use Sessions for Iterative Algorithms
-VQE, QAOA, and other variational algorithms benefit from sessions.
-
-### 3. Choose Appropriate Shots
-- Development/testing: 100-1000 shots
-- Production: 10,000+ shots
-
-### 4. Monitor Convergence
-```python
-energies = []
-
-def cost_function_with_tracking(params):
-    energy = cost_function(params)
-    energies.append(energy)
-    print(f"Iteration {len(energies)}: E = {energy}")
-    return energy
-```
-
-### 5. Save Results
-```python
-import json
-
-results_data = {
-    'energy': float(ground_state_energy),
-    'parameters': optimized_params.tolist(),
-    'iterations': len(energies),
-    'backend': backend.name
+manifest = {
+    "packages": {
+        "qiskit": version("qiskit"),
+        "qiskit-ibm-runtime": version("qiskit-ibm-runtime"),
+    },
+    "backend": backend.name,
+    "job_ids": job_ids,
+    "seed_transpiler": 31,
+    "optimization_level": 1,
+    "shots": 4096,
+    "primitive_options": resolved_options,
+    "logical_parameter_order": [
+        parameter.name for parameter in logical_circuit.parameters
+    ],
+    "compiled_layout": str(isa_circuit.layout),
+    "compiled_operations": dict(isa_circuit.count_ops()),
 }
-
-with open('vqe_results.json', 'w') as f:
-    json.dump(results_data, f, indent=2)
 ```
 
-## Qiskit Serverless
+Store logical and ISA circuits in QPY, and store the manifest in a text format such as JSON after converting Qiskit-specific objects to explicit strings or dictionaries.
 
-For large-scale workflows, use Qiskit Serverless for distributed computation:
+Never serialize credentials, service account objects, raw environments, or API request headers.
 
-```python
-from qiskit_serverless import ServerlessClient, QiskitFunction
+## Preflight Before Paid Execution
 
-client = ServerlessClient()
-
-# Define serverless function
-@QiskitFunction()
-def run_vqe_serverless(hamiltonian, ansatz):
-    # Your VQE implementation
-    pass
-
-# Execute remotely
-job = run_vqe_serverless(hamiltonian, ansatz)
-result = job.result()
-```
-
-## Common Workflow Patterns
-
-### Pattern 1: Parameter Sweep
-```python
-# Map → Optimize once → Execute many → Post-process
-qc_isa = transpile(parameterized_circuit, backend=backend)
-
-with Batch(backend=backend) as batch:
-    sampler = Sampler(session=batch)
-    results = []
-
-    for param_set in parameter_sweep:
-        bound_qc = qc_isa.assign_parameters(param_set)
-        job = sampler.run([bound_qc], shots=1000)
-        results.append(job.result())
-```
-
-### Pattern 2: Iterative Refinement
-```python
-# Map → (Optimize → Execute → Post-process) repeated
-with Session(backend=backend) as session:
-    estimator = Estimator(session=session)
-
-    for iteration in range(max_iter):
-        qc = update_circuit(params)
-        qc_isa = transpile(qc, backend=backend)
-
-        result = estimator.run([(qc_isa, observable)]).result()
-        params = update_params(result)
-```
-
-### Pattern 3: Ensemble Measurement
-```python
-# Map → Optimize → Execute many observables → Post-process
-qc_isa = transpile(qc, backend=backend)
-
-observables = [obs1, obs2, obs3, obs4]
-jobs = [(qc_isa, obs) for obs in observables]
-
-estimator = Estimator(backend)
-result = estimator.run(jobs).result()
-expectation_values = [r.data.evs for r in result]
-```
+1. Run the local primitive example.
+2. Validate circuit width, parameter order, and classical-register names.
+3. Check observable width and apply the final layout.
+4. Compile against the exact backend object and inspect native two-qubit operations.
+5. Test against a fake or Aer backend.
+6. Estimate PUB expansion from parameter arrays, observables, mitigation, and twirling.
+7. Select an allowed execution mode and bounded `max_time`.
+8. Persist job IDs immediately.
+9. Analyze the application metric, not only raw counts or expectation values.

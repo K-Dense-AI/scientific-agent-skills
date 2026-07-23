@@ -1,433 +1,382 @@
-# Hardware Backends and Execution
+# Backends, Runtime Modes, Simulation, and Noise Management
 
-Qiskit is backend-agnostic and supports execution on simulators and real quantum hardware from multiple providers.
+## BackendV2
 
-## Backend Types
+Qiskit 2.x providers expose hardware and simulators through `BackendV2`. Important public attributes include:
 
-### Local Simulators
-- Run on your machine
-- No account required
-- Perfect for development and testing
+```python
+print(backend.name)
+print(backend.num_qubits)
+print(backend.operation_names)
+print(backend.coupling_map)
+print(backend.target)
+print(backend.status())
+```
 
-### Cloud-Based Hardware
-- IBM Quantum (100+ qubit systems)
-- IonQ (trapped ion)
-- Amazon Braket (Rigetti, IonQ, Oxford Quantum Circuits)
-- Other providers via plugins
+The `Target` describes operation support, qubit operands, connectivity, and available timing/error metadata.
 
-## IBM Quantum Backends
+Do not use `backend.configuration()`, `BackendProperties`, or other BackendV1 patterns in new code.
 
-### Connecting to IBM Quantum
+## Connect to IBM Quantum
+
+Use a securely saved account:
 
 ```python
 from qiskit_ibm_runtime import QiskitRuntimeService
 
-# First time: save credentials
-QiskitRuntimeService.save_account(
-    channel="ibm_quantum",
-    token="YOUR_IBM_QUANTUM_TOKEN"
+service = QiskitRuntimeService()
+```
+
+New account configurations use `channel="ibm_quantum_platform"`. See [setup.md](setup.md) for secure credential setup. Never embed or print an API key.
+
+## Discover Backends
+
+Select by requirements, not by a system name copied from a tutorial:
+
+```python
+backends = service.backends(
+    operational=True,
+    simulator=False,
+    min_num_qubits=20,
 )
 
-# Subsequent sessions: load credentials
-service = QiskitRuntimeService()
+for candidate in backends:
+    status = candidate.status()
+    print(
+        candidate.name,
+        candidate.num_qubits,
+        status.pending_jobs,
+    )
 ```
 
-### Listing Available Backends
+For exploratory work:
 
 ```python
-# List all available backends
-backends = service.backends()
-for backend in backends:
-    print(f"{backend.name}: {backend.num_qubits} qubits")
-
-# Filter by minimum qubits
-backends_127q = service.backends(min_num_qubits=127)
-
-# Get specific backend
-backend = service.backend("ibm_brisbane")
-backend = service.least_busy()  # Get least busy backend
+backend = service.least_busy(
+    operational=True,
+    simulator=False,
+    min_num_qubits=20,
+)
 ```
 
-### Backend Properties
+Least busy is not necessarily best. For a production experiment, compare:
 
-```python
-backend = service.backend("ibm_brisbane")
+- required qubit count,
+- connectivity and native two-qubit operations,
+- calibration quality on candidate subgraphs,
+- control-flow or fractional-gate requirements,
+- plan and region,
+- queue and expected execution time.
 
-# Basic info
-print(f"Name: {backend.name}")
-print(f"Qubits: {backend.num_qubits}")
-print(f"Version: {backend.version}")
-print(f"Status: {backend.status()}")
+The bundled read-only inspector summarizes one selected backend:
 
-# Coupling map (qubit connectivity)
-print(backend.coupling_map)
-
-# Basis gates
-print(backend.configuration().basis_gates)
-
-# Qubit properties
-print(backend.qubit_properties(0))  # Properties of qubit 0
+```bash
+python scripts/inspect_runtime.py --min-qubits 20
+python scripts/inspect_runtime.py --backend BACKEND_NAME --json
 ```
 
-### Checking Backend Status
+## Inspect Target Capabilities
 
 ```python
-status = backend.status()
-print(f"Operational: {status.operational}")
-print(f"Pending jobs: {status.pending_jobs}")
-print(f"Status message: {status.status_msg}")
+target = backend.target
+
+print("operations:", sorted(backend.operation_names))
+print("supports if_else:", "if_else" in backend.operation_names)
+print("supports reset:", "reset" in backend.operation_names)
+print("coupling edges:", list(backend.coupling_map.get_edges()))
 ```
 
-## Running on IBM Quantum Hardware
+Operation support can vary by qubit tuple. A name appearing in `operation_names` does not imply every qubit or pair supports it.
 
-### Using Runtime Primitives
+## Prepare ISA Circuits
 
 ```python
-from qiskit import QuantumCircuit, transpile
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit.transpiler import generate_preset_pass_manager
 
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-
-# Create and transpile circuit
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-qc.measure_all()
-
-# Transpile for backend
-transpiled_qc = transpile(qc, backend=backend, optimization_level=3)
-
-# Run with Sampler
-sampler = Sampler(backend)
-job = sampler.run([transpiled_qc], shots=1024)
-
-# Retrieve results
-result = job.result()
-counts = result[0].data.meas.get_counts()
-print(counts)
+pass_manager = generate_preset_pass_manager(
+    backend=backend,
+    optimization_level=1,
+    seed_transpiler=23,
+)
+isa_circuit = pass_manager.run(circuit)
 ```
 
-### Job Management
+For Estimator:
 
 ```python
-# Submit job
-job = sampler.run([qc], shots=1024)
+isa_observable = observable.apply_layout(isa_circuit.layout)
+```
 
-# Get job ID (save for later retrieval)
+Runtime V2 primitives do not perform this conversion automatically.
+
+## Job Mode
+
+Use job mode for independent one-off primitive calls:
+
+```python
+from qiskit_ibm_runtime import SamplerV2 as Sampler
+
+sampler = Sampler(mode=backend)
+job = sampler.run([isa_circuit], shots=1024)
+
 job_id = job.job_id()
-print(f"Job ID: {job_id}")
-
-# Check job status
-print(job.status())
-
-# Wait for completion
+print("job_id:", job_id)
 result = job.result()
-
-# Retrieve job later
-service = QiskitRuntimeService()
-retrieved_job = service.job(job_id)
-result = retrieved_job.result()
 ```
 
-### Job Queuing
+Persist the ID before blocking. Retrieve later:
 
 ```python
-# Check queue position
-job_status = job.status()
-print(f"Queue position: {job.queue_position()}")
+service = QiskitRuntimeService()
+job = service.job(job_id)
+print(job.status())
+result = job.result()
+```
 
-# Cancel job if needed
+Cancel only if the experiment should no longer consume allocation:
+
+```python
 job.cancel()
 ```
 
-## Session Mode
-
-Use sessions for iterative algorithms (VQE, QAOA) to reduce queue time:
-
-```python
-from qiskit_ibm_runtime import Session, SamplerV2 as Sampler
-
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-
-with Session(backend=backend) as session:
-    sampler = Sampler(session=session)
-
-    # Multiple iterations in same session
-    for iteration in range(10):
-        # Parameterized circuit
-        qc = create_parameterized_circuit(params[iteration])
-        job = sampler.run([qc], shots=1024)
-        result = job.result()
-
-        # Update parameters based on results
-        params[iteration + 1] = optimize(result)
-```
-
-Session benefits:
-- Reduced queue waiting between iterations
-- Guaranteed backend availability during session
-- Better for variational algorithms
-
 ## Batch Mode
 
-Use batch mode for independent parallel jobs:
+Batch mode is for independent jobs that can be submitted together. It is available to Open Plan users.
 
 ```python
 from qiskit_ibm_runtime import Batch, SamplerV2 as Sampler
 
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
+with Batch(backend=backend, max_time="10m") as batch:
+    sampler = Sampler(mode=batch)
+    jobs = [
+        sampler.run([isa_circuit], shots=1024)
+        for isa_circuit in isa_circuits
+    ]
 
-with Batch(backend=backend) as batch:
-    sampler = Sampler(session=batch)
-
-    # Submit multiple independent jobs
-    jobs = []
-    for qc in circuit_list:
-        job = sampler.run([qc], shots=1024)
-        jobs.append(job)
-
-    # Collect all results
-    results = [job.result() for job in jobs]
+# The batch accepts no new jobs; submitted jobs can still finish.
+results = [job.result() for job in jobs]
 ```
 
-## Local Simulators
+Batch jobs are scheduled as a group, but do not assume an application-level result order beyond the job list you preserve.
 
-### StatevectorSampler (Ideal Simulation)
+## Session Mode
+
+Session mode is for iterative workloads such as VQE parameter updates:
 
 ```python
-from qiskit.primitives import StatevectorSampler
+from qiskit_ibm_runtime import EstimatorV2 as Estimator, Session
 
-sampler = StatevectorSampler()
-result = sampler.run([qc], shots=1024).result()
-counts = result[0].data.meas.get_counts()
+with Session(backend=backend, max_time="20m") as session:
+    estimator = Estimator(mode=session)
+    jobs = [
+        estimator.run([pub], precision=0.03)
+        for pub in iterative_pubs
+    ]
 ```
 
-### Aer Simulator (Realistic Noise)
+Open Plan users cannot submit session jobs; use job or batch mode. Sessions have maximum and interactive time-to-live limits. Close them as soon as submission is complete.
+
+Creating `Estimator(mode=backend)` inside a session context still selects job mode. Use `mode=session`.
+
+## Exact Local Primitives
+
+For small ideal circuits:
+
+```python
+from qiskit.primitives import StatevectorEstimator, StatevectorSampler
+
+sampler = StatevectorSampler(seed=23)
+estimator = StatevectorEstimator(seed=23)
+```
+
+These implementations use local statevector simulation and do not model backend noise.
+
+Memory for a dense statevector grows as \(2^n\). Use an algorithm-appropriate Aer method or tensor-network tooling for larger circuits.
+
+## Aer Simulation
+
+Install the pinned Aer distribution:
+
+```bash
+uv pip install "qiskit-aer==0.17.2"
+```
+
+Create an ideal Aer backend:
 
 ```python
 from qiskit_aer import AerSimulator
+
+aer = AerSimulator(method="automatic")
+```
+
+Run through Runtime's local-testing primitive interface:
+
+```python
+from qiskit.transpiler import generate_preset_pass_manager
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 
-# Ideal simulation
-simulator = AerSimulator()
+pass_manager = generate_preset_pass_manager(
+    backend=aer,
+    optimization_level=1,
+    seed_transpiler=23,
+)
+isa_circuit = pass_manager.run(circuit)
 
-# Simulate with backend noise model
-backend = service.backend("ibm_brisbane")
-noisy_simulator = AerSimulator.from_backend(backend)
-
-# Run simulation
-transpiled_qc = transpile(qc, simulator)
-sampler = Sampler(simulator)
-job = sampler.run([transpiled_qc], shots=1024)
-result = job.result()
+sampler = Sampler(
+    mode=aer,
+    options={"simulator": {"seed_simulator": 23}},
+)
+result = sampler.run([isa_circuit], shots=1024).result()
 ```
 
-### Aer GPU Acceleration
+Most Runtime options other than shots and simulator settings are ignored in local testing. Do not infer that mitigation was simulated merely because an options object accepted the field.
+
+## Approximate a Real Backend in Aer
 
 ```python
-# Use GPU for faster simulation
-simulator = AerSimulator(method='statevector', device='GPU')
+from qiskit_aer import AerSimulator
+
+noisy_aer = AerSimulator.from_backend(backend)
+pass_manager = generate_preset_pass_manager(
+    backend=noisy_aer,
+    optimization_level=1,
+    seed_transpiler=23,
+)
+noisy_isa = pass_manager.run(circuit)
+
+sampler = Sampler(
+    mode=noisy_aer,
+    options={"simulator": {"seed_simulator": 23}},
+)
+result = sampler.run([noisy_isa], shots=4096).result()
 ```
 
-## Third-Party Providers
+This captures a subset of backend properties at model-construction time. It does not reproduce drift, all crosstalk, or every Runtime service behavior.
 
-### IonQ
+## Fake Backends
 
-IonQ offers trapped-ion quantum computers with all-to-all connectivity:
+Fake backends provide a local `BackendV2` target and calibration-like snapshot:
 
 ```python
-from qiskit_ionq import IonQProvider
+from qiskit_ibm_runtime.fake_provider import FakeSherbrooke
 
-provider = IonQProvider("YOUR_IONQ_API_TOKEN")
-
-# List IonQ backends
-backends = provider.backends()
-backend = provider.get_backend("ionq_qpu")
-
-# Run circuit
-job = backend.run(qc, shots=1024)
-result = job.result()
+fake_backend = FakeSherbrooke()
 ```
 
-### Amazon Braket
+Use them to test target-aware transpilation and Runtime local mode. Fake-backend class names can change; inspect the installed `qiskit_ibm_runtime.fake_provider` module before selecting one.
 
-```python
-from qiskit_braket_provider import BraketProvider
+## Estimator Noise Management
 
-provider = BraketProvider()
-
-# List available devices
-backends = provider.backends()
-
-# Use specific device
-backend = provider.get_backend("Rigetti")
-job = backend.run(qc, shots=1024)
-result = job.result()
-```
-
-## Error Mitigation
-
-### Measurement Error Mitigation
-
-```python
-from qiskit_ibm_runtime import SamplerV2 as Sampler, Options
-
-# Configure error mitigation
-options = Options()
-options.resilience_level = 1  # 0=none, 1=minimal, 2=moderate, 3=heavy
-
-sampler = Sampler(backend, options=options)
-job = sampler.run([qc], shots=1024)
-result = job.result()
-```
-
-### Error Mitigation Levels
-
-- **Level 0**: No mitigation
-- **Level 1**: Readout error mitigation
-- **Level 2**: Level 1 + gate error mitigation
-- **Level 3**: Level 2 + advanced techniques
-
-**Qiskit's Samplomatic package** can reduce sampling overhead by up to 100x with probabilistic error cancellation.
-
-### Zero Noise Extrapolation (ZNE)
-
-```python
-options = Options()
-options.resilience_level = 2
-options.resilience.zne_mitigation = True
-
-sampler = Sampler(backend, options=options)
-```
-
-## Monitoring Usage and Costs
-
-### Check Account Usage
-
-```python
-# For IBM Quantum
-service = QiskitRuntimeService()
-
-# Check remaining credits
-print(service.usage())
-```
-
-### Estimate Job Cost
+Runtime Estimator exposes increasing levels of built-in mitigation:
 
 ```python
 from qiskit_ibm_runtime import EstimatorV2 as Estimator
 
-backend = service.backend("ibm_brisbane")
-
-# Estimate job cost
-estimator = Estimator(backend)
-# Cost depends on circuit complexity and shots
-```
-
-## Best Practices
-
-### 1. Always Transpile Before Running
-
-```python
-# Bad: Run without transpilation
-job = sampler.run([qc], shots=1024)
-
-# Good: Transpile first
-qc_transpiled = transpile(qc, backend=backend, optimization_level=3)
-job = sampler.run([qc_transpiled], shots=1024)
-```
-
-### 2. Test with Simulators First
-
-```python
-# Test with noisy simulator before hardware
-noisy_sim = AerSimulator.from_backend(backend)
-qc_test = transpile(qc, noisy_sim, optimization_level=3)
-
-# Verify results look reasonable
-# Then run on hardware
-```
-
-### 3. Use Appropriate Shot Counts
-
-```python
-# For optimization algorithms: fewer shots (100-1000)
-# For final measurements: more shots (10000+)
-
-# Adaptive shots based on stage
-shots_optimization = 500
-shots_final = 10000
-```
-
-### 4. Choose Backend Strategically
-
-```python
-# For testing: Use least busy backend
-backend = service.least_busy(min_num_qubits=5)
-
-# For production: Use backend matching requirements
-backend = service.backend("ibm_brisbane")  # 127 qubits
-```
-
-### 5. Use Sessions for Variational Algorithms
-
-Sessions are ideal for VQE, QAOA, and other iterative algorithms.
-
-### 6. Monitor Job Status
-
-```python
-import time
-
-job = sampler.run([qc], shots=1024)
-
-while job.status().name not in ['DONE', 'ERROR', 'CANCELLED']:
-    print(f"Status: {job.status().name}")
-    time.sleep(10)
-
-result = job.result()
-```
-
-## Troubleshooting
-
-### Issue: "Backend not found"
-```python
-# List available backends
-print([b.name for b in service.backends()])
-```
-
-### Issue: "Invalid credentials"
-```python
-# Re-save credentials
-QiskitRuntimeService.save_account(
-    channel="ibm_quantum",
-    token="YOUR_TOKEN",
-    overwrite=True
+estimator = Estimator(
+    mode=backend,
+    options={"resilience_level": 1},
 )
 ```
 
-### Issue: Long queue times
-```python
-# Use least busy backend
-backend = service.least_busy(min_num_qubits=5)
+Current supported resilience levels:
 
-# Or use batch mode for multiple independent jobs
+- `0`: disable built-in resilience.
+- `1`: measurement mitigation.
+- `2`: measurement mitigation plus additional techniques such as ZNE, according to current defaults.
+
+There is no resilience level 3 in the current V2 API.
+
+Configure explicit techniques when the experiment requires control:
+
+```python
+estimator = Estimator(mode=backend)
+estimator.options.dynamical_decoupling.enable = True
+estimator.options.dynamical_decoupling.sequence_type = "XpXm"
+
+estimator.options.twirling.enable_gates = True
+estimator.options.twirling.num_randomizations = 32
+estimator.options.twirling.shots_per_randomization = 100
+
+estimator.options.resilience.zne_mitigation = True
+estimator.options.resilience.zne.noise_factors = (1, 3, 5)
+estimator.options.resilience.zne.extrapolator = "exponential"
 ```
 
-### Issue: Job fails with "Circuit too large"
+Mitigation adds bias assumptions, circuit variants, shots, classical processing, and cost. It is not guaranteed to improve an observable.
+
+## Sampler Noise Management
+
+Sampler returns sampled classical data and does not use Estimator resilience levels:
+
 ```python
-# Reduce circuit complexity
-# Use higher transpilation optimization
-qc_opt = transpile(qc, backend=backend, optimization_level=3)
+sampler = Sampler(mode=backend)
+sampler.options.dynamical_decoupling.enable = True
+sampler.options.dynamical_decoupling.sequence_type = "XpXm"
+sampler.options.twirling.enable_gates = True
 ```
 
-## Backend Comparison
+Measurement and gate-twirling defaults differ between Sampler and Estimator and can change. Record the resolved options for every experiment.
 
-| Provider | Connectivity | Gate Set | Notes |
-|----------|-------------|----------|--------|
-| IBM Quantum | Limited | CX, RZ, SX, X | 100+ qubit systems, high quality |
-| IonQ | All-to-all | GPI, GPI2, MS | Trapped ion, low error rates |
-| Rigetti | Limited | CZ, RZ, RX | Superconducting qubits |
-| Oxford Quantum Circuits | Limited | ECR, RZ, SX | Coaxmon technology |
+## Feature Compatibility
+
+Some combinations are restricted. Current examples include incompatibilities among:
+
+- fractional gates,
+- gate twirling,
+- probabilistic error amplification (PEA),
+- probabilistic error cancellation (PEC),
+- gate-folding zero-noise extrapolation (ZNE),
+- some dynamic-circuit features.
+
+Always consult the current Estimator/Sampler options and backend target. Do not copy a mitigation configuration between Runtime versions without revalidation.
+
+## Fractional Gates
+
+Request a backend target that exposes fractional gates when the algorithm benefits:
+
+```python
+backend = service.backend(
+    backend_name,
+    use_fractional_gates=True,
+)
+```
+
+Compile against the returned object. `use_fractional_gates` changes the target and can affect compatibility with control flow and mitigation.
+
+Qiskit Pulse is not an alternative; `qiskit.pulse` was removed in Qiskit 2.0.
+
+## Third-Party Providers
+
+Qiskit can target non-IBM providers through separately installed provider packages. Each provider controls:
+
+- authentication,
+- backend discovery,
+- supported `BackendV2` features,
+- whether native V2 primitives exist,
+- transpilation plugins,
+- result and cost semantics.
+
+Prefer the provider's current documentation. If only `BackendV2` is available, adapt it with `BackendSamplerV2` or `BackendEstimatorV2`. Do not assume IBM Runtime options, sessions, or mitigation are portable.
+
+## Operational Checklist
+
+Before submitting:
+
+1. Verify the account, plan, instance, and region.
+2. Select a backend by circuit width and capabilities.
+3. Compile and test locally against a fake/noisy backend.
+4. Apply the circuit layout to Estimator observables.
+5. Estimate the number of PUBs, circuits after randomization/mitigation, shots, and maximum execution time.
+6. Choose job, batch, or session mode.
+7. Save job IDs immediately.
+8. Store versions, backend, target timestamp, compiler seed, primitive options, and metadata.
+
+## Common Failures
+
+- **Authentication failure**: use `ibm_quantum_platform`, verify the saved account, API key, and instance access.
+- **Backend not found**: list accessible backends; systems and account entitlements change.
+- **Circuit not ISA-compatible**: submit the circuit returned by the backend-specific pass manager.
+- **Open Plan session error**: use job or batch mode.
+- **Unsupported option combination**: check the current feature-compatibility table.
+- **Unexpected queue/cost**: inspect the plan, mode TTL, precision, shots, mitigation, and twirling expansion.
+- **Simulation differs from QPU**: document the model snapshot and unmodeled effects rather than tuning until outputs match.

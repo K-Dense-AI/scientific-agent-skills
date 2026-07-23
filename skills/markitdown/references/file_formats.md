@@ -1,542 +1,281 @@
-# File Format Support
+# File Formats and Conversion Behavior
 
-This document provides detailed information about each file format supported by MarkItDown.
+This reference targets Microsoft MarkItDown 0.1.6. "Built-in" means the converter ships in the `markitdown` package; some built-ins still require an optional dependency extra.
 
-## Document Formats
+## Installation by Format
 
-### PDF (.pdf)
-
-**Capabilities**:
-- Text extraction
-- Table detection
-- Metadata extraction
-- OCR for scanned documents (with dependencies)
-
-**Dependencies**:
 ```bash
-pip install 'markitdown[pdf]'
+# Full built-in feature set
+uv pip install "markitdown[all]==0.1.6"
+
+# Common document subset
+uv pip install "markitdown[pdf,docx,pptx,xlsx]==0.1.6"
+
+# Minimal package; suitable for core text/HTML/CSV/ZIP/EPUB/IPYNB paths
+uv pip install "markitdown==0.1.6"
 ```
 
-**Best For**:
-- Scientific papers
-- Reports
-- Books
-- Forms
+## Built-in Converter Matrix
 
-**Limitations**:
-- Complex layouts may not preserve perfect formatting
-- Scanned PDFs require OCR setup
-- Some PDF features (annotations, forms) may not convert
+| Input | Typical extensions/source | Extra | Main behavior | Important limitations/network |
+|---|---|---|---|---|
+| Plain text | `.txt`, `.md`, recognized text, JSON/XML text | Core | Decodes text while preserving content | JSON/XML are not guaranteed to be normalized or pretty-printed |
+| CSV | `.csv`, `text/csv` | Core | Dedicated CSV-to-Markdown table conversion | Very wide/large tables can create large Markdown |
+| HTML | `.html`, `.htm` | Core | Headings, links, lists, tables, and readable text | CSS layout, client-side rendering, and visual fidelity are not preserved |
+| RSS/Atom-like XML | feed content/URLs | Core | Feed-focused Markdown | Remote retrieval uses network if a URI is supplied |
+| Wikipedia page | Wikipedia URL | Core | Page-oriented Markdown | Network; URL-specific converter |
+| Bing result page | Bing search-result URL | Core | Search-result-oriented Markdown | Network; HTML and service behavior can change |
+| YouTube | `https://www.youtube.com/watch?...` | `youtube-transcription` for transcript | Metadata, description, and available transcript | Fetches YouTube page/transcript; captions may be absent or restricted |
+| ZIP | `.zip` | Core | Iterates members and invokes nested converters | Treat untrusted archives as hostile; output can expand substantially |
+| EPUB | `.epub` | Core | Book metadata and structured text | Complex styling, fixed layout, DRM, and interactive content are not preserved |
+| Jupyter Notebook | `.ipynb` | Core | Notebook cells and content to Markdown | Runtime state is not reproduced; cells remain inert text during conversion |
+| PDF | `.pdf` | `pdf` | Extracts existing text and tables | No built-in local OCR for scanned pages; multi-column order and complex tables require validation |
+| Word | `.docx` | `docx` | Headings, lists, links, tables, images/alt text, and OMML math | Track changes, floating layout, and visual pagination are not faithfully reproduced |
+| PowerPoint | `.pptx` | `pptx` | Slide text, tables, notes, and shape ordering | Animations and layout fidelity are lost; image description requires an LLM client |
+| Excel | `.xlsx` | `xlsx` | Worksheets rendered as Markdown tables | Formulas, charts, merged cells, and formatting require source-level validation |
+| Legacy Excel | `.xls` | `xls` | Worksheets rendered as Markdown tables | Legacy parser limitations; no visual workbook fidelity |
+| Outlook message | `.msg` | `outlook` | Message headers and body | Attachments and rich formatting may need separate handling |
+| Image | `.jpg`, `.jpeg`, `.png` | Core | Selected ExifTool metadata; optional LLM description | Built-in converter does not locally OCR text; image may be sent to an external LLM |
+| Audio/video-audio | `.wav`, `.mp3`, `.m4a`, `.mp4` | `audio-transcription` | Metadata plus speech transcript | Transcription uses Google Web Speech through `SpeechRecognition`; content leaves the machine |
 
-**Example**:
+### Formats commonly overstated
+
+- The 0.1.6 built-in `ImageConverter` accepts JPEG and PNG, not GIF or WebP.
+- Built-in PDF conversion extracts a text layer; Tesseract is not part of MarkItDown's PDF path.
+- The package does not promise page ranges, bounding boxes, coordinates, or pixel-faithful output.
+- JSON and XML are text-based inputs, not schema-aware transformations.
+- A successful conversion does not imply complete figure, equation, table, or reading-order recovery.
+
+## PDF
+
+### Built-in extraction
+
 ```python
 from markitdown import MarkItDown
 
-md = MarkItDown()
-result = md.convert("research_paper.pdf")
-print(result.text_content)
+result = MarkItDown().convert_local("paper.pdf")
+print(result.markdown)
 ```
 
-**Enhanced with Azure Document Intelligence**:
-```python
-md = MarkItDown(docintel_endpoint="https://YOUR-ENDPOINT.cognitiveservices.azure.com/")
-result = md.convert("complex_layout.pdf")
-```
+Use for born-digital PDFs where text is selectable. MarkItDown 0.1.5 improved aligned/wide table output and partially numbered lists; 0.1.6 fixed linear memory growth across PDF pages.
 
----
+### Scanned PDFs
 
-### Microsoft Word (.docx)
+Choose one:
 
-**Capabilities**:
-- Text extraction
-- Table conversion
-- Heading hierarchy
-- List formatting
-- Basic text formatting (bold, italic)
+1. `markitdown-ocr==0.1.0` with an approved vision provider
+2. Azure Document Intelligence
+3. Azure Content Understanding
+4. A local OCR/layout parser when content cannot leave the environment
 
-**Dependencies**:
+Do not claim OCR was performed unless the selected path actually supplied it.
+
+### Validate
+
+- Reading order in multi-column papers
+- Equations, superscripts, and symbols
+- Table headers and row alignment
+- Figure captions and footnotes
+- References and hyperlinks
+- Missing pages or empty scanned sections
+
+## DOCX
+
+Install:
+
 ```bash
-pip install 'markitdown[docx]'
+uv pip install "markitdown[docx]==0.1.6"
 ```
 
-**Best For**:
-- Research papers
-- Reports
-- Documentation
-- Manuscripts
+Version 0.1.2 added DOCX math-equation rendering. Conversion is semantic, not page-layout preserving.
 
-**Preserved Elements**:
-- Headings (converted to Markdown headers)
-- Tables (converted to Markdown tables)
-- Lists (bulleted and numbered)
-- Basic formatting (bold, italic)
-- Paragraphs
+Validate:
 
-**Example**:
+- Heading levels and list nesting
+- Tables and merged cells
+- OMML equations
+- Hyperlinks and image alt text
+- Footnotes/endnotes
+- Tracked changes and comments
+
+For custom Mammoth mapping:
+
 ```python
-result = md.convert("manuscript.docx")
+from markitdown import MarkItDown
+
+converter = MarkItDown(style_map="p[style-name='Abstract'] => blockquote.abstract")
+result = converter.convert_local("manuscript.docx")
 ```
 
----
+## PPTX
 
-### PowerPoint (.pptx)
+Install:
 
-**Capabilities**:
-- Slide content extraction
+```bash
+uv pip install "markitdown[pptx]==0.1.6"
+```
+
+The converter orders shapes to approximate reading order and extracts textual slide content. Optional `llm_client`, `llm_model`, and `llm_prompt` values can describe image content.
+
+Validate:
+
+- Slide order and boundaries
 - Speaker notes
-- Table extraction
-- Image descriptions (with AI)
+- Grouped/overlapping shapes
+- Tables and chart labels
+- Images containing essential text
+- Content conveyed only by position, color, or animation
 
-**Dependencies**:
+## XLSX and XLS
+
+Install:
+
 ```bash
-pip install 'markitdown[pptx]'
+uv pip install "markitdown[xlsx,xls]==0.1.6"
 ```
 
-**Best For**:
-- Presentations
-- Lecture slides
-- Conference talks
+The result is useful for textual review and LLM ingestion, but it is not a workbook round trip.
 
-**Output Format**:
-```markdown
-# Slide 1: Title
+Validate:
 
-Content from slide 1...
+- Sheet names and order
+- Hidden rows, columns, and sheets
+- Merged cells
+- Formula text versus cached/displayed values
+- Date/number interpretation
+- Charts, images, comments, and conditional formatting
 
-**Notes**: Speaker notes appear here
+For numeric analysis, read the workbook directly with a dataframe or spreadsheet library after using MarkItDown for orientation.
 
----
+## Images
 
-# Slide 2: Next Topic
+The built-in converter supports `.jpg`, `.jpeg`, and `.png`.
 
-...
-```
+Without an LLM client, output may contain only selected metadata and can be empty when ExifTool is unavailable or the file has no relevant metadata.
 
-**With AI Image Descriptions**:
 ```python
-from openai import OpenAI
+from markitdown import MarkItDown
 
-client = OpenAI()
-md = MarkItDown(llm_client=client, llm_model="gpt-4o")
-result = md.convert("presentation.pptx")
-```
-
----
-
-### Excel (.xlsx, .xls)
-
-**Capabilities**:
-- Sheet extraction
-- Table formatting
-- Data preservation
-- Formula values (calculated)
-
-**Dependencies**:
-```bash
-pip install 'markitdown[xlsx]'  # Modern Excel
-pip install 'markitdown[xls]'   # Legacy Excel
-```
-
-**Best For**:
-- Data tables
-- Research data
-- Statistical results
-- Experimental data
-
-**Output Format**:
-```markdown
-# Sheet: Results
-
-| Sample | Control | Treatment | P-value |
-|--------|---------|-----------|---------|
-| 1      | 10.2    | 12.5      | 0.023   |
-| 2      | 9.8     | 11.9      | 0.031   |
-```
-
-**Example**:
-```python
-result = md.convert("experimental_data.xlsx")
-```
-
----
-
-## Image Formats
-
-### Images (.jpg, .jpeg, .png, .gif, .webp)
-
-**Capabilities**:
-- EXIF metadata extraction
-- OCR text extraction
-- AI-powered image descriptions
-
-**Dependencies**:
-```bash
-pip install 'markitdown[all]'  # Includes image support
-```
-
-**Best For**:
-- Scanned documents
-- Charts and graphs
-- Scientific diagrams
-- Photographs with text
-
-**Output Without AI**:
-```markdown
-![Image](image.jpg)
-
-**EXIF Data**:
-- Camera: Canon EOS 5D
-- Date: 2024-01-15
-- Resolution: 4000x3000
-```
-
-**Output With AI**:
-```python
-from openai import OpenAI
-
-client = OpenAI()
-md = MarkItDown(
-    llm_client=client,
-    llm_model="gpt-4o",
-    llm_prompt="Describe this scientific diagram in detail"
+result = MarkItDown(exiftool_path="/opt/homebrew/bin/exiftool").convert_local(
+    "figure.png"
 )
-result = md.convert("graph.png")
 ```
 
-**OCR for Text Extraction**:
-Requires Tesseract OCR:
+Use only a trusted ExifTool executable. MarkItDown 0.1.3 added a safety requirement for ExifTool 12.24 or later.
+
+Vision descriptions and OCR are external-processing paths; see `cloud_and_ocr.md`.
+
+## Audio
+
+Accepted extensions are `.wav`, `.mp3`, `.m4a`, and `.mp4`.
+
 ```bash
-# macOS
-brew install tesseract
-
-# Ubuntu
-sudo apt-get install tesseract-ocr
+uv pip install "markitdown[audio-transcription]==0.1.6"
 ```
 
----
+The implementation converts supported audio to a `SpeechRecognition` input and calls `recognize_google()`. This is not offline transcription. Obtain approval before converting confidential recordings.
 
-## Audio Formats
+The converter does not provide speaker diarization, timestamps, confidence values, or domain adaptation.
 
-### Audio (.wav, .mp3)
+## YouTube
 
-**Capabilities**:
-- Metadata extraction
-- Speech-to-text transcription
-- Duration and technical info
-
-**Dependencies**:
 ```bash
-pip install 'markitdown[audio-transcription]'
+uv pip install "markitdown[youtube-transcription]==0.1.6"
+markitdown "https://www.youtube.com/watch?v=VIDEO_ID" -o transcript.md
 ```
 
-**Best For**:
-- Lecture recordings
-- Interviews
-- Podcasts
-- Meeting recordings
+Behavior:
 
-**Output Format**:
-```markdown
-# Audio: interview.mp3
+- Downloads the page
+- Extracts title, description, and selected metadata
+- Requests an available transcript
+- Prefers English, then an available language, with translation fallback
 
-**Metadata**:
-- Duration: 45:32
-- Bitrate: 320kbps
-- Sample Rate: 44100Hz
+Availability depends on YouTube, the video, geography, cookies/network policy, and transcript permissions.
 
-**Transcription**:
-[Transcribed text appears here...]
-```
+## CSV, JSON, and XML
 
-**Example**:
+CSV has a dedicated table converter:
+
 ```python
-result = md.convert("lecture.mp3")
+result = MarkItDown().convert_local("measurements.csv")
 ```
 
----
+JSON and XML are generally handled as text-like formats. If downstream work needs validated records, parse with `json`, `defusedxml`, or a schema-aware library rather than parsing the generated Markdown.
 
-## Web Formats
+## ZIP and EPUB
 
-### HTML (.html, .htm)
+ZIP conversion invokes MarkItDown recursively for archive members. Apply:
 
-**Capabilities**:
-- Clean HTML to Markdown conversion
-- Link preservation
-- Table conversion
-- List formatting
+- Maximum archive size
+- Maximum member count
+- Maximum nested depth
+- Compression-ratio limits
+- Per-member type allowlists
 
-**Best For**:
-- Web pages
-- Documentation
-- Blog posts
-- Online articles
+Do not use conversion as an archive-security boundary.
 
-**Output Format**: Clean Markdown with preserved links and structure
+EPUB conversion targets textual book structure. DRM-protected or fixed-layout publications may fail or lose essential visual information.
 
-**Example**:
+## Remote and Special Sources
+
+`convert_uri()` accepts:
+
+- `file:`
+- `data:`
+- `http:`
+- `https:`
+
+`file:` and `data:` are still potentially dangerous when user-controlled. `http:` and `https:` require SSRF, redirect, size, and timeout controls. See `security.md`.
+
+## Azure Document Intelligence Format Set
+
+The 0.1.6 integration supports:
+
+- Documents: DOCX, PPTX, XLSX
+- OCR/layout: PDF, JPEG, PNG, BMP, TIFF
+- HTML is represented in the enum but is not in the converter's default file-type list
+
+The default API version is `2024-07-31-preview`. Document bytes are sent to Azure.
+
+## Azure Content Understanding Format Set
+
+The 0.1.6 integration can route:
+
+- Documents: PDF, DOCX, PPTX, XLSX, HTML, TXT, Markdown, RTF, XML
+- Email: EML, MSG
+- Images: JPEG, PNG, BMP, TIFF, HEIF/HEIC
+- Video: MP4, M4V, MOV, AVI, MKV, WebM, FLV, WMV
+- Audio: WAV, MP3, M4A, FLAC, OGG, AAC, WMA
+
+Support here means Azure Content Understanding routing, not local built-in parsing. Each routed conversion is an external, potentially billable operation.
+
+## Format Hints
+
+When bytes lack a meaningful filename:
+
 ```python
-result = md.convert("webpage.html")
+from markitdown import MarkItDown, StreamInfo
+
+with open("upload.bin", "rb") as stream:
+    result = MarkItDown().convert_stream(
+        stream,
+        stream_info=StreamInfo(
+            extension=".pdf",
+            mimetype="application/pdf",
+            filename="upload.pdf",
+        ),
+    )
 ```
 
----
+CLI equivalents:
 
-### YouTube URLs
-
-**Capabilities**:
-- Fetch video transcriptions
-- Extract video metadata
-- Caption download
-
-**Dependencies**:
 ```bash
-pip install 'markitdown[youtube-transcription]'
+markitdown < upload.bin -x .pdf -m application/pdf -o output.md
 ```
 
-**Best For**:
-- Educational videos
-- Lectures
-- Talks
-- Tutorials
-
-**Example**:
-```python
-result = md.convert("https://www.youtube.com/watch?v=VIDEO_ID")
-```
-
----
-
-## Data Formats
-
-### CSV (.csv)
-
-**Capabilities**:
-- Automatic table conversion
-- Delimiter detection
-- Header preservation
-
-**Output Format**: Markdown tables
-
-**Example**:
-```python
-result = md.convert("data.csv")
-```
-
-**Output**:
-```markdown
-| Column1 | Column2 | Column3 |
-|---------|---------|---------|
-| Value1  | Value2  | Value3  |
-```
-
----
-
-### JSON (.json)
-
-**Capabilities**:
-- Structured representation
-- Pretty formatting
-- Nested data visualization
-
-**Best For**:
-- API responses
-- Configuration files
-- Data exports
-
-**Example**:
-```python
-result = md.convert("data.json")
-```
-
----
-
-### XML (.xml)
-
-**Capabilities**:
-- Structure preservation
-- Attribute extraction
-- Formatted output
-
-**Best For**:
-- Configuration files
-- Data interchange
-- Structured documents
-
-**Example**:
-```python
-result = md.convert("config.xml")
-```
-
----
-
-## Archive Formats
-
-### ZIP (.zip)
-
-**Capabilities**:
-- Iterates through archive contents
-- Converts each file individually
-- Maintains directory structure in output
-
-**Best For**:
-- Document collections
-- Project archives
-- Batch conversions
-
-**Output Format**:
-```markdown
-# Archive: documents.zip
-
-## File: document1.pdf
-[Content from document1.pdf...]
-
----
-
-## File: document2.docx
-[Content from document2.docx...]
-```
-
-**Example**:
-```python
-result = md.convert("archive.zip")
-```
-
----
-
-## E-book Formats
-
-### EPUB (.epub)
-
-**Capabilities**:
-- Full text extraction
-- Chapter structure
-- Metadata extraction
-
-**Best For**:
-- E-books
-- Digital publications
-- Long-form content
-
-**Output Format**: Markdown with preserved chapter structure
-
-**Example**:
-```python
-result = md.convert("book.epub")
-```
-
----
-
-## Other Formats
-
-### Outlook Messages (.msg)
-
-**Capabilities**:
-- Email content extraction
-- Attachment listing
-- Metadata (from, to, subject, date)
-
-**Dependencies**:
-```bash
-pip install 'markitdown[outlook]'
-```
-
-**Best For**:
-- Email archives
-- Communication records
-
-**Example**:
-```python
-result = md.convert("message.msg")
-```
-
----
-
-## Format-Specific Tips
-
-### PDF Best Practices
-
-1. **Use Azure Document Intelligence for complex layouts**:
-   ```python
-   md = MarkItDown(docintel_endpoint="endpoint_url")
-   ```
-
-2. **For scanned PDFs, ensure OCR is set up**:
-   ```bash
-   brew install tesseract  # macOS
-   ```
-
-3. **Split very large PDFs before conversion** for better performance
-
-### PowerPoint Best Practices
-
-1. **Use AI for visual content**:
-   ```python
-   md = MarkItDown(llm_client=client, llm_model="gpt-4o")
-   ```
-
-2. **Check speaker notes** - they're included in output
-
-3. **Complex animations won't be captured** - static content only
-
-### Excel Best Practices
-
-1. **Large spreadsheets** may take time to convert
-
-2. **Formulas are converted to their calculated values**
-
-3. **Multiple sheets** are all included in output
-
-4. **Charts become text descriptions** (use AI for better descriptions)
-
-### Image Best Practices
-
-1. **Use AI for meaningful descriptions**:
-   ```python
-   md = MarkItDown(
-       llm_client=client,
-       llm_model="gpt-4o",
-       llm_prompt="Describe this scientific figure in detail"
-   )
-   ```
-
-2. **For text-heavy images, ensure OCR dependencies** are installed
-
-3. **High-resolution images** may take longer to process
-
-### Audio Best Practices
-
-1. **Clear audio** produces better transcriptions
-
-2. **Long recordings** may take significant time
-
-3. **Consider splitting long audio files** for faster processing
-
----
-
-## Unsupported Formats
-
-If you need to convert an unsupported format:
-
-1. **Create a custom converter** (see `api_reference.md`)
-2. **Look for plugins** on GitHub (#markitdown-plugin)
-3. **Pre-convert to supported format** (e.g., convert .rtf to .docx)
-
----
-
-## Format Detection
-
-MarkItDown automatically detects format from:
-
-1. **File extension** (primary method)
-2. **MIME type** (fallback)
-3. **File signature** (magic bytes, fallback)
-
-**Override detection**:
-```python
-# Force specific format
-result = md.convert("file_without_extension", file_extension=".pdf")
-
-# With streams
-with open("file", "rb") as f:
-    result = md.convert_stream(f, file_extension=".pdf")
-```
-
+## Source Basis
+
+- Official 0.1.6 README: https://github.com/microsoft/markitdown/blob/v0.1.6/README.md
+- Built-in converter registry: https://github.com/microsoft/markitdown/blob/v0.1.6/packages/markitdown/src/markitdown/_markitdown.py
+- Release history: https://github.com/microsoft/markitdown/releases

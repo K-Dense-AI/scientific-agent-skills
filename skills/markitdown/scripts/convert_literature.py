@@ -1,283 +1,405 @@
 #!/usr/bin/env python3
-"""
-Convert scientific literature PDFs to Markdown for analysis and review.
+"""Convert a trusted local PDF collection into provenance-rich Markdown."""
 
-This script is specifically designed for converting academic papers,
-organizing them, and preparing them for literature review workflows.
-"""
+from __future__ import annotations
 
 import argparse
 import json
 import re
-import sys
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
+from importlib.metadata import version
 from pathlib import Path
-from typing import List, Dict, Optional
+from tempfile import NamedTemporaryFile
+from urllib.parse import quote
+
 from markitdown import MarkItDown
-from datetime import datetime
 
 
-def extract_metadata_from_filename(filename: str) -> Dict[str, str]:
-    """
-    Try to extract metadata from filename.
-    Supports patterns like: Author_Year_Title.pdf
-    """
-    metadata = {}
-    
-    # Remove extension
-    name = Path(filename).stem
-    
-    # Try to extract year
-    year_match = re.search(r'\b(19|20)\d{2}\b', name)
-    if year_match:
-        metadata['year'] = year_match.group()
-    
-    # Split by underscores or dashes
-    parts = re.split(r'[_\-]', name)
-    if len(parts) >= 2:
-        metadata['author'] = parts[0].replace('_', ' ')
-        metadata['title'] = ' '.join(parts[1:]).replace('_', ' ')
-    else:
-        metadata['title'] = name.replace('_', ' ')
-    
-    return metadata
+FILENAME_PATTERN = re.compile(
+    r"^(?P<author>.+?)_(?P<year>(?:19|20)\d{2})_(?P<title>.+)$"
+)
+
+
+@dataclass(slots=True)
+class LiteratureRecord:
+    """Conversion and inferred bibliography metadata for one PDF."""
+
+    source: str
+    output: str | None
+    status: str
+    title: str
+    author: str | None
+    year: str | None
+    source_sha256: str | None = None
+    characters: int = 0
+    error: str | None = None
+
+
+def humanize_filename_component(value: str) -> str:
+    """Turn underscore-delimited filename text into readable text."""
+    return re.sub(r"\s+", " ", value.replace("_", " ")).strip()
+
+
+def infer_metadata(path: Path) -> tuple[str | None, str | None, str]:
+    """Infer author/year/title from Author_Year_Title.pdf when possible."""
+    match = FILENAME_PATTERN.fullmatch(path.stem)
+    if match is None:
+        return None, None, humanize_filename_component(path.stem)
+    return (
+        humanize_filename_component(match.group("author")),
+        match.group("year"),
+        humanize_filename_component(match.group("title")),
+    )
+
+
+def digest_file(path: Path) -> str:
+    """Calculate SHA-256 without loading the complete PDF into memory."""
+    digest = sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def yaml_scalar(value: str) -> str:
+    """JSON strings are valid, safely quoted YAML scalars."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    """Atomically replace a UTF-8 text file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary.write(content)
+            temporary_path = Path(temporary.name)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def output_path_for(
+    source: Path,
+    input_dir: Path,
+    output_dir: Path,
+    year: str | None,
+    organize_by_year: bool,
+) -> Path:
+    """Preserve source directories, optionally below a year directory."""
+    relative = source.relative_to(input_dir).with_suffix(".md")
+    if organize_by_year:
+        return output_dir / (year or "unknown-year") / relative
+    return output_dir / relative
+
+
+def render_document(
+    markdown: str,
+    *,
+    title: str,
+    author: str | None,
+    year: str | None,
+    source: str,
+    source_sha256: str,
+    converted_at: str,
+    markitdown_version: str,
+) -> str:
+    """Add minimal, safely quoted provenance front matter."""
+    fields = {
+        "title": title,
+        "author": author,
+        "year": year,
+        "source": source,
+        "source_sha256": source_sha256,
+        "converted_at": converted_at,
+        "markitdown_version": markitdown_version,
+    }
+    front_matter = ["---"]
+    for key, value in fields.items():
+        if value is not None:
+            front_matter.append(f"{key}: {yaml_scalar(value)}")
+    front_matter.extend(["---", ""])
+    return "\n".join(front_matter) + markdown
 
 
 def convert_paper(
-    md: MarkItDown,
-    input_file: Path,
+    converter: MarkItDown,
+    source: Path,
+    input_dir: Path,
     output_dir: Path,
-    organize_by_year: bool = False
-) -> tuple[bool, Dict]:
-    """
-    Convert a single paper to Markdown with metadata extraction.
-    
-    Args:
-        md: MarkItDown instance
-        input_file: Path to PDF file
-        output_dir: Output directory
-        organize_by_year: Organize into year subdirectories
-        
-    Returns:
-        Tuple of (success, metadata_dict)
-    """
-    try:
-        print(f"Converting: {input_file.name}")
-        
-        # Convert to Markdown
-        result = md.convert(str(input_file))
-        
-        # Extract metadata from filename
-        metadata = extract_metadata_from_filename(input_file.name)
-        metadata['source_file'] = input_file.name
-        metadata['converted_date'] = datetime.now().isoformat()
-        
-        # Try to extract title from content if not in filename
-        if 'title' not in metadata and result.title:
-            metadata['title'] = result.title
-        
-        # Create output path
-        if organize_by_year and 'year' in metadata:
-            output_subdir = output_dir / metadata['year']
-            output_subdir.mkdir(parents=True, exist_ok=True)
-        else:
-            output_subdir = output_dir
-            output_subdir.mkdir(parents=True, exist_ok=True)
-        
-        output_file = output_subdir / f"{input_file.stem}.md"
-        
-        # Create formatted Markdown with front matter
-        content = "---\n"
-        content += f"title: \"{metadata.get('title', input_file.stem)}\"\n"
-        if 'author' in metadata:
-            content += f"author: \"{metadata['author']}\"\n"
-        if 'year' in metadata:
-            content += f"year: {metadata['year']}\n"
-        content += f"source: \"{metadata['source_file']}\"\n"
-        content += f"converted: \"{metadata['converted_date']}\"\n"
-        content += "---\n\n"
-        
-        # Add title
-        content += f"# {metadata.get('title', input_file.stem)}\n\n"
-        
-        # Add metadata section
-        content += "## Document Information\n\n"
-        if 'author' in metadata:
-            content += f"**Author**: {metadata['author']}\n"
-        if 'year' in metadata:
-            content += f"**Year**: {metadata['year']}\n"
-        content += f"**Source File**: {metadata['source_file']}\n"
-        content += f"**Converted**: {metadata['converted_date']}\n\n"
-        content += "---\n\n"
-        
-        # Add content
-        content += result.text_content
-        
-        # Write to file
-        output_file.write_text(content, encoding='utf-8')
-        
-        print(f"✓ Saved to: {output_file}")
-        
-        return True, metadata
-        
-    except Exception as e:
-        print(f"✗ Error converting {input_file.name}: {str(e)}")
-        return False, {'source_file': input_file.name, 'error': str(e)}
+    *,
+    organize_by_year: bool,
+    overwrite: bool,
+    allow_empty: bool,
+    max_bytes: int,
+    markitdown_version: str,
+) -> LiteratureRecord:
+    """Convert one local PDF."""
+    relative_source = source.relative_to(input_dir).as_posix()
+    author, year, inferred_title = infer_metadata(source)
+    output = output_path_for(
+        source,
+        input_dir,
+        output_dir,
+        year,
+        organize_by_year,
+    )
+    relative_output = output.relative_to(output_dir).as_posix()
 
-
-def create_index(papers: List[Dict], output_dir: Path):
-    """Create an index/catalog of all converted papers."""
-    
-    # Sort by year (if available) and title
-    papers_sorted = sorted(
-        papers,
-        key=lambda x: (x.get('year', '9999'), x.get('title', ''))
-    )
-    
-    # Create Markdown index
-    index_content = "# Literature Review Index\n\n"
-    index_content += f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    index_content += f"**Total Papers**: {len(papers)}\n\n"
-    index_content += "---\n\n"
-    
-    # Group by year
-    by_year = {}
-    for paper in papers_sorted:
-        year = paper.get('year', 'Unknown')
-        if year not in by_year:
-            by_year[year] = []
-        by_year[year].append(paper)
-    
-    # Write by year
-    for year in sorted(by_year.keys()):
-        index_content += f"## {year}\n\n"
-        for paper in by_year[year]:
-            title = paper.get('title', paper.get('source_file', 'Unknown'))
-            author = paper.get('author', 'Unknown Author')
-            source = paper.get('source_file', '')
-            
-            # Create link to markdown file
-            md_file = Path(source).stem + ".md"
-            if 'year' in paper and paper['year'] != 'Unknown':
-                md_file = f"{paper['year']}/{md_file}"
-            
-            index_content += f"- **{title}**\n"
-            index_content += f"  - Author: {author}\n"
-            index_content += f"  - Source: {source}\n"
-            index_content += f"  - [Read Markdown]({md_file})\n\n"
-    
-    # Write index
-    index_file = output_dir / "INDEX.md"
-    index_file.write_text(index_content, encoding='utf-8')
-    print(f"\n✓ Created index: {index_file}")
-    
-    # Also create JSON catalog
-    catalog_file = output_dir / "catalog.json"
-    with open(catalog_file, 'w', encoding='utf-8') as f:
-        json.dump(papers_sorted, f, indent=2, ensure_ascii=False)
-    print(f"✓ Created catalog: {catalog_file}")
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Convert scientific literature PDFs to Markdown",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Convert all PDFs in a directory
-  python convert_literature.py papers/ output/
-  
-  # Organize by year
-  python convert_literature.py papers/ output/ --organize-by-year
-  
-  # Create index of all papers
-  python convert_literature.py papers/ output/ --create-index
-  
-Filename Conventions:
-  For best results, name your PDFs using this pattern:
-    Author_Year_Title.pdf
-    
-  Examples:
-    Smith_2023_Machine_Learning_Applications.pdf
-    Jones_2022_Climate_Change_Analysis.pdf
-        """
-    )
-    
-    parser.add_argument('input_dir', type=Path, help='Directory with PDF files')
-    parser.add_argument('output_dir', type=Path, help='Output directory for Markdown files')
-    parser.add_argument(
-        '--organize-by-year', '-y',
-        action='store_true',
-        help='Organize output into year subdirectories'
-    )
-    parser.add_argument(
-        '--create-index', '-i',
-        action='store_true',
-        help='Create an index/catalog of all papers'
-    )
-    parser.add_argument(
-        '--recursive', '-r',
-        action='store_true',
-        help='Search subdirectories recursively'
-    )
-    
-    args = parser.parse_args()
-    
-    # Validate input
-    if not args.input_dir.exists():
-        print(f"Error: Input directory '{args.input_dir}' does not exist")
-        sys.exit(1)
-    
-    if not args.input_dir.is_dir():
-        print(f"Error: '{args.input_dir}' is not a directory")
-        sys.exit(1)
-    
-    # Find PDF files
-    if args.recursive:
-        pdf_files = list(args.input_dir.rglob("*.pdf"))
-    else:
-        pdf_files = list(args.input_dir.glob("*.pdf"))
-    
-    if not pdf_files:
-        print("No PDF files found")
-        sys.exit(1)
-    
-    print(f"Found {len(pdf_files)} PDF file(s)")
-    
-    # Create MarkItDown instance
-    md = MarkItDown()
-    
-    # Convert all papers
-    results = []
-    success_count = 0
-    
-    for pdf_file in pdf_files:
-        success, metadata = convert_paper(
-            md,
-            pdf_file,
-            args.output_dir,
-            args.organize_by_year
+    if source.is_symlink():
+        return LiteratureRecord(
+            source=relative_source,
+            output=None,
+            status="skipped",
+            title=inferred_title,
+            author=author,
+            year=year,
+            error="symbolic links are disabled",
         )
-        
-        if success:
-            success_count += 1
-            results.append(metadata)
-    
-    # Create index if requested
-    if args.create_index and results:
-        create_index(results, args.output_dir)
-    
-    # Print summary
-    print("\n" + "="*50)
-    print("CONVERSION SUMMARY")
-    print("="*50)
-    print(f"Total papers:    {len(pdf_files)}")
-    print(f"Successful:      {success_count}")
-    print(f"Failed:          {len(pdf_files) - success_count}")
-    print(f"Success rate:    {success_count/len(pdf_files)*100:.1f}%")
-    
-    sys.exit(0 if success_count == len(pdf_files) else 1)
+
+    try:
+        resolved = source.resolve(strict=True)
+        resolved.relative_to(input_dir)
+        if not resolved.is_file():
+            raise ValueError("source is not a regular file")
+
+        source_bytes = resolved.stat().st_size
+        if source_bytes > max_bytes:
+            return LiteratureRecord(
+                source=relative_source,
+                output=None,
+                status="skipped",
+                title=inferred_title,
+                author=author,
+                year=year,
+                error=f"source exceeds byte limit ({source_bytes} > {max_bytes})",
+            )
+
+        if output.exists() and not overwrite:
+            return LiteratureRecord(
+                source=relative_source,
+                output=relative_output,
+                status="skipped",
+                title=inferred_title,
+                author=author,
+                year=year,
+                error="output already exists",
+            )
+
+        source_digest = digest_file(resolved)
+        result = converter.convert_local(resolved)
+        if not result.markdown.strip() and not allow_empty:
+            raise ValueError("conversion produced empty Markdown")
+
+        title = (result.title or "").strip() or inferred_title
+        converted_at = datetime.now(timezone.utc).isoformat()
+        document = render_document(
+            result.markdown,
+            title=title,
+            author=author,
+            year=year,
+            source=relative_source,
+            source_sha256=source_digest,
+            converted_at=converted_at,
+            markitdown_version=markitdown_version,
+        )
+        atomic_write_text(output, document)
+        return LiteratureRecord(
+            source=relative_source,
+            output=relative_output,
+            status="converted",
+            title=title,
+            author=author,
+            year=year,
+            source_sha256=source_digest,
+            characters=len(result.markdown),
+        )
+    except Exception as exc:  # Continue the collection and record the failure.
+        return LiteratureRecord(
+            source=relative_source,
+            output=None,
+            status="failed",
+            title=inferred_title,
+            author=author,
+            year=year,
+            error=f"{type(exc).__name__}: {exc}",
+        )
 
 
-if __name__ == '__main__':
-    main()
+def escape_markdown(value: str) -> str:
+    """Escape link-label metacharacters."""
+    return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
+
+def create_index(records: list[LiteratureRecord], output_dir: Path) -> None:
+    """Write a Markdown index and JSON catalog."""
+    eligible = [
+        record
+        for record in records
+        if record.output is not None and (output_dir / record.output).is_file()
+    ]
+    eligible.sort(
+        key=lambda record: (
+            record.year is None,
+            record.year or "",
+            record.title.casefold(),
+            record.source,
+        )
+    )
+
+    lines = [
+        "# Literature Index",
+        "",
+        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        f"Documents: {len(eligible)}",
+        "",
+    ]
+    grouped: dict[str, list[LiteratureRecord]] = {}
+    for record in eligible:
+        grouped.setdefault(record.year or "Unknown year", []).append(record)
+
+    for year in sorted(
+        grouped,
+        key=lambda value: (value == "Unknown year", value),
+    ):
+        lines.extend([f"## {year}", ""])
+        for record in grouped[year]:
+            label = escape_markdown(record.title)
+            link = quote(record.output or "", safe="/")
+            author = f" — {escape_markdown(record.author)}" if record.author else ""
+            lines.append(f"- [{label}]({link}){author}")
+        lines.append("")
+
+    atomic_write_text(output_dir / "INDEX.md", "\n".join(lines).rstrip() + "\n")
+    atomic_write_text(
+        output_dir / "catalog.json",
+        json.dumps(
+            [asdict(record) for record in records],
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Convert trusted local literature PDFs to Markdown with provenance. "
+            "Filename convention: Author_Year_Title.pdf."
+        )
+    )
+    parser.add_argument("input_dir", type=Path)
+    parser.add_argument("output_dir", type=Path)
+    parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        help="Search subdirectories and preserve their relative paths",
+    )
+    parser.add_argument(
+        "--organize-by-year",
+        action="store_true",
+        help="Place outputs below inferred year directories",
+    )
+    parser.add_argument(
+        "--create-index",
+        action="store_true",
+        help="Write INDEX.md and catalog.json",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace existing Markdown outputs",
+    )
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="Write empty conversions instead of failing them",
+    )
+    parser.add_argument(
+        "--max-bytes",
+        type=int,
+        default=256 * 1024 * 1024,
+        help="Maximum PDF size in bytes (default: 268435456)",
+    )
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.max_bytes <= 0:
+        parser.error("--max-bytes must be positive")
+
+    try:
+        input_dir = args.input_dir.resolve(strict=True)
+    except FileNotFoundError:
+        parser.error(f"input directory does not exist: {args.input_dir}")
+    if not input_dir.is_dir():
+        parser.error(f"input path is not a directory: {input_dir}")
+
+    iterator = input_dir.rglob("*") if args.recursive else input_dir.iterdir()
+    papers = sorted(
+        (
+            path
+            for path in iterator
+            if path.suffix.lower() == ".pdf" and (path.is_file() or path.is_symlink())
+        ),
+        key=lambda path: path.as_posix(),
+    )
+
+    output_dir = args.output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    package_version = version("markitdown")
+    converter = MarkItDown()
+
+    records: list[LiteratureRecord] = []
+    for paper in papers:
+        record = convert_paper(
+            converter,
+            paper,
+            input_dir,
+            output_dir,
+            organize_by_year=args.organize_by_year,
+            overwrite=args.overwrite,
+            allow_empty=args.allow_empty,
+            max_bytes=args.max_bytes,
+            markitdown_version=package_version,
+        )
+        records.append(record)
+        detail = record.output or record.error or ""
+        print(f"{record.status:9} {record.source} {detail}".rstrip())
+
+    if args.create_index:
+        create_index(records, output_dir)
+
+    counts = {
+        status: sum(record.status == status for record in records)
+        for status in ("converted", "skipped", "failed")
+    }
+    print(
+        "Summary: "
+        f"{counts['converted']} converted, "
+        f"{counts['skipped']} skipped, "
+        f"{counts['failed']} failed"
+    )
+    if not papers:
+        print("No PDF files found")
+
+    return 1 if counts["failed"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

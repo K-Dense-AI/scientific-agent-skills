@@ -1,381 +1,311 @@
 ---
 name: dnanexus-integration
-description: DNAnexus cloud genomics platform. Build apps/applets, manage data (upload/download), dxpy Python SDK, run workflows, FASTQ/BAM/VCF, for genomics pipeline development and execution.
-license: Unknown
-compatibility: Requires a DNAnexus account
-required_environment_variables: [{"name": "DX_SECURITY_CONTEXT", "prompt": "DNAnexus auth token context (normally set by `dx login`).", "required_for": "optional features"}, {"name": "DX_ASSET_BWA", "prompt": "Optional asset id for the BWA example.", "required_for": "optional features"}]
-metadata: {"version": "1.1", "skill-author": "K-Dense Inc.", "openclaw": {"envVars": [{"name": "DX_SECURITY_CONTEXT", "required": false, "description": "DNAnexus auth token context (normally set by `dx login`)."}, {"name": "DX_ASSET_BWA", "required": false, "description": "Optional asset id for the BWA example."}]}}
+description: Build and operate reproducible genomics workloads on DNAnexus with the dx CLI, dxpy, apps/applets, native workflows, dxCompiler, and Nextflow. Use for DNAnexus data transfers, dxapp.json development, execution monitoring, workflow import, and project automation.
+license: MIT
+compatibility: Requires a DNAnexus account, network access, Python 3.11+, and dx-toolkit/dxpy; some workflow and infrastructure features require organization licenses or policies.
+metadata:
+  version: "2.0"
+  skill-author: K-Dense Inc.
 ---
 
 # DNAnexus Integration
 
-## Overview
+## Purpose
 
-DNAnexus is a cloud platform for biomedical data analysis and genomics. Build and deploy apps/applets, manage data objects, run workflows, and use the dxpy Python SDK for genomics pipeline development and execution.
+Use this skill to build, run, and operate DNAnexus workloads without guessing
+at platform semantics. It covers:
 
-## When to Use This Skill
+- `dx` CLI and `dxpy` automation
+- Files, records, folders, projects, and metadata
+- Apps and applets defined by `dxapp.json`
+- Jobs, workflow analyses, retries, monitoring, and cost controls
+- Native workflows, WDL/CWL through dxCompiler, and Nextflow imports
 
-This skill should be used when:
-- Creating, building, or modifying DNAnexus apps/applets
-- Uploading, downloading, searching, or organizing files and records
-- Running analyses, monitoring jobs, creating workflows
-- Writing scripts using dxpy to interact with the platform
-- Setting up dxapp.json, managing dependencies, using Docker
-- Processing FASTQ, BAM, VCF, or other bioinformatics files
-- Managing projects, permissions, or platform resources
+The documented baseline was verified on **2026-07-23** against
+`dxpy==0.410.0`, dxCompiler 2.17.0, and the 2026 DNAnexus documentation.
+Consult `references/sources.md` and current release notes when behavior may
+have changed.
 
-## Core Capabilities
+## Operating Contract
 
-The skill is organized into five main areas, each with detailed reference documentation:
+DNAnexus operations can expose regulated data, delete immutable objects, change
+permissions, or incur compute and egress charges. Follow these rules:
 
-### 1. App Development
+1. Start read-only. Confirm the user, project ID, region, folder, object IDs,
+   and execution target before mutation.
+2. Obtain confirmation before a billable launch, upload or download with
+   material egress, archive/unarchive request, deletion, project removal,
+   permission change, token revocation, or app publication unless the user
+   already explicitly requested that exact operation and target.
+3. Show resolved IDs and impact before destructive operations. Never infer a
+   deletion target from a non-unique name.
+4. Never print, log, return, or persist `DX_SECURITY_CONTEXT` or API tokens.
+   Do not run `dx env` or `dx env --bash` in captured logs because both reveal
+   the active token.
+5. Use credentials only with official DNAnexus endpoints. Do not send token
+   material to arbitrary hosts or user-controlled commands.
+6. Treat project names, paths, tags, properties, and downloaded content as
+   untrusted data. Quote shell arguments and pass subprocess arguments as
+   arrays.
+7. Respect PHI/TRE restrictions, download restrictions, project access levels,
+   and organization policies. Do not copy data around a control.
+8. Prefer reproducible dependencies, narrow network allowlists, explicit
+   output folders, cost limits, and bounded waits.
 
-**Purpose**: Create executable programs (apps/applets) that run on the DNAnexus platform.
+## Install and Authenticate
 
-**Key Operations**:
-- Generate app skeleton with `dx-app-wizard`
-- Write Python or Bash apps with proper entry points
-- Handle input/output data objects
-- Deploy with `dx build` or `dx build --app`
-- Test apps on the platform
-
-**Common Use Cases**:
-- Bioinformatics pipelines (alignment, variant calling)
-- Data processing workflows
-- Quality control and filtering
-- Format conversion tools
-
-**Reference**: See `references/app-development.md` for:
-- Complete app structure and patterns
-- Python entry point decorators
-- Input/output handling with dxpy
-- Development best practices
-- Common issues and solutions
-
-### 2. Data Operations
-
-**Purpose**: Manage files, records, and other data objects on the platform.
-
-**Key Operations**:
-- Upload/download files with `dxpy.upload_local_file()` and `dxpy.download_dxfile()`
-- Create and manage records with metadata
-- Search for data objects by name, properties, or type
-- Clone data between projects
-- Manage project folders and permissions
-
-**Common Use Cases**:
-- Uploading sequencing data (FASTQ files)
-- Organizing analysis results
-- Searching for specific samples or experiments
-- Backing up data across projects
-- Managing reference genomes and annotations
-
-**Reference**: See `references/data-operations.md` for:
-- Complete file and record operations
-- Data object lifecycle (open/closed states)
-- Search and discovery patterns
-- Project management
-- Batch operations
-
-### 3. Job Execution
-
-**Purpose**: Run analyses, monitor execution, and orchestrate workflows.
-
-**Key Operations**:
-- Launch jobs with `applet.run()` or `app.run()`
-- Monitor job status and logs
-- Create subjobs for parallel processing
-- Build and run multi-step workflows
-- Chain jobs with output references
-
-**Common Use Cases**:
-- Running genomics analyses on sequencing data
-- Parallel processing of multiple samples
-- Multi-step analysis pipelines
-- Monitoring long-running computations
-- Debugging failed jobs
-
-**Reference**: See `references/job-execution.md` for:
-- Complete job lifecycle and states
-- Workflow creation and orchestration
-- Parallel execution patterns
-- Job monitoring and debugging
-- Resource management
-
-### 4. Python SDK (dxpy)
-
-**Purpose**: Programmatic access to DNAnexus platform through Python.
-
-**Key Operations**:
-- Work with data object handlers (DXFile, DXRecord, DXApplet, etc.)
-- Use high-level functions for common tasks
-- Make direct API calls for advanced operations
-- Create links and references between objects
-- Search and discover platform resources
-
-**Common Use Cases**:
-- Automation scripts for data management
-- Custom analysis pipelines
-- Batch processing workflows
-- Integration with external tools
-- Data migration and organization
-
-**Reference**: See `references/python-sdk.md` for:
-- Complete dxpy class reference
-- High-level utility functions
-- API method documentation
-- Error handling patterns
-- Common code patterns
-
-### 5. Configuration and Dependencies
-
-**Purpose**: Configure app metadata and manage dependencies.
-
-**Key Operations**:
-- Write dxapp.json with inputs, outputs, and run specs
-- Install system packages (execDepends)
-- Bundle custom tools and resources
-- Use assets for shared dependencies
-- Integrate Docker containers
-- Configure instance types and timeouts
-
-**Common Use Cases**:
-- Defining app input/output specifications
-- Installing bioinformatics tools (samtools, bwa, etc.)
-- Managing Python package dependencies
-- Using Docker images for complex environments
-- Selecting computational resources
-
-**Reference**: See `references/configuration.md` for:
-- Complete dxapp.json specification
-- Dependency management strategies
-- Docker integration patterns
-- Regional and resource configuration
-- Example configurations
-
-## Quick Start Examples
-
-### Upload and Analyze Data
-
-```python
-import dxpy
-
-# Upload input file
-input_file = dxpy.upload_local_file("sample.fastq", project="project-xxxx")
-
-# Run analysis
-job = dxpy.DXApplet("applet-xxxx").run({
-    "reads": dxpy.dxlink(input_file.get_id())
-})
-
-# Wait for completion
-job.wait_on_done()
-
-# Download results
-output_id = job.describe()["output"]["aligned_reads"]["$dnanexus_link"]
-dxpy.download_dxfile(output_id, "aligned.bam")
-```
-
-### Search and Download Files
-
-```python
-import dxpy
-
-# Find BAM files from a specific experiment
-files = dxpy.find_data_objects(
-    classname="file",
-    name="*.bam",
-    properties={"experiment": "exp001"},
-    project="project-xxxx"
-)
-
-# Download each file
-for file_result in files:
-    file_obj = dxpy.DXFile(file_result["id"])
-    filename = file_obj.describe()["name"]
-    dxpy.download_dxfile(file_result["id"], filename)
-```
-
-### Create Simple App
-
-```python
-# src/my-app.py
-import dxpy
-import subprocess
-
-@dxpy.entry_point('main')
-def main(input_file, quality_threshold=30):
-    # Download input
-    dxpy.download_dxfile(input_file["$dnanexus_link"], "input.fastq")
-
-    # Process
-    subprocess.check_call([
-        "quality_filter",
-        "--input", "input.fastq",
-        "--output", "filtered.fastq",
-        "--threshold", str(quality_threshold)
-    ])
-
-    # Upload output
-    output_file = dxpy.upload_local_file("filtered.fastq")
-
-    return {
-        "filtered_reads": dxpy.dxlink(output_file)
-    }
-
-dxpy.run()
-```
-
-## Workflow Decision Tree
-
-When working with DNAnexus, follow this decision tree:
-
-1. **Need to create a new executable?**
-   - Yes → Use **App Development** (references/app-development.md)
-   - No → Continue to step 2
-
-2. **Need to manage files or data?**
-   - Yes → Use **Data Operations** (references/data-operations.md)
-   - No → Continue to step 3
-
-3. **Need to run an analysis or workflow?**
-   - Yes → Use **Job Execution** (references/job-execution.md)
-   - No → Continue to step 4
-
-4. **Writing Python scripts for automation?**
-   - Yes → Use **Python SDK** (references/python-sdk.md)
-   - No → Continue to step 5
-
-5. **Configuring app settings or dependencies?**
-   - Yes → Use **Configuration** (references/configuration.md)
-
-Often you'll need multiple capabilities together (e.g., app development + configuration, or data operations + job execution).
-
-## Installation and Authentication
-
-### Install dxpy
+Install the CLI in an isolated tool environment:
 
 ```bash
-uv pip install dxpy
+uv tool install "dxpy==0.410.0"
+dx --version
 ```
 
-### Login to DNAnexus
+For Python code in a project:
+
+```bash
+uv add "dxpy==0.410.0"
+```
+
+Use interactive login for human sessions:
 
 ```bash
 dx login
+dx whoami
+dx select
+dx pwd
 ```
 
-This authenticates your session and sets up access to projects and data.
+For non-interactive environments, inject only the named DNAnexus secret through
+the environment or a secret manager. Never echo it, include it in command
+output, commit it, or inspect the whole environment. See
+`references/authentication.md`.
 
-### Verify Installation
+## Safe Preflight
+
+Before acting, gather non-secret context:
 
 ```bash
 dx --version
 dx whoami
+dx pwd
+dx ls
 ```
 
-## Common Patterns
+Then:
 
-### Pattern 1: Batch Processing
+- Resolve project names to immutable `project-...` IDs.
+- Resolve paths to object IDs and check for duplicates.
+- Check file state (`open`, `closing`, or `closed`) and archival state.
+- Check source and destination access levels.
+- Inspect executable input help with `dx run <executable> -h`.
+- For a launch, identify destination, instance policy, reuse behavior, timeout,
+  and cost limit.
 
-Process multiple files with the same analysis:
+If shell environment variables conflict with the saved CLI session, follow
+`references/authentication.md`; do not expose either credential while
+diagnosing.
+
+## Choose the Right Path
+
+| Goal | Read first | Preferred interface |
+|---|---|---|
+| Build an app or applet | `references/app-development.md` | `dx-app-wizard`, `dx build` |
+| Configure `dxapp.json` | `references/configuration.md` | JSON plus validator script |
+| Transfer or organize data | `references/data-operations.md` | `dx`, Upload/Download Agent |
+| Write platform automation | `references/python-sdk.md` | `dxpy` |
+| Launch or debug execution | `references/job-execution.md` | `dx run`, `dx watch`, `dxpy` |
+| Import WDL, CWL, or Nextflow | `references/workflow-languages.md` | dxCompiler or `dx build --nextflow` |
+| Diagnose auth, cost, or failures | `references/operations-and-troubleshooting.md` | read-only inspection first |
+
+## Core Workflows
+
+### Transfer data
+
+Use `dx upload` and `dx download` for small sets. Use Upload Agent for multiple
+or large files (official guidance recommends it above 50 MB) and Download Agent
+for large or long-running batch downloads.
+
+```bash
+dx upload "sample.fastq.gz" \
+  --path "project-xxxx:/raw/sample.fastq.gz" \
+  --property "sample_id=S001"
+
+dx download "project-xxxx:/results/sample.bam" \
+  --output "sample.bam"
+```
+
+Upload Agent compresses uncompressed inputs by default and appends `.gz`. Use
+`--do-not-compress` when byte-for-byte preservation or the original name is
+required. See `references/data-operations.md`.
+
+### Search accurately with dxpy
+
+`find_data_objects()` uses exact name matching unless `name_mode` is supplied.
+Do not pass `"*.bam"` without `name_mode="glob"`.
 
 ```python
-# Find all FASTQ files
+import dxpy
+
 files = dxpy.find_data_objects(
     classname="file",
-    name="*.fastq",
-    project="project-xxxx"
-)
-
-# Launch parallel jobs
-jobs = []
-for file_result in files:
-    job = dxpy.DXApplet("applet-xxxx").run({
-        "input": dxpy.dxlink(file_result["id"])
-    })
-    jobs.append(job)
-
-# Wait for all completions
-for job in jobs:
-    job.wait_on_done()
-```
-
-### Pattern 2: Multi-Step Pipeline
-
-Chain multiple analyses together:
-
-```python
-# Step 1: Quality control
-qc_job = qc_applet.run({"reads": input_file})
-
-# Step 2: Alignment (uses QC output)
-align_job = align_applet.run({
-    "reads": qc_job.get_output_ref("filtered_reads")
-})
-
-# Step 3: Variant calling (uses alignment output)
-variant_job = variant_applet.run({
-    "bam": align_job.get_output_ref("aligned_bam")
-})
-```
-
-### Pattern 3: Data Organization
-
-Organize analysis results systematically:
-
-```python
-# Create organized folder structure
-dxpy.api.project_new_folder(
-    "project-xxxx",
-    {"folder": "/experiments/exp001/results", "parents": True}
-)
-
-# Upload with metadata
-result_file = dxpy.upload_local_file(
-    "results.txt",
     project="project-xxxx",
-    folder="/experiments/exp001/results",
-    properties={
-        "experiment": "exp001",
-        "sample": "sample1",
-        "analysis_date": "2025-10-20"
-    },
-    tags=["validated", "published"]
+    folder="/results",
+    recurse=True,
+    name="*.bam",
+    name_mode="glob",
+    state="closed",
+    describe={"fields": {"name": True, "size": True, "archivalState": True}},
+    limit=100,
+)
+
+for result in files:
+    description = result["describe"]
+    print(result["id"], description["name"], description["archivalState"])
+```
+
+Bound broad searches with a project, folder, time range, and `limit`.
+
+### Build an applet
+
+```bash
+dx-app-wizard
+uv run python "skills/dnanexus-integration/scripts/validate_dxapp.py" \
+  "./my-app/dxapp.json" --kind applet --strict
+dx build "./my-app"
+```
+
+For a versioned app, use the current build form:
+
+```bash
+dx build "./my-app" --create-app
+```
+
+New configurations should use Ubuntu 24.04 and
+`regionalOptions.<region>.systemRequirements`. Top-level `resources` and
+`runSpec.systemRequirements` in `dxapp.json` are deprecated. See
+`references/configuration.md`.
+
+### Launch with explicit controls
+
+First inspect the executable:
+
+```bash
+dx run "applet-xxxx" -h
+```
+
+After target and cost confirmation:
+
+```bash
+dx run "applet-xxxx" \
+  --input-json-file "inputs.json" \
+  --destination "project-xxxx:/runs/run-001" \
+  --cost-limit 25
+```
+
+Keep the normal confirmation prompt for interactive use. Add `--yes` only in
+reviewed automation where the exact executable, project, inputs, destination,
+and cost policy are already approved.
+
+### Monitor jobs and analyses
+
+```bash
+dx find executions --created-after=-2h
+dx find jobs --state failed
+dx find analyses --created-after=-1d
+dx watch "job-xxxx" --get-streams
+```
+
+A run of an app or applet returns a `job-...`; a run of a workflow returns an
+`analysis-...`. `dxpy.DXJob.wait_on_done()` and
+`dxpy.DXAnalysis.wait_on_done()` raise `DXJobFailureError` when an execution
+fails. See `references/job-execution.md`.
+
+### Chain executions without polling
+
+Use job-based output references:
+
+```python
+import dxpy
+
+qc_job = dxpy.DXApplet("applet-qc").run(
+    {"reads": dxpy.dxlink("file-input")},
+    project="project-xxxx",
+    folder="/runs/run-001/qc",
+    cost_limit=10,
+)
+
+align_job = dxpy.DXApplet("applet-align").run(
+    {"reads": qc_job.get_output_ref("filtered_reads")},
+    project="project-xxxx",
+    folder="/runs/run-001/alignment",
+    cost_limit=25,
 )
 ```
 
-## Best Practices
+The downstream job remains `waiting_on_input` until the referenced output is
+ready. Do not wrap `get_output_ref()` in `dxpy.dxlink()`.
 
-1. **Error Handling**: Always wrap API calls in try-except blocks
-2. **Resource Management**: Choose appropriate instance types for workloads
-3. **Data Organization**: Use consistent folder structures and metadata
-4. **Cost Optimization**: Archive old data, use appropriate storage classes
-5. **Documentation**: Include clear descriptions in dxapp.json
-6. **Testing**: Test apps with various input types before production use
-7. **Version Control**: Use semantic versioning for apps
-8. **Security**: Never hardcode credentials in source code
-9. **Logging**: Include informative log messages for debugging
-10. **Cleanup**: Remove temporary files and failed jobs
+## Current Platform Guidance
 
-## Resources
+- Supported app execution environments are Ubuntu 24.04 and 20.04; prefer
+  24.04 for new work.
+- In Ubuntu 24.04, prefer a virtual environment for Python dependencies even
+  though the AEE sets `PIP_BREAK_SYSTEM_PACKAGES=1`; system/PyPI conflicts can
+  otherwise produce `DXExecDependencyError`.
+- Runtime `execDepends` can drift. Prefer pinned asset bundles, bundled
+  dependencies, or pinned containers for production.
+- Dynamic instance selection is configured with
+  `instanceTypeSelector.allowedInstanceTypes` and may require an organization
+  license.
+- Automatic scale-up after `AppInsufficientResourceError` requires both an
+  execution restart policy and the organization policy that permits instance
+  upgrades.
+- Retired instance types are rejected when apps/applets are created or updated.
+  Discover available instance types instead of copying a stale list.
+- Jobs normally have a 30-day runtime limit.
+- Download security status is surfaced by current APIs/CLI. Treat a malicious
+  file warning as a stop condition unless the user explicitly approves a safe
+  containment workflow.
 
-This skill includes detailed reference documentation:
+## Bundled Helpers
 
-### references/
+### Validate `dxapp.json`
 
-- **app-development.md** - Complete guide to building and deploying apps/applets
-- **data-operations.md** - File management, records, search, and project operations
-- **job-execution.md** - Running jobs, workflows, monitoring, and parallel processing
-- **python-sdk.md** - Comprehensive dxpy library reference with all classes and functions
-- **configuration.md** - dxapp.json specification and dependency management
+```bash
+uv run python "skills/dnanexus-integration/scripts/validate_dxapp.py" \
+  "path/to/dxapp.json" --kind app --strict
+```
 
-Load these references when you need detailed information about specific operations or when working on complex tasks.
+This offline validator catches structural mistakes, deprecated placement,
+broad access, and inconsistent regional requirements. It supplements, not
+replaces, `dx build` validation.
 
-## Getting Help
+### Inspect the installed SDK
 
-- Official documentation: https://documentation.dnanexus.com/
-- API reference: http://autodoc.dnanexus.com/
-- GitHub repository: https://github.com/dnanexus/dx-toolkit
-- Support: support@dnanexus.com
+```bash
+uv run --with "dxpy==0.410.0" \
+  "skills/dnanexus-integration/scripts/inspect_dxpy.py" --strict
+```
 
+This performs offline symbol and signature checks. It does not authenticate or
+make network calls.
+
+## Reference Index
+
+- `references/authentication.md` — login, tokens, environment precedence, and
+  secret handling
+- `references/app-development.md` — applet/app lifecycle, entry points,
+  testing, build, and publication
+- `references/configuration.md` — current `dxapp.json`, regions, resources,
+  dependencies, permissions, and retry policy
+- `references/data-operations.md` — transfers, search, metadata, cloning,
+  archival, folders, and deletion
+- `references/python-sdk.md` — verified `dxpy` APIs and error handling
+- `references/job-execution.md` — jobs, analyses, monitoring, chaining, reuse,
+  retries, and cost controls
+- `references/workflow-languages.md` — native workflows, WDL/CWL with
+  dxCompiler, and Nextflow
+- `references/operations-and-troubleshooting.md` — operational playbooks and
+  failure diagnosis
+- `references/sources.md` — authoritative documentation and version baseline

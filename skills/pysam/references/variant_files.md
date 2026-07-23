@@ -1,365 +1,396 @@
-# Working with Variant Files (VCF/BCF)
+# Variant Files: VCF and BCF
 
-## Overview
+This reference targets pysam 0.24.0. Numeric pysam coordinates are 0-based,
+half-open even though VCF text uses a 1-based `POS`.
 
-Pysam provides the `VariantFile` class for reading and writing VCF (Variant Call Format) and BCF (binary VCF) files. These files contain information about genetic variants, including SNPs, indels, and structural variants.
+## Open and Iterate
 
-## Opening Variant Files
+`VariantFile` auto-detects VCF, BGZF-compressed VCF, and BCF input:
 
 ```python
 import pysam
 
-# Reading VCF
-vcf = pysam.VariantFile("example.vcf")
-
-# Reading BCF (binary, compressed)
-bcf = pysam.VariantFile("example.bcf")
-
-# Reading compressed VCF
-vcf_gz = pysam.VariantFile("example.vcf.gz")
-
-# Writing
-outvcf = pysam.VariantFile("output.vcf", "w", header=vcf.header)
+with pysam.VariantFile("cohort.vcf.gz", threads=4) as variants:
+    for record in variants:
+        print(record.contig, record.pos, record.ref, record.alts)
 ```
 
-## VariantFile Properties
+Common modes:
 
-**Header Information:**
-- `header` - Complete VCF header with metadata
-- `header.contigs` - Dictionary of contigs/chromosomes
-- `header.samples` - List of sample names
-- `header.filters` - Dictionary of FILTER definitions
-- `header.info` - Dictionary of INFO field definitions
-- `header.formats` - Dictionary of FORMAT field definitions
+- `r`: VCF input
+- `rb`: BCF input; input auto-detection usually makes an explicit mode
+  unnecessary
+- `w`: VCF output; a `.vcf.gz` suffix selects BGZF-compressed VCF
+- `wb`: compressed BCF output
+- `wbu` / `wb0`: uncompressed BCF output
+
+Writing requires a `VariantHeader`.
+
+Useful constructor options:
+
+- `index_filename=` for a nonstandard or remote index
+- `drop_samples=True` to skip sample data
+- `threads=` for compression/decompression
+- `ignore_truncation=True` for missing BGZF EOF markers; not compatible with
+  `threads > 1`
+
+## Coordinates and Region Queries
 
 ```python
-vcf = pysam.VariantFile("example.vcf")
+with pysam.VariantFile("cohort.vcf.gz") as variants:
+    # Numeric coordinates: [999_999, 2_000_000)
+    numeric = variants.fetch("chr1", 999_999, 2_000_000)
 
-# List samples
-print(f"Samples: {list(vcf.header.samples)}")
-
-# List contigs
-for contig in vcf.header.contigs:
-    print(f"{contig}: length={vcf.header.contigs[contig].length}")
-
-# List INFO fields
-for info in vcf.header.info:
-    print(f"{info}: {vcf.header.info[info].description}")
+    # Region string: 1-based inclusive
+    text = variants.fetch(region="chr1:1000000-2000000")
 ```
 
-## Reading Variant Records
+`VariantFile.fetch()` explicitly defines numeric `start`/`stop` as 0-based,
+half-open. Region strings follow samtools notation.
 
-### Iterate All Variants
+For each `VariantRecord`:
+
+- `contig` / `chrom`: contig name
+- `pos`: 1-based VCF position
+- `start`: 0-based inclusive position
+- `stop`: 0-based exclusive record end
+- `rlen`: reference span
+
+Do not subtract one from a numeric `start` passed to `fetch()`. Use
+`record.start` when integrating with BAM, BED, or FASTA APIs.
+
+Random access requires:
+
+- BGZF VCF: `.tbi` or `.csi`
+- BCF: `.csi`
+
+An unindexed VCF.gz or BCF can still be read sequentially with normal
+iteration. `fetch()` with no region is index-driven; use `for record in
+variants` for a true sequential pass.
+
+For simultaneous iterators, `VariantFile.fetch()` uses `reopen=True`:
 
 ```python
-for variant in vcf:
-    print(f"{variant.chrom}:{variant.pos} {variant.ref}>{variant.alts}")
+first = variants.fetch("chr1", reopen=True)
+second = variants.fetch("chr2", reopen=True)
 ```
 
-### Fetch Specific Region
-
-Requires tabix index (.tbi) for VCF.gz or index for BCF:
+## Header Model
 
 ```python
-# Fetch variants in region (1-based coordinates for region string)
-for variant in vcf.fetch("chr1", 1000000, 2000000):
-    print(f"{variant.chrom}:{variant.pos} {variant.id}")
+with pysam.VariantFile("cohort.vcf.gz") as variants:
+    header = variants.header
+    print(list(header.samples))
 
-# Using region string (1-based)
-for variant in vcf.fetch("chr1:1000000-2000000"):
-    print(variant.pos)
+    for name, contig in header.contigs.items():
+        print(name, contig.length)
+
+    for name, field in header.info.items():
+        print(name, field.number, field.type, field.description)
 ```
 
-**Note:** Uses **1-based coordinates** in `fetch()` calls to match VCF specification.
+Important collections:
 
-## VariantRecord Objects
+- `header.contigs`
+- `header.samples`
+- `header.filters`
+- `header.info`
+- `header.formats`
+- `header.records`
 
-Each variant is represented as a `VariantRecord` object:
+INFO and FORMAT values can only be interpreted safely when their definitions
+exist in the header. Do not infer missing Number/Type metadata.
 
-### Position Information
-- `chrom` - Chromosome/contig name
-- `pos` - Position (1-based)
-- `start` - Start position (0-based)
-- `stop` - Stop position (0-based, exclusive)
-- `id` - Variant ID (e.g., rsID)
-
-### Allele Information
-- `ref` - Reference allele
-- `alts` - Tuple of alternate alleles
-- `alleles` - Tuple of all alleles (ref + alts)
-
-### Quality and Filtering
-- `qual` - Quality score (QUAL field)
-- `filter` - Filter status
-
-### INFO Fields
-
-Access INFO fields as dictionary:
+## Record Fields
 
 ```python
-for variant in vcf:
-    # Check if field exists
-    if "DP" in variant.info:
-        depth = variant.info["DP"]
-        print(f"Depth: {depth}")
-
-    # Get all INFO keys
-    print(f"INFO fields: {variant.info.keys()}")
-
-    # Access specific fields
-    if "AF" in variant.info:
-        allele_freq = variant.info["AF"]
-        print(f"Allele frequency: {allele_freq}")
+for record in variants:
+    alleles = record.alleles       # (REF, ALT1, ALT2, ...)
+    alt_alleles = record.alts      # tuple or None
+    identifier = record.id         # string or None
+    quality = record.qual          # float or None
+    filters = tuple(record.filter.keys())
 ```
 
-### Sample Genotype Data
+`record.alleles_variant_types` classifies alleles with values such as `REF`,
+`SNP`, `MNP`, `INDEL`, `BND`, `OVERLAP`, and `OTHER`.
 
-Access sample data through `samples` dictionary:
+Handle non-simple alleles:
+
+- multiallelic records can have several ALT alleles
+- symbolic alleles include `<DEL>`, `<DUP>`, `<INS>`, and others
+- breakends use bracket notation
+- spanning deletion uses `*`
+- gVCF records often use `<NON_REF>` or `<*>`
+
+Do not apply single-nucleotide logic to every record.
+
+## INFO Fields
 
 ```python
-for variant in vcf:
-    for sample_name in variant.samples:
-        sample = variant.samples[sample_name]
-
-        # Genotype (GT field)
-        gt = sample["GT"]
-        print(f"{sample_name} genotype: {gt}")
-
-        # Other FORMAT fields
-        if "DP" in sample:
-            print(f"{sample_name} depth: {sample['DP']}")
-        if "GQ" in sample:
-            print(f"{sample_name} quality: {sample['GQ']}")
-
-        # Alleles for this genotype
-        alleles = sample.alleles
-        print(f"{sample_name} alleles: {alleles}")
-
-        # Phasing
-        if sample.phased:
-            print(f"{sample_name} is phased")
+for record in variants:
+    depth = record.info.get("DP")
+    frequencies = record.info.get("AF")
+    if frequencies is not None:
+        for allele_index, frequency in enumerate(frequencies, start=1):
+            alt = record.alleles[allele_index]
+            print(alt, frequency)
 ```
 
-**Genotype representation:**
-- `(0, 0)` - Homozygous reference
-- `(0, 1)` - Heterozygous
-- `(1, 1)` - Homozygous alternate
-- `(None, None)` - Missing genotype
-- Phased: `(0|1)` vs unphased: `(0/1)`
+Number semantics matter:
 
-## Writing Variant Files
+- `1`: one value
+- `A`: one value per ALT allele
+- `R`: one value per REF+ALT allele
+- `G`: one value per genotype
+- `.`: variable number
 
-### Creating Header
+Flag fields are represented as booleans. Missing values may be `None`, a tuple
+containing `None`, or absent from the mapping depending on the field.
+
+## FILTER Semantics
+
+```python
+filters = tuple(record.filter.keys())
+
+if "PASS" in filters:
+    status = "pass"
+elif not filters:
+    status = "unfiltered"  # VCF '.'
+else:
+    status = "failed"
+```
+
+`PASS`, an empty filter set (`.`), and a failed filter are distinct states. Do
+not treat `.` as equivalent to `PASS` without an explicit policy.
+
+## Sample and Genotype Data
+
+```python
+for sample_name, call in record.samples.items():
+    genotype = call.get("GT")
+    depth = call.get("DP")
+    genotype_quality = call.get("GQ")
+    phased = call.phased
+    allele_strings = call.alleles
+```
+
+Genotype allele integers index `record.alleles`:
+
+- `0`: REF
+- `1`: first ALT
+- `2`: second ALT
+- `None`: missing allele
+
+Do not assume diploidy:
+
+```python
+def called_alleles(genotype):
+    if genotype is None:
+        return ()
+    return tuple(allele for allele in genotype if allele is not None)
+
+
+called = called_alleles(record.samples["sample_A"].get("GT"))
+alternate_count = sum(allele > 0 for allele in called)
+```
+
+`call.phased` records separator semantics but the Python GT remains a tuple.
+
+## Efficient Sample Subsetting
+
+Call `subset_samples()` before retrieving any record:
+
+```python
+samples = ["sample_A", "sample_B"]
+
+with pysam.VariantFile("cohort.bcf") as source:
+    source.subset_samples(samples)
+    output_header = source.header.copy()
+
+    with pysam.VariantFile(
+        "subset.bcf", "wb", header=output_header, threads=4
+    ) as destination:
+        for record in source:
+            destination.write(record)
+```
+
+This reduces decoding and memory. Do not copy a header, clear its sample
+collection, and manually reconstruct records; that approach is error-prone.
+Validate that every requested sample is present before subsetting.
+
+## Writing Unchanged Records
+
+When the destination uses the input header:
+
+```python
+with pysam.VariantFile("input.vcf.gz") as source, pysam.VariantFile(
+    "passing.vcf.gz",
+    "w",
+    header=source.header,
+    threads=4,
+) as destination:
+    for record in source:
+        if "PASS" in record.filter:
+            destination.write(record)
+```
+
+Write to a new file. Reopen and validate it before replacing any source.
+
+## Safely Add Header Fields
+
+Records are tied to their originating header. When the destination header is
+changed, copy and translate records:
+
+```python
+with pysam.VariantFile("input.vcf.gz") as source:
+    output_header = source.header.copy()
+    output_header.info.add(
+        "BAM_DP",
+        number=1,
+        type="Integer",
+        description="Aligned base depth from the selected BAM and filters",
+    )
+
+    with pysam.VariantFile(
+        "annotated.vcf.gz", "w", header=output_header
+    ) as destination:
+        for input_record in source:
+            record = input_record.copy()
+            record.translate(output_header)
+            record.info["BAM_DP"] = 27
+            destination.write(record)
+```
+
+Declare INFO, FORMAT, FILTER, and contig metadata before assigning values. Use
+distinct field names when the new value has semantics different from an
+existing field.
+
+## Construct New Records
 
 ```python
 header = pysam.VariantHeader()
+header.add_meta("fileformat", value="VCFv4.5")
+header.contigs.add("chr1", length=248_956_422)
+header.info.add(
+    "DP",
+    number=1,
+    type="Integer",
+    description="Total depth",
+)
+header.formats.add(
+    "GT",
+    number=1,
+    type="String",
+    description="Genotype",
+)
+header.add_sample("sample_A")
 
-# Add contigs
-header.contigs.add("chr1", length=248956422)
-header.contigs.add("chr2", length=242193529)
-
-# Add INFO fields
-header.add_line('##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">')
-header.add_line('##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">')
-
-# Add FORMAT fields
-header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
-header.add_line('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read Depth">')
-
-# Add samples
-header.add_sample("sample1")
-header.add_sample("sample2")
-
-# Create output file
-outvcf = pysam.VariantFile("output.vcf", "w", header=header)
-```
-
-### Creating Variant Records
-
-```python
-# Create new variant
-record = outvcf.new_record()
-record.chrom = "chr1"
-record.pos = 100000
-record.id = "rs123456"
-record.ref = "A"
-record.alts = ("G",)
-record.qual = 30
-record.filter.add("PASS")
-
-# Set INFO fields
-record.info["DP"] = 100
-record.info["AF"] = (0.25,)
-
-# Set genotype data
-record.samples["sample1"]["GT"] = (0, 1)
-record.samples["sample1"]["DP"] = 50
-record.samples["sample2"]["GT"] = (0, 0)
-record.samples["sample2"]["DP"] = 50
-
-# Write to file
-outvcf.write(record)
-```
-
-## Filtering Variants
-
-### Basic Filtering
-
-```python
-# Filter by quality
-for variant in vcf:
-    if variant.qual >= 30:
-        print(f"High quality variant: {variant.chrom}:{variant.pos}")
-
-# Filter by depth
-for variant in vcf:
-    if "DP" in variant.info and variant.info["DP"] >= 20:
-        print(f"High depth variant: {variant.chrom}:{variant.pos}")
-
-# Filter by allele frequency
-for variant in vcf:
-    if "AF" in variant.info:
-        for af in variant.info["AF"]:
-            if af >= 0.01:
-                print(f"Common variant: {variant.chrom}:{variant.pos}")
-```
-
-### Filtering by Genotype
-
-```python
-# Find variants where sample has alternate allele
-for variant in vcf:
-    sample = variant.samples["sample1"]
-    gt = sample["GT"]
-
-    # Check if has alternate allele
-    if gt and any(allele and allele > 0 for allele in gt):
-        print(f"Sample has alt allele: {variant.chrom}:{variant.pos}")
-
-    # Check if homozygous alternate
-    if gt == (1, 1):
-        print(f"Homozygous alt: {variant.chrom}:{variant.pos}")
-```
-
-### Filter Field
-
-```python
-# Check FILTER status
-for variant in vcf:
-    if "PASS" in variant.filter or len(variant.filter) == 0:
-        print(f"Passed filters: {variant.chrom}:{variant.pos}")
-    else:
-        print(f"Failed: {variant.filter.keys()}")
-```
-
-## Indexing VCF Files
-
-Create tabix index for compressed VCF:
-
-```python
-# Compress and index
-pysam.tabix_index("example.vcf", preset="vcf", force=True)
-# Creates example.vcf.gz and example.vcf.gz.tbi
-```
-
-Or use bcftools for BCF:
-
-```python
-pysam.bcftools.index("example.bcf")
-```
-
-## Common Workflows
-
-### Extract Variants for Specific Samples
-
-```python
-invcf = pysam.VariantFile("input.vcf")
-samples_to_keep = ["sample1", "sample3"]
-
-# Create new header with subset of samples
-new_header = invcf.header.copy()
-new_header.samples.clear()
-for sample in samples_to_keep:
-    new_header.samples.add(sample)
-
-outvcf = pysam.VariantFile("output.vcf", "w", header=new_header)
-
-for variant in invcf:
-    # Create new record
-    new_record = outvcf.new_record(
-        contig=variant.chrom,
-        start=variant.start,
-        stop=variant.stop,
-        alleles=variant.alleles,
-        id=variant.id,
-        qual=variant.qual,
-        filter=variant.filter,
-        info=variant.info
+with pysam.VariantFile("new.vcf.gz", "w", header=header) as output:
+    record = output.header.new_record(
+        contig="chr1",
+        start=99_999,
+        stop=100_000,
+        alleles=("A", "G"),
+        id="example",
+        qual=60,
     )
-
-    # Copy genotype data for selected samples
-    for sample in samples_to_keep:
-        new_record.samples[sample].update(variant.samples[sample])
-
-    outvcf.write(new_record)
+    record.filter.add("PASS")
+    record.info["DP"] = 40
+    record.samples["sample_A"]["GT"] = (0, 1)
+    output.write(record)
 ```
 
-### Calculate Allele Frequencies
+`start`/`stop` here are numeric Python coordinates. `start=99_999` writes VCF
+`POS=100000`.
+
+## Filtering Patterns
+
+Make missing-value policy explicit:
 
 ```python
-vcf = pysam.VariantFile("example.vcf")
-
-for variant in vcf:
-    total_alleles = 0
-    alt_alleles = 0
-
-    for sample_name in variant.samples:
-        gt = variant.samples[sample_name]["GT"]
-        if gt and None not in gt:
-            total_alleles += 2
-            alt_alleles += sum(1 for allele in gt if allele > 0)
-
-    if total_alleles > 0:
-        af = alt_alleles / total_alleles
-        print(f"{variant.chrom}:{variant.pos} AF={af:.4f}")
+def passes(record, *, min_qual=30.0, min_dp=10) -> bool:
+    if record.qual is None or record.qual < min_qual:
+        return False
+    depth = record.info.get("DP")
+    if depth is None or depth < min_dp:
+        return False
+    return "PASS" in record.filter
 ```
 
-### Convert VCF to Summary Table
+For ALT-frequency filtering:
 
 ```python
-import csv
-
-vcf = pysam.VariantFile("example.vcf")
-
-with open("variants.csv", "w", newline="") as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "DP"])
-
-    for variant in vcf:
-        writer.writerow([
-            variant.chrom,
-            variant.pos,
-            variant.id or ".",
-            variant.ref,
-            ",".join(variant.alts) if variant.alts else ".",
-            variant.qual or ".",
-            variant.info.get("DP", ".")
-        ])
+frequencies = record.info.get("AF")
+keep = (
+    frequencies is not None
+    and any(value is not None and value >= 0.01 for value in frequencies)
+)
 ```
 
-## Performance Tips
+For genotype predicates, ignore missing alleles and preserve ploidy:
 
-1. **Use BCF format** for better compression and faster access than VCF
-2. **Index files** with tabix for efficient region queries
-3. **Filter early** to reduce processing of irrelevant variants
-4. **Use INFO fields efficiently** - check existence before accessing
-5. **Batch write operations** when creating VCF files
+```python
+gt = record.samples["sample_A"].get("GT")
+has_alt = gt is not None and any(
+    allele is not None and allele > 0 for allele in gt
+)
+```
 
-## Common Pitfalls
+## Compression and Indexing
 
-1. **Coordinate systems:** VCF uses 1-based coordinates, but VariantRecord.start is 0-based
-2. **Missing data:** Always check if INFO/FORMAT fields exist before accessing
-3. **Genotype tuples:** Genotypes are tuples, not lists—handle None values for missing data
-4. **Allele indexing:** In genotype (0, 1), 0=REF, 1=first ALT, 2=second ALT, etc.
-5. **Index requirement:** Region-based `fetch()` requires tabix index for VCF.gz
-6. **Header modification:** When subsetting samples, properly update header and copy FORMAT fields
+Plain VCF must be coordinate sorted before compression/indexing:
+
+```python
+import pysam
+
+pysam.tabix_compress("sorted.vcf", "sorted.vcf.gz")
+pysam.tabix_index("sorted.vcf.gz", preset="vcf")
+```
+
+The last call creates TBI. To choose CSI instead, compress first and then use
+bcftools indexing:
+
+```python
+import pysam.bcftools
+
+pysam.bcftools.index("--csi", "sorted.vcf.gz", catch_stdout=False)
+```
+
+Do not use ordinary gzip for a random-access VCF. BGZF permits blocked random
+access.
+
+`tabix_index()` can automatically compress an uncompressed input and delete
+the original unless `keep_original=True`; the explicit two-step pattern above
+is safer. Do not use `force=True` unless overwrite is intended.
+
+For BCF:
+
+```python
+pysam.bcftools.index("--csi", "cohort.bcf", catch_stdout=False)
+```
+
+Use CSI when contigs may exceed the legacy TBI coordinate limit. Read
+`coordinates_and_indexing.md` for index selection.
+
+## Header Translation Across Inputs
+
+Do not merge VCFs by grouping Python records and appending sample calls. Inputs
+can differ in contig order, INFO/FORMAT definitions, normalization, and allele
+representation. Prefer `bcftools merge`, `bcftools concat`, or a dedicated
+variant-merging tool after normalization and header reconciliation.
+
+`record.translate(destination_header)` remaps header dictionaries but does not
+normalize alleles, split multiallelic records, or resolve conflicting metadata.
+
+## Validation Checklist
+
+- Reopen the written file with `VariantFile`.
+- Confirm contig order and sample order.
+- Confirm each assigned INFO/FORMAT/FILTER field is declared with correct
+  Number and Type.
+- Check missing, haploid, polyploid, multiallelic, symbolic, and filtered
+  records.
+- Index the final coordinate-sorted output and fetch known edge intervals.
+- Use bcftools validation/normalization commands when format-level guarantees
+  are required.

@@ -1,429 +1,274 @@
-# Resource Configuration
+# Task Resource Configuration
 
-## Overview
-Latch SDK provides flexible resource configuration for workflow tasks, enabling efficient execution on appropriate compute infrastructure including CPU, GPU, and memory-optimized instances.
+This reference targets `latch==2.76.8`. Resource shapes are operational
+configuration and can change independently of examples. Inspect the installed
+SDK before making cost or capacity guarantees.
 
-## Task Resource Decorators
+## Selection Strategy
 
-### Standard Decorators
+1. Start with the smallest named decorator that can run the task.
+2. Measure CPU, peak RSS, temporary storage, wall time, and GPU utilization.
+3. Move to a larger named decorator only when evidence justifies it.
+4. Use `custom_task` for CPU-only shapes not represented by a named decorator.
+5. Use a named GPU decorator; `custom_task` does not accept `gpu` or
+   `gpu_type` arguments.
+6. Re-measure with representative scientific data before release.
 
-The SDK provides pre-configured task decorators for common resource requirements:
+## Named CPU Decorators
 
-#### @small_task
-Default configuration for lightweight tasks:
 ```python
-from latch import small_task
+from latch.resources.tasks import large_task, medium_task, small_task
+
 
 @small_task
-def lightweight_processing():
-    """Minimal resource requirements"""
-    pass
-```
+def parse_manifest():
+    ...
 
-**Use cases:**
-- File parsing and manipulation
-- Simple data transformations
-- Quick QC checks
-- Metadata operations
 
-#### @large_task
-Increased CPU and memory for intensive computations:
-```python
-from latch import large_task
+@medium_task
+def align_reads():
+    ...
+
 
 @large_task
-def intensive_computation():
-    """Higher CPU and memory allocation"""
-    pass
+def assemble_genome():
+    ...
 ```
 
-**Use cases:**
-- Large file processing
-- Complex statistical analyses
-- Assembly tasks
-- Multi-threaded operations
+SDK 2.76.8 configures these scheduler requests:
 
-#### @small_gpu_task
-GPU-enabled with minimal resources:
+| Decorator | CPU | RAM | Ephemeral storage |
+|---|---:|---:|---:|
+| `small_task` | 2 | 4 GiB | 100 GiB |
+| `medium_task` | 30 | 100 GiB | 1500 GiB |
+| `large_task` | 90 | 170 GiB | 4500 GiB |
+
+The public guide may display nominal instance capacities rather than the
+schedulable requests encoded in the package. The installed package determines
+what registration serializes.
+
+## Named GPU Decorators
+
+Generic GPU shapes:
+
 ```python
-from latch import small_gpu_task
-
-@small_gpu_task
-def gpu_inference():
-    """GPU-enabled task with basic resources"""
-    pass
+from latch.resources.tasks import large_gpu_task, small_gpu_task
 ```
 
-**Use cases:**
-- Neural network inference
-- Small-scale ML predictions
-- GPU-accelerated libraries
+| Decorator | CPU | RAM | GPU |
+|---|---:|---:|---|
+| `small_gpu_task` | 7 | 30 GiB | 1× T4-class |
+| `large_gpu_task` | 63 | 245 GiB | 1× A10G-class |
 
-#### @large_gpu_task
-GPU-enabled with maximum resources:
-```python
-from latch import large_gpu_task
-
-@large_gpu_task
-def gpu_training():
-    """GPU with maximum CPU and memory"""
-    pass
-```
-
-**Use cases:**
-- Deep learning model training
-- Protein structure prediction (AlphaFold)
-- Large-scale GPU computations
-
-### Custom Task Configuration
-
-For precise control, use the `@custom_task` decorator:
+V100 shapes:
 
 ```python
-from latch import custom_task
-from latch.resources.tasks import TaskResources
-
-@custom_task(
-    cpu=8,
-    memory=32,  # GB
-    storage_gib=100,
-    timeout=3600,  # seconds
+from latch.resources.tasks import (
+    v100_x1_task,
+    v100_x4_task,
+    v100_x8_task,
 )
-def custom_processing():
-    """Task with custom resource specifications"""
-    pass
 ```
 
-#### Custom Task Parameters
-
-- **cpu**: Number of CPU cores (integer)
-- **memory**: Memory in GB (integer)
-- **storage_gib**: Ephemeral storage in GiB (integer)
-- **timeout**: Maximum execution time in seconds (integer)
-- **gpu**: Number of GPUs (integer, 0 for CPU-only)
-- **gpu_type**: Specific GPU model (string, e.g., "nvidia-tesla-v100")
-
-### Advanced Custom Configuration
+L40S shapes:
 
 ```python
-from latch.resources.tasks import TaskResources
+from latch.resources.tasks import (
+    g6e_xlarge_task,
+    g6e_2xlarge_task,
+    g6e_4xlarge_task,
+    g6e_8xlarge_task,
+    g6e_12xlarge_task,
+    g6e_16xlarge_task,
+    g6e_24xlarge_task,
+    g6e_48xlarge_task,
+)
+```
 
-@custom_task(
-    cpu=16,
-    memory=64,
+Current L40S scheduler requests and limits:
+
+| Decorator | Request CPU | Request RAM | Limit CPU | Limit RAM | GPUs |
+|---|---:|---:|---:|---:|---:|
+| `g6e_xlarge_task` | 2 | 28 GiB | 4 | 32 GiB | 1 |
+| `g6e_2xlarge_task` | 6 | 57 GiB | 8 | 64 GiB | 1 |
+| `g6e_4xlarge_task` | 14 | 115 GiB | 16 | 128 GiB | 1 |
+| `g6e_8xlarge_task` | 30 | 230 GiB | 32 | 256 GiB | 1 |
+| `g6e_12xlarge_task` | 46 | 345 GiB | 48 | 384 GiB | 4 |
+| `g6e_16xlarge_task` | 62 | 460 GiB | 64 | 512 GiB | 1 |
+| `g6e_24xlarge_task` | 94 | 691 GiB | 96 | 768 GiB | 4 |
+| `g6e_48xlarge_task` | 190 | 1382 GiB | 192 | 1536 GiB | 8 |
+
+GPU availability, quotas, and platform mapping can change. Confirm in the
+current docs or with Latch support before promising a specific model to users.
+
+## Custom CPU, Memory, and Storage
+
+Exact stable signature:
+
+```python
+custom_task(
+    cpu,
+    memory,
+    *,
     storage_gib=500,
+    timeout=0,
+    **task_options,
+)
+```
+
+Example:
+
+```python
+from datetime import timedelta
+
+from latch import custom_task
+
+
+@custom_task(
+    cpu=12,
+    memory=48,
+    storage_gib=750,
+    timeout=timedelta(hours=6),
+    retries=1,
+)
+def call_variants():
+    ...
+```
+
+In SDK 2.76.8, `custom_task` accepts up to 126 CPU cores, 975 GiB RAM, and
+4949 GiB ephemeral storage. Not every arbitrary combination fits a schedulable
+node group; the decorator selects the smallest configured group that satisfies
+all three requests.
+
+`custom_memory_optimized_task` is deprecated. Use `custom_task`.
+
+## Dynamic Resources
+
+Each `cpu`, `memory`, or `storage_gib` argument may be a function of task
+inputs. The resource function's annotated parameters must exist in the task
+with exactly matching annotations.
+
+```python
+from latch import custom_task
+from latch.types import LatchFile
+
+
+def allocate_cpu(files: list[LatchFile]) -> int:
+    return min(32, max(2, len(files) * 2))
+
+
+def allocate_storage(files: list[LatchFile]) -> int:
+    sizes = [file.size() for file in files]
+    if any(size is None for size in sizes):
+        raise ValueError("unable to determine every input size")
+    total_bytes = sum(int(size) for size in sizes)
+    estimated_gib = total_bytes / (1024**3)
+    return max(100, int(estimated_gib * 2) + 1)
+
+
+@custom_task(
+    cpu=allocate_cpu,
+    memory=64,
+    storage_gib=allocate_storage,
+)
+def merge_files(files: list[LatchFile]) -> LatchFile:
+    ...
+```
+
+Dynamic functions execute at runtime before the task launches.
+
+Guardrails:
+
+- Return integers.
+- Bound every computed resource.
+- Include overhead for decompression and intermediate files.
+- Keep computation deterministic and fast.
+- Do not make network calls or retrieve secrets from resource functions.
+- Test the exact annotation matching during staging registration.
+
+## Cache, Retries, and Timeout
+
+Named decorators and non-dynamic `custom_task` accept Flyte task options:
+
+```python
+@medium_task(
+    cache=True,
+    cache_version="aligner-2.1-reference-v4",
+    retries=2,
     timeout=7200,
-    gpu=1,
-    gpu_type="nvidia-tesla-a100"
 )
-def alphafold_prediction():
-    """AlphaFold with A100 GPU and high memory"""
-    pass
+def align_reads():
+    ...
 ```
 
-## GPU Configuration
+- Cache deterministic outputs only.
+- Include tool, reference, and behavior changes in `cache_version`.
+- Use retries for transient infrastructure or network errors.
+- Do not retry deterministic invalid-input failures.
+- A timeout can be seconds or `datetime.timedelta`.
 
-### GPU Types
+## Temporary and Persistent Storage
 
-Available GPU options:
-- **nvidia-tesla-k80**: Basic GPU for testing
-- **nvidia-tesla-v100**: High-performance for training
-- **nvidia-tesla-a100**: Latest generation for maximum performance
+Ephemeral task storage is deleted with the task environment. Use it for:
 
-### Multi-GPU Tasks
+- Decompressed inputs
+- Tool work directories
+- Sort spills
+- Intermediate indexes
 
-```python
-from latch import custom_task
+Return a `LatchFile` or `LatchDir`, or upload through `LPath`, for persistent
+outputs. Never assume `/tmp` or `/root` survives task completion.
 
-@custom_task(
-    cpu=32,
-    memory=128,
-    gpu=4,
-    gpu_type="nvidia-tesla-v100"
-)
-def multi_gpu_training():
-    """Distributed training across multiple GPUs"""
-    pass
+Estimate storage from peak simultaneous intermediates, not final output size:
+
+```text
+requested storage
+  >= staged inputs
+   + decompressed expansion
+   + peak tool intermediates
+   + final outputs
+   + safety margin
 ```
 
-## Resource Selection Strategies
+## Cost and Launch Safety
 
-### By Computational Requirements
+- Surface the chosen resource class before registration or launch.
+- Obtain confirmation before starting large or GPU-backed executions.
+- Prefer a representative small launch plan for validation.
+- Parallelism multiplies cost; map width matters as much as per-task size.
+- Cache hits can reduce cost but are not a substitute for reproducible inputs.
+- Compare resource monitoring against scientific throughput, not utilization
+  alone.
 
-**Memory-Intensive Tasks:**
-```python
-@custom_task(cpu=4, memory=128)  # High memory, moderate CPU
-def genome_assembly():
-    pass
-```
+## Troubleshooting
 
-**CPU-Intensive Tasks:**
-```python
-@custom_task(cpu=64, memory=32)  # High CPU, moderate memory
-def parallel_alignment():
-    pass
-```
+### Out of memory
 
-**I/O-Intensive Tasks:**
-```python
-@custom_task(cpu=8, memory=16, storage_gib=1000)  # Large ephemeral storage
-def data_preprocessing():
-    pass
-```
+- Check peak RSS, not average memory.
+- Identify whether an algorithm scales with records, bases, or samples.
+- Increase memory only after ruling out unbounded accumulation.
 
-### By Workflow Phase
+### Out of storage
 
-**Quick Validation:**
-```python
-@small_task
-def validate_inputs():
-    """Fast input validation"""
-    pass
-```
+- Inspect hidden tool caches and decompressed inputs.
+- Clean intermediates within the task when safe.
+- Increase `storage_gib` based on peak use.
 
-**Main Computation:**
-```python
-@large_task
-def primary_analysis():
-    """Resource-intensive analysis"""
-    pass
-```
+### CPU under-utilization
 
-**Result Aggregation:**
-```python
-@small_task
-def aggregate_results():
-    """Lightweight result compilation"""
-    pass
-```
+- Confirm the scientific tool received its thread/process flag.
+- Avoid requesting more cores than the tool can use.
+- Check I/O and memory bandwidth before scaling CPU.
 
-## Workflow Resource Planning
+### GPU under-utilization
 
-### Complete Pipeline Example
+- Verify the tool was built with the expected CUDA support.
+- Check batch size, data loading, and CPU preprocessing.
+- Avoid multi-GPU shapes unless the application implements distributed work.
 
-```python
-from latch import workflow, small_task, large_task, large_gpu_task
-from latch.types import LatchFile
+## Official Sources
 
-@small_task
-def quality_control(fastq: LatchFile) -> LatchFile:
-    """QC doesn't need much resources"""
-    return qc_output
-
-@large_task
-def alignment(fastq: LatchFile) -> LatchFile:
-    """Alignment benefits from more CPU"""
-    return bam_output
-
-@large_gpu_task
-def variant_calling(bam: LatchFile) -> LatchFile:
-    """GPU-accelerated variant caller"""
-    return vcf_output
-
-@small_task
-def generate_report(vcf: LatchFile) -> LatchFile:
-    """Simple report generation"""
-    return report
-
-@workflow
-def genomics_pipeline(input_fastq: LatchFile) -> LatchFile:
-    """Resource-optimized genomics pipeline"""
-    qc = quality_control(fastq=input_fastq)
-    aligned = alignment(fastq=qc)
-    variants = variant_calling(bam=aligned)
-    return generate_report(vcf=variants)
-```
-
-## Timeout Configuration
-
-### Setting Timeouts
-
-```python
-from latch import custom_task
-
-@custom_task(
-    cpu=8,
-    memory=32,
-    timeout=10800  # 3 hours in seconds
-)
-def long_running_analysis():
-    """Analysis with extended timeout"""
-    pass
-```
-
-### Timeout Best Practices
-
-1. **Estimate conservatively**: Add buffer time beyond expected duration
-2. **Monitor actual runtimes**: Adjust based on real execution data
-3. **Default timeout**: Most tasks have 1-hour default
-4. **Maximum timeout**: Check platform limits for very long jobs
-
-## Storage Configuration
-
-### Ephemeral Storage
-
-Configure temporary storage for intermediate files:
-
-```python
-@custom_task(
-    cpu=8,
-    memory=32,
-    storage_gib=500  # 500 GB temporary storage
-)
-def process_large_dataset():
-    """Task with large intermediate files"""
-    # Ephemeral storage available at /tmp
-    temp_file = "/tmp/intermediate_data.bam"
-    pass
-```
-
-### Storage Guidelines
-
-- Default storage is typically sufficient for most tasks
-- Specify larger storage for tasks with large intermediate files
-- Ephemeral storage is cleared after task completion
-- Use LatchDir for persistent storage needs
-
-## Cost Optimization
-
-### Resource Efficiency Tips
-
-1. **Right-size resources**: Don't over-allocate
-2. **Use appropriate decorators**: Start with standard decorators
-3. **GPU only when needed**: GPU tasks cost more
-4. **Parallel small tasks**: Better than one large task
-5. **Monitor usage**: Review actual resource utilization
-
-### Example: Cost-Effective Design
-
-```python
-# INEFFICIENT: All tasks use large resources
-@large_task
-def validate_input():  # Over-provisioned
-    pass
-
-@large_task
-def simple_transformation():  # Over-provisioned
-    pass
-
-# EFFICIENT: Right-sized resources
-@small_task
-def validate_input():  # Appropriate
-    pass
-
-@small_task
-def simple_transformation():  # Appropriate
-    pass
-
-@large_task
-def intensive_analysis():  # Appropriate
-    pass
-```
-
-## Monitoring and Debugging
-
-### Resource Usage Monitoring
-
-During workflow execution, monitor:
-- CPU utilization
-- Memory usage
-- GPU utilization (if applicable)
-- Execution duration
-- Storage consumption
-
-### Common Resource Issues
-
-**Out of Memory (OOM):**
-```python
-# Solution: Increase memory allocation
-@custom_task(cpu=8, memory=64)  # Increased from 32 to 64 GB
-def memory_intensive_task():
-    pass
-```
-
-**Timeout:**
-```python
-# Solution: Increase timeout
-@custom_task(cpu=8, memory=32, timeout=14400)  # 4 hours
-def long_task():
-    pass
-```
-
-**Insufficient Storage:**
-```python
-# Solution: Increase ephemeral storage
-@custom_task(cpu=8, memory=32, storage_gib=1000)
-def large_intermediate_files():
-    pass
-```
-
-## Conditional Resources
-
-Dynamically allocate resources based on input:
-
-```python
-from latch import workflow, custom_task
-from latch.types import LatchFile
-
-def get_resource_config(file_size_gb: float):
-    """Determine resources based on file size"""
-    if file_size_gb < 10:
-        return {"cpu": 4, "memory": 16}
-    elif file_size_gb < 100:
-        return {"cpu": 16, "memory": 64}
-    else:
-        return {"cpu": 32, "memory": 128}
-
-# Note: Resource decorators must be static
-# Use multiple task variants for different sizes
-@custom_task(cpu=4, memory=16)
-def process_small(file: LatchFile) -> LatchFile:
-    pass
-
-@custom_task(cpu=16, memory=64)
-def process_medium(file: LatchFile) -> LatchFile:
-    pass
-
-@custom_task(cpu=32, memory=128)
-def process_large(file: LatchFile) -> LatchFile:
-    pass
-```
-
-## Best Practices Summary
-
-1. **Start small**: Begin with standard decorators, scale up if needed
-2. **Profile first**: Run test executions to determine actual needs
-3. **GPU sparingly**: Only use GPU when algorithms support it
-4. **Parallel design**: Break into smaller tasks when possible
-5. **Monitor and adjust**: Review execution metrics and optimize
-6. **Document requirements**: Comment why specific resources are needed
-7. **Test locally**: Use Docker locally to validate before registration
-8. **Consider cost**: Balance performance with cost efficiency
-
-## Platform-Specific Considerations
-
-### Available Resources
-
-Latch platform provides:
-- CPU instances: Up to 96 cores
-- Memory: Up to 768 GB
-- GPUs: K80, V100, A100 variants
-- Storage: Configurable ephemeral storage
-
-### Resource Limits
-
-Check current platform limits:
-- Maximum CPUs per task
-- Maximum memory per task
-- Maximum GPU allocation
-- Maximum concurrent tasks
-
-### Quotas and Limits
-
-Be aware of workspace quotas:
-- Total concurrent executions
-- Total resource allocation
-- Storage limits
-- Execution time limits
-
-Contact Latch support for quota increases if needed.
+- Resource guide: https://wiki.latch.bio/workflows/sdk/python/defining-cloud-resources
+- Resource monitoring: https://wiki.latch.bio/workflows/sdk/console/resource-monitoring
+- Task source in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch/resources/tasks.py
+- Changelog in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/CHANGELOG.md

@@ -1,646 +1,432 @@
-# DNAnexus App Configuration and Dependencies
+# Current `dxapp.json` Configuration
 
-## Overview
+## What `dxapp.json` Controls
 
-This guide covers configuring apps through dxapp.json metadata and managing dependencies including system packages, Python libraries, and Docker containers.
+`dxapp.json` is the source manifest consumed by `dx build` and
+`dx build --create-app`. It describes:
 
-## dxapp.json Structure
+- App metadata and version
+- Input and output contracts
+- Entry-point interpreter and source file
+- Application Execution Environment (AEE)
+- Dependencies
+- Timeout and restart policies
+- Requested project, network, and developer permissions
+- Region-specific resources
 
-The `dxapp.json` file is the configuration file for DNAnexus apps and applets. It defines metadata, inputs, outputs, execution requirements, and dependencies.
+Do not confuse the source manifest with the canonical API payload produced by
+the build tool. For field constraints, the API methods `/applet/new`,
+`/app/new`, and the I/O and Run Specifications are authoritative.
 
-### Minimal Example
+## Applets Versus Apps
 
-```json
-{
-  "name": "my-app",
-  "title": "My Analysis App",
-  "summary": "Performs analysis on input files",
-  "dxapi": "1.0.0",
-  "version": "1.0.0",
-  "inputSpec": [],
-  "outputSpec": [],
-  "runSpec": {
-    "interpreter": "python3",
-    "file": "src/my-app.py",
-    "distribution": "Ubuntu",
-    "release": "24.04"
-  }
-}
-```
+| Requirement | Applet | App |
+|---|---|---|
+| `name` | Required | Required |
+| `runSpec` | Required | Required |
+| `version` | Optional | Required |
+| `inputSpec` | Recommended | Required |
+| `outputSpec` | Recommended | Required |
+| Region | Build project region | Declare supported regions |
+| Lifecycle | Project data object | Versioned, publishable executable |
 
-## Metadata Fields
+An applet without both input and output specifications cannot be added as a
+workflow stage.
 
-### Required Fields
+## Minimal Applet
 
-```json
-{
-  "name": "my-app",           // Unique identifier (lowercase, numbers, hyphens, underscores)
-  "title": "My App",          // Human-readable name
-  "summary": "One line description",
-  "dxapi": "1.0.0"           // API version
-}
-```
-
-### Optional Metadata
+This is valid JSON; comments are intentionally omitted.
 
 ```json
 {
-  "version": "1.0.0",        // Semantic version (required for apps)
-  "description": "Extended description...",
-  "developerNotes": "Implementation notes...",
-  "categories": [            // For app discovery
-    "Read Mapping",
-    "Variation Calling"
-  ],
-  "details": {               // Arbitrary metadata
-    "contactEmail": "dev@example.com",
-    "upstreamVersion": "2.1.0",
-    "citations": ["doi:10.1000/example"],
-    "changelog": {
-      "1.0.0": "Initial release"
-    }
-  }
-}
-```
-
-## Input Specification
-
-Define input parameters:
-
-```json
-{
+  "name": "qc-fastq",
   "inputSpec": [
     {
       "name": "reads",
-      "label": "Input reads",
       "class": "file",
       "patterns": ["*.fastq", "*.fastq.gz"],
-      "optional": false,
-      "help": "FASTQ file containing sequencing reads"
-    },
-    {
-      "name": "quality_threshold",
-      "label": "Quality threshold",
-      "class": "int",
-      "default": 30,
-      "optional": true,
-      "help": "Minimum base quality score"
-    },
-    {
-      "name": "reference",
-      "label": "Reference genome",
-      "class": "file",
-      "patterns": ["*.fa", "*.fasta"],
-      "suggestions": [
-        {
-          "name": "Human GRCh38",
-          "project": "project-xxxx",
-          "path": "/references/human_g1k_v37.fasta"
-        }
-      ]
+      "help": "Input FASTQ file"
     }
-  ]
+  ],
+  "outputSpec": [
+    {
+      "name": "report",
+      "class": "file",
+      "patterns": ["*.html"]
+    }
+  ],
+  "runSpec": {
+    "interpreter": "python3",
+    "file": "src/qc_fastq.py",
+    "distribution": "Ubuntu",
+    "release": "24.04",
+    "version": "0"
+  }
 }
 ```
 
-### Input Classes
+The `dxapi` field is optional; it is not a required manifest field.
 
-- `file` - File object
-- `record` - Record object
-- `applet` - Applet reference
-- `string` - Text string
-- `int` - Integer number
-- `float` - Floating point number
-- `boolean` - True/false
-- `hash` - Key-value mapping
-- `array:class` - Array of specified class
+## Production App Skeleton
 
-### Input Options
-
-- `name` - Parameter name (required)
-- `class` - Data type (required)
-- `optional` - Whether parameter is optional (default: false)
-- `default` - Default value for optional parameters
-- `label` - Display name in UI
-- `help` - Description text
-- `patterns` - File name patterns (for files)
-- `suggestions` - Pre-defined reference data
-- `choices` - Allowed values (for strings/numbers)
-- `group` - UI grouping
-
-## Output Specification
-
-Define output parameters:
+Replace the region and instance type with values available to the target
+project. Do not copy a static instance list from old documentation.
 
 ```json
 {
+  "name": "qc-fastq",
+  "title": "FASTQ quality control",
+  "summary": "Creates a quality-control report for one FASTQ file",
+  "version": "1.0.0",
+  "inputSpec": [
+    {
+      "name": "reads",
+      "label": "Reads",
+      "class": "file",
+      "patterns": ["*.fastq.gz"],
+      "help": "A gzip-compressed FASTQ file"
+    }
+  ],
   "outputSpec": [
     {
-      "name": "aligned_reads",
-      "label": "Aligned reads",
+      "name": "report",
+      "label": "QC report",
       "class": "file",
-      "patterns": ["*.bam"],
-      "help": "BAM file with aligned reads"
-    },
-    {
-      "name": "mapping_stats",
-      "label": "Mapping statistics",
-      "class": "record",
-      "help": "Record containing alignment statistics"
+      "patterns": ["*.html"]
     }
-  ]
+  ],
+  "runSpec": {
+    "interpreter": "python3",
+    "file": "src/qc_fastq.py",
+    "distribution": "Ubuntu",
+    "release": "24.04",
+    "version": "0",
+    "timeoutPolicy": {
+      "main": {"hours": 4}
+    },
+    "executionPolicy": {
+      "restartOn": {
+        "ExecutionError": 1,
+        "UnresponsiveWorker": 2,
+        "SpotInstanceInterruption": 2
+      },
+      "maxRestarts": 3
+    }
+  },
+  "access": {
+    "network": []
+  },
+  "regionalOptions": {
+    "aws:us-east-1": {
+      "systemRequirements": {
+        "main": {
+          "instanceType": "mem2_ssd1_v2_x4"
+        }
+      }
+    }
+  }
 }
 ```
 
-## Run Specification
+Run the bundled offline check before building:
 
-Define how the app executes:
+```bash
+uv run python "skills/dnanexus-integration/scripts/validate_dxapp.py" \
+  "path/to/dxapp.json" --kind app --strict
+```
+
+## Input and Output Specifications
+
+Common classes:
+
+- Primitives: `string`, `int`, `float`, `boolean`, `hash`
+- Data objects: `file`, `record`, `applet`
+- Arrays: `array:string`, `array:int`, `array:file`, and so on
+
+Every parameter needs a unique `name` and a `class`. Useful optional fields
+include:
+
+- `label`
+- `help`
+- `optional`
+- `default`
+- `choices`
+- `patterns`
+- `suggestions`
+- `group`
+
+Use `patterns` as a user-interface hint, not as a security or content
+validation boundary. Validate actual content in app code.
+
+Defaults must match the declared class. File and record defaults use DNAnexus
+links, not raw local paths.
+
+## `runSpec`
+
+For the source manifest, set:
 
 ```json
 {
   "runSpec": {
-    "interpreter": "python3",        // or "bash"
-    "file": "src/my-app.py",         // Entry point script
+    "interpreter": "python3",
+    "file": "src/main.py",
     "distribution": "Ubuntu",
     "release": "24.04",
-    "version": "0",                   // Distribution version
-    "execDepends": [                  // System packages
-      {"name": "samtools"},
-      {"name": "bwa"}
-    ],
-    "bundledDepends": [              // Bundled resources
-      {"name": "scripts.tar.gz", "id": {"$dnanexus_link": "file-xxxx"}}
-    ],
-    "assetDepends": [                // Asset dependencies
-      {"name": "asset-name", "id": {"$dnanexus_link": "record-xxxx"}}
-    ],
-    "systemRequirements": {
-      "*": {
-        "instanceType": "mem2_ssd1_v2_x4"
-      }
-    },
-    "headJobOnDemand": true,
-    "restartableEntryPoints": ["main"]
+    "version": "0"
   }
 }
 ```
 
-## System Requirements
+Supported combinations at the current baseline:
 
-### Instance Type Selection
+- Ubuntu 24.04, environment version `0`, `python3` or `bash`
+- Ubuntu 20.04, environment version `0`, `python3` or `bash`
 
-```json
-{
-  "systemRequirements": {
-    "main": {
-      "instanceType": "mem2_ssd1_v2_x8"
-    },
-    "process": {
-      "instanceType": "mem3_ssd1_v2_x16"
-    }
-  }
-}
+Prefer Ubuntu 24.04 for new development. Use 20.04 only for a tested
+compatibility requirement and plan migration.
+
+## Regional Resources
+
+### Current placement
+
+For new manifests, place resource requirements under:
+
+```text
+regionalOptions.<region>.systemRequirements.<entry-point>
 ```
 
-**Common instance types**:
-- `mem1_ssd1_v2_x2` - 2 cores, 3.9 GB RAM
-- `mem1_ssd1_v2_x4` - 4 cores, 7.8 GB RAM
-- `mem2_ssd1_v2_x4` - 4 cores, 15.6 GB RAM
-- `mem2_ssd1_v2_x8` - 8 cores, 31.2 GB RAM
-- `mem3_ssd1_v2_x8` - 8 cores, 62.5 GB RAM
-- `mem3_ssd1_v2_x16` - 16 cores, 125 GB RAM
+The older locations below are deprecated:
 
-### Cluster Specifications
+- `runSpec.systemRequirements`
+- top-level `resources`
 
-For distributed computing:
+They remain accepted for some single-region compatibility cases but should not
+be used in new apps.
 
-```json
-{
-  "systemRequirements": {
-    "main": {
-      "clusterSpec": {
-        "type": "spark",
-        "version": "3.1.2",
-        "initialInstanceCount": 3,
-        "instanceType": "mem1_ssd1_v2_x4",
-        "bootstrapScript": "bootstrap.sh"
-      }
-    }
-  }
-}
-```
+If one region declares `systemRequirements`, declare it for every region
+listed in `regionalOptions`. Region-bound asset and resource IDs must also be
+available in the corresponding region.
 
-## Regional Options
-
-Deploy apps across regions:
+### Fixed instance type
 
 ```json
 {
   "regionalOptions": {
     "aws:us-east-1": {
       "systemRequirements": {
-        "*": {"instanceType": "mem2_ssd1_v2_x4"}
-      },
-      "assetDepends": [
-        {"id": "record-xxxx"}
-      ]
-    },
-    "azure:westus": {
-      "systemRequirements": {
-        "*": {"instanceType": "azure:mem2_ssd1_x4"}
+        "main": {"instanceType": "mem2_ssd1_v2_x4"},
+        "process": {"instanceType": "mem3_ssd1_v2_x8"}
       }
     }
   }
 }
 ```
 
-## Dependency Management
+Available instance types differ by cloud and region. Retired types are rejected
+when an app or applet is created or updated.
 
-### System Packages (execDepends)
+### Dynamic instance selection
 
-Install Ubuntu packages at runtime:
-
-```json
-{
-  "runSpec": {
-    "execDepends": [
-      {"name": "samtools"},
-      {"name": "bwa"},
-      {"name": "python3-pip"},
-      {"name": "r-base", "version": "4.0.0"}
-    ]
-  }
-}
-```
-
-Packages are installed using `apt-get` from Ubuntu repositories.
-
-### Python Dependencies
-
-#### Option 1: Install via pip in execDepends
+Where licensed, provide an ordered fallback list:
 
 ```json
 {
-  "runSpec": {
-    "execDepends": [
-      {"name": "python3-pip"}
-    ]
-  }
-}
-```
-
-Then in your app script:
-```python
-import subprocess
-subprocess.check_call(["pip", "install", "numpy==1.24.0", "pandas==2.0.0"])
-```
-
-#### Option 2: Requirements file
-
-Create `resources/requirements.txt`:
-```
-numpy==1.24.0
-pandas==2.0.0
-scikit-learn==1.3.0
-```
-
-In your app:
-```python
-subprocess.check_call(["pip", "install", "-r", "requirements.txt"])
-```
-
-### Bundled Dependencies
-
-Include custom tools or libraries in the app:
-
-**File structure**:
-```
-my-app/
-├── dxapp.json
-├── src/
-│   └── my-app.py
-└── resources/
-    ├── tools/
-    │   └── custom_tool
-    └── scripts/
-        └── helper.py
-```
-
-Access resources in app:
-```python
-import os
-
-# Resources are in parent directory
-resources_dir = os.path.join(os.path.dirname(__file__), "..", "resources")
-tool_path = os.path.join(resources_dir, "tools", "custom_tool")
-
-# Run bundled tool
-subprocess.check_call([tool_path, "arg1", "arg2"])
-```
-
-### Asset Dependencies
-
-Assets are pre-built bundles of dependencies that can be shared across apps.
-
-#### Using Assets
-
-```json
-{
-  "runSpec": {
-    "assetDepends": [
-      {
-        "name": "bwa-asset",
-        "id": {"$dnanexus_link": "record-xxxx"}
+  "regionalOptions": {
+    "aws:us-east-1": {
+      "systemRequirements": {
+        "main": {
+          "instanceTypeSelector": {
+            "allowedInstanceTypes": [
+              "mem1_ssd1_v2_x4",
+              "mem1_ssd1_v2_x8",
+              "mem2_ssd1_v2_x4"
+            ]
+          }
+        }
       }
-    ]
+    }
   }
 }
 ```
 
-Assets are mounted at runtime and accessible via environment variable:
-```python
-import os
-asset_dir = os.environ.get("DX_ASSET_BWA")
-bwa_path = os.path.join(asset_dir, "bin", "bwa")
-```
+`instanceTypeSelector` is mutually exclusive with `instanceType` and
+`clusterSpec` for the same entry point. The platform initially gives each
+allowed type 10 minutes in list order. If none provisions, it repeats the list
+with doubled windows (20 minutes, then 40, and so on); normal-priority jobs
+apply the same sequence to on-demand fallback after Spot wait expires. The job
+description records attempts in `instanceTypeTransitions`.
 
-#### Creating Assets
+### Clusters
 
-Create asset directory:
-```bash
-mkdir bwa-asset
-cd bwa-asset
-# Install software
-./configure --prefix=$PWD/usr/local
-make && make install
-```
+Cluster requests use `clusterSpec` in an entry point's system requirements.
+Current cluster types are `dxspark`, `apachespark`, and `generic`. Spark
+versions and instance availability change; consult the live I/O and Run
+Specifications instead of hardcoding an old value.
 
-Build asset:
-```bash
-dx build_asset bwa-asset --destination=project-xxxx:/assets/
-```
+## Retry and Timeout Policy
 
-## Docker Integration
-
-### Using Docker Images
+Example:
 
 ```json
 {
   "runSpec": {
-    "interpreter": "python3",
-    "file": "src/my-app.py",
-    "distribution": "Ubuntu",
-    "release": "24.04",
-    "systemRequirements": {
-      "*": {
-        "instanceType": "mem2_ssd1_v2_x4"
-      }
+    "executionPolicy": {
+      "restartOn": {
+        "AppInsufficientResourceError": 2,
+        "ExecutionError": 1,
+        "JMInternalError": 1,
+        "UnresponsiveWorker": 2,
+        "SpotInstanceInterruption": 3,
+        "*": 0
+      },
+      "maxRestarts": 4
     },
-    "execDepends": [
-      {"name": "docker.io"}
-    ]
+    "timeoutPolicy": {
+      "main": {"hours": 12},
+      "process": {"hours": 2}
+    },
+    "restartableEntryPoints": "all"
   }
 }
 ```
 
-Use Docker in app:
-```python
-import subprocess
+Use retries only for failures that can plausibly recover. Retrying
+deterministic `AppError` or invalid input wastes money.
 
-# Pull Docker image
-subprocess.check_call(["docker", "pull", "biocontainers/samtools:v1.9"])
+`maxRestarts` is the total restart ceiling across failure reasons. It must be a
+non-negative integer below 10 and defaults to 9; set a smaller explicit bound
+for cost control.
 
-# Run command in container
-subprocess.check_call([
-    "docker", "run",
-    "-v", f"{os.getcwd()}:/data",
-    "biocontainers/samtools:v1.9",
-    "samtools", "view", "/data/input.bam"
-])
+Automatic upgrade after `AppInsufficientResourceError` requires:
+
+1. An applicable `restartOn` count.
+2. The organization policy that permits instance upgrade on restart.
+3. A larger instance in the same family.
+
+If dynamic selection was used initially, an insufficient-resource retry uses
+the platform's upgrade decision rather than the original selector list.
+
+Jobs normally have a 30-day maximum runtime. Set a shorter workload-specific
+timeout whenever possible.
+
+## Dependencies
+
+Choose the most reproducible workable option:
+
+1. **Bundled source/resources** for small, version-controlled files.
+2. **Asset bundles** for reusable system and Python environments.
+3. **Saved Docker image tarballs** stored as project data or assets.
+4. **`execDepends`** for simple APT dependencies when drift is acceptable.
+5. **Runtime downloads** only when unavoidable and integrity-checked.
+
+### Bundled resources
+
+Files under `resources/` are packaged by `dx build` and unpacked into the AEE.
+Do not bundle secrets, private keys, or mutable credentials.
+
+### `execDepends`
+
+Runtime package repositories can change between executions. Pin versions where
+the package manager supports it and do not rely on floating packages for
+regulated or production workloads.
+
+On Ubuntu 24.04 AEE, `PIP_BREAK_SYSTEM_PACKAGES=1` is set for compatibility,
+but PyPI packages can still conflict with APT-managed Python packages and cause
+`DXExecDependencyError`.
+
+Prefer a virtual environment:
+
+```bash
+python3 -m venv "/home/dnanexus/venv"
+source "/home/dnanexus/venv/bin/activate"
+python3 -m pip install --requirement "requirements.txt"
 ```
 
-### Docker as Base Image
+Pin the requirements and build them into an asset for repeated production use.
+For a Python command-line application, `pipx` can isolate the tool.
 
-For apps that run entirely in Docker:
+### Asset bundles
 
-```json
-{
-  "runSpec": {
-    "interpreter": "bash",
-    "file": "src/wrapper.sh",
-    "distribution": "Ubuntu",
-    "release": "24.04",
-    "execDepends": [
-      {"name": "docker.io"}
-    ]
-  }
-}
+Asset source layout:
+
+```text
+my-asset/
+├── dxasset.json
+├── Makefile
+└── resources/
 ```
+
+Build it in an isolated platform worker:
+
+```bash
+dx build_asset "my-asset"
+```
+
+Set the asset distribution and release to match the app. For multi-region apps,
+provide an asset available in each target region.
+
+### Docker images
+
+The Ubuntu 24.04 and 20.04 AEEs support the native Docker CLI. For production,
+prefer:
+
+1. Pin an image by immutable digest.
+2. `docker save` it to a tarball.
+3. Upload the tarball or include it in an asset.
+4. Use `docker load` in the app.
+
+This avoids a runtime registry dependency and can eliminate broad network
+access. If a private registry must be used, provide credentials as an explicit
+input or protected project object. Anyone with `VIEW` access to that project
+may be able to read those credentials, so use a narrowly scoped pull-only
+credential and confirm the project's membership.
 
 ## Access Requirements
 
-Request special permissions:
+Start with no external network:
 
 ```json
 {
   "access": {
-    "network": ["*"],           // Internet access
-    "project": "CONTRIBUTE",    // Project write access
-    "allProjects": "VIEW",      // Read other projects
-    "developer": true           // Advanced permissions
+    "network": []
   }
 }
 ```
 
-**Network access**:
-- `["*"]` - Full internet
-- `["github.com", "pypi.org"]` - Specific domains
+For an app with default permissions, the platform clones declared inputs into
+its temporary workspace, grants the job `CONTRIBUTE` only there, and clones
+declared outputs back to the launch project. Omit `project` and `allProjects`
+unless the app must directly read, modify, or delete existing project objects.
+Applet defaults differ (`project` defaults to `VIEW`), so still declare only
+the minimum access its behavior requires.
 
-## Timeout Configuration
+Request only what the app needs:
 
-```json
-{
-  "runSpec": {
-    "timeoutPolicy": {
-      "*": {
-        "days": 1,
-        "hours": 12,
-        "minutes": 30
-      }
-    }
-  }
-}
-```
+- `network`: explicit host allowlist; avoid `["*"]`
+- `project`: launch-project level
+- `allProjects`: access to other user projects
+- `developer`: ability to create/modify or use unpublished apps
 
-## Example: Complete dxapp.json
+Effective project access never exceeds the launching user's access. Broad
+`allProjects`, `ADMINISTER`, `developer`, and unrestricted network permissions
+need explicit justification.
 
-```json
-{
-  "name": "rna-seq-pipeline",
-  "title": "RNA-Seq Analysis Pipeline",
-  "summary": "Aligns RNA-seq reads and quantifies gene expression",
-  "description": "Comprehensive RNA-seq pipeline using STAR aligner and featureCounts",
-  "version": "1.0.0",
-  "dxapi": "1.0.0",
-  "categories": ["Read Mapping", "RNA-Seq"],
+For an HTTPS app, configure `httpsApp` separately and define the required
+shared access. Do not expose a service that returns credentials or protected
+data without its own authorization checks.
 
-  "inputSpec": [
-    {
-      "name": "reads",
-      "label": "FASTQ reads",
-      "class": "array:file",
-      "patterns": ["*.fastq.gz", "*.fq.gz"],
-      "help": "Single-end or paired-end RNA-seq reads"
-    },
-    {
-      "name": "reference_genome",
-      "label": "Reference genome",
-      "class": "file",
-      "patterns": ["*.fa", "*.fasta"],
-      "suggestions": [
-        {
-          "name": "Human GRCh38",
-          "project": "project-reference",
-          "path": "/genomes/GRCh38.fa"
-        }
-      ]
-    },
-    {
-      "name": "gtf_file",
-      "label": "Gene annotation (GTF)",
-      "class": "file",
-      "patterns": ["*.gtf", "*.gtf.gz"]
-    }
-  ],
+## Validation Checklist
 
-  "outputSpec": [
-    {
-      "name": "aligned_bam",
-      "label": "Aligned reads (BAM)",
-      "class": "file",
-      "patterns": ["*.bam"]
-    },
-    {
-      "name": "counts",
-      "label": "Gene counts",
-      "class": "file",
-      "patterns": ["*.counts.txt"]
-    },
-    {
-      "name": "qc_report",
-      "label": "QC report",
-      "class": "file",
-      "patterns": ["*.html"]
-    }
-  ],
-
-  "runSpec": {
-    "interpreter": "python3",
-    "file": "src/rna-seq-pipeline.py",
-    "distribution": "Ubuntu",
-    "release": "24.04",
-
-    "execDepends": [
-      {"name": "python3-pip"},
-      {"name": "samtools"},
-      {"name": "subread"}
-    ],
-
-    "assetDepends": [
-      {
-        "name": "star-aligner",
-        "id": {"$dnanexus_link": "record-star-asset"}
-      }
-    ],
-
-    "systemRequirements": {
-      "main": {
-        "instanceType": "mem3_ssd1_v2_x16"
-      }
-    },
-
-    "timeoutPolicy": {
-      "*": {"hours": 8}
-    }
-  },
-
-  "access": {
-    "network": ["*"]
-  },
-
-  "details": {
-    "contactEmail": "support@example.com",
-    "upstreamVersion": "STAR 2.7.10a, Subread 2.0.3",
-    "citations": ["doi:10.1093/bioinformatics/bts635"]
-  }
-}
-```
-
-## Best Practices
-
-1. **Version Management**: Use semantic versioning for apps
-2. **Instance Type**: Start with smaller instances, scale up as needed
-3. **Dependencies**: Document all dependencies clearly
-4. **Error Messages**: Provide helpful error messages for invalid inputs
-5. **Testing**: Test with various input types and sizes
-6. **Documentation**: Write clear descriptions and help text
-7. **Resources**: Bundle frequently-used tools to avoid repeated downloads
-8. **Docker**: Use Docker for complex dependency chains
-9. **Assets**: Create assets for heavy dependencies shared across apps
-10. **Timeouts**: Set reasonable timeouts based on expected runtime
-11. **Network Access**: Request only necessary network permissions
-12. **Region Support**: Use regionalOptions for multi-region apps
-
-## Common Patterns
-
-### Bioinformatics Tool
-
-```json
-{
-  "inputSpec": [
-    {"name": "input_file", "class": "file", "patterns": ["*.bam"]},
-    {"name": "threads", "class": "int", "default": 4, "optional": true}
-  ],
-  "runSpec": {
-    "execDepends": [{"name": "tool-name"}],
-    "systemRequirements": {
-      "main": {"instanceType": "mem2_ssd1_v2_x8"}
-    }
-  }
-}
-```
-
-### Python Data Analysis
-
-```json
-{
-  "runSpec": {
-    "interpreter": "python3",
-    "execDepends": [
-      {"name": "python3-pip"}
-    ],
-    "systemRequirements": {
-      "main": {"instanceType": "mem2_ssd1_v2_x4"}
-    }
-  }
-}
-```
-
-### Docker-based App
-
-```json
-{
-  "runSpec": {
-    "interpreter": "bash",
-    "execDepends": [
-      {"name": "docker.io"}
-    ],
-    "systemRequirements": {
-      "main": {"instanceType": "mem2_ssd1_v2_x8"}
-    }
-  },
-  "access": {
-    "network": ["*"]
-  }
-}
-```
+- JSON parses and contains no comments.
+- `name` and app `version` follow platform constraints.
+- Inputs and outputs have unique names and correct classes.
+- App manifests include `version`, `inputSpec`, and `outputSpec`.
+- AEE is Ubuntu 24.04 or intentionally retained 20.04.
+- No deprecated top-level resource placement is used.
+- Every configured region has compatible assets and resources.
+- Instance types are available now in each region.
+- Retry policy targets transient/recoverable errors.
+- Timeout and launch-time cost limits are defined.
+- Dependencies are pinned and integrity-controlled.
+- Network and project access are least privilege.
+- `dx build` succeeds in a non-production project before publication.

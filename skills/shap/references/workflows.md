@@ -1,605 +1,565 @@
-# SHAP Workflows and Best Practices
+# SHAP Workflows
 
-This document provides comprehensive workflows, best practices, and common use cases for using SHAP in various model interpretation scenarios.
+These workflows target SHAP 0.52.0 and the `shap.Explanation` API. Adapt model-specific code, but preserve the decisions about output, background, masking, validation, and reporting.
 
-## Basic Workflow Structure
+## Workflow 1: Reproducible Tabular Audit
 
-Every SHAP analysis follows a general workflow:
+### 1. Freeze the predictive context
 
-1. **Train Model**: Build and train the machine learning model
-2. **Select Explainer**: Choose appropriate explainer based on model type
-3. **Compute SHAP Values**: Generate explanations for test samples
-4. **Visualize Results**: Use plots to understand feature impacts
-5. **Interpret and Act**: Draw conclusions and make decisions
+Record:
 
-## Workflow 1: Basic Model Explanation
+- dataset and split identifiers;
+- model and preprocessing artifact versions;
+- package versions;
+- feature schema and order;
+- output method/index/name/units;
+- background population and sampling rule;
+- explainer/masker configuration;
+- evaluation row selection.
 
-**Use Case**: Understanding feature importance and prediction behavior for a trained model
+Do not begin interpretation until predictive performance is acceptable for the intended population.
+
+### 2. Build the background from training/reference data
 
 ```python
-import shap
-import pandas as pd
-from sklearn.model_selection import train_test_split
-
-# Step 1: Load and split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-
-# Step 2: Train model (example with XGBoost)
-import xgboost as xgb
-model = xgb.XGBClassifier(n_estimators=100, max_depth=5)
-model.fit(X_train, y_train)
-
-# Step 3: Create explainer
-explainer = shap.TreeExplainer(model)
-
-# Step 4: Compute SHAP values
-shap_values = explainer(X_test)
-
-# Step 5: Visualize global importance
-shap.plots.beeswarm(shap_values, max_display=15)
-
-# Step 6: Examine top features in detail
-shap.plots.scatter(shap_values[:, "Feature1"])
-shap.plots.scatter(shap_values[:, "Feature2"], color=shap_values[:, "Feature1"])
-
-# Step 7: Explain individual predictions
-shap.plots.waterfall(shap_values[0])
+rng_seed = 7
+background = shap.sample(X_train, 100, random_state=rng_seed)
 ```
 
-**Key Decisions**:
-- Explainer type based on model architecture
-- Background dataset size (for DeepExplainer, KernelExplainer)
-- Number of samples to explain (all test set vs. subset)
+Use a shared background for results intended for direct comparison.
 
-## Workflow 2: Model Debugging and Validation
-
-**Use Case**: Identifying and fixing model issues, validating expected behavior
+### 3. Explain held-out rows
 
 ```python
-# Step 1: Compute SHAP values
-explainer = shap.TreeExplainer(model)
-shap_values = explainer(X_test)
-
-# Step 2: Identify prediction errors
-predictions = model.predict(X_test)
-errors = predictions != y_test
-error_indices = np.where(errors)[0]
-
-# Step 3: Analyze errors
-print(f"Total errors: {len(error_indices)}")
-print(f"Error rate: {len(error_indices) / len(y_test):.2%}")
-
-# Step 4: Explain misclassified samples
-for idx in error_indices[:10]:  # First 10 errors
-    print(f"\n=== Error {idx} ===")
-    print(f"Prediction: {predictions[idx]}, Actual: {y_test.iloc[idx]}")
-    shap.plots.waterfall(shap_values[idx])
-
-# Step 5: Check if model learned correct patterns
-# Look for unexpected feature importance
-shap.plots.beeswarm(shap_values)
-
-# Step 6: Investigate specific feature relationships
-# Verify nonlinear relationships make sense
-for feature in model.feature_importances_.argsort()[-5:]:  # Top 5 features
-    feature_name = X_test.columns[feature]
-    shap.plots.scatter(shap_values[:, feature_name])
-
-# Step 7: Validate feature interactions
-# Check if interactions align with domain knowledge
-shap.plots.scatter(shap_values[:, "Feature1"], color=shap_values[:, "Feature2"])
+explainer = shap.Explainer(
+    model,
+    background,
+    algorithm="tree",
+    seed=rng_seed,
+)
+all_outputs = explainer(X_test)
 ```
 
-**Common Issues to Check**:
-- Data leakage (feature with suspiciously high importance)
-- Spurious correlations (unexpected feature relationships)
-- Target leakage (features that shouldn't be predictive)
-- Biases (disproportionate impact on certain groups)
-
-## Workflow 3: Feature Engineering Guidance
-
-**Use Case**: Using SHAP insights to improve feature engineering
+### 4. Select and validate the output
 
 ```python
-# Step 1: Initial model with baseline features
-model_v1 = train_model(X_train_v1, y_train)
-explainer_v1 = shap.TreeExplainer(model_v1)
-shap_values_v1 = explainer_v1(X_test_v1)
-
-# Step 2: Identify feature engineering opportunities
-shap.plots.beeswarm(shap_values_v1)
-
-# Check for:
-# - Nonlinear relationships (candidates for transformation)
-shap.plots.scatter(shap_values_v1[:, "Age"])  # Maybe age^2 or age bins?
-
-# - Feature interactions (candidates for interaction terms)
-shap.plots.scatter(shap_values_v1[:, "Income"], color=shap_values_v1[:, "Education"])
-# Maybe create Income * Education interaction?
-
-# Step 3: Engineer new features based on insights
-X_train_v2 = X_train_v1.copy()
-X_train_v2['Age_squared'] = X_train_v2['Age'] ** 2
-X_train_v2['Income_Education'] = X_train_v2['Income'] * X_train_v2['Education']
-
-# Step 4: Retrain with engineered features
-model_v2 = train_model(X_train_v2, y_train)
-explainer_v2 = shap.TreeExplainer(model_v2)
-shap_values_v2 = explainer_v2(X_test_v2)
-
-# Step 5: Compare feature importance
-shap.plots.bar({
-    "Baseline": shap_values_v1,
-    "With Engineered Features": shap_values_v2
-})
-
-# Step 6: Validate improvement
-print(f"V1 Score: {model_v1.score(X_test_v1, y_test):.4f}")
-print(f"V2 Score: {model_v2.score(X_test_v2, y_test):.4f}")
-```
-
-**Feature Engineering Insights from SHAP**:
-- Strong nonlinear patterns → Try transformations (log, sqrt, polynomial)
-- Color-coded interactions in scatter → Create interaction terms
-- Redundant features in clustering → Remove or combine
-- Unexpected importance → Investigate for data quality issues
-
-## Workflow 4: Model Comparison and Selection
-
-**Use Case**: Comparing multiple models to select the best interpretable model
-
-```python
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-import xgboost as xgb
-
-# Step 1: Train multiple models
-models = {
-    'Logistic Regression': LogisticRegression(max_iter=1000).fit(X_train, y_train),
-    'Random Forest': RandomForestClassifier(n_estimators=100).fit(X_train, y_train),
-    'XGBoost': xgb.XGBClassifier(n_estimators=100).fit(X_train, y_train)
-}
-
-# Step 2: Compute SHAP values for each model
-shap_values_dict = {}
-for name, model in models.items():
-    if name == 'Logistic Regression':
-        explainer = shap.LinearExplainer(model, X_train)
-    else:
-        explainer = shap.TreeExplainer(model)
-    shap_values_dict[name] = explainer(X_test)
-
-# Step 3: Compare global feature importance
-shap.plots.bar(shap_values_dict)
-
-# Step 4: Compare model scores
-for name, model in models.items():
-    score = model.score(X_test, y_test)
-    print(f"{name}: {score:.4f}")
-
-# Step 5: Check consistency of feature importance
-for feature in X_test.columns[:5]:  # Top 5 features
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-    for idx, (name, shap_vals) in enumerate(shap_values_dict.items()):
-        plt.sca(axes[idx])
-        shap.plots.scatter(shap_vals[:, feature], show=False)
-        plt.title(f"{name} - {feature}")
-    plt.tight_layout()
-    plt.show()
-
-# Step 6: Analyze specific predictions across models
-sample_idx = 0
-for name, shap_vals in shap_values_dict.items():
-    print(f"\n=== {name} ===")
-    shap.plots.waterfall(shap_vals[sample_idx])
-
-# Step 7: Decision based on:
-# - Accuracy/Performance
-# - Interpretability (consistent feature importance)
-# - Deployment constraints
-# - Stakeholder requirements
-```
-
-**Model Selection Criteria**:
-- **Accuracy vs. Interpretability**: Sometimes simpler models with SHAP are preferable
-- **Feature Consistency**: Models agreeing on feature importance are more trustworthy
-- **Explanation Quality**: Clear, actionable explanations
-- **Computational Cost**: TreeExplainer is faster than KernelExplainer
-
-## Workflow 5: Fairness and Bias Analysis
-
-**Use Case**: Detecting and analyzing model bias across demographic groups
-
-```python
-# Step 1: Identify protected attributes
-protected_attr = 'Gender'  # or 'Race', 'Age_Group', etc.
-
-# Step 2: Compute SHAP values
-explainer = shap.TreeExplainer(model)
-shap_values = explainer(X_test)
-
-# Step 3: Compare feature importance across groups
-groups = X_test[protected_attr].unique()
-cohorts = {
-    f"{protected_attr}={group}": shap_values[X_test[protected_attr] == group]
-    for group in groups
-}
-shap.plots.bar(cohorts)
-
-# Step 4: Check if protected attribute has high SHAP importance
-# (should be low/zero for fair models)
-protected_importance = np.abs(shap_values[:, protected_attr].values).mean()
-print(f"{protected_attr} mean |SHAP|: {protected_importance:.4f}")
-
-# Step 5: Analyze predictions for each group
-for group in groups:
-    mask = X_test[protected_attr] == group
-    group_shap = shap_values[mask]
-
-    print(f"\n=== {protected_attr} = {group} ===")
-    print(f"Sample size: {mask.sum()}")
-    print(f"Positive prediction rate: {(model.predict(X_test[mask]) == 1).mean():.2%}")
-
-    # Visualize
-    shap.plots.beeswarm(group_shap, max_display=10)
-
-# Step 6: Check for proxy features
-# Features correlated with protected attribute that shouldn't have high importance
-# Example: 'Zip_Code' might be proxy for race
-proxy_features = ['Zip_Code', 'Last_Name_Prefix']  # Domain-specific
-for feature in proxy_features:
-    if feature in X_test.columns:
-        importance = np.abs(shap_values[:, feature].values).mean()
-        print(f"Potential proxy '{feature}' importance: {importance:.4f}")
-
-# Step 7: Mitigation strategies if bias found
-# - Remove protected attribute and proxies
-# - Add fairness constraints during training
-# - Post-process predictions to equalize outcomes
-# - Use different model architecture
-```
-
-**Fairness Metrics to Check**:
-- **Demographic Parity**: Similar positive prediction rates across groups
-- **Equal Opportunity**: Similar true positive rates across groups
-- **Feature Importance Parity**: Similar feature rankings across groups
-- **Protected Attribute Importance**: Should be minimal
-
-## Workflow 6: Deep Learning Model Explanation
-
-**Use Case**: Explaining neural network predictions with DeepExplainer
-
-```python
-import tensorflow as tf
-import shap
-
-# Step 1: Load or build neural network
-model = tf.keras.models.load_model('my_model.h5')
-
-# Step 2: Select background dataset
-# Use subset (100-1000 samples) from training data
-background = X_train[:100]
-
-# Step 3: Create DeepExplainer
-explainer = shap.DeepExplainer(model, background)
-
-# Step 4: Compute SHAP values (may take time)
-# Explain subset of test data
-test_subset = X_test[:50]
-shap_values = explainer.shap_values(test_subset)
-
-# Step 5: Handle multi-output models
-# For binary classification, shap_values is a list [class_0_values, class_1_values]
-# For regression, it's a single array
-if isinstance(shap_values, list):
-    # Focus on positive class
-    shap_values_positive = shap_values[1]
-    shap_exp = shap.Explanation(
-        values=shap_values_positive,
-        base_values=explainer.expected_value[1],
-        data=test_subset
-    )
+if all_outputs.values.ndim == 3:
+    explanation = all_outputs[..., class_index]
+    expected = model.predict_proba(X_test)[:, class_index]
 else:
-    shap_exp = shap.Explanation(
-        values=shap_values,
-        base_values=explainer.expected_value,
-        data=test_subset
+    explanation = all_outputs
+    expected = model.predict(X_test)
+
+reconstructed = (
+    np.asarray(explanation.base_values)
+    + np.asarray(explanation.values).sum(axis=1)
+)
+max_abs_error = float(np.max(np.abs(reconstructed - expected)))
+np.testing.assert_allclose(reconstructed, expected, rtol=1e-5, atol=1e-6)
+```
+
+This example is appropriate only when the explainer's selected output matches `predict` or `predict_proba`. For raw-margin models, compute the corresponding margin instead.
+
+### 5. Move from global to local
+
+```python
+shap.plots.bar(explanation, max_display=20)
+shap.plots.beeswarm(explanation, max_display=20)
+
+global_importance = explanation.abs.mean(0)
+top_index = int(np.argmax(global_importance.values))
+top_feature = global_importance.feature_names[top_index]
+shap.plots.scatter(explanation[:, top_feature], color=explanation)
+
+shap.plots.waterfall(explanation[selected_row])
+```
+
+Select local rows using a documented criterion: high error, threshold proximity, representative quantile, or predeclared case.
+
+### 6. Publish an audit record
+
+Include:
+
+- model metric table;
+- global attribution distribution;
+- selected feature relationships;
+- local explanations with selection rules;
+- background and masking sensitivity;
+- additivity error;
+- non-causal and non-fairness caveats.
+
+## Workflow 2: Regression
+
+```python
+explainer = shap.Explainer(regressor, background)
+explanation = explainer(X_test)
+
+prediction = regressor.predict(X_test)
+reconstructed = explanation.base_values + explanation.values.sum(axis=1)
+np.testing.assert_allclose(reconstructed, prediction, rtol=1e-5, atol=1e-6)
+```
+
+State whether the target was transformed. If the model predicts log target values, SHAP values are in log-target units unless the explained callable reverses the transform.
+
+For transformed targets, choose one:
+
+- explain the model's native output and label units accurately;
+- wrap the inverse-transformed prediction in a model-agnostic callable and explain that output;
+- provide both and explain why additive decompositions differ.
+
+## Workflow 3: Binary Classification
+
+Binary model outputs vary:
+
+- scikit-learn tree classifiers commonly return one output per class;
+- XGBoost/LightGBM raw tree outputs commonly return one margin;
+- a model-agnostic `predict_proba` callable returns two columns.
+
+### Explicit probability-space tree explanation
+
+```python
+explainer = shap.TreeExplainer(
+    model,
+    data=background,
+    feature_perturbation="interventional",
+    model_output="probability",
+)
+all_outputs = explainer(X_test)
+
+if all_outputs.values.ndim == 3:
+    positive = all_outputs[..., positive_class_index]
+else:
+    positive = all_outputs
+
+expected = model.predict_proba(X_test)[:, positive_class_index]
+reconstructed = positive.base_values + positive.values.sum(axis=1)
+np.testing.assert_allclose(reconstructed, expected, rtol=1e-5, atol=1e-6)
+```
+
+If the model family exposes only one positive-class probability output, do not attempt a second class slice.
+
+### Threshold-focused analysis
+
+```python
+probability = model.predict_proba(X_test)[:, positive_class_index]
+distance = np.abs(probability - decision_threshold)
+near_threshold = np.argsort(distance)[:25]
+
+shap.plots.heatmap(positive[near_threshold])
+```
+
+Threshold proximity is a legitimate predeclared selection rule. It does not make SHAP a recourse method.
+
+## Workflow 4: Multiclass or Multi-Output Models
+
+```python
+all_outputs = explainer(X_test)
+print(all_outputs.values.shape)
+print(all_outputs.output_names)
+
+per_output = {
+    str(name): all_outputs[..., index]
+    for index, name in enumerate(all_outputs.output_names)
+}
+```
+
+For each output:
+
+1. validate against the corresponding model output;
+2. generate its own global summary;
+3. keep axis units and scales explicit;
+4. report class prevalence and performance.
+
+Do not:
+
+- use `all_outputs[class_index]` to select an output;
+- assume old list-of-arrays behavior;
+- average signed attributions across classes;
+- compare classes after using different backgrounds.
+
+For many outputs, explain only predeclared or top-ranked outputs:
+
+```python
+selected = explainer(
+    X_subset,
+    outputs=shap.Explanation.argsort.flip[:5],
+)
+```
+
+The `outputs` option is explainer-dependent. Verify selected indexes/names, especially when top outputs can vary by row.
+
+## Workflow 5: Pipelines and Feature Names
+
+Choose whether to explain raw or transformed features.
+
+### Transformed-space, model-specific explanation
+
+```python
+X_train_t = preprocessor.transform(X_train)
+X_test_t = preprocessor.transform(X_test)
+feature_names = preprocessor.get_feature_names_out()
+
+explainer = shap.Explainer(
+    model,
+    X_train_t[:100],
+    feature_names=feature_names.tolist(),
+)
+explanation = explainer(X_test_t)
+```
+
+Benefits: speed and specialized explainer support.
+
+Costs: one source feature may expand into many encoded columns. Aggregate one-hot levels only after preserving signed local contributions and documenting the aggregation:
+
+```python
+source_group_value = explanation.values[:, source_column_indices].sum(axis=1)
+```
+
+Sum signed values for a local additive group. For global importance, decide whether the quantity is:
+
+- mean absolute value of the summed group; or
+- sum of each encoded column's mean absolute value.
+
+They answer different questions.
+
+### Raw-space, end-to-end explanation
+
+```python
+def positive_probability(frame):
+    return pipeline.predict_proba(frame)[:, positive_class_index]
+
+masker = shap.maskers.Independent(raw_background, max_samples=100)
+explainer = shap.PermutationExplainer(
+    positive_probability,
+    masker,
+    feature_names=raw_background.columns.tolist(),
+    seed=7,
+)
+explanation = explainer(
+    raw_test,
+    max_evals=(2 * raw_test.shape[1] + 1) * 5,
+)
+```
+
+Benefits: source-level attribution.
+
+Costs: slower model-agnostic evaluation and potentially unrealistic raw-column combinations.
+
+## Workflow 6: Error and Loss Analysis
+
+Attributing predictions is not the same as attributing errors.
+
+### Analyze errors as a cohort
+
+```python
+prediction = model.predict(X_test)
+error_mask = prediction != y_test.to_numpy()
+
+cohorts = {
+    "correct": explanation[~error_mask],
+    "incorrect": explanation[error_mask],
+}
+shap.plots.bar(cohorts, max_display=20)
+```
+
+Include group sizes. Different attribution magnitudes do not identify the cause of error by themselves.
+
+### Decompose tree log loss
+
+For supported tree models:
+
+```python
+loss_explainer = shap.TreeExplainer(
+    model,
+    data=background,
+    feature_perturbation="interventional",
+    model_output="log_loss",
+)
+loss_exp = loss_explainer(X_test, y_test)
+```
+
+Log-loss explanations require labels at call time and decompose loss rather than prediction. Some classifier families retain an output axis, so inspect `loss_exp.values.shape`, select the intended output before plotting, and validate against the model-specific loss quantity on a small batch. Label plots as log-loss contributions.
+
+Use this to investigate:
+
+- features associated with high model loss;
+- cohort-specific sources of loss;
+- training/test behavior differences.
+
+Do not call a high loss attribution proof of label error; inspect data and model residuals separately.
+
+## Workflow 7: Cohort and Fairness Investigation
+
+```python
+cohorts = explanation.cohorts(group_labels)
+shap.plots.bar(cohorts.abs.mean(0), max_display=20)
+```
+
+For each cohort also compute:
+
+- sample size;
+- outcome prevalence;
+- score distribution;
+- discrimination/performance;
+- calibration;
+- confusion-matrix rates at operational thresholds;
+- missingness and feature distribution.
+
+SHAP contributes descriptive model-use evidence. It does not replace a fairness framework.
+
+Avoid claims such as:
+
+- "protected attribute importance should be zero";
+- "the model is unbiased because group plots look similar";
+- "remove the proxy feature to guarantee fairness."
+
+Use a shared background for direct comparison. If a cohort-specific baseline is required, report both a shared-background and cohort-background analysis.
+
+## Workflow 8: Model Comparison
+
+Before comparing attribution:
+
+1. evaluate models on identical rows;
+2. explain the same target/output and units;
+3. use the same background and masking semantics;
+4. align feature representations;
+5. validate each model separately.
+
+```python
+importance = {}
+
+for name, exp in explanations.items():
+    importance[name] = pd.Series(
+        np.abs(exp.values).mean(axis=0),
+        index=exp.feature_names,
+        name=name,
     )
 
-# Step 6: Visualize
-shap.plots.beeswarm(shap_exp)
-shap.plots.waterfall(shap_exp[0])
-
-# Step 7: For image/text data, use specialized plots
-# Image: shap.image_plot
-# Text: shap.plots.text (for transformers)
+importance_frame = pd.concat(importance.values(), axis=1)
 ```
 
-**Deep Learning Considerations**:
-- Background dataset size affects accuracy and speed
-- Multi-output handling (classification vs. regression)
-- Specialized plots for image/text data
-- Computational cost (consider GPU acceleration)
+Compare:
 
-## Workflow 7: Production Deployment
+- rank correlation;
+- signed feature distributions;
+- local agreement on identical rows;
+- stability across refits;
+- performance and calibration.
 
-**Use Case**: Integrating SHAP explanations into production systems
+Do not treat agreement as truth. Correlated features can cause equivalent models to distribute credit differently.
+
+## Workflow 9: Feature Engineering
+
+Use SHAP to generate hypotheses, then validate them out of sample.
+
+1. Fit a baseline in a training fold.
+2. Inspect scatter plots and interaction candidates.
+3. Propose a transformation based on domain knowledge.
+4. Build the feature inside cross-validation.
+5. Compare predictive metrics and calibration on untouched data.
+6. Recompute explanations with the same reference design.
+
+Avoid engineering features after repeatedly inspecting the final test set.
+
+For a nonlinear pattern:
 
 ```python
-import joblib
-import shap
+shap.plots.scatter(explanation[:, feature_name], color=explanation)
+```
 
-# Step 1: Train and save model
-model = train_model(X_train, y_train)
-joblib.dump(model, 'model.pkl')
+For tree interactions:
 
-# Step 2: Create and save explainer
-explainer = shap.TreeExplainer(model)
-joblib.dump(explainer, 'explainer.pkl')
+```python
+interaction = tree_explainer.shap_interaction_values(X_subset)
+```
 
-# Step 3: Create explanation service
-class ExplanationService:
-    def __init__(self, model_path, explainer_path):
-        self.model = joblib.load(model_path)
-        self.explainer = joblib.load(explainer_path)
+Use interaction values as model diagnostics, not proof of real-world synergy.
 
-    def predict_with_explanation(self, X):
-        """
-        Returns prediction and explanation
-        """
-        # Prediction
-        prediction = self.model.predict(X)
+## Workflow 10: Time Series
 
-        # SHAP values
-        shap_values = self.explainer(X)
+Random train/test splits and random backgrounds can leak future information.
 
-        # Format explanation
-        explanations = []
-        for i in range(len(X)):
-            exp = {
-                'prediction': prediction[i],
-                'base_value': shap_values.base_values[i],
-                'shap_values': dict(zip(X.columns, shap_values.values[i])),
-                'feature_values': X.iloc[i].to_dict()
+1. Use temporal or rolling-origin validation.
+2. Build lag/rolling features using past data only.
+3. Choose background rows from an allowed historical reference window.
+4. Explain a fixed forecast horizon and output.
+5. preserve time ordering in monitoring plots.
+6. compare seasonal regimes separately.
+
+```python
+background = X_train.loc[reference_start:reference_end]
+evaluation = X_test.loc[forecast_start:forecast_end]
+explanation = explainer(evaluation)
+```
+
+Lag features are highly dependent. Compare independent and grouped/domain-constrained maskers, and report instability. A lag attribution is not the causal effect of changing the historical outcome.
+
+For sequence models that consume a time-by-channel tensor, define whether a "feature" is:
+
+- one time point;
+- one channel;
+- one time-channel cell;
+- a grouped time window.
+
+Use a masker consistent with that unit.
+
+## Workflow 11: Text and Images
+
+Use domain maskers and constrain outputs:
+
+```python
+# Text
+text_masker = shap.maskers.Text(tokenizer)
+text_explainer = shap.Explainer(
+    text_model_fn,
+    text_masker,
+    algorithm="partition",
+    output_names=class_names,
+)
+text_exp = text_explainer(text_rows)
+
+# Image
+image_masker = shap.maskers.Image("inpaint_telea", image_shape)
+image_explainer = shap.Explainer(
+    image_model_fn,
+    image_masker,
+    output_names=class_names,
+)
+image_exp = image_explainer(
+    images,
+    max_evals=500,
+    batch_size=50,
+    outputs=shap.Explanation.argsort.flip[:3],
+)
+```
+
+See [modalities.md](modalities.md) for model wrappers and interpretation cautions.
+
+## Workflow 12: Stability and Uncertainty
+
+Repeat the analysis across:
+
+- model refits or cross-validation folds;
+- background samples;
+- approximation seeds/budgets;
+- plausible maskers;
+- evaluation cohorts.
+
+Example background sensitivity:
+
+```python
+importance_runs = []
+
+for seed in range(10):
+    background = shap.sample(X_train, 100, random_state=seed)
+    exp = shap.Explainer(model, background)(X_test)
+    if exp.values.ndim == 3:
+        exp = exp[..., class_index]
+    importance_runs.append(np.abs(exp.values).mean(axis=0))
+
+importance_runs = np.stack(importance_runs)
+importance_mean = importance_runs.mean(axis=0)
+importance_low = np.quantile(importance_runs, 0.025, axis=0)
+importance_high = np.quantile(importance_runs, 0.975, axis=0)
+```
+
+These intervals describe background-sampling variation for a fixed model, not total statistical uncertainty.
+
+## Workflow 13: Production Explanation Service
+
+Production requirements:
+
+- version model, preprocessing, SHAP, background, masker, output, and feature schema together;
+- enforce input column order and dtype;
+- cap request rows and explanation budgets;
+- return output name, units, baseline, contributions, and reconstruction error;
+- avoid exposing sensitive raw feature values;
+- monitor latency and failure rates;
+- test explanations after every model-library or SHAP upgrade.
+
+Prefer rebuilding the explainer from trusted, versioned components in a controlled process. Python pickle/joblib artifacts can execute code; never deserialize an untrusted model or explainer.
+
+Example response construction after validation:
+
+```python
+def format_local_explanation(local_exp, prediction, top_n=10):
+    values = np.asarray(local_exp.values)
+    order = np.argsort(np.abs(values))[::-1][:top_n]
+
+    reconstructed = float(np.asarray(local_exp.base_values) + values.sum())
+    return {
+        "prediction": float(prediction),
+        "base_value": float(np.asarray(local_exp.base_values)),
+        "reconstructed_output": reconstructed,
+        "max_reconstruction_error": abs(reconstructed - float(prediction)),
+        "output_name": local_exp.output_names,
+        "contributions": [
+            {
+                "feature": local_exp.feature_names[index],
+                "shap_value": float(values[index]),
             }
-            explanations.append(exp)
-
-        return explanations
-
-    def get_top_features(self, X, n=5):
-        """
-        Returns top N features for each prediction
-        """
-        shap_values = self.explainer(X)
-
-        top_features = []
-        for i in range(len(X)):
-            # Get absolute SHAP values
-            abs_shap = np.abs(shap_values.values[i])
-
-            # Sort and get top N
-            top_indices = abs_shap.argsort()[-n:][::-1]
-            top_feature_names = X.columns[top_indices].tolist()
-            top_shap_values = shap_values.values[i][top_indices].tolist()
-
-            top_features.append({
-                'features': top_feature_names,
-                'shap_values': top_shap_values
-            })
-
-        return top_features
-
-# Step 4: Usage in API
-service = ExplanationService('model.pkl', 'explainer.pkl')
-
-# Example API endpoint
-def predict_endpoint(input_data):
-    X = pd.DataFrame([input_data])
-    explanations = service.predict_with_explanation(X)
-    return {
-        'prediction': explanations[0]['prediction'],
-        'explanation': explanations[0]
+            for index in order
+        ],
     }
-
-# Step 5: Generate static explanations for batch predictions
-def batch_explain_and_save(X_batch, output_dir):
-    shap_values = explainer(X_batch)
-
-    # Save global plot
-    shap.plots.beeswarm(shap_values, show=False)
-    plt.savefig(f'{output_dir}/global_importance.png', dpi=300, bbox_inches='tight')
-    plt.close()
-
-    # Save individual explanations
-    for i in range(min(100, len(X_batch))):  # First 100
-        shap.plots.waterfall(shap_values[i], show=False)
-        plt.savefig(f'{output_dir}/explanation_{i}.png', dpi=300, bbox_inches='tight')
-        plt.close()
 ```
 
-**Production Best Practices**:
-- Cache explainers to avoid recomputation
-- Batch explanations when possible
-- Limit explanation complexity (top N features)
-- Monitor explanation latency
-- Version explainers alongside models
-- Consider pre-computing explanations for common inputs
+Do not truncate contributions before checking reconstruction; omitted values still matter.
 
-## Workflow 8: Time Series Model Explanation
+## Workflow 14: Attribution Monitoring
 
-**Use Case**: Explaining time series forecasting models
+Attribution drift can reflect:
+
+- input drift;
+- model-version change;
+- background change;
+- feature pipeline change;
+- genuine changes in model use.
+
+Keep the model and reference fixed when detecting input-driven attribution drift.
+
+Numeric summaries:
 
 ```python
-# Step 1: Prepare data with time-based features
-# Example: Predicting next day's sales
-df['DayOfWeek'] = df['Date'].dt.dayofweek
-df['Month'] = df['Date'].dt.month
-df['Lag_1'] = df['Sales'].shift(1)
-df['Lag_7'] = df['Sales'].shift(7)
-df['Rolling_Mean_7'] = df['Sales'].rolling(7).mean()
-
-# Step 2: Train model
-features = ['DayOfWeek', 'Month', 'Lag_1', 'Lag_7', 'Rolling_Mean_7']
-X_train, X_test, y_train, y_test = train_test_split(df[features], df['Sales'])
-model = xgb.XGBRegressor().fit(X_train, y_train)
-
-# Step 3: Compute SHAP values
-explainer = shap.TreeExplainer(model)
-shap_values = explainer(X_test)
-
-# Step 4: Analyze temporal patterns
-# Which features drive predictions at different times?
-shap.plots.beeswarm(shap_values)
-
-# Step 5: Check lagged feature importance
-# Lag features should have high importance for time series
-lag_features = ['Lag_1', 'Lag_7', 'Rolling_Mean_7']
-for feature in lag_features:
-    shap.plots.scatter(shap_values[:, feature])
-
-# Step 6: Explain specific predictions
-# E.g., why was Monday's forecast so different?
-monday_mask = X_test['DayOfWeek'] == 0
-shap.plots.waterfall(shap_values[monday_mask][0])
-
-# Step 7: Validate seasonality understanding
-shap.plots.scatter(shap_values[:, 'Month'])
-```
-
-**Time Series Considerations**:
-- Lagged features and their importance
-- Rolling statistics interpretation
-- Seasonal patterns in SHAP values
-- Avoiding data leakage in feature engineering
-
-## Common Pitfalls and Solutions
-
-### Pitfall 1: Wrong Explainer Choice
-**Problem**: Using KernelExplainer for tree models (slow and unnecessary)
-**Solution**: Always use TreeExplainer for tree-based models
-
-### Pitfall 2: Insufficient Background Data
-**Problem**: DeepExplainer/KernelExplainer with too few background samples
-**Solution**: Use 100-1000 representative samples
-
-### Pitfall 3: Misinterpreting Log-Odds
-**Problem**: Confusion about units (probability vs. log-odds)
-**Solution**: Check model output type; use link="logit" when needed
-
-### Pitfall 4: Ignoring Feature Correlations
-**Problem**: Interpreting features as independent when they're correlated
-**Solution**: Use feature clustering; understand domain relationships
-
-### Pitfall 5: Overfitting to Explanations
-**Problem**: Feature engineering based solely on SHAP without validation
-**Solution**: Always validate improvements with cross-validation
-
-### Pitfall 6: Data Leakage Undetected
-**Problem**: Not noticing unexpected feature importance indicating leakage
-**Solution**: Validate SHAP results against domain knowledge
-
-### Pitfall 7: Computational Constraints Ignored
-**Problem**: Computing SHAP for entire large dataset
-**Solution**: Use sampling, batching, or subset analysis
-
-## Advanced Techniques
-
-### Technique 1: SHAP Interaction Values
-Capture pairwise feature interactions:
-```python
-explainer = shap.TreeExplainer(model)
-shap_interaction_values = explainer.shap_interaction_values(X_test)
-
-# Analyze specific interaction
-feature1_idx = 0
-feature2_idx = 3
-interaction = shap_interaction_values[:, feature1_idx, feature2_idx]
-print(f"Interaction strength: {np.abs(interaction).mean():.4f}")
-```
-
-### Technique 2: Partial Dependence with SHAP
-Combine partial dependence plots with SHAP:
-```python
-from sklearn.inspection import partial_dependence
-
-# SHAP dependence
-shap.plots.scatter(shap_values[:, "Feature1"])
-
-# Partial dependence (model-agnostic)
-pd_result = partial_dependence(model, X_test, features=["Feature1"])
-plt.plot(pd_result['grid_values'][0], pd_result['average'][0])
-```
-
-### Technique 3: Conditional Expectations
-Analyze SHAP values conditioned on other features:
-```python
-# High Income group
-high_income = X_test['Income'] > X_test['Income'].median()
-shap.plots.beeswarm(shap_values[high_income])
-
-# Low Income group
-low_income = X_test['Income'] <= X_test['Income'].median()
-shap.plots.beeswarm(shap_values[low_income])
-```
-
-### Technique 4: Feature Clustering for Redundancy
-```python
-# Create hierarchical clustering
-clustering = shap.utils.hclust(X_train, y_train)
-
-# Visualize with clustering
-shap.plots.bar(shap_values, clustering=clustering, clustering_cutoff=0.5)
-
-# Identify redundant features to remove
-# Features with distance < 0.1 are highly redundant
-```
-
-## Integration with MLOps
-
-**Experiment Tracking**:
-```python
-import mlflow
-
-# Log SHAP values
-with mlflow.start_run():
-    # Train model
-    model = train_model(X_train, y_train)
-
-    # Compute SHAP
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer(X_test)
-
-    # Log plots
-    shap.plots.beeswarm(shap_values, show=False)
-    mlflow.log_figure(plt.gcf(), "shap_beeswarm.png")
-    plt.close()
-
-    # Log feature importance as metrics
-    mean_abs_shap = np.abs(shap_values.values).mean(axis=0)
-    for feature, importance in zip(X_test.columns, mean_abs_shap):
-        mlflow.log_metric(f"shap_{feature}", importance)
-```
-
-**Model Monitoring**:
-```python
-# Track SHAP distribution drift over time
-def compute_shap_summary(shap_values):
+def attribution_summary(exp):
+    values = np.asarray(exp.values)
     return {
-        'mean': shap_values.values.mean(axis=0),
-        'std': shap_values.values.std(axis=0),
-        'percentiles': np.percentile(shap_values.values, [25, 50, 75], axis=0)
+        "mean": values.mean(axis=0),
+        "mean_abs": np.abs(values).mean(axis=0),
+        "q05": np.quantile(values, 0.05, axis=0),
+        "q50": np.quantile(values, 0.50, axis=0),
+        "q95": np.quantile(values, 0.95, axis=0),
     }
-
-# Compute baseline
-baseline_summary = compute_shap_summary(shap_values_train)
-
-# Monitor production data
-production_summary = compute_shap_summary(shap_values_production)
-
-# Detect drift
-drift_detected = np.abs(
-    production_summary['mean'] - baseline_summary['mean']
-) > threshold
 ```
 
-This comprehensive workflows document covers the most common and advanced use cases for SHAP in practice.
+Monitor:
+
+- output and baseline distributions;
+- attribution distributions, not only means;
+- model performance when labels arrive;
+- missingness and schema;
+- group-specific behavior.
+
+Set thresholds from historical variability and operational consequences, not arbitrary percentage changes.
+
+## Review Checklist
+
+- [ ] The explained output and units are explicit.
+- [ ] Background comes from a defensible reference population.
+- [ ] The masker matches feature structure.
+- [ ] Multi-output results are sliced correctly.
+- [ ] Additivity is checked against the correct model output.
+- [ ] Local rows and cohorts use documented selection rules.
+- [ ] Correlation and background sensitivity are evaluated.
+- [ ] Performance accompanies explanations.
+- [ ] Fairness, causal, and recourse claims are separated.
+- [ ] Version and schema metadata are retained.
+- [ ] No untrusted model/explainer artifact is deserialized.
+
+## Sources
+
+- SHAP examples: https://shap.readthedocs.io/en/latest/index.html
+- Tabular examples: https://shap.readthedocs.io/en/latest/tabular_examples.html
+- API examples: https://shap.readthedocs.io/en/latest/api_examples.html
+- TreeExplainer: https://shap.readthedocs.io/en/latest/generated/shap.TreeExplainer.html
+- Explanation: https://shap.readthedocs.io/en/latest/generated/shap.Explanation.html
+- Causal interpretation caution: https://shap.readthedocs.io/en/latest/example_notebooks/overviews/Be%20careful%20when%20interpreting%20predictive%20models%20in%20search%20of%20causal%20insights.html

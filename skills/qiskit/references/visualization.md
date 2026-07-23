@@ -1,415 +1,361 @@
-# Visualization in Qiskit
+# Visualization
 
-Qiskit provides comprehensive visualization tools for quantum circuits, measurement results, and quantum states.
+Qiskit visualizes circuits, sampled counts, ideal states, and backend layouts. Plotting is analysis support, not a substitute for numerical validation.
 
-## Installation
-
-Install visualization dependencies:
+## Install Plotting Dependencies
 
 ```bash
-uv pip install "qiskit[visualization]" matplotlib
+uv pip install "qiskit[visualization]==2.5.0"
 ```
 
-## Circuit Visualization
+The text circuit drawer works with the core package. Matplotlib, Pillow, LaTeX helpers, and notebook integrations depend on the selected output.
 
-### Text-Based Drawings
+## Circuit Drawers
+
+### Text
 
 ```python
 from qiskit import QuantumCircuit
 
-qc = QuantumCircuit(3)
-qc.h(0)
-qc.cx(0, 1)
-qc.cx(1, 2)
+circuit = QuantumCircuit(3)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.cx(1, 2)
 
-# Simple text output
-print(qc.draw())
-
-# Text with more detail
-print(qc.draw('text', fold=-1))  # Don't fold long circuits
+print(circuit.draw(output="text", fold=-1))
 ```
 
-### Matplotlib Drawings
+Text output is the most reliable choice for logs, tests, and terminal-only environments.
+
+### Matplotlib
 
 ```python
-# High-quality matplotlib figure
-qc.draw('mpl')
-
-# Save to file
-fig = qc.draw('mpl')
-fig.savefig('circuit.png', dpi=300, bbox_inches='tight')
+figure = circuit.draw(
+    output="mpl",
+    style="iqp",
+    fold=40,
+    idle_wires=False,
+)
+figure.savefig(
+    "circuit.svg",
+    bbox_inches="tight",
+)
 ```
 
-### LaTeX Drawings
+Keep the returned `Figure`; calling `savefig()` on an unrelated current figure can save the wrong plot.
+
+Useful options:
 
 ```python
-# Generate LaTeX circuit diagram
-qc.draw('latex')
-
-# Save LaTeX source
-latex_source = qc.draw('latex_source')
-with open('circuit.tex', 'w') as f:
-    f.write(latex_source)
+circuit.draw(
+    output="mpl",
+    reverse_bits=False,
+    initial_state=True,
+    plot_barriers=True,
+    fold=30,
+)
 ```
 
-## Customizing Circuit Drawings
+`reverse_bits` changes display order, not circuit semantics.
 
-### Styling Options
+### LaTeX
 
 ```python
-from qiskit.visualization import circuit_drawer
-
-# Reverse qubit order
-qc.draw('mpl', reverse_bits=True)
-
-# Fold long circuits
-qc.draw('mpl', fold=20)  # Fold at 20 columns
-
-# Show idle wires
-qc.draw('mpl', idle_wires=False)
-
-# Add initial state
-qc.draw('mpl', initial_state=True)
+latex_image = circuit.draw(output="latex")
+latex_source = circuit.draw(output="latex_source")
 ```
 
-### Color Customization
+LaTeX rendering requires an appropriate local TeX installation. Prefer SVG from the Matplotlib drawer when a full TeX toolchain is unavailable.
+
+## Custom Circuit Styles
 
 ```python
 style = {
-    'displaycolor': {
-        'h': ('#FA74A6', '#000000'),     # Hadamard: pink
-        'cx': ('#A8D0DB', '#000000'),    # CNOT: light blue
-        'measure': ('#F7E7B4', '#000000') # Measure: yellow
-    }
+    "displaycolor": {
+        "h": ("#648fff", "#ffffff"),
+        "cx": ("#785ef0", "#ffffff"),
+        "measure": ("#dc267f", "#ffffff"),
+    },
+    "fontsize": 11,
+    "subfontsize": 8,
 }
 
-qc.draw('mpl', style=style)
+figure = circuit.draw(output="mpl", style=style)
 ```
 
-## Result Visualization
+Built-in style names can change. `iqp` and `bw` are useful starting points in Qiskit 2.5.
 
-### Histogram of Counts
+Use color plus labels or structure; do not make color the only way to distinguish operations.
+
+## Count Histograms
 
 ```python
 from qiskit.visualization import plot_histogram
-from qiskit.primitives import StatevectorSampler
 
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-qc.measure_all()
-
-sampler = StatevectorSampler()
-result = sampler.run([qc], shots=1024).result()
-counts = result[0].data.meas.get_counts()
-
-# Plot histogram
-plot_histogram(counts)
-
-# Compare multiple experiments
-counts1 = {'00': 500, '11': 524}
-counts2 = {'00': 480, '11': 544}
-plot_histogram([counts1, counts2], legend=['Run 1', 'Run 2'])
-
-# Save figure
-fig = plot_histogram(counts)
-fig.savefig('histogram.png', dpi=300, bbox_inches='tight')
+figure = plot_histogram(
+    counts,
+    sort="value_desc",
+    bar_labels=True,
+    title="Bell-state samples",
+)
+figure.savefig(
+    "counts.png",
+    dpi=300,
+    bbox_inches="tight",
+)
 ```
 
-### Histogram Options
+Compare datasets:
 
 ```python
-# Customize colors
-plot_histogram(counts, color=['#1f77b4', '#ff7f0e'])
-
-# Sort by value
-plot_histogram(counts, sort='value')
-
-# Set bar labels
-plot_histogram(counts, bar_labels=True)
-
-# Set target distribution (for comparison)
-target = {'00': 0.5, '11': 0.5}
-plot_histogram(counts, target=target)
+figure = plot_histogram(
+    [ideal_counts, noisy_counts, hardware_counts],
+    legend=["ideal", "noise model", "hardware"],
+    figsize=(10, 5),
+)
 ```
 
-## State Visualization
-
-### Bloch Sphere
-
-Visualize single-qubit states on the Bloch sphere:
+Normalize explicitly when comparing runs with different shot counts:
 
 ```python
-from qiskit.visualization import plot_bloch_vector
-from qiskit.quantum_info import Statevector
-import numpy as np
-
-# Visualize a specific state vector
-# State |+⟩: equal superposition of |0⟩ and |1⟩
-state = Statevector.from_label('+')
-plot_bloch_vector(state.to_bloch())
-
-# Custom vector
-plot_bloch_vector([0, 1, 0])  # |+⟩ state on X-axis
+def normalize_counts(counts):
+    total = sum(counts.values())
+    return {
+        bitstring: count / total
+        for bitstring, count in counts.items()
+    }
 ```
 
-### Multi-Qubit Bloch Sphere
+Label whether bars are counts, frequencies, or quasi-probabilities. Sampler V2 returns shot data, not V1 quasi-distributions.
+
+## Statevector and Density-Matrix Plots
+
+Construct ideal states only for circuits without measurements, resets, or unsupported classical control:
 
 ```python
-from qiskit.visualization import plot_bloch_multivector
+from qiskit.quantum_info import DensityMatrix, Statevector
 
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
+state = Statevector.from_instruction(unitary_circuit)
+density_matrix = DensityMatrix(state)
+```
 
-state = Statevector.from_instruction(qc)
+Available plotters:
+
+```python
+from qiskit.visualization import (
+    plot_bloch_multivector,
+    plot_state_city,
+    plot_state_hinton,
+    plot_state_paulivec,
+    plot_state_qsphere,
+)
+
 plot_bloch_multivector(state)
-```
-
-### State City Plot
-
-Visualize state amplitudes as a 3D city:
-
-```python
-from qiskit.visualization import plot_state_city
-from qiskit.quantum_info import Statevector
-
-qc = QuantumCircuit(3)
-qc.h(range(3))
-state = Statevector.from_instruction(qc)
-
-plot_state_city(state)
-
-# Customize
-plot_state_city(state, color=['#FF6B6B', '#4ECDC4'])
-```
-
-### QSphere
-
-Visualize quantum states on a sphere:
-
-```python
-from qiskit.visualization import plot_state_qsphere
-
-state = Statevector.from_instruction(qc)
+plot_state_city(density_matrix)
+plot_state_hinton(density_matrix)
+plot_state_paulivec(density_matrix)
 plot_state_qsphere(state)
 ```
 
-### Hinton Diagram
+Dense state memory grows exponentially:
 
-Display state amplitudes:
+- statevector: \(2^n\) complex amplitudes,
+- density matrix: \(4^n\) complex entries.
 
-```python
-from qiskit.visualization import plot_state_hinton
+Do not construct a dense state solely to make a plot when the system size is not tractable.
 
-state = Statevector.from_instruction(qc)
-plot_state_hinton(state)
-```
-
-## Density Matrix Visualization
+## Single Bloch Vector
 
 ```python
-from qiskit.visualization import plot_state_density
-from qiskit.quantum_info import DensityMatrix
+from qiskit.quantum_info import Statevector
+from qiskit.visualization import plot_bloch_vector
 
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-
-state = DensityMatrix.from_instruction(qc)
-plot_state_density(state)
+state = Statevector.from_label("+")
+figure = plot_bloch_vector(
+    state.to_bloch(),
+    title="|+>",
+)
 ```
 
-## Gate Map Visualization
+A reduced qubit from an entangled state may be mixed and appear inside the Bloch sphere. A per-qubit Bloch view does not show multipartite entanglement.
 
-Visualize backend coupling map:
+## Backend Topology and Errors
 
 ```python
-from qiskit.visualization import plot_gate_map
-from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit.visualization import plot_error_map, plot_gate_map
 
-service = QiskitRuntimeService()
-backend = service.backend("ibm_brisbane")
-
-# Show qubit connectivity
-plot_gate_map(backend)
-
-# Show with error rates
-plot_gate_map(backend, plot_error_rates=True)
+gate_map_figure = plot_gate_map(backend)
+error_map_figure = plot_error_map(backend)
 ```
 
-## Error Map Visualization
+These plots reflect the backend snapshot exposed by the provider. Record the retrieval time and backend.
 
-Display backend error rates:
-
-```python
-from qiskit.visualization import plot_error_map
-
-plot_error_map(backend)
-```
-
-## Circuit Properties Display
+Plot a compiled circuit's physical placement:
 
 ```python
 from qiskit.visualization import plot_circuit_layout
 
-# Show how circuit maps to physical qubits
-transpiled_qc = transpile(qc, backend=backend)
-plot_circuit_layout(transpiled_qc, backend)
-```
-
-## Pulse Visualization
-
-For pulse-level control:
-
-```python
-from qiskit import pulse
-from qiskit.visualization import pulse_drawer
-
-# Create pulse schedule
-with pulse.build(backend) as schedule:
-    pulse.play(pulse.Gaussian(duration=160, amp=0.1, sigma=40), pulse.drive_channel(0))
-
-# Visualize
-schedule.draw()
-```
-
-## Interactive Widgets (Jupyter)
-
-### Circuit Composer Widget
-
-```python
-from qiskit.tools.jupyter import QuantumCircuitComposer
-
-composer = QuantumCircuitComposer()
-composer.show()
-```
-
-### Interactive State Visualization
-
-```python
-from qiskit.visualization import plot_histogram
-import matplotlib.pyplot as plt
-
-# Enable interactive mode
-plt.ion()
-plot_histogram(counts)
-plt.show()
-```
-
-## Comparison Plots
-
-### Multiple Histograms
-
-```python
-# Compare results from different backends
-counts_sim = {'00': 500, '11': 524}
-counts_hw = {'00': 480, '01': 20, '10': 24, '11': 500}
-
-plot_histogram(
-    [counts_sim, counts_hw],
-    legend=['Simulator', 'Hardware'],
-    figsize=(12, 6)
+layout_figure = plot_circuit_layout(
+    isa_circuit,
+    backend,
 )
 ```
 
-### Before/After Transpilation
+Use `isa_circuit.layout` for program logic. A plot is for inspection, not a machine-readable mapping.
+
+## Before-and-After Circuit Comparison
 
 ```python
 import matplotlib.pyplot as plt
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 4))
+figure, axes = plt.subplots(
+    nrows=2,
+    figsize=(14, 7),
+    constrained_layout=True,
+)
 
-# Original circuit
-qc.draw('mpl', ax=ax1)
-ax1.set_title('Original Circuit')
+circuit.draw(
+    output="mpl",
+    ax=axes[0],
+    fold=-1,
+)
+axes[0].set_title("Logical circuit")
 
-# Transpiled circuit
-qc_transpiled = transpile(qc, backend=backend, optimization_level=3)
-qc_transpiled.draw('mpl', ax=ax2)
-ax2.set_title('Transpiled Circuit')
+isa_circuit.draw(
+    output="mpl",
+    ax=axes[1],
+    fold=-1,
+)
+axes[1].set_title(
+    f"ISA circuit on {backend.name}"
+)
 
-plt.tight_layout()
+figure.savefig(
+    "logical-vs-isa.svg",
+    bbox_inches="tight",
+)
+```
+
+For very wide circuits, save separate figures rather than shrinking labels until unreadable.
+
+## Parameter and Convergence Plots
+
+Qiskit returns numerical arrays; use Matplotlib directly for scientific plots:
+
+```python
+import matplotlib.pyplot as plt
+
+figure, axis = plt.subplots()
+axis.plot(iterations, objective_values, marker="o")
+axis.set(
+    xlabel="Objective evaluation",
+    ylabel="Energy (hartree)",
+    title="VQE convergence",
+)
+axis.grid(alpha=0.25)
+figure.savefig(
+    "vqe-convergence.svg",
+    bbox_inches="tight",
+)
+```
+
+Include uncertainty bars when repeated runs or estimator standard deviations are available:
+
+```python
+axis.errorbar(
+    parameter_values,
+    expectation_values,
+    yerr=standard_deviations,
+    fmt="o-",
+    capsize=3,
+)
+```
+
+Do not interpret optimizer history as statistically independent samples.
+
+## Publication Output
+
+Prefer vector formats for circuit diagrams and line art:
+
+```python
+figure.savefig(
+    "figure.svg",
+    bbox_inches="tight",
+    metadata={"Creator": "Qiskit 2.5 workflow"},
+)
+figure.savefig(
+    "figure.pdf",
+    bbox_inches="tight",
+)
+```
+
+For raster output:
+
+```python
+figure.savefig(
+    "figure.png",
+    dpi=300,
+    bbox_inches="tight",
+)
+```
+
+Include in the caption:
+
+- logical or transpiled status,
+- backend if transpiled,
+- measurement basis,
+- shot count or precision,
+- mitigation configuration,
+- whether data are ideal, modeled, or hardware-derived.
+
+## Removed Visualization Patterns
+
+Do not use:
+
+- `qiskit.tools.jupyter.QuantumCircuitComposer` from old examples,
+- pulse schedule drawings based on `qiskit.pulse`,
+- nonexistent `plot_state_density` helpers,
+- V1 quasi-distribution examples presented as Sampler V2 output.
+
+`qiskit.pulse` was removed in Qiskit 2.0. Use current fractional-gate or Qiskit Dynamics documentation for control-model research.
+
+## Troubleshooting
+
+### Matplotlib output is unavailable
+
+Install the pinned visualization extra and verify the active interpreter:
+
+```bash
+uv pip install "qiskit[visualization]==2.5.0"
+python -c "import sys, matplotlib; print(sys.executable, matplotlib.__version__)"
+```
+
+### Notebook displays nothing
+
+Return the `Figure` as the final expression or call:
+
+```python
+import matplotlib.pyplot as plt
+
 plt.show()
 ```
 
-## Saving Visualizations
+### LaTeX drawer fails
 
-### Save to Various Formats
+Use `output="mpl"` or `output="text"` unless a complete TeX toolchain is intentionally installed.
 
-```python
-# PNG
-fig = qc.draw('mpl')
-fig.savefig('circuit.png', dpi=300, bbox_inches='tight')
+### Count labels look reversed
 
-# PDF
-fig.savefig('circuit.pdf', bbox_inches='tight')
+Qiskit prints count strings with the highest-index classical bit on the left. Convert explicitly before mapping characters to qubit-indexed variables.
 
-# SVG (vector graphics)
-fig.savefig('circuit.svg', bbox_inches='tight')
+### Backend plot fails
 
-# Histogram
-hist_fig = plot_histogram(counts)
-hist_fig.savefig('results.png', dpi=300, bbox_inches='tight')
-```
+Confirm the object is a compatible `BackendV2` and that the visualization extra is installed. Some third-party backends do not provide every field expected by IBM-oriented plotting functions.
 
-## Styling Best Practices
+### Plot is too large
 
-### Publication-Quality Figures
-
-```python
-import matplotlib.pyplot as plt
-
-# Set matplotlib style
-plt.rcParams['figure.dpi'] = 300
-plt.rcParams['font.size'] = 12
-plt.rcParams['font.family'] = 'sans-serif'
-
-# Create high-quality visualization
-fig = qc.draw('mpl', style='iqp')
-fig.savefig('publication_circuit.png', dpi=600, bbox_inches='tight')
-```
-
-### Available Styles
-
-```python
-# Default style
-qc.draw('mpl')
-
-# IQP style (IBM Quantum)
-qc.draw('mpl', style='iqp')
-
-# Colorblind-friendly
-qc.draw('mpl', style='bw')  # Black and white
-```
-
-## Troubleshooting Visualization
-
-### Common Issues
-
-**Issue**: "No module named 'matplotlib'"
-```bash
-uv pip install matplotlib
-```
-
-**Issue**: Circuit too large to display
-```python
-# Use folding
-qc.draw('mpl', fold=50)
-
-# Or export to file instead of displaying
-fig = qc.draw('mpl')
-fig.savefig('large_circuit.png', dpi=150, bbox_inches='tight')
-```
-
-**Issue**: Jupyter notebook not displaying plots
-```python
-# Add magic command at notebook start
-%matplotlib inline
-```
-
-**Issue**: LaTeX visualization not working
-```bash
-# Install LaTeX support
-uv pip install pylatexenc
-```
+- set `fold`,
+- hide idle wires,
+- split logical modules,
+- export to SVG,
+- include structural metrics in text rather than forcing every instruction into one figure.

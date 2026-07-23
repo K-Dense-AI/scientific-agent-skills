@@ -1,339 +1,376 @@
-# SHAP Explainers Reference
+# SHAP Explainers
 
-This document provides comprehensive information about all SHAP explainer classes, their parameters, methods, and when to use each type.
+This reference targets SHAP 0.52.0. Prefer the callable interface (`explanation = explainer(X)`) so results retain values, baselines, data, feature names, and output names in a `shap.Explanation`.
 
-## Overview
+## Selection Checklist
 
-SHAP provides specialized explainers for different model types, each optimized for specific architectures. The general `shap.Explainer` class automatically selects the appropriate algorithm based on the model type.
+Before choosing an explainer, answer:
 
-## Core Explainer Classes
+1. What exact callable or model output is being explained?
+2. Is the model natively supported by a specialized explainer?
+3. What does "missing" mean for each input feature?
+4. Are features independent, correlated, grouped, sequential, or spatial?
+5. How many model evaluations are affordable per row?
+6. Is the output scalar or multi-output?
+7. Is an exact result required under the chosen game, or is a sampled estimate acceptable?
 
-### shap.Explainer (Auto-selector)
+## Recommended Decision Path
 
-**Purpose**: Automatically uses Shapley values to explain any machine learning model or Python function by selecting the most appropriate explainer algorithm.
+| Model/input | First choice | Alternative | Main risk |
+|---|---|---|---|
+| Supported tree ensemble | `TreeExplainer` | `GPUTreeExplainer` (experimental) | Output units and feature-dependence semantics |
+| Linear model | `LinearExplainer` | `ExactExplainer` | Correlation assumptions |
+| Small tabular feature set | `ExactExplainer` | `PermutationExplainer` | Exponential cost without a partition tree |
+| General tabular callable | `PermutationExplainer` | `PartitionExplainer`, `KernelExplainer` | Evaluation cost and off-manifold masks |
+| Hierarchically grouped inputs | `PartitionExplainer` | `PermutationExplainer` with `Partition` masker | Attributions are Owen values for the constrained game |
+| Differentiable TensorFlow/PyTorch model | `DeepExplainer` or `GradientExplainer` | `PartitionExplainer` | Operator support, background, and output shape |
+| Text or image callable | `PartitionExplainer` with domain masker | Framework-specific deep explainer | Masking semantics dominate interpretation |
 
-**Constructor Parameters**:
-- `model`: The model to explain (function or model object)
-- `masker`: Background data or masker object for feature manipulation
-- `algorithm`: Optional override to force specific explainer type
-- `output_names`: Names for model outputs
-- `feature_names`: Names for input features
+## `shap.Explainer`
 
-**When to Use**: Default choice when unsure which explainer to use; automatically selects the best algorithm based on model type.
+`shap.Explainer` combines a model, masker, link, and algorithm. With `algorithm="auto"`, it returns a compatible specialized subclass.
 
-### TreeExplainer
-
-**Purpose**: Fast and exact SHAP value computation for tree-based ensemble models using the Tree SHAP algorithm.
-
-**Constructor Parameters**:
-- `model`: Tree-based model (XGBoost, LightGBM, CatBoost, PySpark, or scikit-learn trees)
-- `data`: Background dataset for feature integration (optional with tree_path_dependent)
-- `feature_perturbation`: How to handle dependent features
-  - `"interventional"`: Requires background data; follows causal inference rules
-  - `"tree_path_dependent"`: No background data needed; uses training examples per leaf
-  - `"auto"`: Defaults to interventional if data provided, otherwise tree_path_dependent
-- `model_output`: What model output to explain
-  - `"raw"`: Standard model output (default)
-  - `"probability"`: Probability-transformed output
-  - `"log_loss"`: Natural log of loss function
-  - Custom method names like `"predict_proba"`
-- `feature_names`: Optional feature naming
-
-**Supported Models**:
-- XGBoost (xgboost.XGBClassifier, xgboost.XGBRegressor, xgboost.Booster)
-- LightGBM (lightgbm.LGBMClassifier, lightgbm.LGBMRegressor, lightgbm.Booster)
-- CatBoost (catboost.CatBoostClassifier, catboost.CatBoostRegressor)
-- PySpark MLlib tree models
-- scikit-learn (DecisionTreeClassifier, DecisionTreeRegressor, RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoostingClassifier, GradientBoostingRegressor)
-
-**Key Methods**:
-- `shap_values(X)`: Computes SHAP values for samples; returns arrays where each row represents feature attribution
-- `shap_interaction_values(X)`: Estimates interaction effects between feature pairs; provides matrices with main effects and pairwise interactions
-- `explain_row(row)`: Explains individual rows with detailed attribution information
-
-**When to Use**:
-- Primary choice for all tree-based models
-- When exact SHAP values are needed (not approximations)
-- When computational speed is important for large datasets
-- For models like random forests, gradient boosting, or XGBoost
-
-**Example**:
 ```python
-import shap
-import xgboost
-
-# Train model
-model = xgboost.XGBClassifier().fit(X_train, y_train)
-
-# Create explainer
-explainer = shap.TreeExplainer(model)
-
-# Compute SHAP values
-shap_values = explainer.shap_values(X_test)
-
-# Compute interaction values
-shap_interaction = explainer.shap_interaction_values(X_test)
+explainer = shap.Explainer(
+    model,
+    masker=background,
+    algorithm="auto",
+    output_names=output_names,
+    feature_names=feature_names,
+    seed=7,
+)
+explanation = explainer(X_eval)
 ```
 
-### DeepExplainer
+Current algorithm names include `auto`, `permutation`, `partition`, `tree`, `linear`, `deep`, `exact`, and `additive`.
 
-**Purpose**: Approximates SHAP values for deep learning models using an enhanced version of the DeepLIFT algorithm.
+Use the auto-selector when:
 
-**Constructor Parameters**:
-- `model`: Framework-dependent specification
-  - **TensorFlow**: Tuple of (input_tensor, output_tensor) where output is single-dimensional
-  - **PyTorch**: `nn.Module` object or tuple of `(model, layer)` for layer-specific explanations
-- `data`: Background dataset for feature integration
-  - **TensorFlow**: numpy arrays or pandas DataFrames
-  - **PyTorch**: torch tensors
-  - **Recommended size**: 100-1000 samples (not full training set) to balance accuracy and computational cost
-- `session` (TensorFlow only): Optional session object; auto-detected if None
-- `learning_phase_flags`: Custom learning phase tensors for handling batch norm/dropout during inference
+- the model/masker pair is conventional;
+- default output semantics are acceptable;
+- no algorithm-specific parameter is needed.
 
-**Supported Frameworks**:
-- **TensorFlow**: Full support including Keras models
-- **PyTorch**: Complete integration with nn.Module architecture
+Instantiate the specialized class when:
 
-**Key Methods**:
-- `shap_values(X)`: Returns approximate SHAP values for the model applied to data X
-- `explain_row(row)`: Explains single rows with attribution values and expected outputs
-- `save(file)` / `load(file)`: Serialization support for explainer objects
-- `supports_model_with_masker(model, masker)`: Compatibility checker for model types
+- tree `model_output` or `feature_perturbation` must be explicit;
+- a particular approximation or evaluation budget is part of the analysis;
+- a framework-specific deep model requires a precise input/layer form.
 
-**When to Use**:
-- For deep neural networks in TensorFlow or PyTorch
-- When working with convolutional neural networks (CNNs)
-- For recurrent neural networks (RNNs) and transformers
-- When model-specific explanation is needed for deep learning architectures
+Passing a background matrix is shorthand for a standard tabular masker. Prefer an explicit masker when its semantics need to appear in an audit record.
 
-**Key Design Feature**:
-Variance of expectation estimates scales approximately as 1/√N, where N is the number of background samples, enabling accuracy-efficiency trade-offs.
+## `TreeExplainer`
 
-**Example**:
+Current constructor:
+
 ```python
-import shap
-import tensorflow as tf
-
-# Assume model is a Keras model
-model = tf.keras.models.load_model('my_model.h5')
-
-# Select background samples (subset of training data)
-background = X_train[:100]
-
-# Create explainer
-explainer = shap.DeepExplainer(model, background)
-
-# Compute SHAP values
-shap_values = explainer.shap_values(X_test[:10])
+shap.TreeExplainer(
+    model,
+    data=None,
+    model_output="raw",
+    feature_perturbation="auto",
+    feature_names=None,
+)
 ```
 
-### KernelExplainer
+Supported families include XGBoost, LightGBM, CatBoost, PySpark trees, and most scikit-learn tree models. Support varies by model version and categorical configuration, so test a small batch after dependency changes.
 
-**Purpose**: Model-agnostic SHAP value computation using the Kernel SHAP method with weighted linear regression.
+### Feature perturbation
 
-**Constructor Parameters**:
-- `model`: Function or model object that takes a matrix of samples and returns model outputs
-- `data`: Background dataset (numpy array, pandas DataFrame, or sparse matrix) used to simulate missing features
-- `feature_names`: Optional list of feature names; automatically derived from DataFrame column names if available
-- `link`: Connection function between feature importance and model output
-  - `"identity"`: Direct relationship (default)
-  - `"logit"`: For probability outputs
+`feature_perturbation` defines how hidden features are integrated:
 
-**Key Methods**:
-- `shap_values(X, **kwargs)`: Calculates SHAP values for sample predictions
-  - `nsamples`: Evaluation count per prediction ("auto" or integer); higher values reduce variance
-  - `l1_reg`: Feature selection regularization ("num_features(int)", "aic", "bic", or float)
-  - Returns arrays where each row sums to the difference between model output and expected value
-- `explain_row(row)`: Explains individual predictions with attribution values and expected values
-- `save(file)` / `load(file)`: Persist and restore explainer objects
+- `"interventional"` requires background data. Runtime scales approximately linearly with background size.
+- `"tree_path_dependent"` uses training counts stored in tree leaves and does not require a separate background.
+- `"auto"` uses interventional semantics when `data` is supplied and tree-path-dependent semantics otherwise. This has been the default since 0.47.
 
-**When to Use**:
-- For black-box models where specialized explainers aren't available
-- When working with custom prediction functions
-- For any model type (neural networks, SVMs, ensemble methods, etc.)
-- When model-agnostic explanations are needed
-- **Note**: Slower than specialized explainers; use only when no specialized option exists
+These options answer different questions and can allocate credit differently for dependent features. Neither turns an ordinary predictive model into a causal model.
 
-**Example**:
+### Output space
+
+`model_output` can be:
+
+- `"raw"`: model-specific raw tree output;
+- `"probability"`: transformed probability output;
+- `"log_loss"`: per-row natural-log loss decomposition;
+- a supported model method name such as `"predict_proba"`.
+
+`"probability"` and `"log_loss"` currently require `feature_perturbation="interventional"` and background data.
+
+Raw output is model-dependent:
+
+- regression commonly uses the predicted target value;
+- XGBoost binary classification commonly uses a margin/log-odds value;
+- scikit-learn tree classifiers commonly expose one probability output per class.
+
+Always inspect shape and verify the additive reconstruction against the exact model output.
+
+### Calling and validation
+
 ```python
-import shap
-from sklearn.svm import SVC
+explainer = shap.TreeExplainer(
+    model,
+    data=background,
+    feature_perturbation="interventional",
+    model_output="probability",
+)
+all_outputs = explainer(X_eval)
+class_exp = all_outputs[..., class_index]
 
-# Train model
-model = SVC(probability=True).fit(X_train, y_train)
-
-# Create prediction function
-predict_fn = lambda x: model.predict_proba(x)[:, 1]
-
-# Select background samples
-background = shap.sample(X_train, 100)
-
-# Create explainer
-explainer = shap.KernelExplainer(predict_fn, background)
-
-# Compute SHAP values (may be slow)
-shap_values = explainer.shap_values(X_test[:10])
+reconstructed = class_exp.base_values + class_exp.values.sum(axis=1)
+expected = model.predict_proba(X_eval)[:, class_index]
+np.testing.assert_allclose(reconstructed, expected, rtol=1e-5, atol=1e-6)
 ```
 
-### LinearExplainer
+The built-in additivity check currently applies only to some output paths, including raw margins. An explicit reconstruction check remains useful.
 
-**Purpose**: Specialized explainer for linear models that accounts for feature correlations.
+### Approximate tree values
 
-**Constructor Parameters**:
-- `model`: Linear model or tuple of (coefficients, intercept)
-- `masker`: Background data for feature correlation
-- `feature_perturbation`: How to handle feature correlations
-  - `"interventional"`: Assumes feature independence
-  - `"correlation_dependent"`: Accounts for feature correlations
+Do not pass `approximate` to the constructor. If the speed/quality trade-off is intentional:
 
-**Supported Models**:
-- scikit-learn linear models (LinearRegression, LogisticRegression, Ridge, Lasso, ElasticNet)
-- Custom linear models with coefficients and intercept
-
-**When to Use**:
-- For linear regression and logistic regression models
-- When feature correlations are important to explanation accuracy
-- When extremely fast explanations are needed
-- For GLMs and other linear model types
-
-**Example**:
 ```python
-import shap
-from sklearn.linear_model import LogisticRegression
-
-# Train model
-model = LogisticRegression().fit(X_train, y_train)
-
-# Create explainer
-explainer = shap.LinearExplainer(model, X_train)
-
-# Compute SHAP values
-shap_values = explainer.shap_values(X_test)
+approx_exp = explainer(X_eval, approximate=True)
 ```
 
-### GradientExplainer
+This uses a single-ordering approximation associated with Saabas values. It does not retain the consistency guarantee of Tree SHAP and can over-weight lower tree splits. Label the result as approximate.
 
-**Purpose**: Uses expected gradients to approximate SHAP values for neural networks.
+### Interaction values
 
-**Constructor Parameters**:
-- `model`: Deep learning model (TensorFlow or PyTorch)
-- `data`: Background samples for integration
-- `batch_size`: Batch size for gradient computation
-- `local_smoothing`: Amount of noise to add for smoothing (default 0)
+Tree models can compute pairwise interactions:
 
-**When to Use**:
-- As an alternative to DeepExplainer for neural networks
-- When gradient-based explanations are preferred
-- For differentiable models where gradient information is available
-
-**Example**:
 ```python
-import shap
-import torch
-
-# Assume model is a PyTorch model
-model = torch.load('model.pt')
-
-# Select background samples
-background = X_train[:100]
-
-# Create explainer
-explainer = shap.GradientExplainer(model, background)
-
-# Compute SHAP values
-shap_values = explainer.shap_values(X_test[:10])
+interaction = explainer.shap_interaction_values(X_eval)
 ```
 
-### PermutationExplainer
+Shapes:
 
-**Purpose**: Approximates Shapley values by iterating through permutations of inputs.
+- one output: `(samples, features, features)`;
+- multiple outputs: `(samples, features, features, outputs)`.
 
-**Constructor Parameters**:
-- `model`: Prediction function
-- `masker`: Background data or masker object
-- `max_evals`: Maximum number of model evaluations per sample
+Since 0.45, multiple outputs use a NumPy array rather than a list. Interaction computation can be much larger than ordinary explanations; subset rows and features deliberately.
 
-**When to Use**:
-- When exact Shapley values are needed but specialized explainers aren't available
-- For small feature sets where permutation is tractable
-- As a more accurate alternative to KernelExplainer (but slower)
+### GPU tree explainer
 
-**Example**:
+`GPUTreeExplainer` is experimental and requires a source build with CUDA support. Validate parity against CPU `TreeExplainer`, especially for missing values, multiclass baselines, and categorical splits.
+
+## `LinearExplainer`
+
+Use for linear or logistic models:
+
 ```python
-import shap
-
-# Create explainer
-explainer = shap.PermutationExplainer(model.predict, X_train)
-
-# Compute SHAP values
-shap_values = explainer.shap_values(X_test[:10])
+masker = shap.maskers.Independent(background)
+explainer = shap.LinearExplainer(model, masker)
+explanation = explainer(X_eval)
 ```
 
-## Explainer Selection Guide
+With independent/interventional masking, a linear attribution is related to:
 
-**Decision Tree for Choosing an Explainer**:
+```text
+coefficient_i * (x_i - reference_mean_i)
+```
 
-1. **Is your model tree-based?** (XGBoost, LightGBM, CatBoost, Random Forest, etc.)
-   - Yes → Use `TreeExplainer` (fast and exact)
-   - No → Continue to step 2
+For correlation-aware allocation, use an `Impute` masker:
 
-2. **Is your model a deep neural network?** (TensorFlow, PyTorch, Keras)
-   - Yes → Use `DeepExplainer` or `GradientExplainer`
-   - No → Continue to step 3
+```python
+masker = shap.maskers.Impute(background, method="linear")
+explainer = shap.LinearExplainer(model, masker)
+```
 
-3. **Is your model linear?** (Linear/Logistic Regression, GLMs)
-   - Yes → Use `LinearExplainer` (extremely fast)
-   - No → Continue to step 4
+Correlation-aware values share credit among correlated inputs and can assign attribution to a feature that the fitted model does not directly use. This is a property of the conditional game, not evidence of a direct model coefficient or causal effect. SHAP 0.52 warns when the estimated covariance matrix is singular.
 
-4. **Do you need model-agnostic explanations?**
-   - Yes → Use `KernelExplainer` (slower but works with any model)
-   - If computational budget allows and high accuracy is needed → Use `PermutationExplainer`
+## `ExactExplainer`
 
-5. **Unsure or want automatic selection?**
-   - Use `shap.Explainer` (auto-selects best algorithm)
+`ExactExplainer` enumerates coalitions with optimizations:
 
-## Common Parameters Across Explainers
+```python
+masker = shap.maskers.Independent(background)
+explainer = shap.ExactExplainer(model_fn, masker)
+explanation = explainer(X_eval)
+```
 
-**Background Data / Masker**:
-- Purpose: Represents the "typical" input to establish baseline expectations
-- Size recommendations: 50-1000 samples (more for complex models)
-- Selection: Random sample from training data or kmeans-selected representatives
+Use it for:
 
-**Feature Names**:
-- Automatically extracted from pandas DataFrames
-- Can be manually specified for numpy arrays
-- Important for plot interpretability
+- small feature spaces;
+- correctness checks against an approximate explainer;
+- partition games where the hierarchy sharply reduces evaluation cost.
 
-**Model Output Specification**:
-- Raw model output vs. transformed output (probabilities, log-odds)
-- Critical for correct interpretation of SHAP values
-- Example: For XGBoost classifiers, SHAP explains margin output (log-odds) before logistic transformation
+Avoid it for unconstrained high-dimensional inputs.
 
-## Performance Considerations
+## `PermutationExplainer`
 
-**Speed Ranking** (fastest to slowest):
-1. `LinearExplainer` - Nearly instantaneous
-2. `TreeExplainer` - Very fast, scales well
-3. `DeepExplainer` - Fast for neural networks
-4. `GradientExplainer` - Fast for neural networks
-5. `KernelExplainer` - Slow, use only when necessary
-6. `PermutationExplainer` - Very slow but most accurate for small feature sets
+`PermutationExplainer` is the general modern model-agnostic default:
 
-**Memory Considerations**:
-- `TreeExplainer`: Low memory overhead
-- `DeepExplainer`: Memory proportional to background sample size
-- `KernelExplainer`: Can be memory-intensive for large background datasets
-- For large datasets: Use batching or sample subsets
+```python
+masker = shap.maskers.Independent(background, max_samples=100)
+explainer = shap.PermutationExplainer(
+    model_fn,
+    masker,
+    feature_names=feature_names,
+    seed=7,
+)
 
-## Explainer Output: The Explanation Object
+minimum_budget = 2 * len(feature_names) + 1
+explanation = explainer(
+    X_eval,
+    max_evals=minimum_budget * 10,
+    error_bounds=True,
+)
+```
 
-All explainers return `shap.Explanation` objects containing:
-- `values`: SHAP values (numpy array)
-- `base_values`: Expected model output (baseline)
-- `data`: Original feature values
-- `feature_names`: Names of features
+One forward/reverse pass guarantees additivity and is exact for models with interactions no higher than second order. Repeating random permutations improves estimates for higher-order interactions.
 
-The Explanation object supports:
-- Slicing: `explanation[0]` for first sample
-- Array operations: Compatible with numpy operations
-- Direct plotting: Can be passed to plot functions
+Cost scales with:
+
+- evaluation rows;
+- feature count;
+- number of permutations;
+- background rows;
+- model latency.
+
+Batch the model callable where possible. Preserve the seed and budget.
+
+## `PartitionExplainer`
+
+`PartitionExplainer` follows a hierarchical clustering of input features:
+
+```python
+masker = shap.maskers.Partition(
+    background,
+    max_samples=100,
+    clustering="correlation",
+)
+explainer = shap.PartitionExplainer(
+    model_fn,
+    masker,
+    output_names=output_names,
+)
+explanation = explainer(X_eval, max_evals=1000)
+```
+
+With a partition tree, the values are Owen values for a constrained cooperative game. This is useful when:
+
+- groups should enter a coalition together;
+- correlated tabular inputs should be organized hierarchically;
+- tokens or image regions have natural structure;
+- unconstrained exact enumeration is too expensive.
+
+Do not call partition values equivalent to unconstrained Shapley values without noting the changed game.
+
+## `KernelExplainer`
+
+Kernel SHAP fits a weighted linear surrogate over sampled coalitions:
+
+```python
+explainer = shap.KernelExplainer(
+    model_fn,
+    background,
+    link="identity",
+    feature_names=feature_names,
+)
+legacy_values = explainer.shap_values(X_eval, nsamples="auto")
+```
+
+Use it when:
+
+- maintaining a validated Kernel SHAP analysis;
+- a specific identity/logit link behavior is required;
+- another explainer cannot represent the model/masker combination.
+
+For new general tabular work, consider `PermutationExplainer` first because it uses the modern callable interface directly and exposes evaluation budgets clearly.
+
+Kernel SHAP can be slow and may create unrealistic masked samples. Summarizing background data changes the estimand as well as runtime.
+
+## `DeepExplainer`
+
+Deep SHAP approximates attributions for supported differentiable TensorFlow and PyTorch models.
+
+Before constructing a PyTorch explainer, switch the `nn.Module` to evaluation mode using its standard `eval` method. This is a PyTorch state change, not Python's built-in code-evaluation function.
+
+PyTorch:
+
+```python
+explainer = shap.DeepExplainer(model, background_tensor)
+values = explainer.shap_values(test_tensor)
+```
+
+TensorFlow/Keras:
+
+```python
+explainer = shap.DeepExplainer(model, background_array)
+values = explainer.shap_values(test_array)
+```
+
+Model forms:
+
+- TensorFlow: a model, or an `(inputs, output)` tensor pair with a single-dimensional output;
+- PyTorch: an `nn.Module`, or `(model, layer)` to attribute the selected layer's input.
+
+Background cost is linear in sample count. Official guidance describes roughly 100 samples as a useful estimate and 1000 as a more accurate but costlier estimate; test convergence for the actual model.
+
+Output shapes since 0.45:
+
+- one input, one output: `(samples, *input_shape)`;
+- one input, multiple outputs: `(samples, *input_shape, outputs)`;
+- multiple inputs: a list, one array per input.
+
+`ranked_outputs=k` returns both values and selected output indexes. Never assume a binary model returns a two-element list.
+
+Deep explainers support only known operators and architecture patterns. Additivity failures can indicate unsupported operations rather than a tolerance problem.
+
+## `GradientExplainer`
+
+`GradientExplainer` implements expected gradients, an extension of integrated gradients:
+
+```python
+explainer = shap.GradientExplainer(
+    model,
+    background_tensor,
+    batch_size=50,
+    local_smoothing=0,
+)
+values = explainer.shap_values(test_tensor, nsamples=200, rseed=7)
+```
+
+Use it when:
+
+- the model is differentiable;
+- DeepExplainer lacks an operator rule;
+- expected-gradients semantics are appropriate.
+
+It remains an approximation. Report `nsamples`, seed, background, and any smoothing.
+
+## Other Public Explainers
+
+- `AdditiveExplainer`: generalized additive models.
+- `SamplingExplainer`: Shapley sampling/IME-style approximation; mainly relevant to existing workflows.
+- `CoalitionExplainer`: newer coalition-oriented functionality may evolve; verify against the installed release before adopting it in stable pipelines.
+- `shap.explainers.other.*`: wrappers and diagnostic baselines, not the default for a SHAP audit.
+
+## Multi-Output Handling
+
+Modern tabular explanations normally put outputs on the final axis:
+
+```python
+print(explanation.values.shape)
+print(explanation.output_names)
+
+one_output = explanation[..., output_index]
+# If output_names were supplied:
+one_output = explanation[..., "output_name"]
+```
+
+For ranked deep outputs, use the returned indexes; they can differ by sample.
+
+Do not:
+
+- use `explanation[output_index]` to select a class (that selects a row);
+- average signed values across outputs;
+- compare output magnitudes in different units;
+- pass a 3-D multi-output tabular explanation directly to a plot requiring `(samples, features)`.
+
+## Sources
+
+- Explainer API: https://shap.readthedocs.io/en/latest/generated/shap.Explainer.html
+- TreeExplainer: https://shap.readthedocs.io/en/latest/generated/shap.TreeExplainer.html
+- PermutationExplainer: https://shap.readthedocs.io/en/latest/generated/shap.PermutationExplainer.html
+- PartitionExplainer: https://shap.readthedocs.io/en/latest/generated/shap.PartitionExplainer.html
+- DeepExplainer: https://shap.readthedocs.io/en/latest/generated/shap.DeepExplainer.html
+- API reference: https://shap.readthedocs.io/en/latest/api.html

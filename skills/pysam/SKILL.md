@@ -1,262 +1,330 @@
 ---
 name: pysam
-description: Genomic file toolkit. Read/write SAM/BAM/CRAM alignments, VCF/BCF variants, FASTA/FASTQ sequences, extract regions, calculate coverage, for NGS data processing pipelines.
-license: MIT license
-metadata: {"version": "1.0", "skill-author": "K-Dense Inc."}
+description: Python/HTSlib workflows for genomic files. Use when reading, querying, filtering, or writing SAM/BAM/CRAM, VCF/BCF, FASTA/FASTQ, or tabix data with pysam, including pileup, coverage, indexing, and CRAM references.
+license: MIT
+allowed-tools: Read, Write, Edit, Bash
+compatibility: Requires Python 3.8–3.14 and pysam 0.24.0. Bundled scripts use local files. CRAM decoding may require the matching reference FASTA or an explicitly configured REF_PATH/REF_CACHE.
+metadata:
+  version: "2.0"
+  skill-author: K-Dense Inc.
 ---
 
-# Pysam
+# pysam
 
 ## Overview
 
-Pysam is a Python module for reading, manipulating, and writing genomic datasets. Read/write SAM/BAM/CRAM alignment files, VCF/BCF variant files, and FASTA/FASTQ sequences with a Pythonic interface to htslib. Query tabix-indexed files, perform pileup analysis for coverage, and execute samtools/bcftools commands.
+Use pysam for low-level, streaming access to HTSlib-supported genomic formats:
 
-## When to Use This Skill
+- `AlignmentFile` and `AlignedSegment` for SAM/BAM/CRAM
+- `VariantFile`, `VariantHeader`, and `VariantRecord` for VCF/BCF
+- `FastaFile` for indexed FASTA and `FastxFile` for sequential FASTA/FASTQ
+- `TabixFile` for BGZF-compressed, tabix-indexed BED/GFF/GTF/custom tables
+- `pysam.samtools` and `pysam.bcftools` for wrapped command dispatchers
 
-This skill should be used when:
-- Working with sequencing alignment files (BAM/CRAM)
-- Analyzing genetic variants (VCF/BCF)
-- Extracting reference sequences or gene regions
-- Processing raw sequencing data (FASTQ)
-- Calculating coverage or read depth
-- Implementing bioinformatics analysis pipelines
-- Quality control of sequencing data
-- Variant calling and annotation workflows
+Current upstream baseline: **pysam 0.24.0** (27 April 2026), wrapping
+HTSlib/samtools/bcftools 1.23.1. Read `references/sources.md` before updating
+version-specific guidance.
 
-## Quick Start
+## Installation
 
-### Installation
+Use the pinned release for reproducible work:
+
 ```bash
-uv pip install pysam
+uv pip install "pysam==0.24.0"
 ```
 
-### Basic Examples
+Confirm the runtime:
 
-**Read alignment file:**
 ```python
 import pysam
 
-# Open BAM file and fetch reads in region
-samfile = pysam.AlignmentFile("example.bam", "rb")
-for read in samfile.fetch("chr1", 1000, 2000):
-    print(f"{read.query_name}: {read.reference_start}")
-samfile.close()
+print(pysam.__version__)           # 0.24.0
+print(pysam.__samtools_version__)  # 1.23.1
 ```
 
-**Read variant file:**
-```python
-# Open VCF file and iterate variants
-vcf = pysam.VariantFile("variants.vcf")
-for variant in vcf:
-    print(f"{variant.chrom}:{variant.pos} {variant.ref}>{variant.alts}")
-vcf.close()
+Prebuilt wheels are available for supported macOS and Linux platforms. A
+source build needs a C compiler and HTSlib build dependencies; read the
+official installation guide linked from `references/sources.md`.
+
+## First Decide
+
+Before writing code:
+
+1. Identify the real format, compression, sort order, and available index.
+2. Decide whether coordinates are numeric Python coordinates or a region
+   string. Do not mix them.
+3. For CRAM, identify the exact reference assembly and FASTA.
+4. Prefer indexed region access; use sequential iteration only when intended.
+5. Preserve headers when writing and write to a new path by default.
+6. State filtering semantics: mapping/base quality, flags, overlap handling,
+   duplicate handling, and pileup depth cap.
+
+For unfamiliar files, start with the bundled read-only inspector:
+
+```bash
+python scripts/inspect_hts.py sample.bam
+python scripts/inspect_hts.py cohort.vcf.gz
+python scripts/inspect_hts.py reference.fa
 ```
 
-**Query reference sequence:**
-```python
-# Open FASTA and extract sequence
-fasta = pysam.FastaFile("reference.fasta")
-sequence = fasta.fetch("chr1", 1000, 2000)
-print(sequence)
-fasta.close()
-```
+## Bundled Scripts
 
-## Core Capabilities
+| Script | Purpose | Typical call |
+|---|---|---|
+| `scripts/inspect_hts.py` | Metadata-only inspection for alignment, variant, FASTA, FASTQ, and tabix files | `python scripts/inspect_hts.py sample.cram --reference ref.fa` |
+| `scripts/alignment_qc.py` | Streaming aggregate read/QC counts as JSON | `python scripts/alignment_qc.py sample.bam --max-records 100000` |
+| `scripts/variant_summary.py` | Streaming variant, FILTER, and genotype summary as JSON | `python scripts/variant_summary.py cohort.vcf.gz --region chr1:1-1000000` |
+| `scripts/filter_alignments.py` | Filter SAM/BAM/CRAM without changing record order | `python scripts/filter_alignments.py input.bam output.bam --exclude-secondary` |
 
-### 1. Alignment File Operations (SAM/BAM/CRAM)
+All scripts refuse to overwrite existing outputs. Run each with `--help` for
+coordinate, index, and privacy notes.
 
-Use the `AlignmentFile` class to work with aligned sequencing reads. This is appropriate for analyzing mapping results, calculating coverage, extracting reads, or quality control.
+## Coordinate Contract
 
-**Common operations:**
-- Open and read BAM/SAM/CRAM files
-- Fetch reads from specific genomic regions
-- Filter reads by mapping quality, flags, or other criteria
-- Write filtered or modified alignments
-- Calculate coverage statistics
-- Perform pileup analysis (base-by-base coverage)
-- Access read sequences, quality scores, and alignment information
+**Numeric coordinates accepted by pysam APIs are 0-based, half-open.** This
+includes numeric `AlignmentFile.fetch()`, `VariantFile.fetch()`,
+`FastaFile.fetch()`, `TabixFile.fetch()`, and `pileup()` arguments.
 
-**Reference:** See `references/alignment_files.md` for detailed documentation on:
-- Opening and reading alignment files
-- AlignedSegment attributes and methods
-- Region-based fetching with `fetch()`
-- Pileup analysis for coverage
-- Writing and creating BAM files
-- Coordinate systems and indexing
-- Performance optimization tips
-
-### 2. Variant File Operations (VCF/BCF)
-
-Use the `VariantFile` class to work with genetic variants from variant calling pipelines. This is appropriate for variant analysis, filtering, annotation, or population genetics.
-
-**Common operations:**
-- Read and write VCF/BCF files
-- Query variants in specific regions
-- Access variant information (position, alleles, quality)
-- Extract genotype data for samples
-- Filter variants by quality, allele frequency, or other criteria
-- Annotate variants with additional information
-- Subset samples or regions
-
-**Reference:** See `references/variant_files.md` for detailed documentation on:
-- Opening and reading variant files
-- VariantRecord attributes and methods
-- Accessing INFO and FORMAT fields
-- Working with genotypes and samples
-- Creating and writing VCF files
-- Filtering and subsetting variants
-- Multi-sample VCF operations
-
-### 3. Sequence File Operations (FASTA/FASTQ)
-
-Use `FastaFile` for random access to reference sequences and `FastxFile` for reading raw sequencing data. This is appropriate for extracting gene sequences, validating variants against reference, or processing raw reads.
-
-**Common operations:**
-- Query reference sequences by genomic coordinates
-- Extract sequences for genes or regions of interest
-- Read FASTQ files with quality scores
-- Validate variant reference alleles
-- Calculate sequence statistics
-- Filter reads by quality or length
-- Convert between FASTA and FASTQ formats
-
-**Reference:** See `references/sequence_files.md` for detailed documentation on:
-- FASTA file access and indexing
-- Extracting sequences by region
-- Handling reverse complement for genes
-- Reading FASTQ files sequentially
-- Quality score conversion and filtering
-- Working with tabix-indexed files (BED, GTF, GFF)
-- Common sequence processing patterns
-
-### 4. Integrated Bioinformatics Workflows
-
-Pysam excels at integrating multiple file types for comprehensive genomic analyses. Common workflows combine alignment files, variant files, and reference sequences.
-
-**Common workflows:**
-- Calculate coverage statistics for specific regions
-- Validate variants against aligned reads
-- Annotate variants with coverage information
-- Extract sequences around variant positions
-- Filter alignments or variants based on multiple criteria
-- Generate coverage tracks for visualization
-- Quality control across multiple data types
-
-**Reference:** See `references/common_workflows.md` for detailed examples of:
-- Quality control workflows (BAM statistics, reference consistency)
-- Coverage analysis (per-base coverage, low coverage detection)
-- Variant analysis (annotation, filtering by read support)
-- Sequence extraction (variant contexts, gene sequences)
-- Read filtering and subsetting
-- Integration patterns (BAM+VCF, VCF+BED, etc.)
-- Performance optimization for complex workflows
-
-## Key Concepts
-
-### Coordinate Systems
-
-**Critical:** Pysam uses **0-based, half-open** coordinates (Python convention):
-- Start positions are 0-based (first base is position 0)
-- End positions are exclusive (not included in the range)
-- Region 1000-2000 includes bases 1000-1999 (1000 bases total)
-
-**Exception:** Region strings in `fetch()` follow samtools convention (1-based):
-```python
-samfile.fetch("chr1", 999, 2000)      # 0-based: positions 999-1999
-samfile.fetch("chr1:1000-2000")       # 1-based string: positions 1000-2000
-```
-
-**VCF files:** Use 1-based coordinates in the file format, but `VariantRecord.start` is 0-based.
-
-### Indexing Requirements
-
-Random access to specific genomic regions requires index files:
-- **BAM files**: Require `.bai` index (create with `pysam.index()`)
-- **CRAM files**: Require `.crai` index
-- **FASTA files**: Require `.fai` index (create with `pysam.faidx()`)
-- **VCF.gz files**: Require `.tbi` tabix index (create with `pysam.tabix_index()`)
-- **BCF files**: Require `.csi` index
-
-Without an index, use `fetch(until_eof=True)` for sequential reading.
-
-### File Modes
-
-Specify format when opening files:
-- `"rb"` - Read BAM (binary)
-- `"r"` - Read SAM (text)
-- `"rc"` - Read CRAM
-- `"wb"` - Write BAM
-- `"w"` - Write SAM
-- `"wc"` - Write CRAM
-
-### Performance Considerations
-
-1. **Always use indexed files** for random access operations
-2. **Use `pileup()` for column-wise analysis** instead of repeated fetch operations
-3. **Use `count()` for counting** instead of iterating and counting manually
-4. **Process regions in parallel** when analyzing independent genomic regions
-5. **Close files explicitly** to free resources
-6. **Use `until_eof=True`** for sequential processing without index
-7. **Avoid multiple iterators** unless necessary (use `multiple_iterators=True` if needed)
-
-## Common Pitfalls
-
-1. **Coordinate confusion:** Remember 0-based vs 1-based systems in different contexts
-2. **Missing indices:** Many operations require index files—create them first
-3. **Partial overlaps:** `fetch()` returns reads overlapping region boundaries, not just those fully contained
-4. **Iterator scope:** Keep pileup iterator references alive to avoid "PileupProxy accessed after iterator finished" errors
-5. **Quality score editing:** Cannot modify `query_qualities` in place after changing `query_sequence`—create a copy first
-6. **Stream limitations:** Only stdin/stdout are supported for streaming, not arbitrary Python file objects
-7. **Thread safety:** While GIL is released during I/O, comprehensive thread-safety hasn't been fully validated
-
-## Command-Line Tools
-
-Pysam provides access to samtools and bcftools commands:
+**Region strings are samtools-style: 1-based and inclusive.**
 
 ```python
-# Sort BAM file
-pysam.samtools.sort("-o", "sorted.bam", "input.bam")
-
-# Index BAM
-pysam.samtools.index("sorted.bam")
-
-# View specific region
-pysam.samtools.view("-b", "-o", "region.bam", "input.bam", "chr1:1000-2000")
-
-# BCF tools
-pysam.bcftools.view("-O", "z", "-o", "output.vcf.gz", "input.vcf")
+# The same 100 bases:
+bam.fetch("chr1", 99, 199)          # [99, 199)
+bam.fetch(region="chr1:100-199")    # 1-based inclusive
 ```
 
-**Error handling:**
+VCF text uses 1-based `POS`, while record properties expose both systems:
+
+```python
+record.pos    # 1-based
+record.start  # 0-based inclusive
+record.stop   # 0-based exclusive
+```
+
+Read `references/coordinates_and_indexing.md` for format conversions, overlap
+semantics, index choices, and contig-name checks.
+
+## Alignment Files
+
+Use context managers and explicit modes:
+
+```python
+import pysam
+
+with pysam.AlignmentFile("sample.bam", "rb", threads=4) as bam:
+    for read in bam.fetch("chr1", 1_000, 2_000):
+        if (
+            not read.is_unmapped
+            and not read.is_secondary
+            and not read.is_supplementary
+            and read.mapping_quality >= 30
+        ):
+            print(read.query_name, read.reference_start, read.cigarstring)
+```
+
+Use `fetch(until_eof=True)` to stream every record in file order, including
+unplaced unmapped reads, without requiring an index:
+
+```python
+with pysam.AlignmentFile("sample.bam", "rb") as bam:
+    for read in bam.fetch(until_eof=True):
+        ...
+```
+
+Important distinctions:
+
+- `fetch()` returns alignment records overlapping a region.
+- `count()` counts records and defaults to `read_callback="nofilter"`.
+- `count_coverage()` returns A/C/G/T base counts and defaults to base quality
+  15 plus `read_callback="all"`.
+- `pileup()` exposes per-column reads and has its own filtering, base-quality,
+  overlap, orphan, and `max_depth=8000` defaults.
+
+For exact-region pileups, set `truncate=True` and explicit filters:
+
+```python
+with pysam.FastaFile("reference.fa") as fasta, pysam.AlignmentFile(
+    "sample.bam", "rb"
+) as bam:
+    for column in bam.pileup(
+        "chr1",
+        1_000,
+        2_000,
+        truncate=True,
+        stepper="samtools",
+        fastafile=fasta,
+        min_mapping_quality=20,
+        min_base_quality=20,
+        max_depth=100_000,
+    ):
+        print(column.reference_pos, column.get_num_aligned())
+```
+
+Read `references/alignment_files.md` for flags, CIGAR operations, tags,
+modified bases, writing records, pileup details, and iterator lifetime.
+
+## Variant Files
+
+Input format is auto-detected. Numeric fetch coordinates remain 0-based:
+
+```python
+import pysam
+
+with pysam.VariantFile("cohort.vcf.gz", threads=4) as variants:
+    for record in variants.fetch("chr1", 999_999, 2_000_000):
+        print(record.contig, record.pos, record.ref, record.alts)
+        for sample_name, call in record.samples.items():
+            print(sample_name, call.get("GT"))
+```
+
+Subset samples **before retrieving records**:
+
+```python
+with pysam.VariantFile("cohort.bcf") as variants:
+    variants.subset_samples(["sample_A", "sample_B"])
+    for record in variants:
+        ...
+```
+
+When changing a header, copy each record and translate it to the destination
+header before assigning newly declared INFO/FORMAT/FILTER fields. Do not
+manually clear and rebuild `header.samples`.
+
+Read `references/variant_files.md` for safe headers, writing, sample
+subsetting, missing genotypes, symbolic alleles, filtering, translation, and
+indexing.
+
+## FASTA, FASTQ, and Tabix
+
+Indexed FASTA uses numeric 0-based coordinates:
+
+```python
+with pysam.FastaFile("reference.fa") as fasta:
+    sequence = fasta.fetch("chr1", 999, 1_099)
+```
+
+`FastxFile` is sequential. `persist=False` is faster but yielded records become
+invalid after iteration advances:
+
+```python
+with pysam.FastxFile("reads.fastq.gz", persist=False) as reads:
+    for read in reads:
+        qualities = read.get_quality_array()
+        ...
+```
+
+Tabix input must be coordinate-sorted and BGZF-compressed, not ordinary gzip.
+Use a non-destructive two-step workflow:
+
+```python
+pysam.tabix_compress("regions.bed", "regions.bed.gz")
+pysam.tabix_index("regions.bed.gz", preset="bed")
+
+with pysam.TabixFile("regions.bed.gz", parser=pysam.asBed()) as tbx:
+    for interval in tbx.fetch("chr1", 1_000, 2_000):
+        print(interval.contig, interval.start, interval.end)
+```
+
+Read `references/sequence_files.md` for FASTA/FASTQ records and safe tabix
+creation.
+
+## CRAM, Remote I/O, and Threads
+
+pysam 0.24 changed inherited HTSlib behavior:
+
+- Newly written CRAM defaults to CRAM 3.1, not 3.0.
+- HTSlib no longer contacts the EBI reference server by default.
+- Prefer `reference_filename="reference.fa"` for deterministic local reads and
+  writes.
+
+```python
+with pysam.AlignmentFile(
+    "sample.cram",
+    "rc",
+    reference_filename="reference.fa",
+    threads=4,
+) as cram:
+    for read in cram.fetch("chr1", 1_000, 2_000):
+        ...
+```
+
+Only configure `REF_PATH`/`REF_CACHE` when reference-by-MD5 lookup is
+intentional. Do not assume a CRAM is self-contained. `threads=` accelerates
+compression/decompression; it does not parallelize Python analysis.
+
+Read `references/cram_and_performance.md` before CRAM conversion, remote access,
+or concurrent iteration.
+
+## Wrapped samtools and bcftools
+
+Import command modules explicitly. Pass each command-line token as a separate
+string:
+
+```python
+import pysam.samtools
+import pysam.bcftools
+
+pysam.samtools.sort(
+    "-@", "4", "-o", "sorted.bam", "input.bam", catch_stdout=False
+)
+pysam.samtools.index("-@", "4", "sorted.bam", catch_stdout=False)
+
+pysam.bcftools.index("--csi", "variants.vcf.gz", catch_stdout=False)
+```
+
+Dispatchers capture stdout by default. For large or binary output, use the
+tool's `-o` option with `catch_stdout=False`, or `save_stdout=...`, rather than
+returning the complete output in memory.
+
 ```python
 try:
-    pysam.samtools.sort("-o", "output.bam", "input.bam")
-except pysam.SamtoolsError as e:
-    print(f"Error: {e}")
+    pysam.samtools.quickcheck("-v", "sample.bam")
+except pysam.SamtoolsError as error:
+    messages = pysam.samtools.quickcheck.get_messages()
+    raise RuntimeError(messages or str(error)) from error
 ```
 
-## Resources
+Use the Python API for record-level logic and dispatchers for mature bulk
+operations such as sort, index, merge, view, and normalization. Never compose
+dispatcher arguments by splitting an untrusted shell command.
 
-### references/
+## Writing Rules
 
-Detailed documentation for each major capability:
+- Copy or construct a valid header before opening output.
+- Write to a new path; do not use `force=True` unless replacement is explicit.
+- Preserve sort order if the output will be indexed.
+- Set `query_sequence` before `query_qualities`.
+- Prefer `pysam.CIGAR_OPS` enum members; top-level constants such as
+  `pysam.CMATCH` are compatibility aliases slated for future removal.
+- Validate outputs with `pysam.samtools.quickcheck()` for alignments and reopen
+  variant/sequence outputs before downstream use.
+- Use CSI rather than BAI/TBI when references or coordinates exceed legacy
+  index limits.
 
-- **alignment_files.md** - Complete guide to SAM/BAM/CRAM operations, including AlignmentFile class, AlignedSegment attributes, fetch operations, pileup analysis, and writing alignments
+## Reference Map
 
-- **variant_files.md** - Complete guide to VCF/BCF operations, including VariantFile class, VariantRecord attributes, genotype handling, INFO/FORMAT fields, and multi-sample operations
+| Need | Read |
+|---|---|
+| Alignment API, flags, CIGAR, pileup, modified bases | `references/alignment_files.md` |
+| VCF/BCF headers, records, samples, writing | `references/variant_files.md` |
+| FASTA/FASTQ and tabix-indexed tables | `references/sequence_files.md` |
+| Coordinate conversion and index selection | `references/coordinates_and_indexing.md` |
+| CRAM references, remote I/O, threads, performance | `references/cram_and_performance.md` |
+| Correct integrated analysis patterns | `references/common_workflows.md` |
+| Compact current API signatures and defaults | `references/api_reference.md` |
+| Upgrade notes for existing environments | `references/migration_to_0_24.md` |
+| Official docs, specifications, and release sources | `references/sources.md` |
 
-- **sequence_files.md** - Complete guide to FASTA/FASTQ operations, including FastaFile and FastxFile classes, sequence extraction, quality score handling, and tabix-indexed file access
+## Common Failure Modes
 
-- **common_workflows.md** - Practical examples of integrated bioinformatics workflows combining multiple file types, including quality control, coverage analysis, variant validation, and sequence extraction
-
-## Getting Help
-
-For detailed information on specific operations, refer to the appropriate reference document:
-
-- Working with BAM files or calculating coverage → `alignment_files.md`
-- Analyzing variants or genotypes → `variant_files.md`
-- Extracting sequences or processing FASTQ → `sequence_files.md`
-- Complex workflows integrating multiple file types → `common_workflows.md`
-
-Official documentation: https://pysam.readthedocs.io/
-
+- Treating numeric `VariantFile.fetch()` coordinates as 1-based
+- Using ordinary gzip where BGZF plus tabix/CSI is required
+- Calling region fetch without an index
+- Assuming `fetch()` includes unplaced unmapped alignments
+- Forgetting `truncate=True` for an exact pileup interval
+- Ignoring pileup defaults such as base quality 13 and depth cap 8000
+- Sharing one file handle across active iterators or threads
+- Decoding CRAM without its exact reference
+- Assigning a new VCF field before declaring it in the output header
+- Capturing large samtools/bcftools output in memory
+- Using a SNP base-counting method for indels or symbolic alleles

@@ -1,449 +1,352 @@
-# SHAP Theoretical Foundation
+# SHAP Theory and Interpretation
 
-This document explains the theoretical foundations of SHAP (SHapley Additive exPlanations), including Shapley values from game theory, the principles that make SHAP unique, and connections to other explanation methods.
+SHAP applies Shapley-style credit allocation to model explanations. The numerical result is defined by more than the fitted model: it also depends on the model output, background distribution, masking rule, and any coalition constraints.
 
-## Game Theory Origins
+## Additive Explanation
 
-### Shapley Values
+For one scalar model output and one row `x`, SHAP constructs an additive decomposition:
 
-SHAP is grounded in **Shapley values**, a solution concept from cooperative game theory developed by Lloyd Shapley in 1951.
-
-**Core Concept**:
-In cooperative game theory, players collaborate to achieve a total payoff, and the question is: how should this payoff be fairly distributed among players?
-
-**Mapping to Machine Learning**:
-- **Players** → Input features
-- **Game** → Model prediction task
-- **Payoff** → Model output (prediction value)
-- **Coalition** → Subset of features with known values
-- **Fair Distribution** → Attributing prediction to features
-
-### The Shapley Value Formula
-
-For a feature $i$, its Shapley value $\phi_i$ is:
-
-$$\phi_i = \sum_{S \subseteq F \setminus \{i\}} \frac{|S|!(|F|-|S|-1)!}{|F|!} [f(S \cup \{i\}) - f(S)]$$
-
-Where:
-- $F$ is the set of all features
-- $S$ is a subset of features not including $i$
-- $f(S)$ is the model's expected output given only features in $S$
-- $|S|$ is the size of subset $S$
-
-**Interpretation**:
-The Shapley value averages the marginal contribution of feature $i$ across all possible feature coalitions (subsets). The contribution is weighted by how likely each coalition is to occur.
-
-### Key Properties of Shapley Values
-
-**1. Efficiency (Additivity)**:
-$$\sum_{i=1}^{n} \phi_i = f(x) - f(\emptyset)$$
-
-The sum of all SHAP values equals the difference between the model's prediction for the instance and the expected value (baseline).
-
-This is why SHAP waterfall plots always sum to the total prediction change.
-
-**2. Symmetry**:
-If two features $i$ and $j$ contribute equally to all coalitions, then $\phi_i = \phi_j$.
-
-Features with identical effects receive identical attribution.
-
-**3. Dummy**:
-If a feature $i$ doesn't change the model output for any coalition, then $\phi_i = 0$.
-
-Irrelevant features receive zero attribution.
-
-**4. Monotonicity**:
-If a feature's marginal contribution increases across coalitions, its Shapley value increases.
-
-## From Game Theory to Machine Learning
-
-### The Challenge
-
-Computing exact Shapley values requires evaluating the model on all possible feature coalitions:
-- For $n$ features, there are $2^n$ possible coalitions
-- For 50 features, this is over 1 quadrillion evaluations
-
-This exponential complexity makes exact computation intractable for most real-world models.
-
-### SHAP's Solution: Additive Feature Attribution
-
-SHAP connects Shapley values to **additive feature attribution methods**, enabling efficient computation.
-
-**Additive Feature Attribution Model**:
-$$g(z') = \phi_0 + \sum_{i=1}^{M} \phi_i z'_i$$
-
-Where:
-- $g$ is the explanation model
-- $z' \in \{0,1\}^M$ indicates feature presence/absence
-- $\phi_i$ is the attribution to feature $i$
-- $\phi_0$ is the baseline (expected value)
-
-SHAP proves that **Shapley values are the only attribution values satisfying three desirable properties**: local accuracy, missingness, and consistency.
-
-## SHAP Properties and Guarantees
-
-### Local Accuracy
-
-**Property**: The explanation matches the model's output:
-$$f(x) = g(x') = \phi_0 + \sum_{i=1}^{M} \phi_i x'_i$$
-
-**Interpretation**: SHAP values exactly account for the model's prediction. This enables waterfall plots to precisely decompose predictions.
-
-### Missingness
-
-**Property**: If a feature is missing (not observed), its attribution is zero:
-$$x'_i = 0 \Rightarrow \phi_i = 0$$
-
-**Interpretation**: Only features that are present contribute to explanations.
-
-### Consistency
-
-**Property**: If a model changes so a feature's marginal contribution increases (or stays the same) for all inputs, that feature's attribution should not decrease.
-
-**Interpretation**: If a feature becomes more important to the model, its SHAP value reflects this. This enables meaningful model comparisons.
-
-## SHAP as a Unified Framework
-
-SHAP unifies several existing explanation methods by showing they're special cases of Shapley values under specific assumptions.
-
-### LIME (Local Interpretable Model-agnostic Explanations)
-
-**LIME's Approach**: Fit a local linear model around a prediction using perturbed samples.
-
-**Connection to SHAP**: LIME approximates Shapley values but with suboptimal sample weighting. SHAP uses theoretically optimal weights derived from Shapley value formula.
-
-**Key Difference**: LIME's loss function and sampling don't guarantee consistency or exact additivity; SHAP does.
-
-### DeepLIFT
-
-**DeepLIFT's Approach**: Backpropagate contributions through neural networks by comparing to reference activations.
-
-**Connection to SHAP**: DeepExplainer uses DeepLIFT but averages over multiple reference samples to approximate conditional expectations, yielding Shapley values.
-
-### Layer-Wise Relevance Propagation (LRP)
-
-**LRP's Approach**: Decompose neural network predictions by propagating relevance scores backward through layers.
-
-**Connection to SHAP**: LRP is a special case of SHAP with specific propagation rules. SHAP generalizes these rules with Shapley value theory.
-
-### Integrated Gradients
-
-**Integrated Gradients' Approach**: Integrate gradients along path from baseline to input.
-
-**Connection to SHAP**: When using a single reference point, Integrated Gradients approximates SHAP values for smooth models.
-
-## SHAP Computation Methods
-
-Different SHAP explainers use specialized algorithms to compute Shapley values efficiently for specific model types.
-
-### Tree SHAP (TreeExplainer)
-
-**Innovation**: Exploits tree structure to compute exact Shapley values in polynomial time instead of exponential.
-
-**Algorithm**:
-- Traverses each tree path from root to leaf
-- Computes feature contributions using tree splits and weights
-- Aggregates across all trees in ensemble
-
-**Complexity**: $O(TLD^2)$ where $T$ = number of trees, $L$ = max leaves, $D$ = max depth
-
-**Key Advantage**: Exact Shapley values computed efficiently for tree-based models (XGBoost, LightGBM, Random Forest, etc.)
-
-### Kernel SHAP (KernelExplainer)
-
-**Innovation**: Uses weighted linear regression to estimate Shapley values for any model.
-
-**Algorithm**:
-- Samples coalitions (feature subsets) according to Shapley kernel weights
-- Evaluates model on each coalition (missing features replaced by background values)
-- Fits weighted linear model to estimate feature attributions
-
-**Complexity**: $O(n \cdot 2^M)$ but approximates with fewer samples
-
-**Key Advantage**: Model-agnostic; works with any prediction function
-
-**Trade-off**: Slower than specialized explainers; approximate rather than exact
-
-### Deep SHAP (DeepExplainer)
-
-**Innovation**: Combines DeepLIFT with Shapley value sampling.
-
-**Algorithm**:
-- Computes DeepLIFT attributions for each reference sample
-- Averages attributions across multiple reference samples
-- Approximates conditional expectations: $E[f(x) | x_S]$
-
-**Complexity**: $O(n \cdot m)$ where $m$ = number of reference samples
-
-**Key Advantage**: Efficiently approximates Shapley values for deep neural networks
-
-### Linear SHAP (LinearExplainer)
-
-**Innovation**: Closed-form Shapley values for linear models.
-
-**Algorithm**:
-- For independent features: $\phi_i = w_i \cdot (x_i - E[x_i])$
-- For correlated features: Adjusts for feature covariance
-
-**Complexity**: $O(n)$ - nearly instantaneous
-
-**Key Advantage**: Exact Shapley values with minimal computation
-
-## Understanding Conditional Expectations
-
-### The Core Challenge
-
-Computing $f(S)$ (model output given only features in $S$) requires handling missing features.
-
-**Question**: How should we represent "missing" features when the model requires all features as input?
-
-### Two Approaches
-
-**1. Interventional (Marginal) Approach**:
-- Replace missing features with values from background dataset
-- Estimates: $E[f(x) | x_S]$ by marginalizing over $x_{\bar{S}}$
-- Interpretation: "What would the model predict if we didn't know features $\bar{S}$?"
-
-**2. Observational (Conditional) Approach**:
-- Use conditional distribution: $E[f(x) | x_S = x_S^*]$
-- Accounts for feature dependencies
-- Interpretation: "What would the model predict for similar instances with features $S = x_S^*$?"
-
-**Trade-offs**:
-- **Interventional**: Simpler, assumes feature independence, matches causal interpretation
-- **Observational**: More accurate for correlated features, requires conditional distribution estimation
-
-**TreeExplainer** supports both via `feature_perturbation` parameter.
-
-## Baseline (Expected Value) Selection
-
-The **baseline** $\phi_0 = E[f(x)]$ represents the model's average prediction.
-
-### Computing the Baseline
-
-**For TreeExplainer**:
-- With background data: Average prediction on background dataset
-- With tree_path_dependent: Weighted average using tree leaf distributions
-
-**For DeepExplainer / KernelExplainer**:
-- Average prediction on background samples
-
-### Importance of Baseline
-
-- SHAP values measure deviation from baseline
-- Different baselines → different SHAP values (but still sum correctly)
-- Choose baseline representative of "typical" or "neutral" input
-- Common choices: Training set mean, median, or mode
-
-## Interpreting SHAP Values
-
-### Units and Scale
-
-**SHAP values have the same units as the model output**:
-- Regression: Same units as target variable (dollars, temperature, etc.)
-- Classification (log-odds): Log-odds units
-- Classification (probability): Probability units (if model output transformed)
-
-**Magnitude**: Higher absolute SHAP value = stronger feature impact
-
-**Sign**:
-- Positive SHAP value = Feature pushes prediction higher
-- Negative SHAP value = Feature pushes prediction lower
-
-### Additive Decomposition
-
-For a prediction $f(x)$:
-$$f(x) = E[f(X)] + \sum_{i=1}^{n} \phi_i(x)$$
-
-**Example**:
-- Expected value (baseline): 0.3
-- SHAP values: {Age: +0.15, Income: +0.10, Education: -0.05}
-- Prediction: $0.3 + 0.15 + 0.10 - 0.05 = 0.50$
-
-### Global vs. Local Importance
-
-**Local (Instance-level)**:
-- SHAP values for single prediction: $\phi_i(x)$
-- Explains: "Why did the model predict $f(x)$ for this instance?"
-- Visualization: Waterfall, force plots
-
-**Global (Dataset-level)**:
-- Average absolute SHAP values: $E[|\phi_i(x)|]$
-- Explains: "Which features are most important overall?"
-- Visualization: Beeswarm, bar plots
-
-**Key Insight**: Global importance is the aggregation of local importances, maintaining consistency between instance and dataset explanations.
-
-## SHAP vs. Other Feature Importance Methods
-
-### Comparison with Permutation Importance
-
-**Permutation Importance**:
-- Shuffles a feature and measures accuracy drop
-- Global metric only (no instance-level explanations)
-- Can be misleading with correlated features
-
-**SHAP**:
-- Provides both local and global importance
-- Handles feature correlations through coalitional averaging
-- Consistent: Additive property guarantees sum to prediction
-
-### Comparison with Feature Coefficients (Linear Models)
-
-**Feature Coefficients** ($w_i$):
-- Measure impact per unit change in feature
-- Don't account for feature scale or distribution
-
-**SHAP for Linear Models**:
-- $\phi_i = w_i \cdot (x_i - E[x_i])$
-- Accounts for feature value relative to average
-- More interpretable for comparing features with different units/scales
-
-### Comparison with Tree Feature Importance (Gini/Split-based)
-
-**Gini/Split Importance**:
-- Based on training process (purity gain or frequency of splits)
-- Biased toward high-cardinality features
-- No instance-level explanations
-- Can be misleading (importance ≠ predictive power)
-
-**SHAP (Tree SHAP)**:
-- Based on model output (prediction behavior)
-- Fair attribution through Shapley values
-- Provides instance-level explanations
-- Consistent and theoretically grounded
-
-## Interactions and Higher-Order Effects
-
-### SHAP Interaction Values
-
-Standard SHAP captures main effects. **SHAP interaction values** capture pairwise interactions.
-
-**Formula for Interaction**:
-$$\phi_{i,j} = \sum_{S \subseteq F \setminus \{i,j\}} \frac{|S|!(|F|-|S|-2)!}{2(|F|-1)!} \Delta_{ij}(S)$$
-
-Where $\Delta_{ij}(S)$ is the interaction effect of features $i$ and $j$ given coalition $S$.
-
-**Interpretation**:
-- $\phi_{i,i}$: Main effect of feature $i$
-- $\phi_{i,j}$ ($i \neq j$): Interaction effect between features $i$ and $j$
-
-**Property**:
-$$\phi_i = \phi_{i,i} + \sum_{j \neq i} \phi_{i,j}$$
-
-Main SHAP value equals main effect plus half of all pairwise interactions involving feature $i$.
-
-### Computing Interactions
-
-**TreeExplainer** supports exact interaction computation:
-```python
-explainer = shap.TreeExplainer(model)
-shap_interaction_values = explainer.shap_interaction_values(X)
+```text
+f_explained(x) = base_value + sum_i phi_i(x)
 ```
 
-**Limitation**: Exponentially complex for other explainers (only practical for tree models)
+- `f_explained` is the exact output selected for explanation.
+- `base_value` is the expected output under the explainer's reference game.
+- `phi_i` is the attribution assigned to feature `i`.
 
-## Theoretical Limitations and Considerations
+For modern tabular `shap.Explanation` objects:
 
-### Computational Complexity
+```python
+reconstructed = explanation.base_values + explanation.values.sum(axis=1)
+```
 
-**Exact Computation**: $O(2^n)$ - intractable for large $n$
+The equation is meaningful only when the output units are known. A raw margin, probability, log loss, and logit are different quantities.
 
-**Specialized Algorithms**:
-- Tree SHAP: $O(TLD^2)$ - efficient for trees
-- Deep SHAP, Kernel SHAP: Approximations required
+## Cooperative-Game Formulation
 
-**Implication**: For non-tree models with many features, explanations may be approximate.
+Let `F` be the set of features and `v(S)` the value assigned to coalition `S`. A Shapley value for feature `i` is:
 
-### Feature Independence Assumption
+```text
+phi_i =
+  sum over S subset of F \ {i}
+  [ |S|! (|F|-|S|-1)! / |F|! ]
+  * [v(S union {i}) - v(S)]
+```
 
-**Kernel SHAP and Basic Implementation**: Assume features can be independently manipulated
+This averages the marginal contribution of `i` over all feature orderings.
 
-**Challenge**: Real features are often correlated (e.g., height and weight)
+In machine learning, defining `v(S)` is the hard part because a model normally requires all inputs. The masker and background distribution specify how hidden features are integrated or imputed.
 
-**Solutions**:
-- Use observational approach (conditional expectations)
-- TreeExplainer with correlation-aware perturbation
-- Feature grouping for highly correlated features
+## What the Axioms Mean
 
-### Out-of-Distribution Samples
+Classic Shapley values satisfy:
 
-**Issue**: Creating coalitions by replacing features may create unrealistic samples (outside training distribution)
+- **Efficiency:** all feature values sum to the coalition payoff difference.
+- **Symmetry:** interchangeable players receive equal credit.
+- **Dummy/null player:** a player with no marginal contribution receives zero.
+- **Additivity:** values for combined games are sums of values for component games.
 
-**Example**: Setting "Age=5" and "Has PhD=Yes" simultaneously
+The SHAP paper describes related properties for additive feature-attribution methods:
 
-**Implication**: SHAP values reflect model behavior on potentially unrealistic inputs
+- **Local accuracy:** the additive explanation reconstructs the selected output.
+- **Missingness:** absent simplified inputs receive zero attribution under the formulation.
+- **Consistency:** if a feature's marginal contribution increases for every coalition, its attribution does not decrease.
 
-**Mitigation**: Use observational approach or carefully selected background data
+These are mathematical allocation properties. They do **not** mean:
 
-### Causality
+- ethical or legal fairness;
+- causal correctness;
+- robustness to distribution shift;
+- truthfulness of the fitted model;
+- stability under a different background or masker.
 
-**SHAP measures association, not causation**
+Avoid calling SHAP values "fair" without specifying that the term refers only to a cooperative-game allocation axiom.
 
-SHAP answers: "How does the model's prediction change with this feature?"
-SHAP does NOT answer: "What would happen if we changed this feature in reality?"
+## The Value Function Is Part of the Result
 
-**Example**:
-- SHAP: "Hospital stay length increases prediction of mortality" (association)
-- Causality: "Longer hospital stays cause higher mortality" (incorrect!)
+Common tabular games include:
 
-**Implication**: Use domain knowledge to interpret SHAP causally; SHAP alone doesn't establish causation.
+### Marginal/interventional game
 
-## Advanced Theoretical Topics
+Hidden features are sampled from a background distribution independently of the observed features.
 
-### SHAP as Optimal Credit Allocation
+Conceptually:
 
-SHAP is the unique attribution method satisfying:
-1. **Local accuracy**: Explanation matches model
-2. **Missingness**: Absent features have zero attribution
-3. **Consistency**: Attribution reflects feature importance changes
+```text
+v(S) = E_background[f(x_S, X_not_S)]
+```
 
-**Proof**: Lundberg & Lee (2017) showed Shapley values are the only solution satisfying these axioms.
+Advantages:
 
-### Connection to Functional ANOVA
+- clear reference population;
+- preserves the dummy property with respect to direct model use;
+- straightforward model-agnostic masking.
 
-SHAP values correspond to first-order terms in functional ANOVA decomposition:
-$$f(x) = f_0 + \sum_i f_i(x_i) + \sum_{i,j} f_{ij}(x_i, x_j) + ...$$
+Limitations:
 
-Where $f_i(x_i)$ captures main effect of feature $i$, and $\phi_i \approx f_i(x_i)$.
+- can evaluate unrealistic combinations;
+- can be sensitive to the selected background;
+- "interventional" in the API name does not make the resulting predictive explanation a causal effect.
 
-### Relationship to Sensitivity Analysis
+### Conditional game
 
-SHAP generalizes sensitivity analysis:
-- **Sensitivity Analysis**: $\frac{\partial f}{\partial x_i}$ (local gradient)
-- **SHAP**: Integrated sensitivity over feature coalition space
+Hidden features are drawn from a distribution conditional on observed features:
 
-Gradient-based methods (GradientExplainer, Integrated Gradients) approximate SHAP using derivatives.
+```text
+v(S) = E[f(X) | X_S = x_S]
+```
 
-## Practical Implications of Theory
+Advantages:
 
-### Why Use SHAP?
+- can stay closer to the observed data manifold;
+- incorporates statistical dependence.
 
-1. **Theoretical Guarantees**: Only method with consistency, local accuracy, and missingness
-2. **Unified Framework**: Connects and generalizes multiple explanation methods
-3. **Additive Decomposition**: Predictions precisely decompose into feature contributions
-4. **Model Comparison**: Consistency enables comparing feature importance across models
-5. **Versatility**: Works with any model type (with appropriate explainer)
+Limitations:
 
-### When to Be Cautious
+- requires estimating conditional distributions;
+- can assign credit to a feature the model does not directly use;
+- dependence can be mistaken for causation;
+- estimates can be unstable in sparse regions.
 
-1. **Computational Cost**: May be slow for complex models without specialized explainers
-2. **Feature Correlation**: Standard approaches may create unrealistic samples
-3. **Interpretation**: Requires understanding baseline, units, and assumptions
-4. **Causality**: SHAP doesn't imply causation; use domain knowledge
-5. **Approximations**: Non-tree methods use approximations; understand accuracy trade-offs
+### Partitioned game
 
-## References and Further Reading
+Only coalitions compatible with a hierarchy are considered. The resulting allocations are Owen values.
 
-**Foundational Papers**:
-- Shapley, L. S. (1951). "A value for n-person games"
-- Lundberg, S. M., & Lee, S. I. (2017). "A Unified Approach to Interpreting Model Predictions" (NeurIPS)
-- Lundberg, S. M., et al. (2020). "From local explanations to global understanding with explainable AI for trees" (Nature Machine Intelligence)
+Advantages:
 
-**Key Concepts**:
-- Cooperative game theory and Shapley values
-- Additive feature attribution methods
-- Conditional expectation estimation
-- Tree SHAP algorithm and polynomial-time computation
+- respects semantic or statistical groups;
+- makes structured high-dimensional problems more tractable;
+- reduces arbitrary competition among related features.
 
-This theoretical foundation explains why SHAP is a principled, versatile, and powerful tool for model interpretation.
+Limitation: the hierarchy is an assumption and changes the game.
+
+There is no universal answer to "the SHAP value" without specifying the game.
+
+## Background and Baseline
+
+The base value is the reference-game expectation, not automatically:
+
+- the overall target mean;
+- the model intercept;
+- class prevalence;
+- a neutral patient/customer;
+- a decision threshold.
+
+Different backgrounds can change:
+
+- base values;
+- signed local attributions;
+- mean absolute global rankings;
+- cohort comparisons.
+
+Treat background sensitivity as a substantive analysis, not just a runtime check.
+
+## Output Scale
+
+SHAP values use the additive scale selected by the explainer.
+
+Examples:
+
+- regression prediction in target units;
+- binary tree margin in log-odds;
+- class probability;
+- per-row log loss;
+- transformed output under a link function.
+
+A display transform such as `link="logit"` on a force plot changes labels, not the computed SHAP game. If probability-space additivity is required for supported trees, configure `TreeExplainer(model_output="probability", feature_perturbation="interventional", data=...)`.
+
+Do not compare mean absolute SHAP magnitudes across models or outputs on different scales.
+
+## Local and Global Quantities
+
+Local attribution:
+
+```text
+phi_i(x)
+```
+
+Global mean absolute attribution:
+
+```text
+E_x[abs(phi_i(x))]
+```
+
+Mean absolute attribution:
+
+- discards direction;
+- depends on the evaluated sample distribution;
+- is not normalized predictive performance;
+- is not a causal effect size.
+
+Mean signed attribution can cancel heterogeneous effects. Plot the distribution before summarizing.
+
+## Exact and Approximate Algorithms
+
+Unconstrained exact Shapley computation grows exponentially with feature count. SHAP uses model-specific algorithms or sampling:
+
+- **Tree SHAP:** exploits tree structure and is exact for the selected tree game.
+- **Linear SHAP:** closed-form or transformation-based allocation for supported linear games.
+- **ExactExplainer:** optimized enumeration for small or hierarchically constrained inputs.
+- **PermutationExplainer:** averages forward/reverse feature orderings.
+- **KernelExplainer:** estimates values through a weighted linear regression over coalitions.
+- **DeepExplainer:** combines DeepLIFT-style rules with multiple background samples.
+- **GradientExplainer:** uses expected gradients.
+- **PartitionExplainer:** exploits a coalition hierarchy.
+
+"Exact" always means exact under a specified output, background, masker, and coalition game.
+
+## Interaction Values
+
+Tree SHAP can decompose attribution into a symmetric interaction matrix.
+
+For one row:
+
+- diagonal entries are main effects;
+- off-diagonal entries are pairwise interaction allocations;
+- each row sums to that feature's ordinary SHAP value;
+- the full matrix sums to the prediction difference from baseline.
+
+```python
+interaction = explainer.shap_interaction_values(X_eval)
+```
+
+An interaction value describes non-additivity in the fitted model under the chosen game. It does not prove biological, physical, or causal interaction.
+
+Scatter-plot vertical dispersion is only a clue; compute or test interactions before labeling them.
+
+## Correlation and Credit Sharing
+
+When two features contain similar information, multiple allocations can be defensible:
+
+- marginal values emphasize direct functional use by the model;
+- conditional values share credit through dependence;
+- grouped values assign credit to the coalition.
+
+Instability across folds, seeds, backgrounds, or equivalent model fits is evidence that individual attribution is not uniquely supported by the problem. Report grouped results or sensitivity rather than selecting one convenient ranking.
+
+## SHAP Is Not Causal
+
+SHAP makes predictive relationships visible. A positive attribution does not imply that increasing the feature would increase the real-world outcome.
+
+Confounding, mediation, reverse causality, selection bias, and feature redundancy can all make predictive patterns unsuitable for intervention.
+
+Use causal language only when:
+
+- the model and estimand are explicitly causal;
+- identification assumptions are stated;
+- data collection supports those assumptions;
+- the SHAP use is integrated into that causal analysis.
+
+Even then, describe exactly what quantity is attributed.
+
+## SHAP Is Not a Fairness Certificate
+
+Attribution can help investigate:
+
+- whether a model directly uses a protected feature;
+- whether potential proxies have large or heterogeneous attributions;
+- how explanation distributions differ across groups;
+- which features contribute to errors or loss.
+
+It cannot alone establish:
+
+- demographic parity;
+- equalized odds/opportunity;
+- calibration by group;
+- absence of proxy discrimination;
+- individual fairness;
+- compliant recourse.
+
+Protected-feature attribution can be small while proxies drive disparities. Conditional attributions can also assign protected-feature credit even when the model does not directly consume it. Pair SHAP with outcome, error, calibration, threshold, and data-quality analyses.
+
+## SHAP Is Not Recourse
+
+A waterfall answers "how this model output is allocated relative to this reference." It does not answer:
+
+- which feature can feasibly be changed;
+- what the outcome would be after intervention;
+- whether downstream features would change;
+- what the minimal safe action is.
+
+Use dedicated counterfactual/recourse methods with feasibility and causal constraints.
+
+## Uncertainty and Stability
+
+A standard SHAP plot usually shows point estimates, not uncertainty.
+
+Sources of variation include:
+
+- model fitting sample and seed;
+- hyperparameters;
+- background sample;
+- evaluation cohort;
+- approximation seed and budget;
+- conditional-distribution estimation;
+- preprocessing and feature grouping.
+
+Useful stability analyses:
+
+1. bootstrap or cross-fit the model;
+2. repeat background sampling;
+3. repeat approximation seeds;
+4. compare rankings and signed distributions;
+5. report intervals or rank stability;
+6. separate model uncertainty from explainer approximation uncertainty.
+
+## Comparisons With Other Importance Measures
+
+### Permutation importance
+
+Measures predictive performance degradation after shuffling a feature.
+
+- global, metric-dependent;
+- can be distorted by correlated features;
+- does not decompose individual predictions.
+
+### Split/gain importance
+
+Summarizes how a tree used features during fitting.
+
+- fast;
+- can favor high-cardinality or frequently split features;
+- does not provide local output decomposition.
+
+### Linear coefficients
+
+Describe change per input unit on the model's linear scale.
+
+- depend on feature scale and parameterization;
+- do not include how far a row is from the reference.
+
+### Partial dependence
+
+Averages predictions while varying a feature.
+
+- describes an average response surface;
+- can evaluate off-manifold combinations;
+- does not allocate each individual prediction.
+
+These answer different questions. Agreement is reassuring but not proof; disagreement should trigger an assumptions review.
+
+## Interpretation Checklist
+
+Before making a claim:
+
+- [ ] Name the model output and units.
+- [ ] Define background and masking semantics.
+- [ ] Identify the selected row/cohort and sampling rule.
+- [ ] Verify additivity where applicable.
+- [ ] State whether estimates are exact or approximate.
+- [ ] Check correlation and grouping sensitivity.
+- [ ] Separate local from global claims.
+- [ ] Avoid causal, fairness, and recourse claims without separate evidence.
+- [ ] Report model performance and relevant uncertainty.
+
+## Sources
+
+- Lundberg & Lee (2017), "A Unified Approach to Interpreting Model Predictions": https://proceedings.neurips.cc/paper/2017/hash/8a20a8621978632d76c43dfd28b67767-Abstract.html
+- Lundberg et al. (2020), "From local explanations to global understanding with explainable AI for trees": https://www.nature.com/articles/s42256-019-0138-9
+- SHAP introduction: https://shap.readthedocs.io/en/latest/example_notebooks/overviews/An%20introduction%20to%20explainable%20AI%20with%20Shapley%20values.html
+- Causal interpretation caution: https://shap.readthedocs.io/en/latest/example_notebooks/overviews/Be%20careful%20when%20interpreting%20predictive%20models%20in%20search%20of%20causal%20insights.html
+- Explaining quantitative fairness measures: https://shap.readthedocs.io/en/latest/example_notebooks/overviews/Explaining%20quantitative%20measures%20of%20fairness.html
+- Janzing, Minorics & Blöbaum (2020), "Feature relevance quantification in explainable AI: A causal problem": https://proceedings.mlr.press/v108/janzing20a.html

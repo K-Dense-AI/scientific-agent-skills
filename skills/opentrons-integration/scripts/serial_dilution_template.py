@@ -1,96 +1,113 @@
-#!/usr/bin/env python3
-"""
-Serial Dilution Protocol Template
+"""Full-plate 1:2 serial dilution on Opentrons Flex.
 
-This template demonstrates how to perform a serial dilution across a plate row.
-Useful for creating concentration gradients for assays.
+Physical setup:
+- Put at least 12 mL diluent in reservoir A1.
+- Put 200 µL stock in every well of plate column 1.
+- Leave plate columns 2-12 empty.
+
+The protocol fills columns 2-12 with 100 µL diluent, serially transfers
+100 µL across the plate, and removes 100 µL from column 12 so every well
+finishes at 100 µL. Simulate, dry-run, and validate the assay before use.
 """
 
 from opentrons import protocol_api
 
 metadata = {
-    'protocolName': 'Serial Dilution Template',
-    'author': 'Opentrons',
-    'description': 'Serial dilution protocol for creating concentration gradients',
-    'apiLevel': '2.19'
+    "protocolName": "Flex 8-Channel Serial Dilution Template",
+    "author": "Customize before use",
+    "description": "Create eleven 1:2 dilution steps across a 96-well plate.",
 }
 
 requirements = {
-    'robotType': 'Flex',
-    'apiLevel': '2.19'
+    "robotType": "Flex",
+    "apiLevel": "2.29",
 }
 
-def run(protocol: protocol_api.ProtocolContext):
-    """
-    Performs a serial dilution across plate rows.
 
-    Protocol performs:
-    1. Adds diluent to all wells except the first column
-    2. Transfers stock solution to first column
-    3. Performs serial dilutions across rows
-    """
+def run(protocol: protocol_api.ProtocolContext) -> None:
+    """Perform the same serial dilution across all eight plate rows."""
+    tips_1 = protocol.load_labware(
+        "opentrons_flex_96_tiprack_200ul",
+        "D1",
+        label="Tips 1",
+    )
+    tips_2 = protocol.load_labware(
+        "opentrons_flex_96_tiprack_200ul",
+        "C1",
+        label="Tips 2",
+    )
+    reservoir = protocol.load_labware(
+        "nest_12_reservoir_15ml",
+        "D2",
+        label="Diluent Reservoir",
+    )
+    plate = protocol.load_labware(
+        "corning_96_wellplate_360ul_flat",
+        "C2",
+        label="Dilution Plate",
+    )
+    trash = protocol.load_trash_bin("A3")
 
-    # Load labware
-    tips = protocol.load_labware('opentrons_flex_96_tiprack_200ul', 'D1')
-    reservoir = protocol.load_labware('nest_12_reservoir_15ml', 'D2', label='Reservoir')
-    plate = protocol.load_labware('corning_96_wellplate_360ul_flat', 'D3', label='Dilution Plate')
+    pipette = protocol.load_instrument(
+        instrument_name="flex_8channel_1000",
+        mount="left",
+        tip_racks=[tips_1, tips_2],
+    )
 
-    # Load pipette
-    p300 = protocol.load_instrument('p300_single_flex', 'left', tip_racks=[tips])
-
-    # Define liquids (optional, for visualization)
     diluent = protocol.define_liquid(
-        name='Diluent',
-        description='Buffer or growth media',
-        display_color='#B0E0E6'
+        name="Diluent",
+        description="Buffer or media used for the dilution series",
+        display_color="#9ECAE1",
     )
-
     stock = protocol.define_liquid(
-        name='Stock Solution',
-        description='Concentrated stock',
-        display_color='#FF6347'
+        name="Stock",
+        description="Starting material at the highest concentration",
+        display_color="#DE2D26",
+    )
+    reservoir.load_liquid(
+        wells=["A1"],
+        volume=12_000,
+        liquid=diluent,
+    )
+    plate.load_liquid(
+        wells=plate.columns()[0],
+        volume=200,
+        liquid=stock,
     )
 
-    # Load liquids into wells
-    reservoir['A1'].load_liquid(liquid=diluent, volume=15000)
-    reservoir['A2'].load_liquid(liquid=stock, volume=5000)
+    # With a full 8-channel pipette, A-row wells address entire columns.
+    column_anchors = plate.rows()[0]
 
-    # Protocol parameters
-    dilution_factor = 2  # 1:2 dilution
-    transfer_volume = 100  # µL
-    num_dilutions = 11  # Number of dilution steps
-
-    protocol.comment('Starting serial dilution protocol')
-
-    # Step 1: Add diluent to all wells except first column
-    protocol.comment('Adding diluent to wells...')
-    for row in plate.rows()[:8]:  # For each row (A-H)
-        p300.transfer(
-            transfer_volume,
-            reservoir['A1'],  # Diluent source
-            row[1:],  # All wells except first (columns 2-12)
-            new_tip='once'
+    with protocol.group_steps(
+        name="Add Diluent",
+        description="Fill columns 2-12 with 100 µL diluent.",
+    ):
+        pipette.transfer(
+            volume=100,
+            source=reservoir["A1"],
+            dest=column_anchors[1:],
+            new_tip="once",
         )
 
-    # Step 2: Add stock solution to first column
-    protocol.comment('Adding stock solution to first column...')
-    p300.transfer(
-        transfer_volume * 2,  # Double volume for first well
-        reservoir['A2'],  # Stock source
-        [row[0] for row in plate.rows()[:8]],  # First column (wells A1-H1)
-        new_tip='always'
-    )
-
-    # Step 3: Perform serial dilution
-    protocol.comment('Performing serial dilutions...')
-    for row in plate.rows()[:8]:  # For each row
-        p300.transfer(
-            transfer_volume,
-            row[:num_dilutions],  # Source wells (1-11)
-            row[1:num_dilutions + 1],  # Destination wells (2-12)
-            mix_after=(3, 50),  # Mix 3x with 50µL after each transfer
-            new_tip='always'
+    with protocol.group_steps(
+        name="Serial Dilution",
+        description="Transfer and mix through eleven 1:2 dilution steps.",
+    ):
+        pipette.transfer(
+            volume=100,
+            source=column_anchors[:11],
+            dest=column_anchors[1:],
+            mix_after=(3, 50),
+            new_tip="always",
         )
 
-    protocol.comment('Serial dilution complete!')
-    protocol.comment(f'Created {num_dilutions} dilutions with {dilution_factor}x dilution factor')
+    with protocol.group_steps(
+        name="Equalize Final Volume",
+        description="Remove 100 µL from every well in column 12.",
+    ):
+        pipette.pick_up_tip()
+        pipette.aspirate(100, column_anchors[11])
+        pipette.dispense(100, trash)
+        pipette.drop_tip()
+
+    protocol.comment("Serial dilution complete: columns 1-12 contain 100 µL per well.")

@@ -1,214 +1,455 @@
 #!/usr/bin/env python3
-"""
-Quick tree visualization script with common customization options.
+"""Interactive or static ETE 4 tree visualization."""
 
-Provides command-line interface for rapid tree visualization with
-customizable styles, layouts, and output formats.
-"""
+from __future__ import annotations
 
 import argparse
+import ipaddress
 import sys
 from pathlib import Path
 
 try:
-    from ete3 import Tree, TreeStyle, NodeStyle
-except ImportError:
-    print("Error: ete3 not installed. Install with: pip install ete3")
-    sys.exit(1)
+    import ete4
+    from ete4 import Tree
+    from ete4.parser.newick import NewickError
+except ImportError as exc:
+    raise SystemExit(
+        'ETE 4 is required. Install it with: uv pip install "ete4==4.4.0"'
+    ) from exc
 
 
-def create_tree_style(args):
-    """Create TreeStyle based on arguments."""
-    ts = TreeStyle()
-
-    # Basic display options
-    ts.show_leaf_name = args.show_names
-    ts.show_branch_length = args.show_lengths
-    ts.show_branch_support = args.show_support
-    ts.show_scale = args.show_scale
-
-    # Layout
-    ts.mode = args.mode
-    ts.rotation = args.rotation
-
-    # Circular tree options
-    if args.mode == "c":
-        ts.arc_start = args.arc_start
-        ts.arc_span = args.arc_span
-
-    # Spacing
-    ts.branch_vertical_margin = args.vertical_margin
-    if args.scale_factor:
-        ts.scale = args.scale_factor
-
-    # Title
-    if args.title:
-        from ete3 import TextFace
-        title_face = TextFace(args.title, fsize=16, bold=True)
-        ts.title.add_face(title_face, column=0)
-
-    return ts
+ParserSpec = int | str
 
 
-def apply_node_styling(tree, args):
-    """Apply styling to tree nodes."""
-    for node in tree.traverse():
-        nstyle = NodeStyle()
-
-        if node.is_leaf():
-            # Leaf style
-            nstyle["fgcolor"] = args.leaf_color
-            nstyle["size"] = args.leaf_size
-        else:
-            # Internal node style
-            nstyle["fgcolor"] = args.internal_color
-            nstyle["size"] = args.internal_size
-
-            # Color by support if enabled
-            if args.color_by_support and hasattr(node, 'support') and node.support:
-                if node.support >= 0.9:
-                    nstyle["fgcolor"] = "darkgreen"
-                elif node.support >= 0.7:
-                    nstyle["fgcolor"] = "orange"
-                else:
-                    nstyle["fgcolor"] = "red"
-
-        node.set_style(nstyle)
+class UserInputError(ValueError):
+    """An actionable problem with command-line input."""
 
 
-def visualize_tree(tree_file, output, args):
-    """Load tree, apply styles, and render."""
+def parser_spec(value: str) -> ParserSpec:
+    """Parse numeric Newick parser IDs while retaining named aliases."""
+    text = value.strip()
     try:
-        tree = Tree(str(tree_file), format=args.format)
-    except Exception as e:
-        print(f"Error loading tree: {e}")
-        sys.exit(1)
+        return int(text)
+    except ValueError:
+        if not text:
+            raise argparse.ArgumentTypeError("parser cannot be empty")
+        return text
 
-    # Apply styling
-    apply_node_styling(tree, args)
 
-    # Create tree style
-    ts = create_tree_style(args)
-
-    # Render
+def mode_spec(value: str) -> str:
+    """Normalize short and long layout mode names."""
+    aliases = {
+        "r": "rectangular",
+        "rectangular": "rectangular",
+        "c": "circular",
+        "circular": "circular",
+    }
     try:
-        # Determine output parameters based on format
-        output_path = str(output)
-
-        render_args = {"tree_style": ts}
-
-        if args.width:
-            render_args["w"] = args.width
-        if args.height:
-            render_args["h"] = args.height
-        if args.units:
-            render_args["units"] = args.units
-        if args.dpi:
-            render_args["dpi"] = args.dpi
-
-        tree.render(output_path, **render_args)
-        print(f"Tree rendered successfully to: {output}")
-
-    except Exception as e:
-        print(f"Error rendering tree: {e}")
-        sys.exit(1)
+        return aliases[value.lower()]
+    except KeyError as exc:
+        raise argparse.ArgumentTypeError(
+            "mode must be rectangular/r or circular/c"
+        ) from exc
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Quick tree visualization with ETE toolkit",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Basic visualization
-  %(prog)s tree.nw output.pdf
+def load_tree(path: Path, parser: ParserSpec) -> Tree:
+    """Load a Newick tree from a UTF-8 file."""
+    if not path.is_file():
+        raise UserInputError(f"input tree does not exist or is not a file: {path}")
+    try:
+        with path.open(encoding="utf-8") as handle:
+            return Tree(handle, parser=parser)
+    except (OSError, ValueError, TypeError, NewickError) as exc:
+        raise UserInputError(
+            f"could not parse {path} with Newick parser {parser!r}: {exc}"
+        ) from exc
 
-  # Circular tree
-  %(prog)s tree.nw output.pdf --mode c
 
-  # Large tree with custom sizing
-  %(prog)s tree.nw output.png --width 1200 --height 800 --units px --dpi 300
+def support_fraction(value: float | None) -> float | None:
+    """Normalize common 0–1 and 0–100 support conventions."""
+    if value is None:
+        return None
+    numeric = float(value)
+    return numeric / 100 if numeric > 1 else numeric
 
-  # Hide names, show support, color by support
-  %(prog)s tree.nw output.pdf --no-names --show-support --color-by-support
 
-  # Custom title
-  %(prog)s tree.nw output.pdf --title "Phylogenetic Tree of Species"
+def support_color(node: Tree, args: argparse.Namespace) -> str:
+    """Map support to a color after normalization."""
+    support = support_fraction(node.support)
+    if support is None:
+        return args.missing_support_color
+    if support >= args.high_support:
+        return args.high_support_color
+    if support >= args.moderate_support:
+        return args.moderate_support_color
+    return args.low_support_color
 
-  # Semicircular layout
-  %(prog)s tree.nw output.pdf --mode c --arc-start -90 --arc-span 180
-        """
+
+def create_smartview_layout(args: argparse.Namespace):
+    """Create a current SmartView layout."""
+    try:
+        from ete4.smartview import Layout, PropFace, TextFace
+    except ImportError as exc:
+        raise UserInputError(
+            'SmartView is unavailable; reinstall with: uv pip install "ete4==4.4.0"'
+        ) from exc
+
+    def draw_tree(_tree):
+        tree_style = {
+            "shape": args.mode,
+            "node-height-min": args.collapse_pixels,
+            "content-height-min": args.content_pixels,
+            "show-popup-props": ["name", "dist", "support"],
+        }
+        if args.mode == "circular":
+            tree_style.update(
+                {
+                    "angle-start": args.arc_start,
+                    "angle-span": args.arc_span,
+                }
+            )
+        yield tree_style
+        if args.title:
+            yield TextFace(
+                args.title,
+                fs_min=8,
+                fs_max=22,
+                position="header",
+            )
+
+    def draw_node(node):
+        fill = (
+            support_color(node, args)
+            if args.color_by_support and not node.is_leaf
+            else args.leaf_color
+            if node.is_leaf
+            else args.internal_color
+        )
+        radius = args.leaf_size if node.is_leaf else args.internal_size
+        yield {
+            "dot": {
+                "shape": "circle",
+                "radius": radius,
+                "fill": fill,
+            }
+        }
+
+        if node.is_leaf and args.show_names:
+            yield PropFace(
+                "name",
+                fs_min=4,
+                fs_max=args.label_size,
+                position="right",
+            )
+
+        if args.show_support and not node.is_leaf and node.support is not None:
+            yield TextFace(
+                f"{node.support:g}",
+                fs_min=3,
+                fs_max=args.label_size,
+                style={"fill": "#555555"},
+                position="top",
+            )
+
+        if args.show_lengths and not node.is_root and node.dist is not None:
+            yield TextFace(
+                f"{node.dist:g}",
+                fs_min=3,
+                fs_max=args.label_size,
+                style={"fill": "#777777"},
+                position="bottom",
+            )
+
+    return Layout(
+        "quick visualization",
+        draw_tree=draw_tree,
+        draw_node=draw_node,
     )
 
-    parser.add_argument("input", help="Input tree file (Newick format)")
-    parser.add_argument("output", help="Output image file (png, pdf, or svg)")
 
-    # Tree format
-    parser.add_argument("--format", type=int, default=0,
-                        help="Newick format number (default: 0)")
+def validate_bind_address(host: str, allow_remote: bool) -> None:
+    """Require explicit consent before binding beyond loopback."""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if host.lower() == "localhost":
+            return
+        if not allow_remote:
+            raise UserInputError("non-loopback host names require --allow-remote-bind")
+        return
 
-    # Display options
-    display = parser.add_argument_group("Display options")
-    display.add_argument("--no-names", dest="show_names", action="store_false",
-                         help="Don't show leaf names")
-    display.add_argument("--show-lengths", action="store_true",
-                         help="Show branch lengths")
-    display.add_argument("--show-support", action="store_true",
-                         help="Show support values")
-    display.add_argument("--show-scale", action="store_true",
-                         help="Show scale bar")
+    if not address.is_loopback and not allow_remote:
+        raise UserInputError(
+            "refusing a non-loopback SmartView bind without --allow-remote-bind"
+        )
 
-    # Layout options
-    layout = parser.add_argument_group("Layout options")
-    layout.add_argument("--mode", choices=["r", "c"], default="r",
-                        help="Tree mode: r=rectangular, c=circular (default: r)")
-    layout.add_argument("--rotation", type=int, default=0,
-                        help="Tree rotation in degrees (default: 0)")
-    layout.add_argument("--arc-start", type=int, default=0,
-                        help="Circular tree start angle (default: 0)")
-    layout.add_argument("--arc-span", type=int, default=360,
-                        help="Circular tree arc span (default: 360)")
 
-    # Styling options
-    styling = parser.add_argument_group("Styling options")
-    styling.add_argument("--leaf-color", default="blue",
-                         help="Leaf node color (default: blue)")
-    styling.add_argument("--leaf-size", type=int, default=6,
-                         help="Leaf node size (default: 6)")
-    styling.add_argument("--internal-color", default="gray",
-                         help="Internal node color (default: gray)")
-    styling.add_argument("--internal-size", type=int, default=4,
-                         help="Internal node size (default: 4)")
-    styling.add_argument("--color-by-support", action="store_true",
-                         help="Color internal nodes by support value")
+def run_interactive_smartview(
+    tree: Tree,
+    layout,
+    args: argparse.Namespace,
+) -> None:
+    """Run the SmartView server until the user exits."""
+    validate_bind_address(args.host, args.allow_remote_bind)
+    try:
+        from ete4.smartview import explorer
+    except ImportError as exc:
+        raise UserInputError("could not import the SmartView explorer") from exc
 
-    # Size and spacing
-    size = parser.add_argument_group("Size and spacing")
-    size.add_argument("--width", type=int, help="Output width")
-    size.add_argument("--height", type=int, help="Output height")
-    size.add_argument("--units", choices=["px", "mm", "in"],
-                      help="Size units (px, mm, in)")
-    size.add_argument("--dpi", type=int, help="DPI for raster output")
-    size.add_argument("--scale-factor", type=int,
-                      help="Branch length scale factor (pixels per unit)")
-    size.add_argument("--vertical-margin", type=int, default=10,
-                      help="Vertical margin between branches (default: 10)")
+    tree.explore(
+        layouts=[layout],
+        host=args.host,
+        port=args.port,
+        open_browser=not args.no_browser,
+    )
+    print("SmartView is running. Press Enter or Ctrl-C to stop it.")
+    try:
+        input()
+    except (EOFError, KeyboardInterrupt):
+        pass
+    finally:
+        explorer.stop_server()
 
-    # Other options
-    parser.add_argument("--title", help="Tree title")
 
-    args = parser.parse_args()
+def render_smartview(
+    tree: Tree,
+    layout,
+    output: Path,
+    args: argparse.Namespace,
+) -> None:
+    """Render a SmartView PNG screenshot."""
+    if output.suffix.lower() != ".png":
+        raise UserInputError(
+            "SmartView static output is PNG screenshot data; use a .png path "
+            "or select --engine treeview for PDF/SVG"
+        )
+    if not output.parent.is_dir():
+        raise UserInputError(f"output directory does not exist: {output.parent}")
 
-    # Validate output format
-    output_path = Path(args.output)
-    valid_extensions = {".png", ".pdf", ".svg"}
-    if output_path.suffix.lower() not in valid_extensions:
-        print(f"Error: Output must be PNG, PDF, or SVG file")
-        sys.exit(1)
+    try:
+        tree.render_sm(
+            str(output),
+            layouts=[layout],
+            w=args.width,
+            h=args.height,
+        )
+    except (ImportError, ModuleNotFoundError) as exc:
+        raise UserInputError(
+            "SmartView static rendering needs the render-sm extra: "
+            'uv pip install "ete4[render-sm]==4.4.0"'
+        ) from exc
+    print(f"Wrote SmartView PNG: {output}")
 
-    # Visualize
-    visualize_tree(args.input, args.output, args)
+
+def create_treeview_style(tree: Tree, args: argparse.Namespace):
+    """Create a Qt treeview style and apply node styles."""
+    try:
+        from ete4.treeview import NodeStyle, TextFace, TreeStyle
+    except ImportError as exc:
+        raise UserInputError(
+            "Qt treeview output needs the treeview extra: "
+            'uv pip install "ete4[treeview]==4.4.0"'
+        ) from exc
+
+    for node in tree.traverse():
+        style = NodeStyle()
+        style["size"] = args.leaf_size if node.is_leaf else args.internal_size
+        style["fgcolor"] = (
+            support_color(node, args)
+            if args.color_by_support and not node.is_leaf
+            else args.leaf_color
+            if node.is_leaf
+            else args.internal_color
+        )
+        node.set_style(style)
+
+    tree_style = TreeStyle()
+    tree_style.mode = "c" if args.mode == "circular" else "r"
+    tree_style.show_leaf_name = args.show_names
+    tree_style.show_branch_support = args.show_support
+    tree_style.show_branch_length = args.show_lengths
+    tree_style.show_scale = args.show_scale
+
+    if args.mode == "circular":
+        tree_style.arc_start = args.arc_start
+        tree_style.arc_span = args.arc_span
+
+    if args.title:
+        tree_style.title.add_face(
+            TextFace(args.title, fsize=max(args.label_size, 12), bold=True),
+            column=0,
+        )
+    return tree_style
+
+
+def render_treeview(
+    tree: Tree,
+    output: Path,
+    args: argparse.Namespace,
+) -> None:
+    """Render PNG, PDF, or SVG through Qt treeview."""
+    if output.suffix.lower() not in {".png", ".pdf", ".svg"}:
+        raise UserInputError("Qt treeview output must end in .png, .pdf, or .svg")
+    if not output.parent.is_dir():
+        raise UserInputError(f"output directory does not exist: {output.parent}")
+
+    tree_style = create_treeview_style(tree, args)
+    render_args = {
+        "tree_style": tree_style,
+        "units": args.units,
+        "dpi": args.dpi,
+    }
+    if args.width is not None:
+        render_args["w"] = args.width
+    if args.height is not None:
+        render_args["h"] = args.height
+
+    tree.render(str(output), **render_args)
+    print(f"Wrote Qt treeview output: {output}")
+
+
+def choose_engine(args: argparse.Namespace) -> str:
+    """Choose a renderer from the requested engine and output suffix."""
+    if args.engine != "auto":
+        return args.engine
+    if args.output is None or args.output.suffix.lower() == ".png":
+        return "smartview"
+    if args.output.suffix.lower() in {".pdf", ".svg"}:
+        return "treeview"
+    raise UserInputError(
+        "cannot infer renderer from output suffix; use .png, .pdf, or .svg"
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Explore a tree with ETE 4 SmartView or render it with "
+            "SmartView/Qt treeview"
+        )
+    )
+    parser.add_argument("input", type=Path, help="Newick tree file")
+    parser.add_argument(
+        "output",
+        type=Path,
+        nargs="?",
+        help="optional .png, .pdf, or .svg output; omit for SmartView",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s (ETE {ete4.__version__})",
+    )
+    parser.add_argument("--parser", type=parser_spec, default=0)
+    parser.add_argument(
+        "--engine",
+        choices=["auto", "smartview", "treeview"],
+        default="auto",
+    )
+    parser.add_argument("--mode", type=mode_spec, default="rectangular")
+    parser.add_argument("--title")
+
+    display = parser.add_argument_group("display")
+    display.add_argument(
+        "--show-names",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    display.add_argument("--show-support", action="store_true")
+    display.add_argument("--show-lengths", action="store_true")
+    display.add_argument("--show-scale", action="store_true")
+    display.add_argument("--color-by-support", action="store_true")
+    display.add_argument("--label-size", type=int, default=12)
+    display.add_argument("--leaf-size", type=int, default=5)
+    display.add_argument("--internal-size", type=int, default=4)
+    display.add_argument("--leaf-color", default="#2166ac")
+    display.add_argument("--internal-color", default="#777777")
+
+    support = parser.add_argument_group("support colors")
+    support.add_argument("--high-support", type=float, default=0.9)
+    support.add_argument("--moderate-support", type=float, default=0.7)
+    support.add_argument("--high-support-color", default="#1b7837")
+    support.add_argument("--moderate-support-color", default="#e08214")
+    support.add_argument("--low-support-color", default="#b2182b")
+    support.add_argument("--missing-support-color", default="#999999")
+
+    smartview = parser.add_argument_group("SmartView")
+    smartview.add_argument("--collapse-pixels", type=float, default=8)
+    smartview.add_argument("--content-pixels", type=float, default=4)
+    smartview.add_argument("--host", default="127.0.0.1")
+    smartview.add_argument("--port", type=int)
+    smartview.add_argument("--no-browser", action="store_true")
+    smartview.add_argument(
+        "--allow-remote-bind",
+        action="store_true",
+        help="allow SmartView to bind beyond loopback",
+    )
+
+    output = parser.add_argument_group("static output")
+    output.add_argument("--width", type=int)
+    output.add_argument("--height", type=int)
+    output.add_argument("--units", choices=["px", "mm", "in"], default="px")
+    output.add_argument("--dpi", type=int, default=300)
+    output.add_argument("--arc-start", type=int, default=0)
+    output.add_argument("--arc-span", type=int, default=360)
+    return parser
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    """Validate numerical and renderer-specific options."""
+    if not 0 <= args.moderate_support <= args.high_support <= 1:
+        raise UserInputError(
+            "support thresholds must satisfy 0 <= moderate-support <= high-support <= 1"
+        )
+    for name in (
+        "label_size",
+        "leaf_size",
+        "internal_size",
+        "collapse_pixels",
+        "content_pixels",
+    ):
+        if getattr(args, name) < 0:
+            raise UserInputError(f"{name.replace('_', '-')} cannot be negative")
+    for name in ("width", "height", "dpi"):
+        value = getattr(args, name)
+        if value is not None and value <= 0:
+            raise UserInputError(f"{name} must be positive")
+    if args.port is not None and not 1 <= args.port <= 65535:
+        raise UserInputError("port must be between 1 and 65535")
+    if not -360 <= args.arc_start <= 360:
+        raise UserInputError("arc-start must be between -360 and 360 degrees")
+    if not 0 < args.arc_span <= 360:
+        raise UserInputError("arc-span must be greater than 0 and at most 360 degrees")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        validate_args(args)
+        tree = load_tree(args.input, args.parser)
+        engine = choose_engine(args)
+
+        if engine == "smartview":
+            layout = create_smartview_layout(args)
+            if args.output is None:
+                run_interactive_smartview(tree, layout, args)
+            else:
+                render_smartview(tree, layout, args.output, args)
+        else:
+            if args.output is None:
+                raise UserInputError("Qt treeview mode requires an output path")
+            render_treeview(tree, args.output, args)
+    except UserInputError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:  # Preserve unexpected ETE/renderer details.
+        print(
+            f"unexpected visualization error: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,407 +1,316 @@
-# Working with Sequence Files (FASTA/FASTQ)
+# FASTA, FASTQ, and Tabix-Indexed Files
 
-## FASTA Files
+This reference targets pysam 0.24.0.
 
-### Overview
+## Indexed FASTA
 
-Pysam provides the `FastaFile` class for indexed, random access to FASTA reference sequences. FASTA files must be indexed with `samtools faidx` before use.
-
-### Opening FASTA Files
+`FastaFile` provides random access through a faidx index.
 
 ```python
 import pysam
 
-# Open indexed FASTA file
-fasta = pysam.FastaFile("reference.fasta")
+pysam.faidx("reference.fa")
 
-# Automatically looks for reference.fasta.fai index
+with pysam.FastaFile("reference.fa") as fasta:
+    print(fasta.references)
+    print(fasta.lengths)
+    print(fasta.get_reference_length("chr1"))
 ```
 
-### Creating FASTA Index
+An uncompressed FASTA needs `<name>.fai`. A BGZF-compressed FASTA also needs a
+`.gzi` compressed-offset index. Ordinary gzip is not suitable for indexed
+random access.
+
+The constructor can use nonstandard index paths:
 
 ```python
-# Create index using pysam
-pysam.faidx("reference.fasta")
-
-# Or using samtools command
-pysam.samtools.faidx("reference.fasta")
+fasta = pysam.FastaFile(
+    "reference.fa.gz",
+    filepath_index="indexes/reference.fa.gz.fai",
+    filepath_index_compressed="indexes/reference.fa.gz.gzi",
+)
 ```
 
-This creates a `.fai` index file required for random access.
-
-### FastaFile Properties
+### Numeric and string coordinates
 
 ```python
-fasta = pysam.FastaFile("reference.fasta")
+with pysam.FastaFile("reference.fa") as fasta:
+    # Numeric: 0-based, half-open
+    sequence = fasta.fetch("chr1", 999, 1_099)
 
-# List of reference sequences
-references = fasta.references
-print(f"References: {references}")
-
-# Get lengths
-lengths = fasta.lengths
-print(f"Lengths: {lengths}")
-
-# Get specific sequence length
-chr1_length = fasta.get_reference_length("chr1")
+    # Region string: 1-based, inclusive
+    same_sequence = fasta.fetch(region="chr1:1000-1099")
 ```
 
-### Fetching Sequences
+If start or end is omitted, pysam uses the sequence boundary. Invalid regions
+raise `ValueError` or `IndexError`; do not silently clip unless that is the
+documented workflow.
 
-#### Fetch by Region
-
-Uses **0-based, half-open** coordinates:
+### Fetch variant context
 
 ```python
-# Fetch specific region
-sequence = fasta.fetch("chr1", 1000, 2000)
-print(f"Sequence: {sequence}")  # Returns 1000 bases
-
-# Fetch entire chromosome
-chr1_seq = fasta.fetch("chr1")
-
-# Fetch using region string (1-based)
-sequence = fasta.fetch(region="chr1:1001-2000")
+def variant_context(
+    fasta: pysam.FastaFile,
+    contig: str,
+    pos_1based: int,
+    ref: str,
+    flank: int = 20,
+) -> tuple[str, bool]:
+    start = pos_1based - 1
+    context_start = max(0, start - flank)
+    context_stop = min(
+        fasta.get_reference_length(contig),
+        start + len(ref) + flank,
+    )
+    context = fasta.fetch(contig, context_start, context_stop)
+    observed_ref = fasta.fetch(contig, start, start + len(ref))
+    return context, observed_ref.upper() == ref.upper()
 ```
 
-**Important:** Numeric arguments use 0-based coordinates, region strings use 1-based coordinates (samtools convention).
+Validate the entire REF allele, not only its first base. A mismatch often
+means the VCF and FASTA use different assemblies, contig aliases, or
+normalization.
 
-#### Common Use Cases
+### Strand-aware extraction
+
+Coordinates do not encode strand. Reverse-complement after fetching:
 
 ```python
-# Get sequence at variant position
-def get_variant_context(fasta, chrom, pos, window=10):
-    """Get sequence context around a variant position (1-based)."""
-    start = max(0, pos - window - 1)  # Convert to 0-based
-    end = pos + window
-    return fasta.fetch(chrom, start, end)
+IUPAC_COMPLEMENT = str.maketrans(
+    "ACGTRYMKBDHVNacgtrymkbdhvn",
+    "TGCAYRKMVHDBNtgcayrkmvhdbn",
+)
 
-# Get sequence for gene coordinates
-def get_gene_sequence(fasta, chrom, start, end, strand):
-    """Get gene sequence with strand awareness."""
-    seq = fasta.fetch(chrom, start, end)
 
-    if strand == "-":
-        # Reverse complement
-        complement = str.maketrans("ATGCatgc", "TACGtacg")
-        seq = seq.translate(complement)[::-1]
+def reverse_complement(sequence: str) -> str:
+    return sequence.translate(IUPAC_COMPLEMENT)[::-1]
 
-    return seq
 
-# Check reference allele
-def check_ref_allele(fasta, chrom, pos, expected_ref):
-    """Verify reference allele at position (1-based pos)."""
-    actual = fasta.fetch(chrom, pos-1, pos)  # Convert to 0-based
-    return actual.upper() == expected_ref.upper()
+sequence = fasta.fetch("chr1", start, stop)
+if strand == "-":
+    sequence = reverse_complement(sequence)
 ```
 
-### Extracting Multiple Regions
+Confirm annotation coordinates before conversion: BED is normally 0-based
+half-open; GFF/GTF text is normally 1-based inclusive.
+
+## Sequential FASTA and FASTQ
+
+`FastxFile` streams FASTA, FASTQ, or mixed FASTX records. It does not implement
+random access.
 
 ```python
-# Extract multiple regions efficiently
-regions = [
-    ("chr1", 1000, 2000),
-    ("chr1", 5000, 6000),
-    ("chr2", 10000, 11000)
-]
-
-sequences = {}
-for chrom, start, end in regions:
-    seq_id = f"{chrom}:{start}-{end}"
-    sequences[seq_id] = fasta.fetch(chrom, start, end)
+with pysam.FastxFile("reads.fastq.gz") as reads:
+    for record in reads:
+        print(record.name)
+        print(record.sequence)
+        print(record.comment)
+        print(record.quality)
 ```
 
-### Working with Ambiguous Bases
+The current class is `FastxFile`; `FastqFile` is an old compatibility name.
 
-FASTA files may contain IUPAC ambiguity codes:
+### Record persistence
 
-- N = any base
-- R = A or G (purine)
-- Y = C or T (pyrimidine)
-- S = G or C (strong)
-- W = A or T (weak)
-- K = G or T (keto)
-- M = A or C (amino)
-- B = C, G, or T (not A)
-- D = A, G, or T (not C)
-- H = A, C, or T (not G)
-- V = A, C, or G (not T)
+`persist=True` is the default and copies each record so it remains valid.
+For high-throughput scans, `persist=False` avoids the copy:
 
 ```python
-# Handle ambiguous bases
-def count_ambiguous(sequence):
-    """Count non-ATGC bases."""
-    return sum(1 for base in sequence.upper() if base not in "ATGC")
-
-# Remove regions with too many Ns
-def has_quality_sequence(fasta, chrom, start, end, max_n_frac=0.1):
-    """Check if region has acceptable N content."""
-    seq = fasta.fetch(chrom, start, end)
-    n_count = seq.upper().count('N')
-    return (n_count / len(seq)) <= max_n_frac
+with pysam.FastxFile("reads.fastq.gz", persist=False) as reads:
+    for record in reads:
+        process(record.name, record.sequence)
+        # Do not save `record` for use after the iterator advances.
 ```
 
-## FASTQ Files
+With `persist=False`, records are read-only proxies and cease to be valid after
+iteration advances. Copy needed strings or use the default when retaining
+records.
 
-### Overview
-
-Pysam provides `FastxFile` (or `FastqFile`) for reading FASTQ files containing raw sequencing reads with quality scores. FASTQ files do not support random access—only sequential reading.
-
-### Opening FASTQ Files
+### Quality scores
 
 ```python
-import pysam
-
-# Open FASTQ file
-fastq = pysam.FastxFile("reads.fastq")
-
-# Works with compressed files
-fastq_gz = pysam.FastxFile("reads.fastq.gz")
+with pysam.FastxFile("reads.fastq") as reads:
+    for record in reads:
+        if record.quality is None:  # FASTA record
+            continue
+        qualities = record.get_quality_array()
+        mean_quality = (
+            sum(qualities) / len(qualities) if qualities else None
+        )
 ```
 
-### Reading FASTQ Records
+Pysam converts the FASTQ quality string to numeric Phred scores. Confirm the
+source encoding for legacy FASTQ; modern data is normally Phred+33.
+
+### Safe writing
+
+`str(record)` preserves whether the record is FASTA or FASTQ and includes the
+comment and quality line correctly:
 
 ```python
-fastq = pysam.FastxFile("reads.fastq")
-
-for read in fastq:
-    print(f"Name: {read.name}")
-    print(f"Sequence: {read.sequence}")
-    print(f"Quality: {read.quality}")
-    print(f"Comment: {read.comment}")  # Optional header comment
+with pysam.FastxFile("reads.fastq.gz") as source, open(
+    "filtered.fastq", "x", encoding="utf-8"
+) as destination:
+    for record in source:
+        qualities = record.get_quality_array()
+        if qualities and sum(qualities) / len(qualities) >= 20:
+            destination.write(str(record) + "\n")
 ```
 
-**FastqProxy attributes:**
-- `name` - Read identifier (without @ prefix)
-- `sequence` - DNA/RNA sequence
-- `quality` - ASCII-encoded quality string
-- `comment` - Optional comment from header line
-- `get_quality_array()` - Convert quality string to numeric array
+Use exclusive creation (`"x"`) when replacement was not requested. Manual
+four-line FASTQ formatting can lose comments or create sequence/quality length
+mismatches.
 
-### Quality Score Conversion
+### Streaming statistics
 
 ```python
-# Convert quality string to numeric values
-for read in fastq:
-    qual_array = read.get_quality_array()
-    mean_quality = sum(qual_array) / len(qual_array)
-    print(f"{read.name}: mean Q = {mean_quality:.1f}")
-```
-
-Quality scores are Phred-scaled (typically Phred+33 encoding):
-- Q = -10 * log10(P_error)
-- ASCII 33 ('!') = Q0
-- ASCII 43 ('+') = Q10
-- ASCII 63 ('?') = Q30
-
-### Common FASTQ Processing Workflows
-
-#### Quality Filtering
-
-```python
-def filter_by_quality(input_fastq, output_fastq, min_mean_quality=20):
-    """Filter reads by mean quality score."""
-    with pysam.FastxFile(input_fastq) as infile:
-        with open(output_fastq, 'w') as outfile:
-            for read in infile:
-                qual_array = read.get_quality_array()
-                mean_q = sum(qual_array) / len(qual_array)
-
-                if mean_q >= min_mean_quality:
-                    # Write in FASTQ format
-                    outfile.write(f"@{read.name}\n")
-                    outfile.write(f"{read.sequence}\n")
-                    outfile.write("+\n")
-                    outfile.write(f"{read.quality}\n")
-```
-
-#### Length Filtering
-
-```python
-def filter_by_length(input_fastq, output_fastq, min_length=50):
-    """Filter reads by minimum length."""
-    with pysam.FastxFile(input_fastq) as infile:
-        with open(output_fastq, 'w') as outfile:
-            kept = 0
-            for read in infile:
-                if len(read.sequence) >= min_length:
-                    outfile.write(f"@{read.name}\n")
-                    outfile.write(f"{read.sequence}\n")
-                    outfile.write("+\n")
-                    outfile.write(f"{read.quality}\n")
-                    kept += 1
-    print(f"Kept {kept} reads")
-```
-
-#### Calculate Quality Statistics
-
-```python
-def calculate_fastq_stats(fastq_file):
-    """Calculate basic statistics for FASTQ file."""
-    total_reads = 0
-    total_bases = 0
+def fastx_stats(path: str) -> dict[str, float | int | None]:
+    record_count = 0
+    base_count = 0
     quality_sum = 0
+    quality_count = 0
 
-    with pysam.FastxFile(fastq_file) as fastq:
-        for read in fastq:
-            total_reads += 1
-            read_length = len(read.sequence)
-            total_bases += read_length
-
-            qual_array = read.get_quality_array()
-            quality_sum += sum(qual_array)
+    with pysam.FastxFile(path, persist=False) as records:
+        for record in records:
+            record_count += 1
+            base_count += len(record.sequence)
+            if record.quality is not None:
+                qualities = record.get_quality_array()
+                quality_sum += sum(qualities)
+                quality_count += len(qualities)
 
     return {
-        "total_reads": total_reads,
-        "total_bases": total_bases,
-        "mean_read_length": total_bases / total_reads if total_reads > 0 else 0,
-        "mean_quality": quality_sum / total_bases if total_bases > 0 else 0
+        "records": record_count,
+        "bases": base_count,
+        "mean_length": (
+            base_count / record_count if record_count else None
+        ),
+        "mean_quality": (
+            quality_sum / quality_count if quality_count else None
+        ),
     }
 ```
 
-#### Extract Reads by Name
+This is a full scan but has constant memory.
 
-```python
-def extract_reads_by_name(fastq_file, read_names, output_file):
-    """Extract specific reads by name."""
-    read_set = set(read_names)
+## BGZF and Tabix
 
-    with pysam.FastxFile(fastq_file) as infile:
-        with open(output_file, 'w') as outfile:
-            for read in infile:
-                if read.name in read_set:
-                    outfile.write(f"@{read.name}\n")
-                    outfile.write(f"{read.sequence}\n")
-                    outfile.write("+\n")
-                    outfile.write(f"{read.quality}\n")
-```
+`TabixFile` provides random access to coordinate-sorted, BGZF-compressed
+tabular files.
 
-#### Convert FASTQ to FASTA
-
-```python
-def fastq_to_fasta(fastq_file, fasta_file):
-    """Convert FASTQ to FASTA (discards quality scores)."""
-    with pysam.FastxFile(fastq_file) as infile:
-        with open(fasta_file, 'w') as outfile:
-            for read in infile:
-                outfile.write(f">{read.name}\n")
-                outfile.write(f"{read.sequence}\n")
-```
-
-#### Subsample FASTQ
-
-```python
-import random
-
-def subsample_fastq(input_fastq, output_fastq, fraction=0.1, seed=42):
-    """Randomly subsample reads from FASTQ file."""
-    random.seed(seed)
-
-    with pysam.FastxFile(input_fastq) as infile:
-        with open(output_fastq, 'w') as outfile:
-            for read in infile:
-                if random.random() < fraction:
-                    outfile.write(f"@{read.name}\n")
-                    outfile.write(f"{read.sequence}\n")
-                    outfile.write("+\n")
-                    outfile.write(f"{read.quality}\n")
-```
-
-## Tabix-Indexed Files
-
-### Overview
-
-Pysam provides `TabixFile` for accessing tabix-indexed genomic data files (BED, GFF, GTF, generic tab-delimited).
-
-### Opening Tabix Files
+### Non-destructive compression and indexing
 
 ```python
 import pysam
 
-# Open tabix-indexed file
-tabix = pysam.TabixFile("annotations.bed.gz")
-
-# File must be bgzip-compressed and tabix-indexed
+pysam.tabix_compress("regions.bed", "regions.bed.gz")
+pysam.tabix_index("regions.bed.gz", preset="bed")
 ```
 
-### Creating Tabix Index
+This leaves `regions.bed` intact. By contrast, calling `tabix_index()` directly
+on an uncompressed file may automatically compress it and remove the original
+unless `keep_original=True`.
+
+Do not use `force=True` unless replacing existing compressed data or indexes is
+explicitly intended.
+
+### Input requirements
+
+- Sort by contig and coordinate first. `tabix_index()` does not verify sort
+  order.
+- Use BGZF, not ordinary gzip.
+- Select the correct preset: commonly `bed`, `gff`, `sam`, or `vcf`.
+- Presets define columns and coordinate conventions.
+
+For a custom table:
 
 ```python
-# Index a file
-pysam.tabix_index("annotations.bed", preset="bed", force=True)
-# Creates annotations.bed.gz and annotations.bed.gz.tbi
-
-# Presets available: bed, gff, vcf
+pysam.tabix_index(
+    "custom.tsv.gz",
+    seq_col=0,
+    start_col=1,
+    end_col=2,
+    zerobased=True,
+)
 ```
 
-### Fetching Records
+Python column indices are 0-based. File coordinates are assumed 1-based unless
+`zerobased=True`. This is separate from query coordinates, which are always
+numeric 0-based in the Python API.
+
+Use CSI for references beyond legacy TBI limits:
 
 ```python
-tabix = pysam.TabixFile("annotations.bed.gz")
-
-# Fetch region
-for row in tabix.fetch("chr1", 1000000, 2000000):
-    print(row)  # Returns tab-delimited string
-
-# Parse with specific parser
-for row in tabix.fetch("chr1", 1000000, 2000000, parser=pysam.asBed()):
-    print(f"Interval: {row.contig}:{row.start}-{row.end}")
-
-# Available parsers: asBed(), asGTF(), asVCF(), asTuple()
+pysam.tabix_index(
+    "regions.bed.gz",
+    preset="bed",
+    csi=True,
+    min_shift=14,
+)
 ```
 
-### Working with BED Files
+### Querying
 
 ```python
-bed = pysam.TabixFile("regions.bed.gz")
-
-# Access BED fields by name
-for interval in bed.fetch("chr1", 1000000, 2000000, parser=pysam.asBed()):
-    print(f"Region: {interval.contig}:{interval.start}-{interval.end}")
-    print(f"Name: {interval.name}")
-    print(f"Score: {interval.score}")
-    print(f"Strand: {interval.strand}")
+with pysam.TabixFile(
+    "regions.bed.gz",
+    parser=pysam.asBed(),
+    threads=4,
+) as regions:
+    for row in regions.fetch("chr1", 1_000, 2_000):
+        print(row.contig, row.start, row.end, row.name)
 ```
 
-### Working with GTF/GFF Files
+Numeric query coordinates are 0-based, half-open. Region strings are
+samtools-style 1-based inclusive.
+
+Useful parsers:
+
+- `pysam.asTuple()`: tuple-like fields
+- `pysam.asBed()`: BED fields with 0-based start/end
+- `pysam.asGTF()`: GTF/GFF-like fields and attributes
+- `pysam.asVCF()`: lightweight tabix VCF parser
+
+For complete VCF semantics, use `VariantFile`, not `TabixFile(asVCF())`.
+
+Without a parser, each result is the raw tab-delimited string:
 
 ```python
-gtf = pysam.TabixFile("annotations.gtf.gz")
-
-# Access GTF fields
-for feature in gtf.fetch("chr1", 1000000, 2000000, parser=pysam.asGTF()):
-    print(f"Feature: {feature.feature}")
-    print(f"Gene: {feature.gene_id}")
-    print(f"Transcript: {feature.transcript_id}")
-    print(f"Coordinates: {feature.start}-{feature.end}")
+with pysam.TabixFile("annotations.tsv.gz") as table:
+    for line in table.fetch("chr1", 1_000, 2_000):
+        fields = line.split("\t")
 ```
 
-## Performance Tips
+### Headers and multiple iterators
 
-### FASTA
-1. **Always use indexed FASTA** files (create .fai with samtools faidx)
-2. **Batch fetch operations** when extracting multiple regions
-3. **Cache frequently accessed sequences** in memory
-4. **Use appropriate window sizes** to avoid loading excessive sequence data
+```python
+with pysam.TabixFile("annotations.gff.gz") as table:
+    header_lines = list(table.header)
+    first = table.fetch("chr1", multiple_iterators=True)
+    second = table.fetch("chr2", multiple_iterators=True)
+```
 
-### FASTQ
-1. **Stream processing** - FASTQ files are read sequentially, process on-the-fly
-2. **Use compressed FASTQ.gz** to save disk space (pysam handles transparently)
-3. **Avoid loading entire file** into memory—process read-by-read
-4. **For large files**, consider parallel processing with file splitting
+Header lines are yielded without trailing newlines. Each
+`multiple_iterators=True` iterator reopens the file and adds overhead.
 
-### Tabix
-1. **Always bgzip and tabix-index** files before region queries
-2. **Use appropriate presets** when creating indices
-3. **Specify parser** for named field access
-4. **Batch queries** to same file to avoid re-opening
+## Choosing the Right Interface
+
+| Data | Interface | Access |
+|---|---|---|
+| Reference FASTA | `FastaFile` | indexed random access |
+| FASTA/FASTQ reads | `FastxFile` | sequential |
+| BED/GFF/GTF/custom table | `TabixFile` | BGZF + tabix/CSI random access |
+| VCF/BCF | `VariantFile` | structured records, sequential or indexed |
 
 ## Common Pitfalls
 
-1. **FASTA coordinate system:** fetch() uses 0-based coordinates, region strings use 1-based
-2. **Missing index:** FASTA random access requires .fai index file
-3. **FASTQ sequential only:** Cannot do random access or region-based queries on FASTQ
-4. **Quality encoding:** Assume Phred+33 unless specified otherwise
-5. **Tabix compression:** Must use bgzip, not regular gzip, for tabix indexing
-6. **Parser requirement:** TabixFile needs explicit parser for named field access
-7. **Case sensitivity:** FASTA sequences preserve case—use .upper() or .lower() for consistent comparisons
+- Mixing numeric 0-based coordinates with 1-based region strings
+- Expecting `FastaFile` to open without `.fai`
+- Using ordinary gzip for indexed FASTA or tabix data
+- Retaining a `persist=False` FASTX proxy
+- Assuming every FASTX record has qualities
+- Manually formatting FASTQ and losing comments or quality alignment
+- Letting `tabix_index()` remove the uncompressed source unexpectedly
+- Indexing an unsorted file
+- Forgetting `zerobased=True` for custom 0-based table coordinates
+- Using a TBI index for coordinates beyond its legacy range

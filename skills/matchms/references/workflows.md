@@ -1,647 +1,451 @@
-# Matchms Common Workflows
+# Practical Workflows (matchms 0.33.1)
 
-This document provides detailed examples of common mass spectrometry analysis workflows using matchms.
+These patterns use the current 0.33.1 API. Adapt tolerances and quality filters
+to the instrument, acquisition method, and scientific question.
 
-## Workflow 1: Basic Spectral Library Matching
+## 1. Standard Query/Reference Preprocessing
 
-Match unknown spectra against a reference library to identify compounds.
-
-```python
-from matchms.importing import load_from_mgf
-from matchms.filtering import default_filters, normalize_intensities
-from matchms.filtering import select_by_relative_intensity, require_minimum_number_of_peaks
-from matchms import calculate_scores
-from matchms.similarity import CosineGreedy
-
-# Load reference library
-print("Loading reference library...")
-library = list(load_from_mgf("reference_library.mgf"))
-
-# Load query spectra (unknowns)
-print("Loading query spectra...")
-queries = list(load_from_mgf("unknown_spectra.mgf"))
-
-# Process library spectra
-print("Processing library...")
-processed_library = []
-for spectrum in library:
-    spectrum = default_filters(spectrum)
-    spectrum = normalize_intensities(spectrum)
-    spectrum = select_by_relative_intensity(spectrum, intensity_from=0.01)
-    spectrum = require_minimum_number_of_peaks(spectrum, n_required=5)
-    if spectrum is not None:
-        processed_library.append(spectrum)
-
-# Process query spectra
-print("Processing queries...")
-processed_queries = []
-for spectrum in queries:
-    spectrum = default_filters(spectrum)
-    spectrum = normalize_intensities(spectrum)
-    spectrum = select_by_relative_intensity(spectrum, intensity_from=0.01)
-    spectrum = require_minimum_number_of_peaks(spectrum, n_required=5)
-    if spectrum is not None:
-        processed_queries.append(spectrum)
-
-# Calculate similarities
-print("Calculating similarities...")
-scores = calculate_scores(references=processed_library,
-                         queries=processed_queries,
-                         similarity_function=CosineGreedy(tolerance=0.1))
-
-# Get top matches for each query
-print("\nTop matches:")
-for i, query in enumerate(processed_queries):
-    top_matches = scores.scores_by_query(query, sort=True)[:5]
-
-    query_name = query.get("compound_name", f"Query {i}")
-    print(f"\n{query_name}:")
-
-    for ref_idx, score in top_matches:
-        ref_spectrum = processed_library[ref_idx]
-        ref_name = ref_spectrum.get("compound_name", f"Ref {ref_idx}")
-        print(f"  {ref_name}: {score:.4f}")
-```
-
----
-
-## Workflow 2: Quality Control and Data Cleaning
-
-Filter and clean spectral data before analysis.
-
-```python
-from matchms.importing import load_from_mgf
-from matchms.exporting import save_as_mgf
-from matchms.filtering import (default_filters, normalize_intensities,
-                               require_precursor_mz, require_minimum_number_of_peaks,
-                               require_minimum_number_of_high_peaks,
-                               select_by_relative_intensity, remove_peaks_around_precursor_mz)
-
-# Load spectra
-spectra = list(load_from_mgf("raw_data.mgf"))
-print(f"Loaded {len(spectra)} raw spectra")
-
-# Apply quality filters
-cleaned_spectra = []
-for spectrum in spectra:
-    # Harmonize metadata
-    spectrum = default_filters(spectrum)
-
-    # Quality requirements
-    spectrum = require_precursor_mz(spectrum, minimum_accepted_mz=50.0)
-    if spectrum is None:
-        continue
-
-    spectrum = require_minimum_number_of_peaks(spectrum, n_required=10)
-    if spectrum is None:
-        continue
-
-    # Clean peaks
-    spectrum = normalize_intensities(spectrum)
-    spectrum = remove_peaks_around_precursor_mz(spectrum, mz_tolerance=17)
-    spectrum = select_by_relative_intensity(spectrum, intensity_from=0.01)
-
-    # Require high-quality peaks
-    spectrum = require_minimum_number_of_high_peaks(spectrum,
-                                                     n_required=5,
-                                                     intensity_threshold=0.05)
-    if spectrum is None:
-        continue
-
-    cleaned_spectra.append(spectrum)
-
-print(f"Retained {len(cleaned_spectra)} high-quality spectra")
-print(f"Removed {len(spectra) - len(cleaned_spectra)} low-quality spectra")
-
-# Save cleaned data
-save_as_mgf(cleaned_spectra, "cleaned_data.mgf")
-```
-
----
-
-## Workflow 3: Multi-Metric Similarity Scoring
-
-Combine multiple similarity metrics for robust compound identification.
-
-```python
-from matchms.importing import load_from_mgf
-from matchms.filtering import (default_filters, normalize_intensities,
-                               derive_inchi_from_smiles, add_fingerprint, add_losses)
-from matchms import calculate_scores
-from matchms.similarity import (CosineGreedy, ModifiedCosine,
-                                NeutralLossesCosine, FingerprintSimilarity)
-import numpy as np
-
-# Load spectra
-library = list(load_from_mgf("library.mgf"))
-queries = list(load_from_mgf("queries.mgf"))
-
-# Process with multiple features
-def process_for_multimetric(spectrum):
-    spectrum = default_filters(spectrum)
-    spectrum = normalize_intensities(spectrum)
-
-    # Add chemical fingerprints
-    spectrum = derive_inchi_from_smiles(spectrum)
-    spectrum = add_fingerprint(spectrum, fingerprint_type="morgan2", nbits=2048)
-
-    # Add neutral losses
-    spectrum = add_losses(spectrum, loss_mz_from=5.0, loss_mz_to=200.0)
-
-    return spectrum
-
-processed_library = [process_for_multimetric(s) for s in library if s is not None]
-processed_queries = [process_for_multimetric(s) for s in queries if s is not None]
-
-# Calculate multiple similarity scores
-print("Calculating Cosine similarity...")
-cosine_scores = calculate_scores(processed_library, processed_queries,
-                                 CosineGreedy(tolerance=0.1))
-
-print("Calculating Modified Cosine similarity...")
-modified_cosine_scores = calculate_scores(processed_library, processed_queries,
-                                         ModifiedCosine(tolerance=0.1))
-
-print("Calculating Neutral Losses similarity...")
-neutral_losses_scores = calculate_scores(processed_library, processed_queries,
-                                        NeutralLossesCosine(tolerance=0.1))
-
-print("Calculating Fingerprint similarity...")
-fingerprint_scores = calculate_scores(processed_library, processed_queries,
-                                      FingerprintSimilarity(similarity_measure="jaccard"))
-
-# Combine scores with weights
-weights = {
-    'cosine': 0.4,
-    'modified_cosine': 0.3,
-    'neutral_losses': 0.2,
-    'fingerprint': 0.1
-}
-
-# Get combined scores for each query
-for i, query in enumerate(processed_queries):
-    query_name = query.get("compound_name", f"Query {i}")
-
-    combined_scores = []
-    for j, ref in enumerate(processed_library):
-        combined = (weights['cosine'] * cosine_scores.scores[j, i] +
-                   weights['modified_cosine'] * modified_cosine_scores.scores[j, i] +
-                   weights['neutral_losses'] * neutral_losses_scores.scores[j, i] +
-                   weights['fingerprint'] * fingerprint_scores.scores[j, i])
-        combined_scores.append((j, combined))
-
-    # Sort by combined score
-    combined_scores.sort(key=lambda x: x[1], reverse=True)
-
-    print(f"\n{query_name} - Top 3 matches:")
-    for ref_idx, score in combined_scores[:3]:
-        ref_name = processed_library[ref_idx].get("compound_name", f"Ref {ref_idx}")
-        print(f"  {ref_name}: {score:.4f}")
-```
-
----
-
-## Workflow 4: Precursor-Filtered Library Search
-
-Pre-filter by precursor mass before spectral matching for faster searches.
-
-```python
-from matchms.importing import load_from_mgf
-from matchms.filtering import default_filters, normalize_intensities
-from matchms import calculate_scores
-from matchms.similarity import PrecursorMzMatch, CosineGreedy
-import numpy as np
-
-# Load data
-library = list(load_from_mgf("large_library.mgf"))
-queries = list(load_from_mgf("queries.mgf"))
-
-# Process spectra
-processed_library = [normalize_intensities(default_filters(s)) for s in library]
-processed_queries = [normalize_intensities(default_filters(s)) for s in queries]
-
-# Step 1: Fast precursor mass filtering
-print("Filtering by precursor mass...")
-mass_filter = calculate_scores(processed_library, processed_queries,
-                               PrecursorMzMatch(tolerance=0.1, tolerance_type="Dalton"))
-
-# Step 2: Calculate cosine only for matching precursors
-print("Calculating cosine similarity for filtered candidates...")
-cosine_scores = calculate_scores(processed_library, processed_queries,
-                                CosineGreedy(tolerance=0.1))
-
-# Step 3: Apply mass filter to cosine scores
-for i, query in enumerate(processed_queries):
-    candidates = []
-
-    for j, ref in enumerate(processed_library):
-        # Only consider if precursor matches
-        if mass_filter.scores[j, i] > 0:
-            cosine_score = cosine_scores.scores[j, i]
-            candidates.append((j, cosine_score))
-
-    # Sort by cosine score
-    candidates.sort(key=lambda x: x[1], reverse=True)
-
-    query_name = query.get("compound_name", f"Query {i}")
-    print(f"\n{query_name} - Top 5 matches (from {len(candidates)} candidates):")
-
-    for ref_idx, score in candidates[:5]:
-        ref_name = processed_library[ref_idx].get("compound_name", f"Ref {ref_idx}")
-        ref_mz = processed_library[ref_idx].get("precursor_mz", "N/A")
-        print(f"  {ref_name} (m/z {ref_mz}): {score:.4f}")
-```
-
----
-
-## Workflow 5: Building a Reusable Processing Pipeline
-
-Create a standardized pipeline for consistent processing.
+Apply the same peak processing to both collections. Metadata enrichment can
+differ when a reference library contains known structures and queries do not.
 
 ```python
 from matchms import SpectrumProcessor
-from matchms.filtering import (default_filters, normalize_intensities,
-                               select_by_relative_intensity,
-                               remove_peaks_around_precursor_mz,
-                               require_minimum_number_of_peaks,
-                               derive_inchi_from_smiles, add_fingerprint)
-from matchms.importing import load_from_mgf
-from matchms.exporting import save_as_pickle
+from matchms.filtering import (
+    default_filters,
+    normalize_intensities,
+    require_minimum_number_of_peaks,
+    require_precursor_mz,
+    select_by_mz,
+    select_by_relative_intensity,
+)
+from matchms.importing import load_spectra
 
-# Define custom processing pipeline
-def create_standard_pipeline():
-    """Create a reusable processing pipeline"""
-    return SpectrumProcessor([
-        default_filters,
-        normalize_intensities,
-        lambda s: remove_peaks_around_precursor_mz(s, mz_tolerance=17),
-        lambda s: select_by_relative_intensity(s, intensity_from=0.01),
-        lambda s: require_minimum_number_of_peaks(s, n_required=5),
-        derive_inchi_from_smiles,
-        lambda s: add_fingerprint(s, fingerprint_type="morgan2")
-    ])
 
-# Create pipeline instance
-pipeline = create_standard_pipeline()
+def preprocess(path):
+    raw = [default_filters(spectrum) for spectrum in load_spectra(path)]
+    processor = SpectrumProcessor(
+        [
+            (require_precursor_mz, {"minimum_accepted_mz": 50.0}),
+            normalize_intensities,
+            (select_by_mz, {"mz_from": 20.0, "mz_to": 1500.0}),
+            (select_by_relative_intensity, {"intensity_from": 0.01}),
+            (require_minimum_number_of_peaks, {"n_required": 5}),
+        ]
+    )
+    cleaned, _ = processor.process_spectra(
+        raw,
+        progress_bar=False,
+        create_report=False,
+    )
+    return cleaned, ["default_filters", *processor.processing_steps]
 
-# Process multiple datasets with same pipeline
-datasets = ["dataset1.mgf", "dataset2.mgf", "dataset3.mgf"]
 
-for dataset_file in datasets:
-    print(f"\nProcessing {dataset_file}...")
-
-    # Load spectra
-    spectra = list(load_from_mgf(dataset_file))
-
-    # Apply pipeline
-    processed = []
-    for spectrum in spectra:
-        result = pipeline(spectrum)
-        if result is not None:
-            processed.append(result)
-
-    print(f"  Loaded: {len(spectra)}")
-    print(f"  Processed: {len(processed)}")
-
-    # Save processed data
-    output_file = dataset_file.replace(".mgf", "_processed.pkl")
-    save_as_pickle(processed, output_file)
-    print(f"  Saved to: {output_file}")
+queries, query_steps = preprocess("queries.mgf")
+references, reference_steps = preprocess("library.msp")
+assert query_steps == reference_steps
 ```
 
----
+`SpectrumProcessor` may reorder built-in filters. Persist the final
+`processing_steps`, not only the requested list. Run the aggregate
+`default_filters` before the processor; if passed as one callable, it is treated
+as a custom filter and placed after registered filters.
 
-## Workflow 6: Format Conversion and Standardization
+## 2. Run the Bundled Library Search
 
-Convert between different mass spectrometry file formats.
+The bundled CLI is the fastest route to a reproducible CSV:
 
-```python
-from matchms.importing import load_from_mzml, load_from_mgf
-from matchms.exporting import save_as_mgf, save_as_msp, save_as_json
-from matchms.filtering import default_filters, normalize_intensities
-
-def convert_and_standardize(input_file, output_format="mgf"):
-    """
-    Load, standardize, and convert mass spectrometry data
-
-    Parameters:
-    -----------
-    input_file : str
-        Input file path (supports .mzML, .mzXML, .mgf)
-    output_format : str
-        Output format ('mgf', 'msp', or 'json')
-    """
-    # Determine input format and load
-    if input_file.endswith('.mzML') or input_file.endswith('.mzXML'):
-        from matchms.importing import load_from_mzml
-        spectra = list(load_from_mzml(input_file, ms_level=2))
-    elif input_file.endswith('.mgf'):
-        spectra = list(load_from_mgf(input_file))
-    else:
-        raise ValueError(f"Unsupported format: {input_file}")
-
-    print(f"Loaded {len(spectra)} spectra from {input_file}")
-
-    # Standardize
-    processed = []
-    for spectrum in spectra:
-        spectrum = default_filters(spectrum)
-        spectrum = normalize_intensities(spectrum)
-        if spectrum is not None:
-            processed.append(spectrum)
-
-    print(f"Standardized {len(processed)} spectra")
-
-    # Export
-    output_file = input_file.rsplit('.', 1)[0] + f'_standardized.{output_format}'
-
-    if output_format == 'mgf':
-        save_as_mgf(processed, output_file)
-    elif output_format == 'msp':
-        save_as_msp(processed, output_file)
-    elif output_format == 'json':
-        save_as_json(processed, output_file)
-    else:
-        raise ValueError(f"Unsupported output format: {output_format}")
-
-    print(f"Saved to {output_file}")
-    return processed
-
-# Convert mzML to MGF
-convert_and_standardize("raw_data.mzML", output_format="mgf")
-
-# Convert MGF to MSP library format
-convert_and_standardize("library.mgf", output_format="msp")
+```bash
+uv run python scripts/library_search.py \
+  queries.mgf library.msp hits.csv \
+  --metric modified \
+  --tolerance 0.02 \
+  --top-k 10 \
+  --min-score 0.6 \
+  --min-matches 5
 ```
 
----
+The script:
 
-## Workflow 7: Metadata Enrichment and Validation
+- applies the same configurable peak filters to both inputs;
+- supports cosine, exact/greedy modified cosine, neutral-loss, BLINK, and Flash
+  modes;
+- handles both scalar and structured matchms score records;
+- records identifiers, precursor m/z, rank, score, and matched peaks;
+- refuses pickle inputs;
+- refuses to overwrite output unless `--force`; and
+- stops before an unexpectedly large pairwise matrix unless `--max-pairs` is
+  explicitly raised.
 
-Enrich spectra with chemical structure information and validate annotations.
+Use `--help` before batch use.
 
-```python
-from matchms.importing import load_from_mgf
-from matchms.exporting import save_as_mgf
-from matchms.filtering import (default_filters, derive_inchi_from_smiles,
-                               derive_inchikey_from_inchi, derive_smiles_from_inchi,
-                               add_fingerprint, repair_not_matching_annotation,
-                               require_valid_annotation)
-
-# Load spectra
-spectra = list(load_from_mgf("spectra.mgf"))
-
-# Enrich and validate
-enriched_spectra = []
-validation_failures = []
-
-for i, spectrum in enumerate(spectra):
-    # Basic harmonization
-    spectrum = default_filters(spectrum)
-
-    # Derive chemical structures
-    spectrum = derive_inchi_from_smiles(spectrum)
-    spectrum = derive_inchikey_from_inchi(spectrum)
-    spectrum = derive_smiles_from_inchi(spectrum)
-
-    # Repair mismatches
-    spectrum = repair_not_matching_annotation(spectrum)
-
-    # Add molecular fingerprints
-    spectrum = add_fingerprint(spectrum, fingerprint_type="morgan2", nbits=2048)
-
-    # Validate
-    validated = require_valid_annotation(spectrum)
-
-    if validated is not None:
-        enriched_spectra.append(validated)
-    else:
-        validation_failures.append(i)
-
-print(f"Successfully enriched: {len(enriched_spectra)}")
-print(f"Validation failures: {len(validation_failures)}")
-
-# Save enriched data
-save_as_mgf(enriched_spectra, "enriched_spectra.mgf")
-
-# Report failures
-if validation_failures:
-    print("\nSpectra that failed validation:")
-    for idx in validation_failures[:10]:  # Show first 10
-        original = spectra[idx]
-        name = original.get("compound_name", f"Spectrum {idx}")
-        print(f"  - {name}")
-```
-
----
-
-## Workflow 8: Large-Scale Library Comparison
-
-Compare two large spectral libraries efficiently.
+## 3. Programmatic Spectral-Library Search
 
 ```python
-from matchms.importing import load_from_mgf
-from matchms.filtering import default_filters, normalize_intensities
 from matchms import calculate_scores
-from matchms.similarity import CosineGreedy
-import numpy as np
+from matchms.similarity import ModifiedCosineGreedy
 
-# Load two libraries
-print("Loading libraries...")
-library1 = list(load_from_mgf("library1.mgf"))
-library2 = list(load_from_mgf("library2.mgf"))
+metric = ModifiedCosineGreedy(tolerance=0.02)
+scores = calculate_scores(
+    references=references,
+    queries=queries,
+    similarity_function=metric,
+)
 
-# Process
-processed_lib1 = [normalize_intensities(default_filters(s)) for s in library1]
-processed_lib2 = [normalize_intensities(default_filters(s)) for s in library2]
+score_name = "ModifiedCosineGreedy_score"
+matches_name = "ModifiedCosineGreedy_matches"
+rows = []
 
-# Calculate all-vs-all similarities
-print("Calculating similarities...")
-scores = calculate_scores(processed_lib1, processed_lib2,
-                         CosineGreedy(tolerance=0.1))
-
-# Find high-similarity pairs (potential duplicates or similar compounds)
-threshold = 0.8
-similar_pairs = []
-
-for i, spec1 in enumerate(processed_lib1):
-    for j, spec2 in enumerate(processed_lib2):
-        score = scores.scores[i, j]
-        if score >= threshold:
-            similar_pairs.append({
-                'lib1_idx': i,
-                'lib2_idx': j,
-                'lib1_name': spec1.get("compound_name", f"L1_{i}"),
-                'lib2_name': spec2.get("compound_name", f"L2_{j}"),
-                'similarity': score
-            })
-
-# Sort by similarity
-similar_pairs.sort(key=lambda x: x['similarity'], reverse=True)
-
-print(f"\nFound {len(similar_pairs)} pairs with similarity >= {threshold}")
-print("\nTop 10 most similar pairs:")
-for pair in similar_pairs[:10]:
-    print(f"{pair['lib1_name']} <-> {pair['lib2_name']}: {pair['similarity']:.4f}")
-
-# Export to CSV
-import pandas as pd
-df = pd.DataFrame(similar_pairs)
-df.to_csv("library_comparison.csv", index=False)
-print("\nFull results saved to library_comparison.csv")
+for query_index, query in enumerate(queries):
+    ranked = scores.scores_by_query(query, name=score_name, sort=True)
+    for rank, (reference, value) in enumerate(ranked[:10], start=1):
+        rows.append(
+            {
+                "query_index": query_index,
+                "query_id": query.get("spectrum_id", query.get("id")),
+                "reference_id": reference.get(
+                    "spectrum_id",
+                    reference.get("compound_name"),
+                ),
+                "rank": rank,
+                "score": float(value[score_name]),
+                "matches": int(value[matches_name]),
+            }
+        )
 ```
 
----
+Filter on both score and matched peaks only after examining their distributions.
+Do not label arbitrary cutoffs as universal high/medium/low confidence.
 
-## Workflow 9: Ion Mode Specific Processing
+## 4. Efficient Precursor-Gated Search
 
-Process positive and negative mode spectra separately.
+For identity-oriented search, a precursor gate can reduce expensive spectral
+calculations:
 
 ```python
-from matchms.importing import load_from_mgf
-from matchms.filtering import (default_filters, normalize_intensities,
-                               require_correct_ionmode, derive_ionmode)
-from matchms.exporting import save_as_mgf
+from matchms import calculate_scores
+from matchms.similarity import ModifiedCosineGreedy, PrecursorMzMatch
 
-# Load mixed mode spectra
-spectra = list(load_from_mgf("mixed_modes.mgf"))
+scores = calculate_scores(
+    references,
+    queries,
+    PrecursorMzMatch(tolerance=10, tolerance_type="ppm"),
+    array_type="sparse",
+)
+scores.filter_by_range(
+    name="PrecursorMzMatch",
+    low=0.5,
+    above_operator=">=",
+)
+scores.calculate(
+    ModifiedCosineGreedy(tolerance=0.02),
+    array_type="sparse",
+    join_type="left",
+)
+```
 
-# Separate by ion mode
-positive_spectra = []
-negative_spectra = []
-unknown_mode = []
+This pattern calculates the second metric on retained coordinates. It is
+inappropriate when the scientific goal is broad analog discovery across
+precursor shifts or adducts.
 
-for spectrum in spectra:
-    # Harmonize and derive ion mode
-    spectrum = default_filters(spectrum)
-    spectrum = derive_ionmode(spectrum)
+## 5. Reproducible `Pipeline` Workflow
 
-    # Separate by mode
-    ionmode = spectrum.get("ionmode")
+`Pipeline` combines import, ordered filtering, sparse score gating, and score
+calculation. A workflow can also be written to YAML.
 
-    if ionmode == "positive":
-        spectrum = normalize_intensities(spectrum)
-        positive_spectra.append(spectrum)
-    elif ionmode == "negative":
-        spectrum = normalize_intensities(spectrum)
-        negative_spectra.append(spectrum)
-    else:
-        unknown_mode.append(spectrum)
+```python
+from matchms import Pipeline
+from matchms.Pipeline import create_workflow
 
-print(f"Positive mode: {len(positive_spectra)}")
-print(f"Negative mode: {len(negative_spectra)}")
-print(f"Unknown mode: {len(unknown_mode)}")
+common_filters = [
+    "make_charge_int",
+    "add_compound_name",
+    "derive_adduct_from_name",
+    "derive_formula_from_name",
+    "clean_compound_name",
+    "interpret_pepmass",
+    "add_precursor_mz",
+    "derive_ionmode",
+    "correct_charge",
+    ["require_precursor_mz", {"minimum_accepted_mz": 50.0}],
+    "normalize_intensities",
+    ["select_by_relative_intensity", {"intensity_from": 0.01}],
+    ["require_minimum_number_of_peaks", {"n_required": 5}],
+]
 
-# Save separated data
-save_as_mgf(positive_spectra, "positive_mode.mgf")
-save_as_mgf(negative_spectra, "negative_mode.mgf")
+workflow = create_workflow(
+    yaml_file_name=None,
+    query_filters=common_filters,
+    reference_filters=common_filters,
+    score_computations=[
+        ["precursormzmatch", {"tolerance": 10, "tolerance_type": "ppm"}],
+        ["filter_by_range", {"name": "PrecursorMzMatch", "low": 0.5}],
+        ["modifiedcosinegreedy", {"tolerance": 0.02}],
+        [
+            "filter_by_range",
+            {"name": "ModifiedCosineGreedy_score", "low": 0.6},
+        ],
+    ],
+)
 
-# Process mode-specific analyses
+pipeline = Pipeline(
+    workflow,
+    progress_bar=False,
+    logging_level="WARNING",
+    logging_file="matchms-pipeline.log",
+)
+pipeline.run(
+    query_files="queries.mgf",
+    reference_files="library.msp",
+    cleaned_query_file="queries-cleaned.mgf",
+    cleaned_reference_file="library-cleaned.msp",
+    create_report=False,
+)
+scores = pipeline.scores
+```
+
+Notes:
+
+- `create_workflow()` expects matchms filter callables/names and score class
+  names lowercased in `score_computations`.
+- The first score should establish the coordinate set when later metrics should
+  be candidate-gated.
+- `filter_by_range` mutates the retained coordinates.
+- `Pipeline.run()` stores final scores on `pipeline.scores`.
+- Output and YAML paths must not already exist.
+- For all-vs-all scoring, omit `reference_files`; Pipeline then sets symmetric
+  mode.
+
+To persist and reload a workflow:
+
+```python
+from matchms import Pipeline
+from matchms.Pipeline import create_workflow
+from matchms.yaml_file_functions import load_workflow_from_yaml_file
+
+create_workflow(
+    yaml_file_name="workflow.yaml",
+    query_filters=common_filters,
+    reference_filters=common_filters,
+    score_computations=[["cosinegreedy", {"tolerance": 0.02}]],
+)
+
+workflow = load_workflow_from_yaml_file("workflow.yaml")
+Pipeline(workflow).run("queries.mgf", "library.msp")
+```
+
+Treat YAML as configuration, not as a substitute for recording software and
+input versions.
+
+## 6. All-vs-All Comparison
+
+```python
 from matchms import calculate_scores
 from matchms.similarity import CosineGreedy
 
-if len(positive_spectra) > 1:
-    print("\nCalculating positive mode similarities...")
-    pos_scores = calculate_scores(positive_spectra, positive_spectra,
-                                  CosineGreedy(tolerance=0.1))
-
-if len(negative_spectra) > 1:
-    print("Calculating negative mode similarities...")
-    neg_scores = calculate_scores(negative_spectra, negative_spectra,
-                                  CosineGreedy(tolerance=0.1))
+scores = calculate_scores(
+    references=spectra,
+    queries=spectra,
+    similarity_function=CosineGreedy(tolerance=0.02),
+    array_type="sparse",
+    is_symmetric=True,
+)
 ```
 
----
-
-## Workflow 10: Automated Compound Identification Report
-
-Generate a detailed compound identification report.
+`is_symmetric=True` avoids redundant calculation for symmetric methods. The
+logical pair count still grows quadratically. Estimate size before launching:
 
 ```python
-from matchms.importing import load_from_mgf
-from matchms.filtering import default_filters, normalize_intensities
-from matchms import calculate_scores
-from matchms.similarity import CosineGreedy, ModifiedCosine
-import pandas as pd
-
-def identify_compounds(query_file, library_file, output_csv="identification_report.csv"):
-    """
-    Automated compound identification with detailed report
-    """
-    # Load data
-    print("Loading data...")
-    queries = list(load_from_mgf(query_file))
-    library = list(load_from_mgf(library_file))
-
-    # Process
-    proc_queries = [normalize_intensities(default_filters(s)) for s in queries]
-    proc_library = [normalize_intensities(default_filters(s)) for s in library]
-
-    # Calculate similarities
-    print("Calculating similarities...")
-    cosine_scores = calculate_scores(proc_library, proc_queries, CosineGreedy())
-    modified_scores = calculate_scores(proc_library, proc_queries, ModifiedCosine())
-
-    # Generate report
-    results = []
-    for i, query in enumerate(proc_queries):
-        query_name = query.get("compound_name", f"Unknown_{i}")
-        query_mz = query.get("precursor_mz", "N/A")
-
-        # Get top 5 matches
-        cosine_matches = cosine_scores.scores_by_query(query, sort=True)[:5]
-
-        for rank, (lib_idx, cos_score) in enumerate(cosine_matches, 1):
-            ref = proc_library[lib_idx]
-            mod_score = modified_scores.scores[lib_idx, i]
-
-            results.append({
-                'Query': query_name,
-                'Query_mz': query_mz,
-                'Rank': rank,
-                'Match': ref.get("compound_name", f"Ref_{lib_idx}"),
-                'Match_mz': ref.get("precursor_mz", "N/A"),
-                'Cosine_Score': cos_score,
-                'Modified_Cosine': mod_score,
-                'InChIKey': ref.get("inchikey", "N/A")
-            })
-
-    # Create DataFrame and save
-    df = pd.DataFrame(results)
-    df.to_csv(output_csv, index=False)
-    print(f"\nReport saved to {output_csv}")
-
-    # Summary statistics
-    print("\nSummary:")
-    high_confidence = len(df[df['Cosine_Score'] >= 0.8])
-    medium_confidence = len(df[(df['Cosine_Score'] >= 0.6) & (df['Cosine_Score'] < 0.8)])
-    low_confidence = len(df[df['Cosine_Score'] < 0.6])
-
-    print(f"  High confidence (≥0.8): {high_confidence}")
-    print(f"  Medium confidence (0.6-0.8): {medium_confidence}")
-    print(f"  Low confidence (<0.6): {low_confidence}")
-
-    return df
-
-# Run identification
-report = identify_compounds("unknowns.mgf", "reference_library.mgf")
+n = len(spectra)
+unique_pairs_with_diagonal = n * (n + 1) // 2
 ```
 
----
+For large collections, consider:
 
-## Best Practices
+- precursor/metadata candidate masks;
+- `BlinkCosine` or matrix-oriented `FlashSimilarity`;
+- batched query subsets;
+- sparse score thresholds; and
+- approximate-neighbor indexing with validated recall.
 
-1. **Always process both queries and references**: Apply the same filters to ensure consistent comparison
-2. **Save intermediate results**: Use pickle format for fast reloading of processed spectra
-3. **Monitor memory usage**: Use generators for large files instead of loading all at once
-4. **Validate data quality**: Apply quality filters before similarity calculations
-5. **Choose appropriate similarity metrics**: CosineGreedy for speed, ModifiedCosine for related compounds
-6. **Combine multiple metrics**: Use multiple similarity scores for robust identification
-7. **Filter by precursor mass first**: Dramatically speeds up large library searches
-8. **Document your pipeline**: Save processing parameters for reproducibility
+Do not densify a large result with `to_array()` merely to find top hits.
 
-## Further Resources
+## 7. Fast Matrix Scoring
 
-- matchms documentation: https://matchms.readthedocs.io
-- GNPS platform: https://gnps.ucsd.edu
-- matchms GitHub: https://github.com/matchms/matchms
+### Flash entropy
+
+```python
+from matchms import calculate_scores
+from matchms.similarity import FlashSimilarity
+
+scores = calculate_scores(
+    references,
+    queries,
+    FlashSimilarity(
+        score_type="spectral_entropy",
+        matching_mode="fragment",
+        tolerance=0.02,
+        noise_cutoff=0.01,
+    ),
+)
+```
+
+### Fast modified-cosine-like mode
+
+```python
+scores = calculate_scores(
+    references,
+    queries,
+    FlashSimilarity(
+        score_type="cosine",
+        matching_mode="hybrid",
+        tolerance=0.02,
+    ),
+)
+```
+
+Flash outputs a scalar `FlashSimilarity` field without a matched-peak count.
+Validate ranking agreement against a transparent baseline on representative
+data.
+
+## 8. Mirror-Plot Validation
+
+```python
+from pathlib import Path
+
+output = Path("top-hit-mirror.png")
+axis = query.plot_against(reference, figsize=(10, 6), dpi=200)
+axis.figure.savefig(output, bbox_inches="tight")
+```
+
+Inspect:
+
+- unshifted and shifted matched peaks;
+- precursor and adduct agreement;
+- whether the score is driven by one dominant fragment;
+- unexplained high-intensity peaks; and
+- collision-energy/acquisition differences.
+
+## 9. Spectral Similarity Network
+
+Networks require an all-vs-all `Scores` object and a unique identifier on each
+spectrum:
+
+```python
+from matchms import calculate_scores
+from matchms.networking import SimilarityNetwork
+from matchms.similarity import ModifiedCosineGreedy
+
+scores = calculate_scores(
+    spectra,
+    spectra,
+    ModifiedCosineGreedy(tolerance=0.02),
+    array_type="sparse",
+    is_symmetric=True,
+)
+
+network = SimilarityNetwork(
+    identifier_key="spectrum_id",
+    top_n=20,
+    max_links=10,
+    score_cutoff=0.7,
+    link_method="mutual",
+    keep_unconnected_nodes=True,
+)
+network.create_network(
+    scores,
+    score_name="ModifiedCosineGreedy_score",
+)
+network.export_to_file("spectral-network.graphml", graph_format="graphml")
+```
+
+Supported export formats include GraphML, GEXF, GML, Cytoscape JSON, and JSON.
+`top_n` must be at least `max_links`. Equal scores near the strict link limit
+can make tie selection order-dependent; use deterministic identifiers and
+document parameters.
+
+Network components are hypotheses about spectral relatedness, not proof of
+shared structure or biosynthetic origin.
+
+## 10. Structure Versus Spectrum Similarity
+
+Use separate labels and outputs:
+
+- spectral similarity compares measured peak patterns;
+- fingerprint similarity compares known molecular structures;
+- correlation between the two can be analyzed only where reliable structures
+  are available.
+
+Do not include a query's true structure in candidate ranking when evaluating a
+spectral identification method; that leaks the answer.
+
+## 11. USI-Based Reproducible Pair
+
+```python
+from matchms.importing import load_from_usi
+from matchms.similarity import CosineGreedy
+
+reference = load_from_usi(
+    "mzspec:GNPS:GNPS-LIBRARY:accession:CCMSLIB00000424840"
+)
+query = load_from_usi(
+    "mzspec:MSV000086109:BD5_dil2x_BD5_01_57213:scan:760"
+)
+result = CosineGreedy(tolerance=0.02).pair(reference, query)
+```
+
+Record resolver, retrieval date, and returned metadata. A USI is stable
+provenance, but resolver availability and returned annotations can change.
+
+## 12. Provenance Record
+
+At minimum, save:
+
+```python
+import json
+import platform
+
+import matchms
+
+provenance = {
+    "matchms_version": matchms.__version__,
+    "python_version": platform.python_version(),
+    "query_files": ["queries.mgf"],
+    "reference_files": ["library.msp"],
+    "metadata_harmonization": True,
+    "processing_steps": query_steps,
+    "similarity": {
+        "class": "ModifiedCosineGreedy",
+        "tolerance_da": 0.02,
+    },
+    "selection": {
+        "top_k": 10,
+        "minimum_score": 0.6,
+        "minimum_matches": 5,
+    },
+}
+
+with open("provenance.json", "w", encoding="utf-8") as handle:
+    json.dump(provenance, handle, indent=2, default=str)
+```
+
+Also retain input checksums, library release/date, acquisition information,
+code/configuration, and any manual curation decisions.
+
+## Failure Modes
+
+- **No modified-cosine results:** check precursor m/z after harmonization and
+  filtering.
+- **Unexpected `TypeError` from `SpectrumProcessor`:** call
+  `process_spectrum()`/`process_spectra()`; the processor is not callable.
+- **Cannot format a score as float:** extract a named field from the structured
+  score record.
+- **Top-hit value treated as an index:** `scores_by_query()` returns a Spectrum.
+- **Huge memory use:** avoid dense conversion; gate candidates and estimate pair
+  count.
+- **No network edges:** verify identifier fields, score layer name, threshold,
+  and that the scores are all-vs-all.
+- **Fingerprint warnings:** migrate from `add_fingerprint()` to `Fingerprints`
+  and bridge to the current `FingerprintSimilarity` only when required.
+- **Output already exists:** matchms intentionally refuses overwrite in generic
+  writers and pipeline outputs; choose a new path or remove only after explicit
+  confirmation.

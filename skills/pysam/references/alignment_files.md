@@ -1,280 +1,374 @@
-# Working with Alignment Files (SAM/BAM/CRAM)
+# Alignment Files: SAM, BAM, and CRAM
 
-## Overview
+This reference targets pysam 0.24.0. All numeric coordinates shown here are
+0-based, half-open.
 
-Pysam provides the `AlignmentFile` class for reading and writing SAM/BAM/CRAM formatted files containing aligned sequence data. BAM/CRAM files support compression and random access through indexing.
+## Open Modes and Handles
 
-## Opening Alignment Files
-
-Specify format via mode qualifier:
-- `"rb"` - Read BAM (binary)
-- `"r"` - Read SAM (text)
-- `"rc"` - Read CRAM (compressed)
-- `"wb"` - Write BAM
-- `"w"` - Write SAM
-- `"wc"` - Write CRAM
+| Format | Read | Write |
+|---|---:|---:|
+| SAM text | `r` | `w` |
+| BAM | `rb` | `wb` |
+| CRAM | `rc` | `wc` |
 
 ```python
 import pysam
 
-# Reading
-samfile = pysam.AlignmentFile("example.bam", "rb")
-
-# Writing (requires template or header)
-outfile = pysam.AlignmentFile("output.bam", "wb", template=samfile)
+with pysam.AlignmentFile("input.bam", "rb", threads=4) as alignments:
+    print(alignments.references)
 ```
 
-### Stream Processing
-
-Use `"-"` as filename for stdin/stdout operations:
+For CRAM, supply the exact reference where possible:
 
 ```python
-# Read from stdin
-infile = pysam.AlignmentFile('-', 'rb')
-
-# Write to stdout
-outfile = pysam.AlignmentFile('-', 'w', template=infile)
+with pysam.AlignmentFile(
+    "input.cram",
+    "rc",
+    reference_filename="GRCh38.fa",
+    threads=4,
+) as alignments:
+    ...
 ```
 
-**Important:** Pysam does not support reading/writing from true Python file objects—only stdin/stdout streams are supported.
+`AlignmentFile` can use a path or a real file object that exposes `fileno()`.
+In-memory objects such as `io.BytesIO` are not supported by HTSlib. Use `"-"`
+for stdin/stdout. When an existing file object is accepted,
+`duplicate_filehandle=True` (the default) prevents pysam from closing the
+caller's descriptor.
 
-## AlignmentFile Properties
+Useful constructor options:
 
-**Header Information:**
-- `references` - List of chromosome/contig names
-- `lengths` - Corresponding lengths for each reference
-- `header` - Complete header as dictionary
+- `index_filename=`: nonstandard, remote, or separately named index
+- `require_index=True`: fail early if random access is required
+- `reference_filename=`: CRAM reference FASTA
+- `threads=`: compression/decompression threads
+- `format_options=["key=value"]`: HTSlib format options
+- `ignore_truncation=True`: downgrade a missing BGZF EOF marker to a warning;
+  do not combine with `threads > 1`
+
+## Headers and Index State
+
+`AlignmentFile.header` is an `AlignmentHeader`, not a plain dictionary.
 
 ```python
-samfile = pysam.AlignmentFile("example.bam", "rb")
-print(f"References: {samfile.references}")
-print(f"Lengths: {samfile.lengths}")
+with pysam.AlignmentFile("input.bam", "rb") as bam:
+    header_dict = bam.header.to_dict()
+    header_text = str(bam.header)
+    contigs = dict(zip(bam.references, bam.lengths))
+    has_index = bam.has_index()
 ```
 
-## Reading Reads
+Use `check_index()` when a missing index should be an error. It raises for SAM,
+closed files, or unusable indexes. `get_index_statistics()` exposes per-contig
+mapped/unmapped counts recorded in an available index; these are index
+statistics, not a fresh scan of every record.
 
-### fetch() - Region-Based Retrieval
+## Iteration Choices
 
-Retrieves reads overlapping specified genomic regions using **0-based coordinates**.
+### Indexed region query
 
 ```python
-# Fetch specific region
-for read in samfile.fetch("chr1", 1000, 2000):
-    print(read.query_name, read.reference_start)
-
-# Fetch entire contig
-for read in samfile.fetch("chr1"):
-    print(read.query_name)
-
-# Fetch without index (sequential read)
-for read in samfile.fetch(until_eof=True):
-    print(read.query_name)
+with pysam.AlignmentFile("input.bam", "rb") as bam:
+    for read in bam.fetch("chr1", 1_000, 2_000):
+        ...
 ```
 
-**Important Notes:**
-- Requires index (.bai/.crai) for random access
-- Returns reads that **overlap** the region (may extend beyond boundaries)
-- Use `until_eof=True` for non-indexed files or sequential reading
-- By default, only returns mapped reads
-- For unmapped reads, use `fetch("*")` or `until_eof=True`
+- Requires BAI/CSI for BAM or CRAI for CRAM.
+- Returns reads overlapping the interval, including reads that start before it
+  or end after it.
+- Records are returned in coordinate/index order.
+- `fetch()` with no region still requires an index and returns mapped records.
 
-### Multiple Iterators
-
-When using multiple iterators on the same file:
+### Sequential scan
 
 ```python
-samfile = pysam.AlignmentFile("example.bam", "rb", multiple_iterators=True)
-iter1 = samfile.fetch("chr1", 1000, 2000)
-iter2 = samfile.fetch("chr2", 5000, 6000)
+with pysam.AlignmentFile("input.bam", "rb") as bam:
+    for read in bam.fetch(until_eof=True):
+        ...
 ```
 
-Without `multiple_iterators=True`, a new fetch() call repositions the file pointer and breaks existing iterators.
+- Does not require an index.
+- Starts at the current file position.
+- Preserves file order.
+- Includes unplaced unmapped records.
 
-### count() - Count Reads in Region
+`fetch("*")` requests only unplaced unmapped records at the end of a
+coordinate-sorted alignment file.
+
+### Multiple active iterators
+
+`multiple_iterators` belongs to `fetch()`, not the `AlignmentFile`
+constructor:
 
 ```python
-# Count all reads
-num_reads = samfile.count("chr1", 1000, 2000)
-
-# Count with quality filter
-num_quality_reads = samfile.count("chr1", 1000, 2000, quality=20)
+with pysam.AlignmentFile("input.bam", "rb") as bam:
+    chr1_reads = bam.fetch("chr1", multiple_iterators=True)
+    chr2_reads = bam.fetch("chr2", multiple_iterators=True)
 ```
 
-### count_coverage() - Per-Base Coverage
+Each such iterator reopens the file and has overhead. Prefer one ordered pass
+when possible.
 
-Returns four arrays (A, C, G, T) with per-base coverage:
+## `AlignedSegment` Essentials
+
+### Identity and sequence
+
+- `query_name`
+- `query_sequence`
+- `query_qualities`: numeric Phred scores, or `None`
+- `query_length`
+- `query_alignment_sequence`: query bases participating in the alignment
+- `query_alignment_qualities`
+- `get_forward_sequence()` / `get_forward_qualities()`: original sequencer
+  orientation
+
+Assigning `query_sequence` invalidates `query_qualities`. Save and reassign
+qualities after changing sequence.
+
+### Reference placement
+
+- `reference_name`
+- `reference_id`
+- `reference_start`: 0-based inclusive
+- `reference_end`: 0-based exclusive; derived from CIGAR
+- `mapping_quality`
+- `next_reference_name`, `next_reference_start`
+- `template_length`
+
+Many placement-derived properties are `None` or sentinel values for unmapped
+or CIGAR-less records. Check `is_unmapped` before using them.
+
+### Flags
+
+Common boolean properties:
+
+- pairing: `is_paired`, `is_proper_pair`, `is_read1`, `is_read2`
+- orientation: `is_reverse`, `mate_is_reverse`
+- mapping: `is_unmapped`, `mate_is_unmapped`
+- status: `is_secondary`, `is_supplementary`, `is_qcfail`, `is_duplicate`
+
+For a typical primary mapped-read filter:
 
 ```python
-coverage = samfile.count_coverage("chr1", 1000, 2000)
-a_counts, c_counts, g_counts, t_counts = coverage
+def keep_primary(read: pysam.AlignedSegment) -> bool:
+    return (
+        not read.is_unmapped
+        and not read.is_secondary
+        and not read.is_supplementary
+        and not read.is_qcfail
+        and not read.is_duplicate
+        and read.mapping_quality >= 20
+    )
 ```
 
-## AlignedSegment Objects
+State whether supplementary alignments and duplicates are intentionally
+excluded; there is no universal filter for every analysis.
 
-Each read is represented as an `AlignedSegment` object with these key attributes:
+## CIGAR Operations and Alignment Geometry
 
-### Read Information
-- `query_name` - Read name/ID
-- `query_sequence` - Read sequence (bases)
-- `query_qualities` - Base quality scores (ASCII-encoded)
-- `query_length` - Length of the read
+`cigartuples` stores `(operation, length)`, the reverse of textual SAM CIGAR
+notation.
 
-### Mapping Information
-- `reference_name` - Chromosome/contig name
-- `reference_start` - Start position (0-based, inclusive)
-- `reference_end` - End position (0-based, exclusive)
-- `mapping_quality` - MAPQ score
-- `cigarstring` - CIGAR string (e.g., "100M")
-- `cigartuples` - CIGAR as list of (operation, length) tuples
+| Enum | Code | SAM op | Consumes query | Consumes reference |
+|---|---:|---:|---:|---:|
+| `CIGAR_OPS.CMATCH` | 0 | `M` | yes | yes |
+| `CIGAR_OPS.CINS` | 1 | `I` | yes | no |
+| `CIGAR_OPS.CDEL` | 2 | `D` | no | yes |
+| `CIGAR_OPS.CREF_SKIP` | 3 | `N` | no | yes |
+| `CIGAR_OPS.CSOFT_CLIP` | 4 | `S` | yes | no |
+| `CIGAR_OPS.CHARD_CLIP` | 5 | `H` | no | no |
+| `CIGAR_OPS.CPAD` | 6 | `P` | no | no |
+| `CIGAR_OPS.CEQUAL` | 7 | `=` | yes | yes |
+| `CIGAR_OPS.CDIFF` | 8 | `X` | yes | yes |
+| `CIGAR_OPS.CBACK` | 9 | `B` | legacy | legacy |
 
-**Important:** `cigartuples` format differs from SAM specification. Operations are integers:
-- 0 = M (match/mismatch)
-- 1 = I (insertion)
-- 2 = D (deletion)
-- 3 = N (skipped reference)
-- 4 = S (soft clipping)
-- 5 = H (hard clipping)
-- 6 = P (padding)
-- 7 = = (sequence match)
-- 8 = X (sequence mismatch)
+Prefer enum members in new code. Top-level aliases such as `pysam.CMATCH`
+remain in 0.24 for compatibility but are expected to be removed in a future
+release.
 
-### Flags and Status
-- `flag` - SAM flag as integer
-- `is_paired` - Is read paired?
-- `is_proper_pair` - Is read in a proper pair?
-- `is_unmapped` - Is read unmapped?
-- `mate_is_unmapped` - Is mate unmapped?
-- `is_reverse` - Is read on reverse strand?
-- `mate_is_reverse` - Is mate on reverse strand?
-- `is_read1` - Is this read1?
-- `is_read2` - Is this read2?
-- `is_secondary` - Is secondary alignment?
-- `is_qcfail` - Did read fail QC?
-- `is_duplicate` - Is read a duplicate?
-- `is_supplementary` - Is supplementary alignment?
-
-### Tags and Optional Fields
-- `get_tag(tag)` - Get value of optional field
-- `set_tag(tag, value)` - Set optional field
-- `has_tag(tag)` - Check if tag exists
-- `get_tags()` - Get all tags as list of tuples
+Useful geometry methods:
 
 ```python
-for read in samfile.fetch("chr1", 1000, 2000):
-    if read.has_tag("NM"):
-        edit_distance = read.get_tag("NM")
-        print(f"{read.query_name}: NM={edit_distance}")
+blocks = read.get_blocks()  # aligned reference blocks; gaps at D/N
+pairs = read.get_aligned_pairs(matches_only=False, with_cigar=True)
+reference_positions = read.get_reference_positions(full_length=True)
 ```
 
-## Writing Alignment Files
+`get_aligned_pairs(with_seq=True)` needs an MD tag and returns reference bases
+derived from that tag. It does not consult a separately opened FASTA.
 
-### Creating Header
+## Optional Tags and Modified Bases
 
 ```python
-header = {
-    'HD': {'VN': '1.0'},
-    'SQ': [
-        {'LN': 1575, 'SN': 'chr1'},
-        {'LN': 1584, 'SN': 'chr2'}
-    ]
-}
+if read.has_tag("NM"):
+    edit_distance = read.get_tag("NM")
 
-outfile = pysam.AlignmentFile("output.bam", "wb", header=header)
+read.set_tag("XX", 7, value_type="i")
+all_tags = read.get_tags(with_value_type=True)
 ```
 
-### Creating AlignedSegment Objects
+Use standard tags according to the SAM tags specification. Avoid changing
+alignment-derived tags such as NM/MD without recomputing them.
+
+For base modifications encoded by MM/ML:
 
 ```python
-# Create new read
-a = pysam.AlignedSegment()
-a.query_name = "read001"
-a.query_sequence = "AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG"
-a.flag = 0
-a.reference_id = 0  # Index into header['SQ']
-a.reference_start = 100
-a.mapping_quality = 20
-a.cigar = [(0, 35)]  # 35M
-a.query_qualities = pysam.qualitystring_to_array("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
-
-# Write to file
-outfile.write(a)
+for (canonical_base, strand, modification), calls in (
+    read.modified_bases or {}
+).items():
+    for query_position, quality in calls:
+        probability = None if quality < 0 else quality / 256.0
 ```
 
-### Converting Between Formats
+The key is `(canonical base, strand, modification)`, where strand is `0`
+forward or `1` reverse. pysam 0.24 removed the earlier five-modification-type
+limit and fixed crashes on degenerate empty MM calls.
+
+## Counting and Coverage
+
+### Record count
 
 ```python
-# BAM to SAM
-infile = pysam.AlignmentFile("input.bam", "rb")
-outfile = pysam.AlignmentFile("output.sam", "w", template=infile)
-for read in infile:
-    outfile.write(read)
-infile.close()
-outfile.close()
+with pysam.AlignmentFile("input.bam", "rb") as bam:
+    raw_overlap_count = bam.count("chr1", 1_000, 2_000)
+    filtered_count = bam.count(
+        "chr1",
+        1_000,
+        2_000,
+        read_callback="all",
+    )
 ```
 
-## Pileup Analysis
-
-The `pileup()` method provides **column-wise** (position-by-position) analysis across a region:
+`count()` defaults to `read_callback="nofilter"`. `"all"` excludes reads with
+unmapped, secondary, QC-fail, or duplicate flags. It does not accept a
+`quality=` argument. Use a callback for custom record filtering:
 
 ```python
-for pileupcolumn in samfile.pileup("chr1", 1000, 2000):
-    print(f"Position {pileupcolumn.pos}: coverage = {pileupcolumn.nsegments}")
-
-    for pileupread in pileupcolumn.pileups:
-        if not pileupread.is_del and not pileupread.is_refskip:
-            # Query position is the position in the read
-            base = pileupread.alignment.query_sequence[pileupread.query_position]
-            print(f"  {pileupread.alignment.query_name}: {base}")
+count = bam.count(
+    "chr1",
+    1_000,
+    2_000,
+    read_callback=lambda read: keep_primary(read),
+)
 ```
 
-**Key attributes:**
-- `pileupcolumn.pos` - 0-based reference position
-- `pileupcolumn.nsegments` - Number of reads covering position
-- `pileupread.alignment` - The AlignedSegment object
-- `pileupread.query_position` - Position in the read (None for deletions)
-- `pileupread.is_del` - Is this a deletion?
-- `pileupread.is_refskip` - Is this a reference skip (N in CIGAR)?
+### A/C/G/T base coverage
 
-**Important:** Keep iterator references alive. The error "PileupProxy accessed after iterator finished" occurs when iterators go out of scope prematurely.
-
-## Coordinate System
-
-**Critical:** Pysam uses **0-based, half-open** coordinates (Python convention):
-- `reference_start` is 0-based (first base is 0)
-- `reference_end` is exclusive (not included in range)
-- Region from 1000-2000 includes bases 1000-1999
-
-**Exception:** Region strings in `fetch()` and `pileup()` follow samtools conventions (1-based):
 ```python
-# These are equivalent:
-samfile.fetch("chr1", 999, 2000)  # Python style: 0-based
-samfile.fetch("chr1:1000-2000")   # samtools style: 1-based
+a, c, g, t = bam.count_coverage(
+    "chr1",
+    1_000,
+    2_000,
+    quality_threshold=20,
+    read_callback="all",
+)
+depth = [sum(values) for values in zip(a, c, g, t)]
 ```
 
-## Indexing
+The result has exactly `stop - start` positions and therefore represents zero
+coverage. Only A/C/G/T bases are counted; ambiguous query bases do not
+contribute.
 
-Create BAM index:
+## Pileup Semantics
+
 ```python
-pysam.index("example.bam")
+with pysam.FastaFile("reference.fa") as fasta, pysam.AlignmentFile(
+    "input.bam", "rb"
+) as bam:
+    iterator = bam.pileup(
+        "chr1",
+        1_000,
+        2_000,
+        truncate=True,
+        stepper="samtools",
+        fastafile=fasta,
+        min_mapping_quality=20,
+        min_base_quality=20,
+        max_depth=100_000,
+        ignore_overlaps=True,
+        ignore_orphans=True,
+    )
+    for column in iterator:
+        for pileup_read in column.pileups:
+            if pileup_read.is_del or pileup_read.is_refskip:
+                continue
+            query_position = pileup_read.query_position
+            base = pileup_read.alignment.query_sequence[query_position]
 ```
 
-Or use command-line interface:
+Key defaults and behaviors:
+
+- Without `truncate=True`, columns outside the requested interval can appear
+  when overlapping reads extend beyond the interval.
+- `stepper="all"` filters unmapped, secondary, QC-fail, and duplicate reads.
+- `stepper="nofilter"` disables read filtering.
+- `stepper="samtools"` applies samtools-style processing; provide `fastafile`
+  for full BAQ/reference behavior.
+- Default `min_base_quality` is 13.
+- Default `max_depth` is 8000.
+- Paired overlap detection and orphan filtering are enabled by default.
+- `nsegments` counts reads in the pileup column before base-level exclusions;
+  `get_num_aligned()` is often the clearer aligned-base depth.
+
+`PileupColumn` and `PileupRead` proxy objects are valid only while their
+iterator remains alive. Do not retain a column after iteration ends.
+
+For SNP support, inspect base and quality. For insertions/deletions, use
+`PileupRead.indel`, deletion/refskip state, CIGAR, and normalized alleles.
+Single-base counting is not an indel caller.
+
+## Writing Alignments
+
+### Preserve an input header
+
 ```python
-pysam.samtools.index("example.bam")
+with pysam.AlignmentFile("input.bam", "rb") as source, pysam.AlignmentFile(
+    "filtered.bam", "wb", template=source, threads=4
+) as destination:
+    for read in source.fetch(until_eof=True):
+        if keep_primary(read):
+            destination.write(read)
 ```
 
-## Performance Tips
+The output retains input order. Only index it if that order is coordinate
+sorted and unmapped records remain in a valid location.
 
-1. **Use indexed access** when querying specific regions repeatedly
-2. **Use `pileup()` for column-wise analysis** instead of repeated fetch operations
-3. **Use `fetch(until_eof=True)` for sequential reading** of non-indexed files
-4. **Avoid multiple iterators** unless necessary (performance cost)
-5. **Use `count()` for simple counting** instead of iterating and counting manually
+### Construct a new record
 
-## Common Pitfalls
+```python
+header = pysam.AlignmentHeader.from_dict(
+    {
+        "HD": {"VN": "1.6", "SO": "coordinate"},
+        "SQ": [{"SN": "chr1", "LN": 248_956_422}],
+    }
+)
 
-1. **Partial overlaps:** `fetch()` returns reads that overlap region boundaries—implement explicit filtering if exact boundaries are needed
-2. **Quality score editing:** Cannot edit `query_qualities` in place after modifying `query_sequence`. Create a copy first: `quals = read.query_qualities`
-3. **Missing index:** `fetch()` without `until_eof=True` requires an index file
-4. **Thread safety:** While pysam releases GIL during I/O, comprehensive thread-safety hasn't been fully validated
-5. **Iterator scope:** Keep pileup iterator references alive to avoid "PileupProxy accessed after iterator finished" errors
+with pysam.AlignmentFile("new.bam", "wb", header=header) as output:
+    read = pysam.AlignedSegment(output.header)
+    read.query_name = "read001"
+    read.query_sequence = "ACGTACGTAA"
+    read.flag = 0
+    read.reference_id = output.get_tid("chr1")
+    read.reference_start = 100
+    read.mapping_quality = 60
+    read.cigartuples = [(pysam.CIGAR_OPS.CMATCH, 10)]
+    read.query_qualities = pysam.qualitystring_to_array("IIIIIIIIII")
+    output.write(read)
+```
+
+Construct records against the destination header so numeric reference IDs map
+correctly. Sequence length, qualities, and query-consuming CIGAR operations
+must agree.
+
+## Validation
+
+For BAM/CRAM:
+
+```python
+pysam.samtools.quickcheck("-v", "filtered.bam")
+pysam.samtools.index("filtered.bam", catch_stdout=False)
+```
+
+`quickcheck` checks basic headers and EOF markers, not biological correctness.
+Reopen the file, verify header/reference compatibility, and inspect expected
+regions. Read `cram_and_performance.md` for CRAM-specific validation.

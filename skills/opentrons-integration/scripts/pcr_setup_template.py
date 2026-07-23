@@ -1,154 +1,146 @@
-#!/usr/bin/env python3
-"""
-PCR Setup Protocol Template
+"""Eight-reaction PCR setup and cycling template for Opentrons Flex.
 
-This template demonstrates how to set up PCR reactions using the Thermocycler module.
-Includes master mix distribution, sample addition, and PCR cycling.
+This is an automation example, not a validated PCR method. Confirm reagent
+volumes, dead volume, temperatures, cycle profile, plate, seal, and tip policy
+for the assay. Simulate and complete a nonhazardous dry run before use.
 """
 
 from opentrons import protocol_api
 
 metadata = {
-    'protocolName': 'PCR Setup with Thermocycler',
-    'author': 'Opentrons',
-    'description': 'Automated PCR setup and cycling protocol',
-    'apiLevel': '2.19'
+    "protocolName": "Flex PCR Setup and Cycling Template",
+    "author": "Customize before use",
+    "description": "Prepare eight 25 µL PCR reactions and run a cycle profile.",
 }
 
 requirements = {
-    'robotType': 'Flex',
-    'apiLevel': '2.19'
+    "robotType": "Flex",
+    "apiLevel": "2.29",
 }
 
-def run(protocol: protocol_api.ProtocolContext):
-    """
-    Sets up PCR reactions and runs thermocycler.
 
-    Protocol performs:
-    1. Distributes master mix to PCR plate
-    2. Adds DNA samples
-    3. Runs PCR cycling program
-    """
+def run(protocol: protocol_api.ProtocolContext) -> None:
+    """Prepare eight reactions and run an example PCR program."""
+    thermocycler = protocol.load_module("thermocyclerModuleV2")
+    pcr_plate = thermocycler.load_labware(
+        "opentrons_96_wellplate_200ul_pcr_full_skirt",
+        label="PCR Plate",
+    )
 
-    # Load thermocycler module
-    tc_mod = protocol.load_module('thermocyclerModuleV2')
-    tc_plate = tc_mod.load_labware('nest_96_wellplate_100ul_pcr_full_skirt')
-
-    # Load tips and reagents
-    tips_20 = protocol.load_labware('opentrons_flex_96_tiprack_50ul', 'C1')
-    tips_200 = protocol.load_labware('opentrons_flex_96_tiprack_200ul', 'C2')
+    tips_50 = protocol.load_labware(
+        "opentrons_flex_96_tiprack_50ul",
+        "C1",
+        label="50 µL Tips",
+    )
+    tips_200 = protocol.load_labware(
+        "opentrons_flex_96_tiprack_200ul",
+        "C2",
+        label="200 µL Tips",
+    )
     reagent_rack = protocol.load_labware(
-        'opentrons_24_tuberack_nest_1.5ml_snapcap',
-        'D1',
-        label='Reagents'
+        "opentrons_24_tuberack_nest_1.5ml_snapcap",
+        "D1",
+        label="PCR Reagents",
+    )
+    protocol.load_trash_bin("A3")
+
+    small_pipette = protocol.load_instrument(
+        "flex_1channel_50",
+        "left",
+        tip_racks=[tips_50],
+    )
+    large_pipette = protocol.load_instrument(
+        "flex_1channel_1000",
+        "right",
+        tip_racks=[tips_200],
     )
 
-    # Load pipettes
-    p20 = protocol.load_instrument('p50_single_flex', 'left', tip_racks=[tips_20])
-    p300 = protocol.load_instrument('p300_single_flex', 'right', tip_racks=[tips_200])
+    sample_count = 8
+    master_mix_volume_ul = 20
+    template_volume_ul = 5
+    reaction_volume_ul = master_mix_volume_ul + template_volume_ul
 
-    # Define liquids
     master_mix = protocol.define_liquid(
-        name='PCR Master Mix',
-        description='2x PCR master mix',
-        display_color='#FFB6C1'
+        name="PCR Master Mix",
+        description="Assay-specific master mix",
+        display_color="#E377C2",
     )
-
     template_dna = protocol.define_liquid(
-        name='Template DNA',
-        description='DNA samples',
-        display_color='#90EE90'
+        name="Template DNA",
+        description="DNA samples 1-8",
+        display_color="#2CA02C",
     )
-
-    # Load liquids
-    reagent_rack['A1'].load_liquid(liquid=master_mix, volume=1000)
-    for i in range(8):  # 8 samples
-        reagent_rack.wells()[i + 1].load_liquid(liquid=template_dna, volume=50)
-
-    # PCR setup parameters
-    num_samples = 8
-    master_mix_volume = 20  # µL per reaction
-    template_volume = 5  # µL per reaction
-    total_reaction_volume = 25  # µL
-
-    protocol.comment('Starting PCR setup...')
-
-    # Open thermocycler lid
-    tc_mod.open_lid()
-    protocol.comment('Thermocycler lid opened')
-
-    # Step 1: Distribute master mix
-    protocol.comment(f'Distributing {master_mix_volume}µL master mix to {num_samples} wells...')
-    p300.distribute(
-        master_mix_volume,
-        reagent_rack['A1'],
-        tc_plate.wells()[:num_samples],
-        new_tip='once',
-        disposal_volume=10  # Extra volume to prevent shortage
+    reagent_rack.load_liquid(
+        wells=["A1"],
+        volume=300,
+        liquid=master_mix,
     )
+    reagent_rack.load_liquid(
+        wells=reagent_rack.wells()[1 : sample_count + 1],
+        volume=20,
+        liquid=template_dna,
+    )
+    pcr_plate.load_empty(wells=pcr_plate.wells()[:sample_count])
 
-    # Step 2: Add template DNA
-    protocol.comment('Adding template DNA to each well...')
-    for i in range(num_samples):
-        p20.transfer(
-            template_volume,
-            reagent_rack.wells()[i + 1],  # Sample tubes
-            tc_plate.wells()[i],  # PCR plate wells
-            mix_after=(3, 10),  # Mix 3x with 10µL
-            new_tip='always'
+    thermocycler.open_lid()
+
+    with protocol.group_steps(
+        name="Distribute Master Mix",
+        description="Add 20 µL master mix to reactions A1-H1.",
+    ):
+        large_pipette.distribute(
+            volume=master_mix_volume_ul,
+            source=reagent_rack["A1"],
+            dest=pcr_plate.wells()[:sample_count],
+            new_tip="once",
+            disposal_volume=10,
         )
 
-    protocol.comment('PCR reactions prepared')
+    with protocol.group_steps(
+        name="Add Templates",
+        description="Add one DNA template to each PCR reaction.",
+    ):
+        for index in range(sample_count):
+            small_pipette.transfer(
+                volume=template_volume_ul,
+                source=reagent_rack.wells()[index + 1],
+                dest=pcr_plate.wells()[index],
+                mix_after=(3, 20),
+                new_tip="always",
+            )
 
-    # Close lid and start PCR
-    tc_mod.close_lid()
-    protocol.comment('Thermocycler lid closed')
+    with protocol.group_steps(
+        name="Run PCR",
+        description="Close the lid and execute the example PCR profile.",
+    ):
+        thermocycler.close_lid()
+        thermocycler.set_lid_temperature(temperature=105)
+        thermocycler.set_block_temperature(
+            temperature=95,
+            hold_time_seconds=180,
+            block_max_volume=reaction_volume_ul,
+        )
+        thermocycler.execute_profile(
+            steps=[
+                {"temperature": 95, "hold_time_seconds": 15},
+                {"temperature": 60, "hold_time_seconds": 30},
+                {"temperature": 72, "hold_time_seconds": 30},
+            ],
+            repetitions=35,
+            block_max_volume=reaction_volume_ul,
+        )
+        thermocycler.set_block_temperature(
+            temperature=72,
+            hold_time_minutes=5,
+            block_max_volume=reaction_volume_ul,
+        )
+        thermocycler.set_block_temperature(
+            temperature=4,
+            block_max_volume=reaction_volume_ul,
+        )
+        thermocycler.deactivate_lid()
+        thermocycler.open_lid()
 
-    # Set lid temperature
-    tc_mod.set_lid_temperature(celsius=105)
-    protocol.comment('Lid heating to 105°C')
-
-    # Initial denaturation
-    protocol.comment('Initial denaturation...')
-    tc_mod.set_block_temperature(
-        temperature=95,
-        hold_time_seconds=180,
-        block_max_volume=total_reaction_volume
+    protocol.comment(
+        "PCR complete. The block remains at 4 °C until the run is stopped."
     )
-
-    # PCR cycling profile
-    protocol.comment('Starting PCR cycling...')
-    profile = [
-        {'temperature': 95, 'hold_time_seconds': 15},  # Denaturation
-        {'temperature': 60, 'hold_time_seconds': 30},  # Annealing
-        {'temperature': 72, 'hold_time_seconds': 30}   # Extension
-    ]
-
-    num_cycles = 35
-    tc_mod.execute_profile(
-        steps=profile,
-        repetitions=num_cycles,
-        block_max_volume=total_reaction_volume
-    )
-
-    # Final extension
-    protocol.comment('Final extension...')
-    tc_mod.set_block_temperature(
-        temperature=72,
-        hold_time_minutes=5,
-        block_max_volume=total_reaction_volume
-    )
-
-    # Hold at 4°C
-    protocol.comment('Cooling to 4°C for storage...')
-    tc_mod.set_block_temperature(
-        temperature=4,
-        block_max_volume=total_reaction_volume
-    )
-
-    # Deactivate and open
-    tc_mod.deactivate_lid()
-    tc_mod.open_lid()
-
-    protocol.comment('PCR complete! Plate ready for removal.')
-    protocol.comment(f'Completed {num_cycles} cycles for {num_samples} samples')

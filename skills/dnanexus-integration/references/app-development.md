@@ -1,247 +1,360 @@
-# DNAnexus App Development
+# App and Applet Development
 
-## Overview
+## Model
 
-Apps and applets are executable programs that run on the DNAnexus platform. They can be written in Python or Bash and are deployed with all necessary dependencies and configuration.
+- **Applet**: immutable executable data object in one project; best for
+  development, testing, and project-local tools.
+- **App**: versioned executable that can be authorized, published, and run
+  across projects/regions; best for maintained reusable products.
+- **Job**: execution of an app or applet.
+- **Entry point**: named function within an executable. `main` is used for a
+  normal app/appet run; other entry points can be launched as subjobs.
 
-## Applets vs Apps
+Develop as an applet, test in a non-production project, then create and publish
+an app only after reviewing code, permissions, dependencies, and regions.
 
-- **Applets**: Data objects that live inside projects. Good for development and testing.
-- **Apps**: Versioned, shareable executables that don't live inside projects. Can be published for others to use.
+## Source Layout
 
-Both are created identically until the final build step. Applets can be converted to apps later.
+```text
+my-app/
+├── dxapp.json
+├── src/
+│   └── my_app.py
+├── resources/
+│   └── requirements.txt
+└── test/
+    ├── input.json
+    └── expected.json
+```
 
-## Creating an App/Applet
+`resources/` is bundled into the executable. Never place tokens, private keys,
+registry passwords, or patient data in it.
 
-### Using dx-app-wizard
-
-Generate a skeleton app directory structure:
+## Create a Skeleton
 
 ```bash
 dx-app-wizard
 ```
 
-This creates:
-- `dxapp.json` - Configuration file
-- `src/` - Source code directory
-- `resources/` - Bundled dependencies
-- `test/` - Test files
+The wizard supports templates such as:
 
-### Building and Deploying
+- `basic`
+- `parallelized`
+- `scatter-process-gather`
 
-Build an applet:
-```bash
-dx build
-```
+The generated code is a starting point, not a production security boundary.
+Review all access and dependency fields.
 
-Build an app:
-```bash
-dx build --app
-```
-
-The build process:
-1. Validates dxapp.json configuration
-2. Bundles source code and resources
-3. Deploys to the platform
-4. Returns the applet/app ID
-
-## App Directory Structure
-
-```
-my-app/
-├── dxapp.json          # Metadata and configuration
-├── src/
-│   └── my-app.py       # Main executable (Python)
-│   └── my-app.sh       # Or Bash script
-├── resources/          # Bundled files and dependencies
-│   └── tools/
-│   └── data/
-└── test/               # Test data and scripts
-    └── test.json
-```
-
-## Python App Structure
-
-### Entry Points
-
-Python apps use the `@dxpy.entry_point()` decorator to define functions:
+## Python Entry Point
 
 ```python
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import Any
+
 import dxpy
 
-@dxpy.entry_point('main')
-def main(input1, input2):
-    # Process inputs
-    # Return outputs
-    return {
-        "output1": result1,
-        "output2": result2
-    }
+
+@dxpy.entry_point("main")
+def main(reads: dict[str, Any], min_quality: int = 20) -> dict[str, Any]:
+    if not 0 <= min_quality <= 93:
+        raise dxpy.AppError("min_quality must be between 0 and 93")
+
+    input_path = Path("reads.fastq.gz")
+    output_path = Path("filtered.fastq.gz")
+
+    reads_file = dxpy.get_handler(reads)
+    if not isinstance(reads_file, dxpy.DXFile):
+        raise dxpy.AppError("reads must reference a DNAnexus file")
+
+    dxpy.download_dxfile(reads_file, str(input_path))
+
+    # Fixed executable + argv list; no shell interpretation of user input.
+    subprocess.run(
+        [
+            "quality-filter",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--min-quality",
+            str(min_quality),
+        ],
+        check=True,
+    )
+
+    report = dxpy.upload_local_file(
+        str(output_path),
+        wait_on_close=True,
+    )
+    return {"filtered_reads": dxpy.dxlink(report.get_id())}
+
 
 dxpy.run()
 ```
 
-### Input/Output Handling
+Key points:
 
-**Inputs**: DNAnexus data objects are represented as dicts containing links:
+- `dxpy.get_handler()` accepts an ID or DNAnexus link.
+- Pass subprocess arguments as a list. Do not use `shell=True` with inputs.
+- Return a mapping whose keys exactly match `outputSpec`.
+- Return file/record outputs as DNAnexus links.
+- Use `AppError` for an expected, actionable user/input error.
+- Do not catch every exception and convert it to success.
 
-```python
-@dxpy.entry_point('main')
-def main(reads_file):
-    # Convert link to handler
-    reads_dxfile = dxpy.DXFile(reads_file)
+The Python execution template reads `job_input.json`, calls the selected entry
+point with keyword arguments, and writes the returned mapping to
+`job_output.json`.
 
-    # Download to local filesystem
-    dxpy.download_dxfile(reads_dxfile.get_id(), "reads.fastq")
-
-    # Process file...
-```
-
-**Outputs**: Return primitive types directly, convert file outputs to links:
-
-```python
-    # Upload result file
-    output_file = dxpy.upload_local_file("output.fastq")
-
-    return {
-        "trimmed_reads": dxpy.dxlink(output_file)
-    }
-```
-
-## Bash App Structure
-
-Bash apps use a simpler shell script approach:
+## Bash Entry Point
 
 ```bash
-#!/bin/bash
-set -e -x -o pipefail
+#!/usr/bin/env bash
 
 main() {
-    # Download inputs
-    dx download "$reads_file" -o reads.fastq
+  dx download "$reads" --output "reads.fastq.gz"
 
-    # Process
-    process_reads reads.fastq > output.fastq
+  quality-filter \
+    --input "reads.fastq.gz" \
+    --output "filtered.fastq.gz" \
+    --min-quality "$min_quality"
 
-    # Upload outputs
-    trimmed_reads=$(dx upload output.fastq --brief)
-
-    # Set job output
-    dx-jobutil-add-output trimmed_reads "$trimmed_reads" --class=file
+  filtered_reads="$(dx upload "filtered.fastq.gz" --brief)"
+  dx-jobutil-add-output \
+    "filtered_reads" "$filtered_reads" --class=file
 }
 ```
 
-## Common Development Patterns
-
-### 1. Bioinformatics Pipeline
-
-Download → Process → Upload pattern:
-
-```python
-# Download input
-dxpy.download_dxfile(input_file_id, "input.fastq")
-
-# Run analysis
-subprocess.check_call(["tool", "input.fastq", "output.bam"])
-
-# Upload result
-output = dxpy.upload_local_file("output.bam")
-return {"aligned_reads": dxpy.dxlink(output)}
-```
-
-### 2. Multi-file Processing
-
-```python
-# Process multiple inputs
-for file_link in input_files:
-    file_handler = dxpy.DXFile(file_link)
-    local_path = f"{file_handler.name}"
-    dxpy.download_dxfile(file_handler.get_id(), local_path)
-    # Process each file...
-```
-
-### 3. Parallel Processing
-
-Apps can spawn subjobs for parallel execution:
-
-```python
-# Create subjobs
-subjobs = []
-for item in input_list:
-    subjob = dxpy.new_dxjob(
-        fn_input={"input": item},
-        fn_name="process_item"
-    )
-    subjobs.append(subjob)
-
-# Collect results
-results = [job.get_output_ref("result") for job in subjobs]
-```
+The platform invokes Bash with error-exit behavior. Still quote variables,
+validate scalar inputs, and avoid building command strings. Input values are
+untrusted even when provided by a trusted platform user.
 
 ## Execution Environment
 
-Apps run in isolated Linux VMs (Ubuntu 24.04) with:
-- Internet access
-- DNAnexus API access
-- Temporary scratch space in `/home/dnanexus`
-- Input files downloaded to job workspace
-- Root access for installing dependencies
+Current AEEs:
 
-## Testing Apps
+- Ubuntu 24.04, version `0`
+- Ubuntu 20.04, version `0`
 
-### Local Testing
+Jobs run on ephemeral workers. The platform:
 
-Test app logic locally before deploying:
+1. Provisions the worker and app container.
+2. Installs `execDepends`.
+3. Configures API, networking, and logs.
+4. Unpacks bundled dependencies and assets.
+5. Runs the selected interpreter/entry point.
+6. Captures `stdout` and `stderr`.
+7. Processes `job_output.json` or `job_error.json`.
+8. Destroys the workspace unless a supported debugging hold is requested.
 
-```bash
-cd my-app
-python src/my-app.py
-```
+Useful system-provided values include:
 
-### Platform Testing
+- `DX_JOB_ID`
+- `DX_WORKSPACE_ID`
+- `DX_PROJECT_CONTEXT_ID`
+- `DX_RESOURCES_ID`
+- `DX_SECURITY_CONTEXT`
 
-Run the applet on the platform:
+Use `dxpy` rather than parsing these directly where possible. Never print the
+security context.
 
-```bash
-dx run applet-xxxx -i input1=file-yyyy
-```
+Network access is restricted unless requested in app metadata. Prefer a domain
+allowlist; do not request `["*"]` solely to install dependencies at runtime.
 
-Monitor job execution:
+## Separate Pure Logic from Platform I/O
 
-```bash
-dx watch job-zzzz
-```
+Do not use `python src/my_app.py` as the only local test. `dxpy.run()` expects
+the platform execution contract.
 
-View job logs:
+Instead:
 
-```bash
-dx watch job-zzzz --get-streams
-```
+1. Put scientific logic in ordinary functions/modules.
+2. Unit-test those functions with local files.
+3. Keep the entry point as a thin download → validate → compute → upload
+   adapter.
+4. Test the packaged applet on DNAnexus with small non-sensitive fixtures.
 
-## Best Practices
+Example:
 
-1. **Error Handling**: Use try-except blocks and provide informative error messages
-2. **Logging**: Print progress and debug information to stdout/stderr
-3. **Validation**: Validate inputs before processing
-4. **Cleanup**: Remove temporary files when done
-5. **Documentation**: Include clear descriptions in dxapp.json
-6. **Testing**: Test with various input types and edge cases
-7. **Versioning**: Use semantic versioning for apps
-
-## Common Issues
-
-### File Not Found
-Ensure files are properly downloaded before accessing:
 ```python
-dxpy.download_dxfile(file_id, local_path)
-# Now safe to open local_path
+def build_command(
+    input_path: str,
+    output_path: str,
+    min_quality: int,
+) -> list[str]:
+    if not 0 <= min_quality <= 93:
+        raise ValueError("min_quality must be between 0 and 93")
+    return [
+        "quality-filter",
+        "--input",
+        input_path,
+        "--output",
+        output_path,
+        "--min-quality",
+        str(min_quality),
+    ]
 ```
 
-### Out of Memory
-Specify larger instance type in dxapp.json systemRequirements
+Test `build_command()` locally without credentials.
 
-### Timeout
-Increase timeout in dxapp.json or split into smaller jobs
+## Build
 
-### Permission Errors
-Ensure app has necessary permissions in dxapp.json
+Validate offline:
+
+```bash
+uv run python "skills/dnanexus-integration/scripts/validate_dxapp.py" \
+  "my-app/dxapp.json" --kind applet --strict
+```
+
+Build an applet:
+
+```bash
+dx build "my-app"
+```
+
+Build a versioned app:
+
+```bash
+dx build "my-app" --create-app
+```
+
+Use `dx build --help` from the installed toolkit for destination, overwrite,
+regional, and advanced flags; these evolve with dx-toolkit.
+
+After build:
+
+```bash
+dx describe "applet-xxxx"
+dx run "applet-xxxx" -h
+```
+
+Verify:
+
+- Input/output fields and defaults
+- AEE release
+- Regions and instance requirements
+- Access and network requirements
+- Dependency records/files
+- Timeout and restart policy
+
+## Test on Platform
+
+Use a dedicated test project and explicit destination:
+
+```bash
+dx run "applet-xxxx" \
+  --input-json-file "test/input.json" \
+  --destination "project-test:/test-runs/run-001"
+```
+
+Keep interactive confirmation. Set a small cost limit for automation:
+
+```bash
+dx run "applet-xxxx" \
+  --input-json-file "test/input.json" \
+  --destination "project-test:/test-runs/run-002" \
+  --cost-limit 5
+```
+
+Monitor:
+
+```bash
+dx watch "job-xxxx"
+dx describe "job-xxxx"
+```
+
+Test:
+
+- Required and optional inputs
+- Malformed and incompatible inputs
+- Empty and boundary-size data
+- Output classes, names, and closed states
+- Retry behavior and idempotency
+- Network-denied behavior
+- Resource exhaustion behavior
+- Duplicate execution and reuse
+
+## Subjobs and Parallelism
+
+Only use subjobs for independent work large enough to justify worker startup.
+
+```python
+import dxpy
+
+
+@dxpy.entry_point("main")
+def main(items):
+    jobs = [
+        dxpy.new_dxjob(
+            fn_input={"item": item},
+            fn_name="process_item",
+        )
+        for item in items
+    ]
+    return {
+        "results": [
+            job.get_output_ref("result")
+            for job in jobs
+        ]
+    }
+
+
+@dxpy.entry_point("process_item")
+def process_item(item):
+    result = process_one(item)
+    return {"result": result}
+
+
+dxpy.run()
+```
+
+Do not wait synchronously for child jobs when output references can express the
+dependency. Ensure every restartable entry point is idempotent before setting
+`restartableEntryPoints` to `all`.
+
+## Reuse and Idempotency
+
+DNAnexus can reuse identical completed jobs. Preserve reuse for deterministic
+workloads to save time and cost.
+
+Disable reuse only when:
+
+- The executable intentionally depends on untracked external state.
+- A debugging run must execute again.
+- The user explicitly requires recomputation.
+
+If an app writes outside its output folder, uses the current time, downloads
+floating resources, or mutates a shared record, document that behavior and
+reconsider whether it is suitable for reuse/restarts.
+
+## Errors
+
+Use failure categories deliberately:
+
+- `AppError`: expected user/data problem with an actionable message
+- `AppInternalError`: unexpected application defect or nonzero process exit
+- `AppInsufficientResourceError`: insufficient memory/storage condition
+- `InputError` / `OutputError`: platform contract mismatch
+- `DXExecDependencyError`: dependency installation failure
+
+Do not mark partial scientific output as success. If safe partial results are
+valuable, publish them under explicitly named diagnostic outputs and still
+return the appropriate failure.
+
+## Publish Checklist
+
+- Source and dependency licenses reviewed
+- App version incremented
+- Inputs/outputs backward compatible or breaking change documented
+- Reproducible assets/images pinned
+- No embedded credentials or sensitive fixtures
+- Network and project access minimized
+- Supported regions tested
+- Instance types currently available
+- Timeouts, retries, and cost behavior tested
+- Output metadata and scientific provenance included
+- App source visibility (`openSource`) chosen intentionally
+- Authorized users/orgs reviewed
+- Applet test evidence retained
