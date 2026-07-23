@@ -1,648 +1,291 @@
 # Regions of Interest (ROIs)
 
-This reference covers creating, retrieving, and analyzing ROIs in OMERO.
+ROIs and shape labels may encode phenotypes, diagnoses, sample identifiers, or
+analysis decisions. Export geometry and labels only within an explicit scope.
 
-## ROI Overview
+## Model Semantics
 
-ROIs (Regions of Interest) in OMERO are containers for geometric shapes that mark specific regions on images. Each ROI can contain multiple shapes, and shapes can be specific to Z-sections and timepoints.
+The OMERO 5.6 line uses the June 2016 OME schema. The OME ROI model defines
+eight concrete 2D shape types:
 
-### Supported Shape Types
+- Ellipse
+- Label
+- Line
+- Mask
+- Point
+- Polygon
+- Polyline
+- Rectangle
 
-- **Rectangle**: Rectangular regions
-- **Ellipse**: Circular and elliptical regions
-- **Line**: Line segments
-- **Point**: Single points
-- **Polygon**: Multi-point polygons
-- **Mask**: Pixel-based masks
-- **Polyline**: Multi-segment lines
+Plane selectors are optional:
 
-## Creating ROIs
+- `TheZ`: z-section; absent means all z-sections
+- `TheT`: timepoint; absent means all timepoints
+- `TheC`: channel; absent means all channels
 
-### Helper Functions
+Do not coerce absent values to zero. A 3D ROI is represented as a union of 2D
+shapes across planes; it is not a native volumetric mesh.
 
-```python
-from omero.rtypes import rdouble, rint, rstring
-import omero.model
+Display fields include RGBA fill/stroke colors, stroke width, fill rule, dash
+array, text label, and font properties. Geometry and display metadata are
+distinct.
 
-def create_roi(conn, image, shapes):
-    """
-    Create an ROI and link it to shapes.
+## Current Service Status
 
-    Args:
-        conn: BlitzGateway connection
-        image: Image object
-        shapes: List of shape objects
-
-    Returns:
-        Saved ROI object
-    """
-    roi = omero.model.RoiI()
-    roi.setImage(image._obj)
-
-    for shape in shapes:
-        roi.addShape(shape)
-
-    updateService = conn.getUpdateService()
-    return updateService.saveAndReturnObject(roi)
-
-def rgba_to_int(red, green, blue, alpha=255):
-    """
-    Convert RGBA values (0-255) to integer encoding for OMERO.
-
-    Args:
-        red, green, blue, alpha: Color values (0-255)
-
-    Returns:
-        Integer color value
-    """
-    return int.from_bytes([red, green, blue, alpha],
-                          byteorder='big', signed=True)
-```
-
-### Rectangle ROI
+The current Python examples still retrieve ROIs with:
 
 ```python
-from omero.rtypes import rdouble, rint, rstring
-import omero.model
-
-# Get image
-image = conn.getObject("Image", image_id)
-
-# Define position and size
-x, y = 50, 100
-width, height = 200, 150
-z, t = 0, 0  # Z-section and timepoint
-
-# Create rectangle
-rect = omero.model.RectangleI()
-rect.x = rdouble(x)
-rect.y = rdouble(y)
-rect.width = rdouble(width)
-rect.height = rdouble(height)
-rect.theZ = rint(z)
-rect.theT = rint(t)
-
-# Set label and colors
-rect.textValue = rstring("Cell Region")
-rect.fillColor = rint(rgba_to_int(255, 0, 0, 50))    # Red, semi-transparent
-rect.strokeColor = rint(rgba_to_int(255, 255, 0, 255))  # Yellow border
-
-# Create ROI
-roi = create_roi(conn, image, [rect])
-print(f"Created ROI ID: {roi.getId().getValue()}")
-```
-
-### Ellipse ROI
-
-```python
-# Center position and radii
-center_x, center_y = 250, 250
-radius_x, radius_y = 100, 75
-z, t = 0, 0
-
-# Create ellipse
-ellipse = omero.model.EllipseI()
-ellipse.x = rdouble(center_x)
-ellipse.y = rdouble(center_y)
-ellipse.radiusX = rdouble(radius_x)
-ellipse.radiusY = rdouble(radius_y)
-ellipse.theZ = rint(z)
-ellipse.theT = rint(t)
-ellipse.textValue = rstring("Nucleus")
-ellipse.fillColor = rint(rgba_to_int(0, 255, 0, 50))
-
-# Create ROI
-roi = create_roi(conn, image, [ellipse])
-```
-
-### Line ROI
-
-```python
-# Line endpoints
-x1, y1 = 100, 100
-x2, y2 = 300, 200
-z, t = 0, 0
-
-# Create line
-line = omero.model.LineI()
-line.x1 = rdouble(x1)
-line.y1 = rdouble(y1)
-line.x2 = rdouble(x2)
-line.y2 = rdouble(y2)
-line.theZ = rint(z)
-line.theT = rint(t)
-line.textValue = rstring("Measurement Line")
-line.strokeColor = rint(rgba_to_int(0, 0, 255, 255))
-
-# Create ROI
-roi = create_roi(conn, image, [line])
-```
-
-### Point ROI
-
-```python
-# Point position
-x, y = 150, 150
-z, t = 0, 0
-
-# Create point
-point = omero.model.PointI()
-point.x = rdouble(x)
-point.y = rdouble(y)
-point.theZ = rint(z)
-point.theT = rint(t)
-point.textValue = rstring("Feature Point")
-
-# Create ROI
-roi = create_roi(conn, image, [point])
-```
-
-### Polygon ROI
-
-```python
-from omero.model.enums import UnitsLength
-
-# Define vertices as string "x1,y1 x2,y2 x3,y3 ..."
-vertices = "10,20 50,150 200,200 250,75"
-z, t = 0, 0
-
-# Create polygon
-polygon = omero.model.PolygonI()
-polygon.points = rstring(vertices)
-polygon.theZ = rint(z)
-polygon.theT = rint(t)
-polygon.textValue = rstring("Cell Outline")
-
-# Set colors and stroke width
-polygon.fillColor = rint(rgba_to_int(255, 0, 255, 50))
-polygon.strokeColor = rint(rgba_to_int(255, 255, 0, 255))
-polygon.strokeWidth = omero.model.LengthI(2, UnitsLength.PIXEL)
-
-# Create ROI
-roi = create_roi(conn, image, [polygon])
-```
-
-### Mask ROI
-
-```python
-import numpy as np
-import struct
-import math
-
-def create_mask_bytes(mask_array, bytes_per_pixel=1):
-    """
-    Convert binary mask array to bit-packed bytes for OMERO.
-
-    Args:
-        mask_array: Binary numpy array (0s and 1s)
-        bytes_per_pixel: 1 or 2
-
-    Returns:
-        Byte array for OMERO mask
-    """
-    if bytes_per_pixel == 2:
-        divider = 16.0
-        format_string = "H"
-        byte_factor = 0.5
-    elif bytes_per_pixel == 1:
-        divider = 8.0
-        format_string = "B"
-        byte_factor = 1
-    else:
-        raise ValueError("bytes_per_pixel must be 1 or 2")
-
-    mask_bytes = mask_array.astype(np.uint8).tobytes()
-    steps = math.ceil(len(mask_bytes) / divider)
-    packed_mask = []
-
-    for i in range(int(steps)):
-        binary = mask_bytes[i * int(divider):
-                           i * int(divider) + int(divider)]
-        format_str = str(int(byte_factor * len(binary))) + format_string
-        binary = struct.unpack(format_str, binary)
-        s = "".join(str(bit) for bit in binary)
-        packed_mask.append(int(s, 2))
-
-    return bytearray(packed_mask)
-
-# Create binary mask (1s and 0s)
-mask_w, mask_h = 100, 100
-mask_array = np.fromfunction(
-    lambda x, y: ((x - 50)**2 + (y - 50)**2) < 40**2,  # Circle
-    (mask_w, mask_h)
-)
-
-# Pack mask
-mask_packed = create_mask_bytes(mask_array, bytes_per_pixel=1)
-
-# Mask position
-mask_x, mask_y = 50, 50
-z, t, c = 0, 0, 0
-
-# Create mask
-mask = omero.model.MaskI()
-mask.setX(rdouble(mask_x))
-mask.setY(rdouble(mask_y))
-mask.setWidth(rdouble(mask_w))
-mask.setHeight(rdouble(mask_h))
-mask.setTheZ(rint(z))
-mask.setTheT(rint(t))
-mask.setTheC(rint(c))
-mask.setBytes(mask_packed)
-mask.textValue = rstring("Segmentation Mask")
-
-# Set color
-from omero.gateway import ColorHolder
-mask_color = ColorHolder()
-mask_color.setRed(255)
-mask_color.setGreen(0)
-mask_color.setBlue(0)
-mask_color.setAlpha(100)
-mask.setFillColor(rint(mask_color.getInt()))
-
-# Create ROI
-roi = create_roi(conn, image, [mask])
-```
-
-## Multiple Shapes in One ROI
-
-```python
-# Create multiple shapes for the same ROI
-shapes = []
-
-# Rectangle
-rect = omero.model.RectangleI()
-rect.x = rdouble(100)
-rect.y = rdouble(100)
-rect.width = rdouble(50)
-rect.height = rdouble(50)
-rect.theZ = rint(0)
-rect.theT = rint(0)
-shapes.append(rect)
-
-# Ellipse
-ellipse = omero.model.EllipseI()
-ellipse.x = rdouble(125)
-ellipse.y = rdouble(125)
-ellipse.radiusX = rdouble(20)
-ellipse.radiusY = rdouble(20)
-ellipse.theZ = rint(0)
-ellipse.theT = rint(0)
-shapes.append(ellipse)
-
-# Create single ROI with both shapes
-roi = create_roi(conn, image, shapes)
-```
-
-## Retrieving ROIs
-
-### Get All ROIs for Image
-
-```python
-# Get ROI service
-roi_service = conn.getRoiService()
-
-# Find all ROIs for image
-result = roi_service.findByImage(image_id, None)
-
-print(f"Found {len(result.rois)} ROIs")
-
-for roi in result.rois:
-    print(f"ROI ID: {roi.getId().getValue()}")
-    print(f"  Number of shapes: {len(roi.copyShapes())}")
-```
-
-### Parse ROI Shapes
-
-```python
-import omero.model
-
-result = roi_service.findByImage(image_id, None)
-
-for roi in result.rois:
-    roi_id = roi.getId().getValue()
-    print(f"ROI ID: {roi_id}")
-
-    for shape in roi.copyShapes():
-        shape_id = shape.getId().getValue()
-        z = shape.getTheZ().getValue() if shape.getTheZ() else None
-        t = shape.getTheT().getValue() if shape.getTheT() else None
-
-        # Get label
-        label = ""
-        if shape.getTextValue():
-            label = shape.getTextValue().getValue()
-
-        print(f"  Shape ID: {shape_id}, Z: {z}, T: {t}, Label: {label}")
-
-        # Type-specific parsing
-        if isinstance(shape, omero.model.RectangleI):
-            x = shape.getX().getValue()
-            y = shape.getY().getValue()
-            width = shape.getWidth().getValue()
-            height = shape.getHeight().getValue()
-            print(f"    Rectangle: ({x}, {y}) {width}x{height}")
-
-        elif isinstance(shape, omero.model.EllipseI):
-            x = shape.getX().getValue()
-            y = shape.getY().getValue()
-            rx = shape.getRadiusX().getValue()
-            ry = shape.getRadiusY().getValue()
-            print(f"    Ellipse: center ({x}, {y}), radii ({rx}, {ry})")
-
-        elif isinstance(shape, omero.model.PointI):
-            x = shape.getX().getValue()
-            y = shape.getY().getValue()
-            print(f"    Point: ({x}, {y})")
-
-        elif isinstance(shape, omero.model.LineI):
-            x1 = shape.getX1().getValue()
-            y1 = shape.getY1().getValue()
-            x2 = shape.getX2().getValue()
-            y2 = shape.getY2().getValue()
-            print(f"    Line: ({x1}, {y1}) to ({x2}, {y2})")
-
-        elif isinstance(shape, omero.model.PolygonI):
-            points = shape.getPoints().getValue()
-            print(f"    Polygon: {points}")
-
-        elif isinstance(shape, omero.model.MaskI):
-            x = shape.getX().getValue()
-            y = shape.getY().getValue()
-            width = shape.getWidth().getValue()
-            height = shape.getHeight().getValue()
-            print(f"    Mask: ({x}, {y}) {width}x{height}")
-```
-
-## Analyzing ROI Intensities
-
-### Get Statistics for ROI Shapes
-
-```python
-# Get all shapes from ROIs
 roi_service = conn.getRoiService()
 result = roi_service.findByImage(image_id, None)
-
-shape_ids = []
-for roi in result.rois:
-    for shape in roi.copyShapes():
-        shape_ids.append(shape.id.val)
-
-# Define position
-z, t = 0, 0
-channel_index = 0
-
-# Get statistics
-stats = roi_service.getShapeStatsRestricted(
-    shape_ids, z, t, [channel_index]
-)
-
-# Display statistics
-for i, stat in enumerate(stats):
-    shape_id = shape_ids[i]
-    print(f"Shape {shape_id} statistics:")
-    print(f"  Points Count: {stat.pointsCount[channel_index]}")
-    print(f"  Min: {stat.min[channel_index]}")
-    print(f"  Mean: {stat.mean[channel_index]}")
-    print(f"  Max: {stat.max[channel_index]}")
-    print(f"  Sum: {stat.sum[channel_index]}")
-    print(f"  Std Dev: {stat.stdDev[channel_index]}")
 ```
 
-### Extract Pixel Values Within ROI
+However, the current OMERO Blitz API marks the `IRoi` interface deprecated.
+That means “still available but at removal risk,” not “already removed.” OME
+does not document a general replacement for every `IRoi` method in the pages
+reviewed for this snapshot.
+
+Therefore:
+
+- isolate `IRoi` use behind a small function;
+- do not build new broad workflows around legacy measurement-table helpers;
+- verify the target server's generated API before relying on it;
+- record this dependency in long-lived integrations.
+
+The official OMERO.web JSON API also documents paginated ROI listing by image:
+`/api/v0/m/rois/?image=<id>&limit=<n>&offset=<n>`. Use it only when the site
+exposes the documented `api` app over HTTPS and its authentication model is
+appropriate.
+
+## Bounded ROI Read
+
+`findByImage()` does not expose page arguments. Apply explicit image, ROI, and
+shape caps and report truncation:
 
 ```python
-import numpy as np
+image_id = 123
+max_rois = 100
+max_shapes_per_roi = 500
 
-# Get image and ROI
-image = conn.getObject("Image", image_id)
+roi_service = conn.getRoiService()
 result = roi_service.findByImage(image_id, None)
+rois = list(result.rois)
 
-# Get first rectangle shape
-roi = result.rois[0]
-rect = roi.copyShapes()[0]
-
-# Get rectangle bounds
-x = int(rect.getX().getValue())
-y = int(rect.getY().getValue())
-width = int(rect.getWidth().getValue())
-height = int(rect.getHeight().getValue())
-z = rect.getTheZ().getValue()
-t = rect.getTheT().getValue()
-
-# Get pixel data
-pixels = image.getPrimaryPixels()
-
-# Extract region for each channel
-for c in range(image.getSizeC()):
-    # Get plane
-    plane = pixels.getPlane(z, c, t)
-
-    # Extract ROI region
-    roi_region = plane[y:y+height, x:x+width]
-
-    print(f"Channel {c}:")
-    print(f"  Mean intensity: {np.mean(roi_region)}")
-    print(f"  Max intensity: {np.max(roi_region)}")
+roi_truncated = len(rois) > max_rois
+for roi in rois[:max_rois]:
+    shapes = list(roi.copyShapes())
+    print(
+        {
+            "roi_id": roi.getId().getValue(),
+            "shape_count_returned": min(len(shapes), max_shapes_per_roi),
+            "shape_truncated": len(shapes) > max_shapes_per_roi,
+        }
+    )
 ```
 
-## Modifying ROIs
+The cap limits client processing/output, not necessarily server work:
+`findByImage()` may already have assembled all matching ROIs. For a known very
+large image, do not call it casually; consider the documented paginated JSON
+API or a site-reviewed query.
 
-### Update Shape Properties
+The bundled exporter requires explicit image IDs and uses redaction defaults:
+
+```bash
+python -B scripts/export_image_metadata.py \
+  --image-id 123 \
+  --max-rois-per-image 100 \
+  --max-shapes-per-roi 500 \
+  --output ./image-123-metadata.json
+```
+
+Review the dry run, then add `--execute`. ROI labels remain redacted unless
+`--include-roi-labels` is specified.
+
+## Reading Shape Fields
+
+Generated model values are usually wrapped in OMERO rtypes. Preserve `None`:
 
 ```python
-# Get ROI and shape
-result = roi_service.findByImage(image_id, None)
-roi = result.rois[0]
-shape = roi.copyShapes()[0]
+def unwrap(value):
+    if value is None:
+        return None
+    getter = getattr(value, "getValue", None)
+    return getter() if callable(getter) else value
 
-# Modify shape (example: change rectangle size)
+
+for roi in result.rois[:max_rois]:
+    for shape in list(roi.copyShapes())[:max_shapes_per_roi]:
+        record = {
+            "id": unwrap(shape.getId()),
+            "the_z": unwrap(shape.getTheZ()),
+            "the_t": unwrap(shape.getTheT()),
+            "the_c": unwrap(shape.getTheC()),
+            "label_redacted": True,
+        }
+        print(record)
+```
+
+Use type checks before geometry access:
+
+```python
+import omero.model
+
 if isinstance(shape, omero.model.RectangleI):
-    shape.setWidth(rdouble(150))
-    shape.setHeight(rdouble(100))
-    shape.setTextValue(rstring("Updated Rectangle"))
-
-# Save changes
-updateService = conn.getUpdateService()
-updated_roi = updateService.saveAndReturnObject(roi._obj)
+    geometry = {
+        "x": unwrap(shape.getX()),
+        "y": unwrap(shape.getY()),
+        "width": unwrap(shape.getWidth()),
+        "height": unwrap(shape.getHeight()),
+    }
+elif isinstance(shape, omero.model.EllipseI):
+    geometry = {
+        "x": unwrap(shape.getX()),
+        "y": unwrap(shape.getY()),
+        "radius_x": unwrap(shape.getRadiusX()),
+        "radius_y": unwrap(shape.getRadiusY()),
+    }
+elif isinstance(shape, omero.model.LineI):
+    geometry = {
+        "x1": unwrap(shape.getX1()),
+        "y1": unwrap(shape.getY1()),
+        "x2": unwrap(shape.getX2()),
+        "y2": unwrap(shape.getY2()),
+    }
+elif isinstance(shape, (omero.model.PolygonI, omero.model.PolylineI)):
+    geometry = {"points": unwrap(shape.getPoints())}
 ```
 
-### Remove Shape from ROI
+Validate coordinates against image dimensions. Preserve floating-point
+coordinates; do not truncate them to integers merely for JSON.
+
+For masks:
+
+- export position, dimensions, plane selectors, and byte count only by default;
+- do not serialize mask bytes into broad JSON;
+- treat decoded masks as pixel-derived data;
+- validate width/height and bit packing against the current model before
+  reconstructing.
+
+## Creating an ROI Is a Write
+
+Current core-model pattern:
 
 ```python
-result = roi_service.findByImage(image_id, None)
-
-for roi in result.rois:
-    for shape in roi.copyShapes():
-        # Check condition (e.g., remove by label)
-        if (shape.getTextValue() and
-            shape.getTextValue().getValue() == "test-Ellipse"):
-
-            print(f"Removing shape {shape.getId().getValue()}")
-            roi.removeShape(shape)
-
-            # Save modified ROI
-            updateService = conn.getUpdateService()
-            roi = updateService.saveAndReturnObject(roi)
-```
-
-## Deleting ROIs
-
-### Delete Single ROI
-
-```python
-# Delete ROI by ID
-roi_id = 123
-conn.deleteObjects("Roi", [roi_id], wait=True)
-print(f"Deleted ROI {roi_id}")
-```
-
-### Delete All ROIs for Image
-
-```python
-# Get all ROI IDs for image
-result = roi_service.findByImage(image_id, None)
-roi_ids = [roi.getId().getValue() for roi in result.rois]
-
-# Delete all
-if roi_ids:
-    conn.deleteObjects("Roi", roi_ids, wait=True)
-    print(f"Deleted {len(roi_ids)} ROIs")
-```
-
-## Batch ROI Creation
-
-### Create ROIs for Multiple Images
-
-```python
-# Get images
-dataset = conn.getObject("Dataset", dataset_id)
-
-for image in dataset.listChildren():
-    # Create rectangle at center of each image
-    x = image.getSizeX() // 2 - 50
-    y = image.getSizeY() // 2 - 50
-
-    rect = omero.model.RectangleI()
-    rect.x = rdouble(x)
-    rect.y = rdouble(y)
-    rect.width = rdouble(100)
-    rect.height = rdouble(100)
-    rect.theZ = rint(0)
-    rect.theT = rint(0)
-    rect.textValue = rstring("Auto ROI")
-
-    roi = create_roi(conn, image, [rect])
-    print(f"Created ROI for image {image.getName()}")
-```
-
-### Create ROIs Across Z-Stack
-
-```python
-image = conn.getObject("Image", image_id)
-size_z = image.getSizeZ()
-
-# Create rectangle on each Z-section
-shapes = []
-for z in range(size_z):
-    rect = omero.model.RectangleI()
-    rect.x = rdouble(100)
-    rect.y = rdouble(100)
-    rect.width = rdouble(50)
-    rect.height = rdouble(50)
-    rect.theZ = rint(z)
-    rect.theT = rint(0)
-    shapes.append(rect)
-
-# Single ROI with shapes across Z
-roi = create_roi(conn, image, shapes)
-```
-
-## Complete Example
-
-```python
-from omero.gateway import BlitzGateway
-from omero.rtypes import rdouble, rint, rstring
 import omero.model
+from omero.rtypes import rdouble, rint, rstring
 
-HOST = 'omero.example.com'
-PORT = 4064
-USERNAME = 'user'
-PASSWORD = 'pass'
+image = conn.getObject("Image", image_id)
+if image is None:
+    raise LookupError("Image unavailable")
 
-def rgba_to_int(r, g, b, a=255):
-    return int.from_bytes([r, g, b, a], byteorder='big', signed=True)
+x = 50.0
+y = 100.0
+width = 200.0
+height = 150.0
+z = 0
+t = 0
 
-with BlitzGateway(USERNAME, PASSWORD, host=HOST, port=PORT) as conn:
-    # Get image
-    image = conn.getObject("Image", image_id)
-    print(f"Processing: {image.getName()}")
+if x < 0 or y < 0 or x + width > image.getSizeX() or y + height > image.getSizeY():
+    raise ValueError("Rectangle is outside image bounds")
+if not 0 <= z < image.getSizeZ() or not 0 <= t < image.getSizeT():
+    raise ValueError("Plane index is outside image bounds")
 
-    # Create multiple ROIs
-    updateService = conn.getUpdateService()
+rectangle = omero.model.RectangleI()
+rectangle.setX(rdouble(x))
+rectangle.setY(rdouble(y))
+rectangle.setWidth(rdouble(width))
+rectangle.setHeight(rdouble(height))
+rectangle.setTheZ(rint(z))
+rectangle.setTheT(rint(t))
+rectangle.setTextValue(rstring("reviewed-region"))
 
-    # ROI 1: Rectangle
-    roi1 = omero.model.RoiI()
-    roi1.setImage(image._obj)
+roi = omero.model.RoiI()
+roi.setImage(image._obj)
+roi.addShape(rectangle)
 
-    rect = omero.model.RectangleI()
-    rect.x = rdouble(50)
-    rect.y = rdouble(50)
-    rect.width = rdouble(100)
-    rect.height = rdouble(100)
-    rect.theZ = rint(0)
-    rect.theT = rint(0)
-    rect.textValue = rstring("Cell 1")
-    rect.strokeColor = rint(rgba_to_int(255, 0, 0, 255))
-
-    roi1.addShape(rect)
-    roi1 = updateService.saveAndReturnObject(roi1)
-    print(f"Created ROI 1: {roi1.getId().getValue()}")
-
-    # ROI 2: Ellipse
-    roi2 = omero.model.RoiI()
-    roi2.setImage(image._obj)
-
-    ellipse = omero.model.EllipseI()
-    ellipse.x = rdouble(200)
-    ellipse.y = rdouble(150)
-    ellipse.radiusX = rdouble(40)
-    ellipse.radiusY = rdouble(30)
-    ellipse.theZ = rint(0)
-    ellipse.theT = rint(0)
-    ellipse.textValue = rstring("Cell 2")
-    ellipse.strokeColor = rint(rgba_to_int(0, 255, 0, 255))
-
-    roi2.addShape(ellipse)
-    roi2 = updateService.saveAndReturnObject(roi2)
-    print(f"Created ROI 2: {roi2.getId().getValue()}")
-
-    # Retrieve and analyze
-    roi_service = conn.getRoiService()
-    result = roi_service.findByImage(image_id, None)
-
-    shape_ids = []
-    for roi in result.rois:
-        for shape in roi.copyShapes():
-            shape_ids.append(shape.id.val)
-
-    # Get statistics
-    stats = roi_service.getShapeStatsRestricted(shape_ids, 0, 0, [0])
-
-    for i, stat in enumerate(stats):
-        print(f"Shape {shape_ids[i]}:")
-        print(f"  Mean intensity: {stat.mean[0]:.2f}")
+saved = conn.getUpdateService().saveAndReturnObject(roi)
+print(saved.getId().getValue())
 ```
 
-## Best Practices
+Before execution, confirm:
 
-1. **Organize Shapes**: Group related shapes in single ROIs
-2. **Label Shapes**: Use textValue for identification
-3. **Set Z and T**: Always specify Z-section and timepoint
-4. **Color Coding**: Use consistent colors for shape types
-5. **Validate Coordinates**: Ensure shapes are within image bounds
-6. **Batch Creation**: Create multiple ROIs in single transaction when possible
-7. **Delete Unused**: Remove temporary or test ROIs
-8. **Export Data**: Store ROI statistics in tables for later analysis
-9. **Version Control**: Document ROI creation methods in annotations
-10. **Performance**: Use shape statistics service instead of manual pixel extraction
+- image ID, group, and dimensions;
+- shape count and coordinate system;
+- Z/T/C semantics;
+- label sensitivity;
+- write permission;
+- whether an existing ROI should be updated rather than duplicated.
+
+## RGBA Encoding
+
+The official Python example encodes color bytes as a signed 32-bit integer:
+
+```python
+def rgba_to_int(red, green, blue, alpha=255):
+    channels = (red, green, blue, alpha)
+    if any(not 0 <= value <= 255 for value in channels):
+        raise ValueError("RGBA channels must be in 0..255")
+    return int.from_bytes(channels, byteorder="big", signed=True)
+```
+
+Use `rint(rgba_to_int(...))` for generated shape color fields. Do not swap RGBA
+order or assume an unsigned representation.
+
+## Intensity Measurements
+
+The historical Python example uses
+`IRoi.getShapeStatsRestricted(shape_ids, z, t, channel_indices)`. Since
+`IRoi` is deprecated:
+
+1. verify the method in the target server's generated API;
+2. cap shape and channel counts;
+3. preserve channel indexing (pixel channels are zero-based);
+4. record the exact server/client versions;
+5. do not describe the result as a replacement for a validated analysis
+   pipeline.
+
+For simple rectangular reads, a bounded pixel tile may be clearer:
+
+```python
+pixels = image.getPrimaryPixels()
+z = 0
+c = 0
+t = 0
+x = 10
+y = 20
+width = 100
+height = 80
+
+tile = next(pixels.getTiles([(z, c, t, (x, y, width, height))]))
+```
+
+Confirm the current API's tile generator behavior and cap tile area. Polygon,
+polyline, ellipse, and mask measurements require a correctly defined raster
+mask; a bounding box alone is not the ROI.
+
+## Updates and Deletion
+
+Updating a shape and saving an ROI is a write that can affect downstream
+measurements. Deleting an ROI removes its shapes. Never add delete support to a
+read-only export script.
+
+Before update/delete:
+
+- show image, ROI, and shape IDs;
+- retrieve current values;
+- check permissions and group context;
+- obtain approval for the exact IDs;
+- avoid namespace/label-based bulk selection;
+- wait for command completion and verify the result.
+
+## ROI Export Checklist
+
+- Explicit image IDs only
+- One group context
+- Maximum images, ROIs per image, and shapes per ROI
+- Labels redacted by default
+- Mask bytes omitted
+- No pixel values unless separately requested
+- Plane selectors preserve `None`
+- Geometry strings have a length cap
+- `IRoi` deprecation recorded
+- Connection closed in `finally`

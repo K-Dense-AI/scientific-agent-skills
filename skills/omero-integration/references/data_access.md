@@ -1,544 +1,359 @@
-# Data Access & Retrieval
+# Data Access, Hierarchies, and Transfers
 
-This reference covers navigating OMERO's hierarchical data structure and retrieving objects.
+Use this reference for bounded reads and explicit import/export scopes. Read
+[`connection.md`](connection.md) first.
 
-## OMERO Data Hierarchy
+## Object Hierarchies
 
-### Standard Hierarchy
+Common container paths are:
 
-```
-Project
-  └─ Dataset
-       └─ Image
-```
-
-### Screening Hierarchy
-
-```
-Screen
-  └─ Plate
-       └─ Well
-            └─ WellSample
-                 └─ Image
+```text
+Project -> Dataset -> Image
+Screen -> Plate -> Well -> WellSample -> Image
+Image -> Pixels -> Channel
+Image -> Fileset -> OriginalFile(s)
 ```
 
-## Listing Objects
+Links are model objects and may be many-to-many. Do not assume an image has
+exactly one dataset or a dataset exactly one project. Traverse links returned
+by the server instead of synthesizing parent paths.
 
-### List Projects
+Common BlitzGateway object names documented by OME include:
+
+- `Project`, `Dataset`, `Image`
+- `Screen`, `Plate`, `PlateAcquisition`, `Well`
+- `Roi`, `Shape`
+- `Experimenter`, `ExperimenterGroup`
+- `OriginalFile`, `Fileset`
+- `Annotation` and specific annotation subtypes
+
+Object-name support is not permission. A returned `None` may mean nonexistent
+or inaccessible.
+
+## One Object by ID
+
+Use explicit IDs whenever possible:
 
 ```python
-# List all projects for current user
-for project in conn.listProjects():
-    print(f"Project: {project.getName()} (ID: {project.getId()})")
+image_id = 123
+image = conn.getObject("Image", image_id)
+if image is None:
+    raise LookupError("Image was not found or is not accessible")
+
+print(image.getId())
+print(image.getSizeX(), image.getSizeY())
 ```
 
-### List Projects with Filtering
+Do not print names, descriptions, owner names, or acquisition metadata unless
+the requested output includes them.
+
+For multiple explicit IDs:
 
 ```python
-# Get current user and group
-my_exp_id = conn.getUser().getId()
-default_group_id = conn.getEventContext().groupId
-
-# List projects with filters
-for project in conn.getObjects("Project", opts={
-    'owner': my_exp_id,                    # Filter by owner
-    'group': default_group_id,             # Filter by group
-    'order_by': 'lower(obj.name)',         # Sort alphabetically
-    'limit': 10,                           # Limit results
-    'offset': 0                            # Pagination offset
-}):
-    print(f"Project: {project.getName()}")
+requested_ids = [101, 102, 103]
+for image in conn.getObjects(
+    "Image",
+    requested_ids,
+    respect_order=True,
+):
+    print(image.getId())
 ```
 
-### List Datasets
+Keep the input list bounded. Check whether inaccessible IDs were omitted.
+
+## Bounded Pagination
+
+`getObjects()` returns a generator. Use both an overall cap and page size:
 
 ```python
-# List all datasets
-for dataset in conn.getObjects("Dataset"):
-    print(f"Dataset: {dataset.getName()} (ID: {dataset.getId()})")
+def iter_bounded(conn, object_type, *, limit=100, page_size=25):
+    if not 1 <= limit <= 1000:
+        raise ValueError("limit must be between 1 and 1000")
+    if not 1 <= page_size <= min(limit, 200):
+        raise ValueError("page_size must be between 1 and min(limit, 200)")
 
-# List orphaned datasets (not in any project)
-for dataset in conn.getObjects("Dataset", opts={'orphaned': True}):
-    print(f"Orphaned Dataset: {dataset.getName()}")
+    emitted = 0
+    offset = 0
+    while emitted < limit:
+        size = min(page_size, limit - emitted)
+        page = list(
+            conn.getObjects(
+                object_type,
+                opts={
+                    "limit": size,
+                    "offset": offset,
+                    "order_by": "obj.id",
+                },
+            )
+        )
+        if not page:
+            return
+
+        for obj in page:
+            yield obj
+            emitted += 1
+
+        if len(page) < size:
+            return
+        offset += len(page)
 ```
 
-### List Images
+Do not write `list(conn.getObjects(...))` without server-side limits. If
+another process changes rows during offset paging, results may shift; record
+the extraction time and selected group.
 
-```python
-# List all images
-for image in conn.getObjects("Image"):
-    print(f"Image: {image.getName()} (ID: {image.getId()})")
+The bundled inventory helper implements a cap of 1000 and page cap of 200:
 
-# List images in specific dataset
-dataset_id = 123
-for image in conn.getObjects("Image", opts={'dataset': dataset_id}):
-    print(f"Image: {image.getName()}")
+```bash
+python -B scripts/inventory.py \
+  --object-type Image \
+  --limit 50 \
+  --page-size 25
 
-# List orphaned images
-for image in conn.getObjects("Image", opts={'orphaned': True}):
-    print(f"Orphaned Image: {image.getName()}")
+# Review the dry-run JSON, then explicitly connect:
+python -B scripts/inventory.py \
+  --object-type Image \
+  --limit 50 \
+  --page-size 25 \
+  --execute \
+  --output ./image-inventory.json
 ```
 
-## Retrieving Objects by ID
+Names are redacted unless `--include-names` is requested.
 
-### Get Single Object
+## Group and Owner Filters
+
+Prefer one selected group:
 
 ```python
-# Get project by ID
+group_id = 42
+conn.SERVICE_OPTS.setOmeroGroup(str(group_id))
+
+for project in conn.getObjects(
+    "Project",
+    opts={"limit": 20, "offset": 0, "order_by": "obj.id"},
+):
+    print(project.getId())
+```
+
+Filters can further narrow a query:
+
+```python
+owner_id = conn.getUser().getId()
+projects = conn.getObjects(
+    "Project",
+    opts={
+        "owner": owner_id,
+        "group": group_id,
+        "limit": 20,
+        "offset": 0,
+        "order_by": "obj.id",
+    },
+)
+```
+
+Cross-group context (`-1`) must be separately approved and paired with a hard
+limit. Never use it as a fallback when an object is not found.
+
+## Traversing Containers
+
+Downward traversal lazily loads children:
+
+```python
 project = conn.getObject("Project", project_id)
-if project:
-    print(f"Project: {project.getName()}")
-else:
-    print("Project not found")
-
-# Get dataset by ID
-dataset = conn.getObject("Dataset", dataset_id)
-
-# Get image by ID
-image = conn.getObject("Image", image_id)
-```
-
-### Get Multiple Objects by ID
-
-```python
-# Get multiple projects at once
-project_ids = [1, 2, 3, 4, 5]
-projects = conn.getObjects("Project", project_ids)
-
-for project in projects:
-    print(f"Project: {project.getName()}")
-```
-
-### Supported Object Types
-
-The `getObject()` and `getObjects()` methods support:
-- `"Project"`
-- `"Dataset"`
-- `"Image"`
-- `"Screen"`
-- `"Plate"`
-- `"Well"`
-- `"Roi"`
-- `"Annotation"` (and specific types: `"TagAnnotation"`, `"FileAnnotation"`, etc.)
-- `"Experimenter"`
-- `"ExperimenterGroup"`
-- `"Fileset"`
-
-## Query by Attributes
-
-### Query Objects by Name
-
-```python
-# Find images with specific name
-images = conn.getObjects("Image", attributes={"name": "sample_001.tif"})
-
-for image in images:
-    print(f"Found image: {image.getName()} (ID: {image.getId()})")
-
-# Find datasets with specific name
-datasets = conn.getObjects("Dataset", attributes={"name": "Control Group"})
-```
-
-### Query Annotations by Value
-
-```python
-# Find tags with specific text value
-tags = conn.getObjects("TagAnnotation",
-                      attributes={"textValue": "experiment_tag"})
-
-for tag in tags:
-    print(f"Tag: {tag.getValue()}")
-
-# Find map annotations
-map_anns = conn.getObjects("MapAnnotation",
-                          attributes={"ns": "custom.namespace"})
-```
-
-## Navigating Hierarchies
-
-### Navigate Down (Parent to Children)
-
-```python
-# Project → Datasets → Images
-project = conn.getObject("Project", project_id)
-
-for dataset in project.listChildren():
-    print(f"Dataset: {dataset.getName()}")
-
-    for image in dataset.listChildren():
-        print(f"  Image: {image.getName()}")
-```
-
-### Navigate Up (Child to Parent)
-
-```python
-# Image → Dataset → Project
-image = conn.getObject("Image", image_id)
-
-# Get parent dataset
-dataset = image.getParent()
-if dataset:
-    print(f"Dataset: {dataset.getName()}")
-
-    # Get parent project
-    project = dataset.getParent()
-    if project:
-        print(f"Project: {project.getName()}")
-```
-
-### Complete Hierarchy Traversal
-
-```python
-# Traverse complete project hierarchy
-for project in conn.getObjects("Project", opts={'order_by': 'lower(obj.name)'}):
-    print(f"Project: {project.getName()} (ID: {project.getId()})")
-
-    for dataset in project.listChildren():
-        image_count = dataset.countChildren()
-        print(f"  Dataset: {dataset.getName()} ({image_count} images)")
-
-        for image in dataset.listChildren():
-            print(f"    Image: {image.getName()}")
-            print(f"      Size: {image.getSizeX()} x {image.getSizeY()}")
-            print(f"      Channels: {image.getSizeC()}")
-```
-
-## Screening Data Access
-
-### List Screens and Plates
-
-```python
-# List all screens
-for screen in conn.getObjects("Screen"):
-    print(f"Screen: {screen.getName()} (ID: {screen.getId()})")
-
-    # List plates in screen
-    for plate in screen.listChildren():
-        print(f"  Plate: {plate.getName()} (ID: {plate.getId()})")
-```
-
-### Access Plate Wells
-
-```python
-# Get plate
-plate = conn.getObject("Plate", plate_id)
-
-# Plate metadata
-print(f"Plate: {plate.getName()}")
-print(f"Grid size: {plate.getGridSize()}")  # e.g., (8, 12) for 96-well
-print(f"Number of fields: {plate.getNumberOfFields()}")
-
-# Iterate through wells
-for well in plate.listChildren():
-    print(f"Well at row {well.row}, column {well.column}")
-
-    # Count images in well (fields)
-    field_count = well.countWellSample()
-    print(f"  Number of fields: {field_count}")
-
-    # Access images in well
-    for index in range(field_count):
-        image = well.getImage(index)
-        print(f"    Field {index}: {image.getName()}")
-```
-
-### Direct Well Access
-
-```python
-# Get specific well by row and column
-well = plate.getWell(row=0, column=0)  # Top-left well
-
-# Get image from well
-if well.countWellSample() > 0:
-    image = well.getImage(0)  # First field
-    print(f"Image: {image.getName()}")
-```
-
-### Well Sample Access
-
-```python
-# Access well samples directly
-for well in plate.listChildren():
-    for ws in well.listChildren():  # ws = WellSample
-        image = ws.getImage()
-        print(f"WellSample {ws.getId()}: {image.getName()}")
-```
-
-## Image Properties
-
-### Basic Dimensions
-
-```python
-image = conn.getObject("Image", image_id)
-
-# Pixel dimensions
-print(f"X: {image.getSizeX()}")
-print(f"Y: {image.getSizeY()}")
-print(f"Z: {image.getSizeZ()} (Z-sections)")
-print(f"C: {image.getSizeC()} (Channels)")
-print(f"T: {image.getSizeT()} (Time points)")
-
-# Image type
-print(f"Type: {image.getPixelsType()}")  # e.g., 'uint16', 'uint8'
-```
-
-### Physical Dimensions
-
-```python
-# Get pixel sizes with units (OMERO 5.1.0+)
-size_x_obj = image.getPixelSizeX(units=True)
-size_y_obj = image.getPixelSizeY(units=True)
-size_z_obj = image.getPixelSizeZ(units=True)
-
-print(f"Pixel Size X: {size_x_obj.getValue()} {size_x_obj.getSymbol()}")
-print(f"Pixel Size Y: {size_y_obj.getValue()} {size_y_obj.getSymbol()}")
-print(f"Pixel Size Z: {size_z_obj.getValue()} {size_z_obj.getSymbol()}")
-
-# Get as floats (micrometers)
-size_x = image.getPixelSizeX()  # Returns float in µm
-size_y = image.getPixelSizeY()
-size_z = image.getPixelSizeZ()
-```
-
-### Channel Information
-
-```python
-# Iterate through channels
-for channel in image.getChannels():
-    print(f"Channel {channel.getLabel()}:")
-    print(f"  Color: {channel.getColor().getRGB()}")
-    print(f"  Lookup Table: {channel.getLut()}")
-    print(f"  Wavelength: {channel.getEmissionWave()}")
-```
-
-### Image Metadata
-
-```python
-# Acquisition date
-acquired = image.getAcquisitionDate()
-if acquired:
-    print(f"Acquired: {acquired}")
-
-# Description
-description = image.getDescription()
-if description:
-    print(f"Description: {description}")
-
-# Owner and group
-details = image.getDetails()
-print(f"Owner: {details.getOwner().getFullName()}")
-print(f"Username: {details.getOwner().getOmeName()}")
-print(f"Group: {details.getGroup().getName()}")
-print(f"Created: {details.getCreationEvent().getTime()}")
-```
-
-## Object Ownership and Permissions
-
-### Get Owner Information
-
-```python
-# Get object owner
-obj = conn.getObject("Dataset", dataset_id)
-owner = obj.getDetails().getOwner()
-
-print(f"Owner ID: {owner.getId()}")
-print(f"Username: {owner.getOmeName()}")
-print(f"Full Name: {owner.getFullName()}")
-print(f"Email: {owner.getEmail()}")
-```
-
-### Get Group Information
-
-```python
-# Get object's group
-obj = conn.getObject("Image", image_id)
-group = obj.getDetails().getGroup()
-
-print(f"Group: {group.getName()} (ID: {group.getId()})")
-```
-
-### Filter by Owner
-
-```python
-# Get objects for specific user
-user_id = 5
-datasets = conn.getObjects("Dataset", opts={'owner': user_id})
-
-for dataset in datasets:
-    print(f"Dataset: {dataset.getName()}")
-```
-
-## Advanced Queries
-
-### Pagination
-
-```python
-# Paginate through large result sets
-page_size = 50
-offset = 0
-
-while True:
-    images = list(conn.getObjects("Image", opts={
-        'limit': page_size,
-        'offset': offset,
-        'order_by': 'obj.id'
-    }))
-
-    if not images:
+if project is None:
+    raise LookupError("Project unavailable")
+
+dataset_limit = 10
+for dataset_index, dataset in enumerate(project.listChildren()):
+    if dataset_index >= dataset_limit:
         break
+    print(dataset.getId())
 
-    for image in images:
-        print(f"Image: {image.getName()}")
-
-    offset += page_size
+    image_limit = 25
+    for image_index, image in enumerate(dataset.listChildren()):
+        if image_index >= image_limit:
+            break
+        print(image.getId())
 ```
 
-### Sorting Results
+`countChildren()` can help plan a cap but does not replace one. A count may
+change before retrieval.
+
+For a direct dataset image query, prefer a server filter:
 
 ```python
-# Sort by name (case-insensitive)
-projects = conn.getObjects("Project", opts={
-    'order_by': 'lower(obj.name)'
-})
-
-# Sort by ID (ascending)
-datasets = conn.getObjects("Dataset", opts={
-    'order_by': 'obj.id'
-})
-
-# Sort by name (descending)
-images = conn.getObjects("Image", opts={
-    'order_by': 'lower(obj.name) desc'
-})
+images = conn.getObjects(
+    "Image",
+    opts={
+        "dataset": dataset_id,
+        "limit": 50,
+        "offset": 0,
+        "order_by": "obj.id",
+    },
+)
 ```
 
-### Combining Filters
+## Screening Data
+
+Bound each hierarchy level:
 
 ```python
-# Complex query with multiple filters
-my_exp_id = conn.getUser().getId()
-default_group_id = conn.getEventContext().groupId
+plate = conn.getObject("Plate", plate_id)
+if plate is None:
+    raise LookupError("Plate unavailable")
 
-images = conn.getObjects("Image", opts={
-    'owner': my_exp_id,
-    'group': default_group_id,
-    'dataset': dataset_id,
-    'order_by': 'lower(obj.name)',
-    'limit': 100,
-    'offset': 0
-})
+for well_index, well in enumerate(plate.listChildren()):
+    if well_index >= 96:
+        break
+    print(well.getId())
+
+    field_count = min(well.countWellSample(), 10)
+    for field_index in range(field_count):
+        image = well.getImage(field_index)
+        if image is not None:
+            print(image.getId())
 ```
 
-## Counting Objects
+Well rows/columns and field counts can reveal experiment design. Include them
+only when requested.
 
-### Count Children
+## Image Metadata
+
+Basic dimensions do not retrieve pixel planes:
 
 ```python
-# Count images in dataset
-dataset = conn.getObject("Dataset", dataset_id)
-image_count = dataset.countChildren()
-print(f"Dataset contains {image_count} images")
-
-# Count datasets in project
-project = conn.getObject("Project", project_id)
-dataset_count = project.countChildren()
-print(f"Project contains {dataset_count} datasets")
+summary = {
+    "id": image.getId(),
+    "size_x": image.getSizeX(),
+    "size_y": image.getSizeY(),
+    "size_z": image.getSizeZ(),
+    "size_c": image.getSizeC(),
+    "size_t": image.getSizeT(),
+    "pixels_type": image.getPixelsType(),
+}
 ```
 
-### Count Annotations
+Physical sizes may be absent:
 
 ```python
-# Count annotations on object
-image = conn.getObject("Image", image_id)
-annotation_count = image.countAnnotations()
-print(f"Image has {annotation_count} annotations")
+size_x = image.getPixelSizeX(units=True)
+if size_x is not None:
+    print(size_x.getValue(), size_x.getSymbol())
 ```
 
-## Orphaned Objects
+Names, descriptions, acquisition dates, owner names, group names, and channel
+labels are potentially sensitive metadata. Redact by default in broad reports.
 
-### Find Orphaned Datasets
+## Filesets and Original Files
+
+A fileset groups original imported files and may represent several images.
+Inspect metadata before downloading:
 
 ```python
-# Datasets not linked to any project
-orphaned_datasets = conn.getObjects("Dataset", opts={'orphaned': True})
-
-print("Orphaned Datasets:")
-for dataset in orphaned_datasets:
-    print(f"  {dataset.getName()} (ID: {dataset.getId()})")
-    print(f"    Owner: {dataset.getDetails().getOwner().getOmeName()}")
-    print(f"    Images: {dataset.countChildren()}")
+fileset = image.getFileset()
+if fileset is not None:
+    print(fileset.getId())
 ```
 
-### Find Orphaned Images
+Downloading an `Image` or `Fileset` may retrieve several original files and
+their directory structure. Estimate scope first; never use a container-wide
+download merely because it is convenient.
 
-```python
-# Images not in any dataset
-orphaned_images = conn.getObjects("Image", opts={'orphaned': True})
+The current CLI supports:
 
-print("Orphaned Images:")
-for image in orphaned_images:
-    print(f"  {image.getName()} (ID: {image.getId()})")
+```bash
+# One OriginalFile:
+omero download OriginalFile:123 ./explicit-local-file
+
+# Original files linked to one image:
+omero download Image:123 ./explicit-empty-directory
+
+# Original files in one fileset:
+omero download Fileset:456 ./explicit-empty-directory
 ```
 
-### Find Orphaned Plates
+Authenticate through an already prompted CLI session. Do not add `-w`,
+`--password`, or `-k` to reusable command text. Reject symlinked destinations
+and collisions; never derive a local path directly from an untrusted remote
+filename.
 
-```python
-# Plates not in any screen
-orphaned_plates = conn.getObjects("Plate", opts={'orphaned': True})
+## Import Planning and Import
 
-for plate in orphaned_plates:
-    print(f"Orphaned Plate: {plate.getName()}")
+The OMERO importer can scan without a running server:
+
+```bash
+omero import -f ./explicit-input
+omero import --depth 4 -f ./explicit-directory
 ```
 
-## Complete Example
+`-f` lists files that would be imported, grouped into filesets, then exits.
+This is the correct first pass; it is not a remote import.
 
-```python
-from omero.gateway import BlitzGateway
+The bundled local planner is even more conservative and does not invoke OMERO:
 
-# Connection details
-HOST = 'omero.example.com'
-PORT = 4064
-USERNAME = 'user'
-PASSWORD = 'pass'
-
-# Connect and query data
-with BlitzGateway(USERNAME, PASSWORD, host=HOST, port=PORT) as conn:
-    # Get user context
-    user = conn.getUser()
-    group = conn.getGroupFromContext()
-
-    print(f"Connected as {user.getName()} in group {group.getName()}")
-    print()
-
-    # List projects with datasets and images
-    for project in conn.getObjects("Project", opts={'limit': 5}):
-        print(f"Project: {project.getName()} (ID: {project.getId()})")
-
-        for dataset in project.listChildren():
-            image_count = dataset.countChildren()
-            print(f"  Dataset: {dataset.getName()} ({image_count} images)")
-
-            # Show first 3 images
-            for idx, image in enumerate(dataset.listChildren()):
-                if idx >= 3:
-                    print(f"    ... and {image_count - 3} more")
-                    break
-                print(f"    Image: {image.getName()}")
-                print(f"      Size: {image.getSizeX()}x{image.getSizeY()}")
-                print(f"      Channels: {image.getSizeC()}, Z: {image.getSizeZ()}")
-
-        print()
+```bash
+python -B scripts/plan_transfer.py import \
+  --target Dataset:id:42 \
+  --max-files 100 \
+  ./explicit-input
 ```
 
-## Best Practices
+After review and a prompted `omero login`, an actual scoped import is:
 
-1. **Use Context Managers**: Always use `with` statements for automatic connection cleanup
-2. **Limit Results**: Use `limit` and `offset` for large datasets
-3. **Filter Early**: Apply filters to reduce data transfer
-4. **Check for None**: Always check if `getObject()` returns None before using
-5. **Efficient Traversal**: Use `listChildren()` instead of querying separately
-6. **Count Before Loading**: Use `countChildren()` to decide whether to load data
-7. **Group Context**: Set appropriate group context before cross-group queries
-8. **Pagination**: Implement pagination for large result sets
-9. **Object Reuse**: Cache frequently accessed objects to reduce queries
-10. **Error Handling**: Wrap queries in try-except blocks for robustness
+```bash
+omero import -T Dataset:id:42 ./explicit-input
+```
+
+Important:
+
+- The target must be in the current session group.
+- Import needs compatible importer Java libraries; set `OMERODIR` to the
+  matching extracted server distribution.
+- `--parallel-fileset` and `--parallel-upload` are documented as experimental;
+  high values can crash the client or make the server unresponsive.
+- `--report --upload` can send broken source files and logs to the OME team.
+  Never use it without explicit authorization to disclose that data.
+- In-place imports change repository assumptions and are administrator
+  workflows, not a routine client optimization.
+
+## OME-TIFF and XML Export
+
+The documented `omero export` command currently supports:
+
+```bash
+omero export --file ./image-123.ome.tiff Image:123
+omero export --file ./image-123.ome.xml --type XML Image:123
+```
+
+This is not the same as downloading original files:
+
+- export serializes an OMERO image as OME-TIFF or its metadata as XML;
+- download retrieves original files associated with an OriginalFile,
+  FileAnnotation, Image, or Fileset.
+
+Dataset iteration exists only as an experimental export mode. Do not use it
+for broad exports by default. Plan explicit image IDs instead:
+
+```bash
+python -B scripts/plan_transfer.py export \
+  --format ome-tiff \
+  --output-dir ./reviewed-output \
+  Image:123 Image:124
+```
+
+The planner does not connect or export. Review file collisions, image count,
+and available storage before running each proposed command.
+
+## Transfer Checklist
+
+Before any import, export, or download:
+
+1. Confirm current session group.
+2. Confirm explicit source paths or object IDs.
+3. Cap file/object count and directory scan depth.
+4. Distinguish derived OME-TIFF/XML export from original-file download.
+5. Estimate bytes and review data-sharing authorization.
+6. Use a dedicated existing output directory with no symlinks/collisions.
+7. Never use credential flags.
+8. Do not upload diagnostics or broken files without separate consent.

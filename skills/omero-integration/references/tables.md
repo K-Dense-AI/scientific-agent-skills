@@ -1,532 +1,269 @@
-# OMERO Tables
+# OMERO.tables
 
-This reference covers creating and managing structured tabular data in OMERO using OMERO.tables.
+OMERO.tables stores columnar analysis data as an `OriginalFile` backed by an
+HDF table. Treat table reads as data exports and table creation/update as
+server writes.
 
-## OMERO.tables Overview
+## Compatibility and Scope
 
-OMERO.tables provides a way to store structured tabular data associated with OMERO objects. Tables are stored as HDF5 files and can be queried efficiently. Common use cases include:
+The current stable OMERO.tables definition is part of `omero-blitz` 5.8.5 in
+the OMERO.server 5.6.18 documentation. OMERO.server 5.6.12 specifically
+required OMERO.py 5.19.4 for the Tables service to start correctly, which
+illustrates why client/server pairing matters.
 
-- Storing quantitative measurements from images
-- Recording analysis results
-- Tracking experimental metadata
-- Linking measurements to specific images or ROIs
+Before using tables:
+
+- confirm the server's tested OMERO.py version;
+- confirm the Tables service is active;
+- select one group and one table/attached object;
+- cap columns and rows;
+- plan handle closure even after read/query failure.
 
 ## Column Types
 
-OMERO.tables supports various column types:
+Current scalar columns:
 
-- **LongColumn**: Integer values (64-bit)
-- **DoubleColumn**: Floating-point values
-- **StringColumn**: Text data (fixed max length)
-- **BoolColumn**: Boolean values
-- **LongArrayColumn**: Arrays of integers
-- **DoubleArrayColumn**: Arrays of floats
-- **FileColumn**: References to OMERO files
-- **ImageColumn**: References to OMERO images
-- **RoiColumn**: References to OMERO ROIs
-- **WellColumn**: References to OMERO wells
+- `FileColumn`, `ImageColumn`, `RoiColumn`, `WellColumn`, `PlateColumn`
+- `BoolColumn`
+- `LongColumn` (signed 64-bit)
+- `DoubleColumn` (64-bit)
+- `StringColumn(name, description, size, values)`
 
-## Creating Tables
+Current fixed-width array columns include:
 
-### Basic Table Creation
+- `FloatArrayColumn(name, description, size, values)`
+- `DoubleArrayColumn(name, description, size, values)`
+- `LongArrayColumn(name, description, size, values)`
+
+The array `size` argument is required. Older examples that omit it are stale.
+All columns added in one operation must contain the same number of rows.
+Column names are unique; names beginning with double underscore are reserved.
+
+The service performs limited validation of string and array lengths. Validate
+every value against the initialized schema before writing.
+
+## Read-Only Table Inspection
+
+Start from one explicit `OriginalFile` ID, not a filename search:
 
 ```python
-from random import random
-import omero.grid
+original_file_id = 123
+max_rows = 100
+max_columns = 20
 
-# Create unique table name
-table_name = f"MyAnalysisTable_{random()}"
+original = conn.getObject("OriginalFile", original_file_id)
+if original is None:
+    raise LookupError("Table OriginalFile unavailable")
 
-# Define columns (empty data for initialization)
-col1 = omero.grid.LongColumn('ImageID', 'Image identifier', [])
-col2 = omero.grid.DoubleColumn('MeanIntensity', 'Mean pixel intensity', [])
-col3 = omero.grid.StringColumn('Category', 'Classification', 64, [])
-
-columns = [col1, col2, col3]
-
-# Get resources and create table
 resources = conn.c.sf.sharedResources()
-repository_id = resources.repositories().descriptions[0].getId().getValue()
-table = resources.newTable(repository_id, table_name)
-
-# Initialize table with column definitions
-table.initialize(columns)
-```
-
-### Add Data to Table
-
-```python
-# Prepare data
-image_ids = [1, 2, 3, 4, 5]
-intensities = [123.4, 145.2, 98.7, 156.3, 132.8]
-categories = ["Good", "Good", "Poor", "Excellent", "Good"]
-
-# Create data columns
-data_col1 = omero.grid.LongColumn('ImageID', 'Image identifier', image_ids)
-data_col2 = omero.grid.DoubleColumn('MeanIntensity', 'Mean pixel intensity', intensities)
-data_col3 = omero.grid.StringColumn('Category', 'Classification', 64, categories)
-
-data = [data_col1, data_col2, data_col3]
-
-# Add data to table
-table.addData(data)
-
-# Get file reference
-orig_file = table.getOriginalFile()
-table.close()  # Always close table when done
-```
-
-### Link Table to Dataset
-
-```python
-# Create file annotation from table
-orig_file_id = orig_file.id.val
-file_ann = omero.model.FileAnnotationI()
-file_ann.setFile(omero.model.OriginalFileI(orig_file_id, False))
-file_ann = conn.getUpdateService().saveAndReturnObject(file_ann)
-
-# Link to dataset
-link = omero.model.DatasetAnnotationLinkI()
-link.setParent(omero.model.DatasetI(dataset_id, False))
-link.setChild(omero.model.FileAnnotationI(file_ann.getId().getValue(), False))
-conn.getUpdateService().saveAndReturnObject(link)
-
-print(f"Linked table to dataset {dataset_id}")
-```
-
-## Column Types in Detail
-
-### Long Column (Integers)
-
-```python
-# Column for integer values
-image_ids = [101, 102, 103, 104, 105]
-col = omero.grid.LongColumn('ImageID', 'Image identifier', image_ids)
-```
-
-### Double Column (Floats)
-
-```python
-# Column for floating-point values
-measurements = [12.34, 56.78, 90.12, 34.56, 78.90]
-col = omero.grid.DoubleColumn('Measurement', 'Value in microns', measurements)
-```
-
-### String Column (Text)
-
-```python
-# Column for text (max length required)
-labels = ["Control", "Treatment A", "Treatment B", "Control", "Treatment A"]
-col = omero.grid.StringColumn('Condition', 'Experimental condition', 64, labels)
-```
-
-### Boolean Column
-
-```python
-# Column for boolean values
-flags = [True, False, True, True, False]
-col = omero.grid.BoolColumn('QualityPass', 'Passes quality control', flags)
-```
-
-### Image Column (References to Images)
-
-```python
-# Column linking to OMERO images
-image_ids = [101, 102, 103, 104, 105]
-col = omero.grid.ImageColumn('Image', 'Source image', image_ids)
-```
-
-### ROI Column (References to ROIs)
-
-```python
-# Column linking to OMERO ROIs
-roi_ids = [201, 202, 203, 204, 205]
-col = omero.grid.RoiColumn('ROI', 'Associated ROI', roi_ids)
-```
-
-### Array Columns
-
-```python
-# Column for arrays of doubles
-histogram_data = [
-    [10, 20, 30, 40],
-    [15, 25, 35, 45],
-    [12, 22, 32, 42]
-]
-col = omero.grid.DoubleArrayColumn('Histogram', 'Intensity histogram', histogram_data)
-
-# Column for arrays of longs
-bin_counts = [[5, 10, 15], [8, 12, 16], [6, 11, 14]]
-col = omero.grid.LongArrayColumn('Bins', 'Histogram bins', bin_counts)
-```
-
-## Reading Table Data
-
-### Open Existing Table
-
-```python
-# Get table file by name
-orig_table_file = conn.getObject("OriginalFile",
-                                 attributes={'name': table_name})
-
-# Open table
-resources = conn.c.sf.sharedResources()
-table = resources.openTable(orig_table_file._obj)
-
-print(f"Opened table: {table.getOriginalFile().getName().getValue()}")
-print(f"Number of rows: {table.getNumberOfRows()}")
-```
-
-### Read All Data
-
-```python
-# Get column headers
-print("Columns:")
-for col in table.getHeaders():
-    print(f"  {col.name}: {col.description}")
-
-# Read all data
-row_count = table.getNumberOfRows()
-data = table.readCoordinates(range(row_count))
-
-# Display data
-for col in data.columns:
-    print(f"\nColumn: {col.name}")
-    for value in col.values:
-        print(f"  {value}")
-
-table.close()
-```
-
-### Read Specific Rows
-
-```python
-# Read rows 10-20
-start = 10
-stop = 20
-data = table.read(list(range(table.getHeaders().__len__())), start, stop)
-
-for col in data.columns:
-    print(f"Column: {col.name}")
-    for value in col.values:
-        print(f"  {value}")
-```
-
-### Read Specific Columns
-
-```python
-# Read only columns 0 and 2
-column_indices = [0, 2]
-start = 0
-stop = table.getNumberOfRows()
-
-data = table.read(column_indices, start, stop)
-
-for col in data.columns:
-    print(f"Column: {col.name}")
-    print(f"Values: {col.values}")
-```
-
-## Querying Tables
-
-### Query with Conditions
-
-```python
-# Query rows where MeanIntensity > 100
-row_count = table.getNumberOfRows()
-
-query_rows = table.getWhereList(
-    "(MeanIntensity > 100)",
-    variables={},
-    start=0,
-    stop=row_count,
-    step=0
-)
-
-print(f"Found {len(query_rows)} matching rows")
-
-# Read matching rows
-data = table.readCoordinates(query_rows)
-
-for col in data.columns:
-    print(f"\n{col.name}:")
-    for value in col.values:
-        print(f"  {value}")
-```
-
-### Complex Queries
-
-```python
-# Multiple conditions with AND
-query_rows = table.getWhereList(
-    "(MeanIntensity > 100) & (MeanIntensity < 150)",
-    variables={},
-    start=0,
-    stop=row_count,
-    step=0
-)
-
-# Multiple conditions with OR
-query_rows = table.getWhereList(
-    "(Category == 'Good') | (Category == 'Excellent')",
-    variables={},
-    start=0,
-    stop=row_count,
-    step=0
-)
-
-# String matching
-query_rows = table.getWhereList(
-    "(Category == 'Good')",
-    variables={},
-    start=0,
-    stop=row_count,
-    step=0
-)
-```
-
-## Complete Example: Image Analysis Results
-
-```python
-from omero.gateway import BlitzGateway
-import omero.grid
-import omero.model
-import numpy as np
-
-HOST = 'omero.example.com'
-PORT = 4064
-USERNAME = 'user'
-PASSWORD = 'pass'
-
-with BlitzGateway(USERNAME, PASSWORD, host=HOST, port=PORT) as conn:
-    # Get dataset
-    dataset = conn.getObject("Dataset", dataset_id)
-    print(f"Analyzing dataset: {dataset.getName()}")
-
-    # Collect measurements from images
-    image_ids = []
-    mean_intensities = []
-    max_intensities = []
-    cell_counts = []
-
-    for image in dataset.listChildren():
-        image_ids.append(image.getId())
-
-        # Get pixel data
-        pixels = image.getPrimaryPixels()
-        plane = pixels.getPlane(0, 0, 0)  # Z=0, C=0, T=0
-
-        # Calculate statistics
-        mean_intensities.append(float(np.mean(plane)))
-        max_intensities.append(float(np.max(plane)))
-
-        # Simulate cell count (would be from actual analysis)
-        cell_counts.append(np.random.randint(50, 200))
-
-    # Create table
-    table_name = f"Analysis_Results_{dataset.getId()}"
-
-    # Define columns
-    col1 = omero.grid.ImageColumn('Image', 'Source image', [])
-    col2 = omero.grid.DoubleColumn('MeanIntensity', 'Mean pixel value', [])
-    col3 = omero.grid.DoubleColumn('MaxIntensity', 'Maximum pixel value', [])
-    col4 = omero.grid.LongColumn('CellCount', 'Number of cells detected', [])
-
-    # Initialize table
-    resources = conn.c.sf.sharedResources()
-    repository_id = resources.repositories().descriptions[0].getId().getValue()
-    table = resources.newTable(repository_id, table_name)
-    table.initialize([col1, col2, col3, col4])
-
-    # Add data
-    data_col1 = omero.grid.ImageColumn('Image', 'Source image', image_ids)
-    data_col2 = omero.grid.DoubleColumn('MeanIntensity', 'Mean pixel value',
-                                        mean_intensities)
-    data_col3 = omero.grid.DoubleColumn('MaxIntensity', 'Maximum pixel value',
-                                        max_intensities)
-    data_col4 = omero.grid.LongColumn('CellCount', 'Number of cells detected',
-                                      cell_counts)
-
-    table.addData([data_col1, data_col2, data_col3, data_col4])
-
-    # Get file and close table
-    orig_file = table.getOriginalFile()
-    table.close()
-
-    # Link to dataset
-    orig_file_id = orig_file.id.val
-    file_ann = omero.model.FileAnnotationI()
-    file_ann.setFile(omero.model.OriginalFileI(orig_file_id, False))
-    file_ann = conn.getUpdateService().saveAndReturnObject(file_ann)
-
-    link = omero.model.DatasetAnnotationLinkI()
-    link.setParent(omero.model.DatasetI(dataset_id, False))
-    link.setChild(omero.model.FileAnnotationI(file_ann.getId().getValue(), False))
-    conn.getUpdateService().saveAndReturnObject(link)
-
-    print(f"Created and linked table with {len(image_ids)} rows")
-
-    # Query results
-    table = resources.openTable(orig_file)
-
-    high_cell_count_rows = table.getWhereList(
-        "(CellCount > 100)",
-        variables={},
-        start=0,
-        stop=table.getNumberOfRows(),
-        step=0
+table = resources.openTable(original._obj)
+try:
+    headers = list(table.getHeaders())
+    if len(headers) > max_columns:
+        raise ValueError("Table has more columns than approved")
+
+    row_count = table.getNumberOfRows()
+    stop = min(row_count, max_rows)
+    column_indices = list(range(len(headers)))
+    data = table.read(column_indices, 0, stop)
+
+    print(
+        {
+            "original_file_id": original_file_id,
+            "total_rows": row_count,
+            "returned_rows": stop,
+            "truncated": row_count > stop,
+            "columns": [column.name for column in headers],
+        }
     )
-
-    print(f"Images with >100 cells: {len(high_cell_count_rows)}")
-
-    # Read those rows
-    data = table.readCoordinates(high_cell_count_rows)
-    for i in range(len(high_cell_count_rows)):
-        img_id = data.columns[0].values[i]
-        count = data.columns[3].values[i]
-        print(f"  Image {img_id}: {count} cells")
-
+finally:
     table.close()
 ```
 
-## Retrieve Tables from Objects
+`read(colNumbers, start, stop)` uses a stop-exclusive row range, except the
+current docs note that `start=0, stop=0` returns the first row. Avoid that edge
+case: do not call `read` when the approved row count is zero.
 
-### Find Tables Attached to Dataset
+Other current read methods:
+
+- `readCoordinates(rowNumbers)`: complete rows at explicit indices
+- `slice(colNumbers, rowNumbers)`: selected columns and rows
+- `getWhereList(condition, variables, start, stop, step)`: matching row
+  indices, which can then be passed to `readCoordinates`
+
+An empty column or row selection in `slice` may mean “all,” so never use empty
+lists as a safety limit.
+
+## Paged Read
+
+Read consecutive chunks instead of every row:
 
 ```python
-# Get dataset
-dataset = conn.getObject("Dataset", dataset_id)
+def iter_table_pages(table, column_indices, *, limit=1000, page_size=100):
+    if not 1 <= limit <= 10_000:
+        raise ValueError("limit out of range")
+    if not 1 <= page_size <= min(limit, 500):
+        raise ValueError("page_size out of range")
 
-# List file annotations
-for ann in dataset.listAnnotations():
-    if isinstance(ann, omero.gateway.FileAnnotationWrapper):
-        file_obj = ann.getFile()
-        file_name = file_obj.getName()
-
-        # Check if it's a table (might have specific naming pattern)
-        if "Table" in file_name or file_name.endswith(".h5"):
-            print(f"Found table: {file_name} (ID: {file_obj.getId()})")
-
-            # Open and inspect
-            resources = conn.c.sf.sharedResources()
-            table = resources.openTable(file_obj._obj)
-
-            print(f"  Rows: {table.getNumberOfRows()}")
-            print(f"  Columns:")
-            for col in table.getHeaders():
-                print(f"    {col.name}")
-
-            table.close()
+    total = min(table.getNumberOfRows(), limit)
+    start = 0
+    while start < total:
+        stop = min(start + page_size, total)
+        yield table.read(column_indices, start, stop)
+        start = stop
 ```
 
-## Updating Tables
+Do not accumulate all pages unless the total cap and memory cost were reviewed.
+Large string/array columns can make a small row count expensive.
 
-### Append Rows
+## Fixed Queries and Bound Variables
+
+OMERO.tables uses PyTables condition syntax. Keep the condition code fixed and
+bind user values:
 
 ```python
-# Open existing table
+from omero.rtypes import rint
+
+row_count = table.getNumberOfRows()
+max_rows_considered = min(row_count, 1000)
+matches = table.getWhereList(
+    condition="(Image > minimum_id)",
+    variables={"minimum_id": rint(100)},
+    start=0,
+    stop=max_rows_considered,
+    step=0,
+)
+matches = list(matches[:100])
+data = table.readCoordinates(matches)
+```
+
+Never concatenate user text into a condition. Validate column names against
+`getHeaders()` and map requested operations to a fixed allowlist.
+
+The documented condition language includes logical, comparison, arithmetic,
+and selected mathematical operations. Treat it as a query language, not as
+arbitrary Python. Do not use Python `eval()` or `exec()` around it.
+
+## Creating a Table
+
+Creation is a write. Use a unique, caller-reviewed name and one selected
+repository:
+
+```python
+from omero.grid import DoubleColumn, ImageColumn, StringColumn
+
+columns = [
+    ImageColumn("Image", "Source image", []),
+    DoubleColumn("MeanIntensity", "Mean raw value", []),
+    StringColumn("Status", "Review status", 32, []),
+]
+
 resources = conn.c.sf.sharedResources()
-table = resources.openTable(orig_file._obj)
+repositories = resources.repositories().descriptions
+if not repositories:
+    raise RuntimeError("No table repository is available")
 
-# Prepare new data
-new_image_ids = [106, 107]
-new_intensities = [88.9, 92.3]
-new_categories = ["Good", "Excellent"]
-
-# Create data columns
-data_col1 = omero.grid.LongColumn('ImageID', '', new_image_ids)
-data_col2 = omero.grid.DoubleColumn('MeanIntensity', '', new_intensities)
-data_col3 = omero.grid.StringColumn('Category', '', 64, new_categories)
-
-# Append data
-table.addData([data_col1, data_col2, data_col3])
-
-print(f"New row count: {table.getNumberOfRows()}")
-table.close()
+repository_id = repositories[0].getId().getValue()
+table = resources.newTable(repository_id, "analysis-v2-explicit-name")
+try:
+    table.initialize(columns)
+    table.addData(
+        [
+            ImageColumn("Image", "Source image", [101, 102]),
+            DoubleColumn("MeanIntensity", "Mean raw value", [12.5, 14.0]),
+            StringColumn("Status", "Review status", 32, ["reviewed", "reviewed"]),
+        ]
+    )
+    table_file_id = table.getOriginalFile().getId().getValue()
+finally:
+    table.close()
 ```
 
-## Deleting Tables
+Before execution:
 
-### Delete Table File
+- verify repository selection with the administrator;
+- validate every referenced object ID in the same intended group;
+- validate all row counts, numeric ranges, strings, and array sizes;
+- cap rows per `addData` batch;
+- decide recovery if initialization succeeds but data upload fails.
+
+## Linking a Table
+
+The table `OriginalFile` becomes discoverable through a `FileAnnotation` and an
+object-annotation link:
 
 ```python
-# Get file object
-orig_file = conn.getObject("OriginalFile", file_id)
+from omero.model import (
+    DatasetAnnotationLinkI,
+    DatasetI,
+    FileAnnotationI,
+    OriginalFileI,
+)
 
-# Delete file (also deletes table)
-conn.deleteObjects("OriginalFile", [file_id], wait=True)
-print(f"Deleted table file {file_id}")
+file_annotation = FileAnnotationI()
+file_annotation.setFile(OriginalFileI(table_file_id, False))
+file_annotation = conn.getUpdateService().saveAndReturnObject(file_annotation)
+
+link = DatasetAnnotationLinkI()
+link.setParent(DatasetI(dataset_id, False))
+link.setChild(FileAnnotationI(file_annotation.getId().getValue(), False))
+conn.getUpdateService().saveAndReturnObject(link)
 ```
 
-### Unlink Table from Object
+This is a second write after table creation. If link creation fails, the table
+and file annotation may remain orphaned. Record IDs after every successful
+step and define cleanup before starting.
+
+OMERO.web table viewing expects conventions such as a column named `Image`
+with a supported ID/numeric column type. A custom column called something else
+may store valid data but not receive the same UI behavior.
+
+## Concurrency and Lifecycle
+
+Each OMERO table is backed by one HDF table. PyTables/HDF does not support
+general concurrent access, so OMERO.tables adds global locking. Keep table
+handles short-lived:
 
 ```python
-# Find annotation links
-dataset = conn.getObject("Dataset", dataset_id)
-
-for ann in dataset.listAnnotations():
-    if isinstance(ann, omero.gateway.FileAnnotationWrapper):
-        if "Table" in ann.getFile().getName():
-            # Delete link (keeps table, removes association)
-            conn.deleteObjects("DatasetAnnotationLink",
-                             [ann.link.getId()],
-                             wait=True)
-            print(f"Unlinked table from dataset")
+table = resources.openTable(original._obj)
+try:
+    # One bounded operation.
+    ...
+finally:
+    table.close()
 ```
 
-## Best Practices
+Do not hold a handle across:
 
-1. **Descriptive Names**: Use meaningful table and column names
-2. **Close Tables**: Always close tables after use
-3. **String Length**: Set appropriate max length for string columns
-4. **Link to Objects**: Attach tables to relevant datasets or projects
-5. **Use References**: Use ImageColumn, RoiColumn for object references
-6. **Query Efficiently**: Use getWhereList() instead of reading all data
-7. **Document**: Add descriptions to columns
-8. **Version Control**: Include version info in table name or metadata
-9. **Batch Operations**: Add data in batches for better performance
-10. **Error Handling**: Check for None returns and handle exceptions
+- user interaction;
+- network retries/reconnection;
+- long pixel analysis;
+- another process's expected write window.
 
-## Common Patterns
+If BlitzGateway reconnects, discard any old table proxy and open a fresh one.
 
-### ROI Measurements Table
+## Updating or Deleting
 
-```python
-# Table structure for ROI measurements
-columns = [
-    omero.grid.ImageColumn('Image', 'Source image', []),
-    omero.grid.RoiColumn('ROI', 'Measured ROI', []),
-    omero.grid.LongColumn('ChannelIndex', 'Channel number', []),
-    omero.grid.DoubleColumn('Area', 'ROI area in pixels', []),
-    omero.grid.DoubleColumn('MeanIntensity', 'Mean intensity', []),
-    omero.grid.DoubleColumn('IntegratedDensity', 'Sum of intensities', []),
-    omero.grid.StringColumn('CellType', 'Cell classification', 32, [])
-]
-```
+`addData()` and `update()` mutate table content. Deleting the backing
+`OriginalFile` may remove the table; deleting one annotation link may merely
+detach it from one object. These require separate impact review.
 
-### Time Series Data Table
+Never:
 
-```python
-# Table structure for time series measurements
-columns = [
-    omero.grid.ImageColumn('Image', 'Time series image', []),
-    omero.grid.LongColumn('Timepoint', 'Time index', []),
-    omero.grid.DoubleColumn('Timestamp', 'Time in seconds', []),
-    omero.grid.DoubleColumn('Value', 'Measured value', []),
-    omero.grid.StringColumn('Measurement', 'Type of measurement', 64, [])
-]
-```
+- update rows selected by a dynamically constructed condition;
+- append an unbounded result set;
+- delete a table based only on filename;
+- overwrite an existing table as a retry strategy;
+- leave a handle open after an exception.
 
-### Screening Results Table
+## Table Checklist
 
-```python
-# Table structure for screening plate analysis
-columns = [
-    omero.grid.WellColumn('Well', 'Plate well', []),
-    omero.grid.LongColumn('FieldIndex', 'Field number', []),
-    omero.grid.DoubleColumn('CellCount', 'Number of cells', []),
-    omero.grid.DoubleColumn('Viability', 'Percent viable', []),
-    omero.grid.StringColumn('Phenotype', 'Observed phenotype', 128, []),
-    omero.grid.BoolColumn('Hit', 'Hit in screen', [])
-]
-```
+- Explicit `OriginalFile` ID and selected group
+- Server/client pairing verified
+- Column count, row limit, page size, string size, and array width bounded
+- Fixed conditions with bound variables
+- No empty selection that means “all”
+- Handle closed in `finally`
+- Writes and links reviewed separately
+- Partial-create IDs recorded for recovery
+- Export classification reviewed before JSON/CSV output

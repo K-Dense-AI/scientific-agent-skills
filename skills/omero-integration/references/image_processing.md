@@ -1,665 +1,286 @@
-# Image Processing & Rendering
+# Pixels, Rendering, and Derived Images
 
-This reference covers accessing raw pixel data, image rendering, and creating new images in OMERO.
+Pixel planes, thumbnails, rendered images, channel labels, and physical sizes
+are data exports. Set explicit image IDs, coordinates, byte/memory caps, and
+output paths before retrieval.
 
-## Accessing Raw Pixel Data
+## Dimensions Before Data
 
-### Get Single Plane
+Inspect dimensions without loading a plane:
 
 ```python
-# Get image
 image = conn.getObject("Image", image_id)
+if image is None:
+    raise LookupError("Image unavailable")
 
-# Get dimensions
-size_z = image.getSizeZ()
-size_c = image.getSizeC()
-size_t = image.getSizeT()
-
-# Get pixels object
-pixels = image.getPrimaryPixels()
-
-# Get single plane (returns NumPy array)
-z, c, t = 0, 0, 0  # First Z-section, channel, and timepoint
-plane = pixels.getPlane(z, c, t)
-
-print(f"Shape: {plane.shape}")
-print(f"Data type: {plane.dtype.name}")
-print(f"Min: {plane.min()}, Max: {plane.max()}")
+dimensions = {
+    "size_x": image.getSizeX(),
+    "size_y": image.getSizeY(),
+    "size_z": image.getSizeZ(),
+    "size_c": image.getSizeC(),
+    "size_t": image.getSizeT(),
+    "pixels_type": image.getPixelsType(),
+}
 ```
 
-### Get Multiple Planes
+Estimate element count and memory before a read. A single `uint16` plane uses
+roughly `size_x * size_y * 2` bytes before NumPy/container overhead. Do not
+retrieve a full 5D image by default.
+
+## One Raw Plane
+
+Raw pixel access is zero-based in Z, C, and T:
 
 ```python
-import numpy as np
-
-# Get Z-stack for specific channel and timepoint
-pixels = image.getPrimaryPixels()
-c, t = 0, 0  # First channel and timepoint
-
-# Build list of (z, c, t) coordinates
-zct_list = [(z, c, t) for z in range(size_z)]
-
-# Get all planes at once
-planes = pixels.getPlanes(zct_list)
-
-# Stack into 3D array
-z_stack = np.array([p for p in planes])
-print(f"Z-stack shape: {z_stack.shape}")
-```
-
-### Get Hypercube (Subset of 5D Data)
-
-```python
-# Get subset of 5D data (Z, C, T)
-zct_list = []
-for z in range(size_z // 2, size_z):  # Second half of Z
-    for c in range(size_c):           # All channels
-        for t in range(size_t):       # All timepoints
-            zct_list.append((z, c, t))
-
-# Get planes
-planes = pixels.getPlanes(zct_list)
-
-# Process each plane
-for i, plane in enumerate(planes):
-    z, c, t = zct_list[i]
-    print(f"Plane Z={z}, C={c}, T={t}: Min={plane.min()}, Max={plane.max()}")
-```
-
-### Get Tile (Region of Interest)
-
-```python
-# Define tile coordinates
-x, y = 50, 50          # Top-left corner
-width, height = 100, 100  # Tile size
-tile = (x, y, width, height)
-
-# Get tile for specific Z, C, T
-z, c, t = 0, 0, 0
-zct_list = [(z, c, t, tile)]
-
-tiles = pixels.getTiles(zct_list)
-tile_data = tiles[0]
-
-print(f"Tile shape: {tile_data.shape}")  # Should be (height, width)
-```
-
-### Get Multiple Tiles
-
-```python
-# Get tiles from Z-stack
-c, t = 0, 0
-tile = (50, 50, 100, 100)  # x, y, width, height
-
-# Build list with tiles
-zct_list = [(z, c, t, tile) for z in range(size_z)]
-
-tiles = pixels.getTiles(zct_list)
-
-for i, tile_data in enumerate(tiles):
-    print(f"Tile Z={i}: {tile_data.shape}, Min={tile_data.min()}")
-```
-
-## Image Histograms
-
-### Get Histogram
-
-```python
-# Get histogram for first channel
-channel_index = 0
-num_bins = 256
-z, t = 0, 0
-
-histogram = image.getHistogram([channel_index], num_bins, False, z, t)
-print(f"Histogram bins: {len(histogram)}")
-print(f"First 10 bins: {histogram[:10]}")
-```
-
-### Multi-Channel Histogram
-
-```python
-# Get histograms for all channels
-channels = list(range(image.getSizeC()))
-histograms = image.getHistogram(channels, 256, False, 0, 0)
-
-for c, hist in enumerate(histograms):
-    print(f"Channel {c}: Total pixels = {sum(hist)}")
-```
-
-## Image Rendering
-
-### Render Image with Current Settings
-
-```python
-from PIL import Image
-from io import BytesIO
-
-# Get image
-image = conn.getObject("Image", image_id)
-
-# Render at specific Z and T
-z = image.getSizeZ() // 2  # Middle Z-section
+z = 0
+c = 0
 t = 0
 
-rendered_image = image.renderImage(z, t)
-# rendered_image is a PIL Image object
-rendered_image.save("rendered_image.jpg")
+if not 0 <= z < image.getSizeZ():
+    raise ValueError("Z out of range")
+if not 0 <= c < image.getSizeC():
+    raise ValueError("C out of range")
+if not 0 <= t < image.getSizeT():
+    raise ValueError("T out of range")
+
+max_pixels = 16_000_000
+if image.getSizeX() * image.getSizeY() > max_pixels:
+    raise ValueError("Plane exceeds approved pixel count; use tiles")
+
+pixels = image.getPrimaryPixels()
+plane = pixels.getPlane(z, c, t)
+print(plane.shape, plane.dtype)
 ```
 
-### Get Thumbnail
+Do not print arrays. Summaries such as min/max may still reveal signal
+distribution and should be included only when requested.
+
+## Several Explicit Planes
+
+`getPlanes()` accepts a list of `(z, c, t)` tuples and returns an iterator.
+Bound the coordinate list and process incrementally:
 
 ```python
-from PIL import Image
+coordinates = [(0, 0, 0), (1, 0, 0), (2, 0, 0)]
+if len(coordinates) > 20:
+    raise ValueError("Too many planes")
+
+for (z, c, t), plane in zip(coordinates, pixels.getPlanes(coordinates)):
+    print({"z": z, "c": c, "t": t, "shape": plane.shape})
+```
+
+Do not create a coordinate list from all dimensions until the resulting count
+has been checked.
+
+## Tiles for Large Images
+
+`getTiles()` accepts `(z, c, t, (x, y, width, height))` tuples:
+
+```python
+x = 0
+y = 0
+width = 512
+height = 512
+z = 0
+c = 0
+t = 0
+
+if width <= 0 or height <= 0:
+    raise ValueError("Tile dimensions must be positive")
+if x < 0 or y < 0:
+    raise ValueError("Tile origin must be non-negative")
+if x + width > image.getSizeX() or y + height > image.getSizeY():
+    raise ValueError("Tile exceeds image bounds")
+if width * height > 1_048_576:
+    raise ValueError("Tile exceeds approved pixel count")
+
+request = [(z, c, t, (x, y, width, height))]
+tile = next(pixels.getTiles(request))
+```
+
+For a tiled scan, cap:
+
+- number of tiles;
+- pixels per tile;
+- total pixels;
+- channels/Z/T;
+- memory retained at once.
+
+Do not infer that a rectangular tile is equivalent to a nonrectangular ROI.
+
+## Channel Metadata
+
+Channel metadata may include sensitive labels:
+
+```python
+max_channels = min(image.getSizeC(), 16)
+for index, channel in enumerate(image.getChannels()):
+    if index >= max_channels:
+        break
+    print(
+        {
+            "index": index,
+            "label_redacted": True,
+            "color": channel.getColor().getRGB(),
+            "lut": channel.getLut(),
+            "reverse_intensity": channel.isReverseIntensity(),
+        }
+    )
+```
+
+Raw pixel channel indices are zero-based. BlitzGateway rendering channel
+selectors are one-based. Keep this conversion explicit.
+
+## Physical Dimensions
+
+Physical sizes can be absent:
+
+```python
+for axis, value in (
+    ("x", image.getPixelSizeX(units=True)),
+    ("y", image.getPixelSizeY(units=True)),
+    ("z", image.getPixelSizeZ(units=True)),
+):
+    if value is not None:
+        print(axis, value.getValue(), value.getSymbol())
+```
+
+Preserve the unit. Do not assume an unwrapped numeric value has the unit needed
+by downstream analysis.
+
+Changing pixel sizes mutates the server model and must be a separately
+reviewed write. Do not “correct” missing metadata automatically.
+
+## Thumbnail Bytes
+
+`getThumbnail()` returns encoded image bytes using current rendering settings:
+
+```python
 from io import BytesIO
+from PIL import Image
 
-# Get thumbnail (uses current rendering settings)
-thumbnail_data = image.getThumbnail()
-
-# Convert to PIL Image
-thumbnail = Image.open(BytesIO(thumbnail_data))
-thumbnail.save("thumbnail.jpg")
-
-# Get specific thumbnail size
-thumbnail_data = image.getThumbnail(size=(96, 96))
-thumbnail = Image.open(BytesIO(thumbnail_data))
+thumbnail_bytes = image.getThumbnail(size=(96, 96))
+thumbnail = Image.open(BytesIO(thumbnail_bytes))
+thumbnail.load()
+print(thumbnail.size)
 ```
 
-## Rendering Settings
-
-### View Current Settings
+To save, use a caller-selected filename and refuse collisions/symlinks:
 
 ```python
-# Display rendering settings
-print("Current Rendering Settings:")
-print(f"Grayscale mode: {image.isGreyscaleRenderingModel()}")
-print(f"Default Z: {image.getDefaultZ()}")
-print(f"Default T: {image.getDefaultT()}")
-print()
+from pathlib import Path
 
-# Channel settings
-print("Channel Settings:")
-for idx, channel in enumerate(image.getChannels()):
-    print(f"Channel {idx + 1}:")
-    print(f"  Label: {channel.getLabel()}")
-    print(f"  Color: {channel.getColor().getHtml()}")
-    print(f"  Active: {channel.isActive()}")
-    print(f"  Window: {channel.getWindowStart()} - {channel.getWindowEnd()}")
-    print(f"  Min/Max: {channel.getWindowMin()} - {channel.getWindowMax()}")
+destination = Path("./image-123-thumbnail.png")
+if destination.exists() or destination.is_symlink():
+    raise FileExistsError(destination)
+thumbnail.save(destination, format="PNG")
 ```
 
-### Set Rendering Model
+Do not derive `destination` from `image.getName()`.
+
+## Rendering
+
+`renderImage(z, t, compression=0.9)` returns a Pillow image:
 
 ```python
-# Switch to grayscale rendering
-image.setGreyscaleRenderingModel()
-
-# Switch to color rendering
-image.setColorRenderingModel()
-```
-
-### Set Active Channels
-
-```python
-# Activate specific channels (1-indexed)
-image.setActiveChannels([1, 3])  # Channels 1 and 3 only
-
-# Activate all channels
-all_channels = list(range(1, image.getSizeC() + 1))
-image.setActiveChannels(all_channels)
-
-# Activate single channel
-image.setActiveChannels([2])
-```
-
-### Set Channel Colors
-
-```python
-# Set channel colors (hex format)
-channels = [1, 2, 3]
-colors = ['FF0000', '00FF00', '0000FF']  # Red, Green, Blue
-
-image.setActiveChannels(channels, colors=colors)
-
-# Use None to keep existing color
-colors = ['FF0000', None, '0000FF']  # Keep channel 2's color
-image.setActiveChannels(channels, colors=colors)
-```
-
-### Set Channel Window (Intensity Range)
-
-```python
-# Set intensity windows for channels
-channels = [1, 2]
-windows = [
-    [100.0, 500.0],  # Channel 1: 100-500
-    [50.0, 300.0]    # Channel 2: 50-300
-]
-
-image.setActiveChannels(channels, windows=windows)
-
-# Use None to keep existing window
-windows = [[100.0, 500.0], [None, None]]
-image.setActiveChannels(channels, windows=windows)
-```
-
-### Set Default Z and T
-
-```python
-# Set default Z-section and timepoint
-image.setDefaultZ(5)
-image.setDefaultT(0)
-
-# Render using defaults
-rendered_image = image.renderImage(z=None, t=None)
-rendered_image.save("default_rendering.jpg")
-```
-
-## Render Individual Channels
-
-### Render Each Channel Separately
-
-```python
-# Set grayscale mode
-image.setGreyscaleRenderingModel()
-
 z = image.getSizeZ() // 2
 t = 0
-
-# Render each channel
-for c in range(1, image.getSizeC() + 1):
-    image.setActiveChannels([c])
-    rendered = image.renderImage(z, t)
-    rendered.save(f"channel_{c}.jpg")
+rendered = image.renderImage(z, t, compression=0.9)
 ```
 
-### Render Multi-Channel Composites
+The rendered result reflects the current rendering model, active channels,
+colors, windows, LUTs, and defaults. Record those settings when a reproducible
+figure depends on them.
+
+Current official examples set active rendering channels with one-based
+indices:
 
 ```python
-# Color composite of first 3 channels
-image.setColorRenderingModel()
-channels = [1, 2, 3]
-colors = ['FF0000', '00FF00', '0000FF']  # RGB
-
-image.setActiveChannels(channels, colors=colors)
+image.setActiveChannels(
+    [1, 2],
+    [[20.0, 300.0], [50.0, 500.0]],
+    ["00FF00", "FF0000"],
+)
 rendered = image.renderImage(z, t)
-rendered.save("rgb_composite.jpg")
 ```
 
-## Image Projections
+This initializes a stateful rendering engine. Keep the rendering scope short.
+Closing the BlitzGateway closes its tracked services; if using low-level
+stateful services directly, close each in `finally`. Do not depend on private
+attributes such as `image._re` in durable code.
 
-### Maximum Intensity Projection
+`saveDefaults()` or other persistence calls change server rendering settings.
+Do not call them in a read/render helper. Rendering locally does not authorize
+persisting new defaults.
+
+## Histograms and Statistics
+
+Histograms and min/max statistics can be large or expensive across many
+channels/planes. Restrict:
+
+- one explicit image;
+- an allowlisted channel list;
+- bin count;
+- Z/T;
+- number of returned arrays.
+
+Do not use whole-dataset histograms as a connectivity test.
+
+## Derived Images Are Writes
+
+`BlitzGateway.createImageFromNumpySeq(...)` creates a server image:
 
 ```python
-# Set projection type
-image.setProjection('intmax')
-
-# Render (projects across all Z)
-z, t = 0, 0  # Z is ignored for projections
-rendered = image.renderImage(z, t)
-rendered.save("max_projection.jpg")
-
-# Reset to normal rendering
-image.setProjection('normal')
+result = conn.createImageFromNumpySeq(
+    plane_iterator,
+    "reviewed-derived-image",
+    sizeZ=1,
+    sizeC=source.getSizeC(),
+    sizeT=source.getSizeT(),
+    description="Method and source IDs recorded separately",
+    dataset=target_dataset,
+    sourceImageId=source.getId(),
+)
 ```
 
-### Mean Intensity Projection
+Before execution:
 
-```python
-image.setProjection('intmean')
-rendered = image.renderImage(z, t)
-rendered.save("mean_projection.jpg")
-image.setProjection('normal')
-```
+1. validate iterator plane order and exact expected plane count;
+2. validate each shape and dtype;
+3. cap source planes and memory;
+4. confirm target dataset and group;
+5. confirm output name/description contains no secrets;
+6. decide cleanup for a partial write;
+7. copy physical dimensions only when semantically valid.
 
-### Available Projection Types
+For a maximum-intensity projection, the derived image has one Z plane.
+Do not copy a source Z spacing that no longer describes the data.
 
-- `'normal'`: No projection (default)
-- `'intmax'`: Maximum intensity projection
-- `'intmean'`: Mean intensity projection
-- `'intmin'`: Minimum intensity projection (if supported)
+## Dtype Handling
 
-## Save and Reset Rendering Settings
-
-### Save Current Settings as Default
-
-```python
-# Modify rendering settings
-image.setActiveChannels([1, 2])
-image.setDefaultZ(5)
-
-# Save as new default
-image.saveDefaults()
-```
-
-### Reset to Import Settings
-
-```python
-# Reset to original import settings
-image.resetDefaults(save=True)
-```
-
-## Create Images from NumPy Arrays
-
-### Create Simple Image
+Keep the source dtype unless the algorithm requires conversion:
 
 ```python
 import numpy as np
 
-# Create sample data
-size_x, size_y = 512, 512
-size_z, size_c, size_t = 10, 2, 1
-
-# Generate planes
-def plane_generator():
-    """Generator that yields planes"""
-    for z in range(size_z):
-        for c in range(size_c):
-            for t in range(size_t):
-                # Create synthetic data
-                plane = np.random.randint(0, 255, (size_y, size_x), dtype=np.uint8)
-                yield plane
-
-# Create image
-image = conn.createImageFromNumpySeq(
-    plane_generator(),
-    "Test Image",
-    size_z, size_c, size_t,
-    description="Image created from NumPy arrays",
-    dataset=None
-)
-
-print(f"Created image ID: {image.getId()}")
+plane_float = plane.astype(np.float32)
+# Perform reviewed numerical processing.
+result = np.clip(plane_float, 0, np.iinfo(np.uint16).max).astype(np.uint16)
 ```
 
-### Create Image from Hard-Coded Arrays
-
-```python
-from numpy import array, int8
-
-# Define dimensions
-size_x, size_y = 5, 4
-size_z, size_c, size_t = 1, 2, 1
-
-# Create planes
-plane1 = array(
-    [[0, 1, 2, 3, 4],
-     [5, 6, 7, 8, 9],
-     [0, 1, 2, 3, 4],
-     [5, 6, 7, 8, 9]],
-    dtype=int8
-)
-
-plane2 = array(
-    [[5, 6, 7, 8, 9],
-     [0, 1, 2, 3, 4],
-     [5, 6, 7, 8, 9],
-     [0, 1, 2, 3, 4]],
-    dtype=int8
-)
-
-planes = [plane1, plane2]
-
-def plane_gen():
-    for p in planes:
-        yield p
-
-# Create image
-desc = "Image created from hard-coded arrays"
-image = conn.createImageFromNumpySeq(
-    plane_gen(),
-    "numpy_image",
-    size_z, size_c, size_t,
-    description=desc,
-    dataset=None
-)
-
-print(f"Created image: {image.getName()} (ID: {image.getId()})")
-```
-
-### Create Image in Dataset
-
-```python
-# Get target dataset
-dataset = conn.getObject("Dataset", dataset_id)
-
-# Create image
-image = conn.createImageFromNumpySeq(
-    plane_generator(),
-    "New Analysis Result",
-    size_z, size_c, size_t,
-    description="Result from analysis pipeline",
-    dataset=dataset  # Add to dataset
-)
-```
-
-### Create Derived Image
-
-```python
-# Get source image
-source = conn.getObject("Image", source_image_id)
-size_z = source.getSizeZ()
-size_c = source.getSizeC()
-size_t = source.getSizeT()
-dataset = source.getParent()
-
-pixels = source.getPrimaryPixels()
-new_size_c = 1  # Average channels
-
-def plane_gen():
-    """Average channels together"""
-    for z in range(size_z):
-        for c in range(new_size_c):
-            for t in range(size_t):
-                # Get multiple channels
-                channel0 = pixels.getPlane(z, 0, t)
-                channel1 = pixels.getPlane(z, 1, t)
-
-                # Combine
-                new_plane = (channel0.astype(float) + channel1.astype(float)) / 2
-                new_plane = new_plane.astype(channel0.dtype)
-
-                yield new_plane
-
-# Create new image
-desc = "Averaged channels from source image"
-derived = conn.createImageFromNumpySeq(
-    plane_gen(),
-    f"{source.getName()}_averaged",
-    size_z, new_size_c, size_t,
-    description=desc,
-    dataset=dataset
-)
-
-print(f"Created derived image: {derived.getId()}")
-```
-
-## Set Physical Dimensions
-
-### Set Pixel Sizes with Units
-
-```python
-from omero.model.enums import UnitsLength
-import omero.model
-
-# Get image
-image = conn.getObject("Image", image_id)
-
-# Create unit objects
-pixel_size_x = omero.model.LengthI(0.325, UnitsLength.MICROMETER)
-pixel_size_y = omero.model.LengthI(0.325, UnitsLength.MICROMETER)
-pixel_size_z = omero.model.LengthI(1.0, UnitsLength.MICROMETER)
-
-# Get pixels object
-pixels = image.getPrimaryPixels()._obj
-
-# Set physical sizes
-pixels.setPhysicalSizeX(pixel_size_x)
-pixels.setPhysicalSizeY(pixel_size_y)
-pixels.setPhysicalSizeZ(pixel_size_z)
-
-# Save changes
-conn.getUpdateService().saveObject(pixels)
-
-print("Updated pixel dimensions")
-```
-
-### Available Length Units
-
-From `omero.model.enums.UnitsLength`:
-- `ANGSTROM`
-- `NANOMETER`
-- `MICROMETER`
-- `MILLIMETER`
-- `CENTIMETER`
-- `METER`
-- `PIXEL`
-
-### Set Pixel Size on New Image
-
-```python
-from omero.model.enums import UnitsLength
-import omero.model
-
-# Create image
-image = conn.createImageFromNumpySeq(
-    plane_generator(),
-    "New Image with Dimensions",
-    size_z, size_c, size_t
-)
-
-# Set pixel sizes
-pixel_size = omero.model.LengthI(0.5, UnitsLength.MICROMETER)
-pixels = image.getPrimaryPixels()._obj
-pixels.setPhysicalSizeX(pixel_size)
-pixels.setPhysicalSizeY(pixel_size)
-
-z_size = omero.model.LengthI(2.0, UnitsLength.MICROMETER)
-pixels.setPhysicalSizeZ(z_size)
-
-conn.getUpdateService().saveObject(pixels)
-```
-
-## Complete Example: Image Processing Pipeline
-
-```python
-from omero.gateway import BlitzGateway
-import numpy as np
-
-HOST = 'omero.example.com'
-PORT = 4064
-USERNAME = 'user'
-PASSWORD = 'pass'
-
-with BlitzGateway(USERNAME, PASSWORD, host=HOST, port=PORT) as conn:
-    # Get source image
-    source = conn.getObject("Image", source_image_id)
-    print(f"Processing: {source.getName()}")
-
-    # Get dimensions
-    size_x = source.getSizeX()
-    size_y = source.getSizeY()
-    size_z = source.getSizeZ()
-    size_c = source.getSizeC()
-    size_t = source.getSizeT()
-
-    pixels = source.getPrimaryPixels()
-
-    # Process: Maximum intensity projection over Z
-    def plane_gen():
-        for c in range(size_c):
-            for t in range(size_t):
-                # Get all Z planes for this C, T
-                z_stack = []
-                for z in range(size_z):
-                    plane = pixels.getPlane(z, c, t)
-                    z_stack.append(plane)
-
-                # Maximum projection
-                max_proj = np.max(z_stack, axis=0)
-                yield max_proj
-
-    # Create result image (single Z-section)
-    result = conn.createImageFromNumpySeq(
-        plane_gen(),
-        f"{source.getName()}_MIP",
-        1, size_c, size_t,  # Z=1 for projection
-        description="Maximum intensity projection",
-        dataset=source.getParent()
-    )
-
-    print(f"Created MIP image: {result.getId()}")
-
-    # Copy pixel sizes (X and Y only, no Z for projection)
-    from omero.model.enums import UnitsLength
-    import omero.model
-
-    source_pixels = source.getPrimaryPixels()._obj
-    result_pixels = result.getPrimaryPixels()._obj
-
-    result_pixels.setPhysicalSizeX(source_pixels.getPhysicalSizeX())
-    result_pixels.setPhysicalSizeY(source_pixels.getPhysicalSizeY())
-
-    conn.getUpdateService().saveObject(result_pixels)
-
-    print("Processing complete")
-```
-
-## Working with Different Data Types
-
-### Handle Various Pixel Types
-
-```python
-# Get pixel type
-pixel_type = image.getPixelsType()
-print(f"Pixel type: {pixel_type}")
-
-# Common types: uint8, uint16, uint32, int8, int16, int32, float, double
-
-# Get plane with correct dtype
-plane = pixels.getPlane(z, c, t)
-print(f"NumPy dtype: {plane.dtype}")
-
-# Convert if needed for processing
-if plane.dtype == np.uint16:
-    # Convert to float for processing
-    plane_float = plane.astype(np.float32)
-    # Process...
-    # Convert back
-    result = plane_float.astype(np.uint16)
-```
-
-### Handle Large Images
-
-```python
-# Process large images in tiles to save memory
-tile_size = 512
-size_x = image.getSizeX()
-size_y = image.getSizeY()
-
-for y in range(0, size_y, tile_size):
-    for x in range(0, size_x, tile_size):
-        # Get tile dimensions
-        w = min(tile_size, size_x - x)
-        h = min(tile_size, size_y - y)
-        tile = (x, y, w, h)
-
-        # Get tile data
-        zct_list = [(z, c, t, tile)]
-        tile_data = pixels.getTiles(zct_list)[0]
-
-        # Process tile
-        # ...
-```
-
-## Best Practices
-
-1. **Use Generators**: For creating images, use generators to avoid loading all data in memory
-2. **Specify Data Types**: Match NumPy dtypes to OMERO pixel types
-3. **Set Physical Dimensions**: Always set pixel sizes for new images
-4. **Tile Large Images**: Process large images in tiles to manage memory
-5. **Close Connections**: Always close connections when done
-6. **Rendering Efficiency**: Cache rendering settings when rendering multiple images
-7. **Channel Indexing**: Remember channels are 1-indexed for rendering, 0-indexed for pixel access
-8. **Save Settings**: Save rendering settings if they should be permanent
-9. **Compression**: Use compression parameter in renderImage() for faster transfers
-10. **Error Handling**: Check for None returns and handle exceptions
+Document clipping, scaling, normalization, and rounding. Never cast a float
+array to an integer type without checking range and non-finite values.
+
+## Rendering and Pixel Checklist
+
+- Explicit image ID and group
+- Dimensions inspected before retrieval
+- Z/C/T and coordinates range-checked
+- Plane/tile count and total pixels bounded
+- Raw channel indexing distinguished from rendering indexing
+- Labels and pixel-derived values classified for export
+- Caller-selected non-symlink output with collision refusal
+- Rendering services short-lived
+- No rendering-default save in read-only workflows
+- Derived-image creation separately approved
+- Connection and stateful services closed

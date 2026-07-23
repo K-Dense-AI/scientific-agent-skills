@@ -1,249 +1,222 @@
 ---
 name: omero-integration
-description: Microscopy data management platform. Access images via Python, retrieve datasets, analyze pixels, manage ROIs/annotations, batch processing, for high-content screening and microscopy workflows.
-license: Unknown
-required_environment_variables: [{"name": "OMERO_HOST", "prompt": "OMERO server hostname.", "required_for": "full functionality"}, {"name": "OMERO_PORT", "prompt": "OMERO server port (default 4064).", "required_for": "optional features"}, {"name": "OMERO_USER", "prompt": "OMERO username.", "required_for": "full functionality"}, {"name": "OMERO_PASSWORD", "prompt": "OMERO password.", "required_for": "full functionality"}]
-metadata: {"version": "1.1", "skill-author": "K-Dense Inc.", "openclaw": {"envVars": [{"name": "OMERO_HOST", "required": true, "description": "OMERO server hostname."}, {"name": "OMERO_PORT", "required": false, "description": "OMERO server port (default 4064)."}, {"name": "OMERO_USER", "required": true, "description": "OMERO username."}, {"name": "OMERO_PASSWORD", "required": true, "description": "OMERO password."}]}}
+description: Securely inspect and automate microscopy data workflows against OMERO.server with omero-py, BlitzGateway, OMERO CLI, tables, annotations, ROIs, rendering, and documented OMERO.web APIs. Use for scoped OMERO inventory, metadata export, import/export planning, or reviewed write workflows.
+license: MIT
+compatibility: >-
+  Requires network access to a user-selected OMERO.server for remote operations.
+  The 2026-07-23 snapshot uses OMERO.py 5.22.1 with ZeroC IcePy 3.6.5;
+  OMERO supports Python 3.10-3.12 (3.12 recommended) while 3.13-3.14 remain
+  upcoming in its support matrix. Bundled local planners require Python 3.10+
+  and read only named OMERO_* variables; they never load .env files.
+metadata:
+  version: "1.2"
+  skill-author: K-Dense Inc.
+  openclaw:
+    envVars:
+      - name: OMERO_HOST
+        required: true
+        description: OMERO.server hostname.
+      - name: OMERO_PORT
+        required: false
+        description: OMERO SSL router port; default 4064.
+      - name: OMERO_USER
+        required: false
+        description: Username when not reusing a session.
+      - name: OMERO_PASSWORD
+        required: false
+        description: Password when not reusing a session.
+      - name: OMERO_SESSION_KEY
+        required: false
+        description: Existing session key as an alternative credential.
+      - name: OMERO_SECURE
+        required: false
+        description: Secure transport toggle; default true.
 ---
 
 # OMERO Integration
 
-## Overview
+Use current OME documentation and the smallest explicit data scope. OMERO data
+may contain unpublished images, identifiers, annotations, original files, and
+derived measurements.
 
-OMERO is an open-source platform for managing, visualizing, and analyzing microscopy images and metadata. Access images via Python API, retrieve datasets, analyze pixels, manage ROIs and annotations, for high-content screening and microscopy workflows.
+## Verified Baseline
 
-## When to Use This Skill
+This skill was refreshed on **2026-07-23**:
 
-This skill should be used when:
-- Working with OMERO Python API (omero-py) to access microscopy data
-- Retrieving images, datasets, projects, or screening data programmatically
-- Analyzing pixel data and creating derived images
-- Creating or managing ROIs (regions of interest) on microscopy images
-- Adding annotations, tags, or metadata to OMERO objects
-- Storing measurement results in OMERO tables
-- Creating server-side scripts for batch processing
-- Performing high-content screening analysis
+- **OMERO.server 5.6.18** (May 2026) is the current documented stable server.
+- It was tested by OME with **OMERO.py/omero-py 5.22.1** and
+  **OMERO.web 5.31.0**.
+- `omero-py==5.22.1` requires Python 3.10 or newer. The OMERO support matrix
+  supports 3.10 and 3.11, recommends 3.12, and still labels 3.13/3.14
+  “upcoming.”
+- OMERO 5.6 uses **IcePy 3.6**, with 3.6.5 prebuilt client wheels documented
+  for Python versions through 3.12.
 
-## Core Capabilities
+The pin above is a reproducible skill snapshot, not a promise that every
+OMERO.server release accepts that client. For another server version, consult
+its release entry and use the OMERO.py version tested with it. See
+[`references/sources.md`](references/sources.md).
 
-This skill covers eight major capability areas. Each is documented in detail in the references/ directory:
+## Operating Contract
 
-### 1. Connection & Session Management
-**File**: `references/connection.md`
+1. Start with local validation or a dry run. Do not connect until the user has
+   selected the host, group, object type, IDs, and result limit.
+2. Read credentials only from the named `OMERO_*` variables in the frontmatter.
+   Never search parent directories or load `.env` files.
+3. Never place a password or session key in command arguments, source code,
+   output JSON, logs, tracebacks, or chat. A session key is a bearer credential.
+4. Default to `secure=True`. OMERO encrypts login by default, but post-login
+   data and the session ID may otherwise travel unencrypted. `secure=True` does
+   not by itself guarantee certificate hostname verification.
+5. Bound every list, page, ROI, shape, annotation, table row, pixel plane, and
+   local file scan. Do not turn an object request into a group-wide or
+   cross-group export without explicit approval.
+6. Treat all writes separately: annotation/link creation, rendering-default
+   saves, image creation, imports, script uploads, table writes, ownership or
+   group changes, and deletion require an exact reviewed target.
+7. Close `BlitzGateway`, table handles, raw stores, thumbnail stores, rendering
+   engines, script clients, and other stateful services in `finally` blocks or
+   documented context-manager patterns.
+8. Never connect to a real server merely to “test” examples.
 
-Establish secure connections to OMERO servers, manage sessions, handle authentication, and work with group contexts. Use this for initial setup and connection patterns.
+## Choose the Interface
 
-**Common scenarios:**
-- Connect to OMERO server with credentials
-- Use existing session IDs
-- Switch between group contexts
-- Manage connection lifecycle with context managers
+- **BlitzGateway (`omero-py`)**: primary Python client for object traversal,
+  pixels, annotations, ROIs, rendering, and services.
+- **OMERO CLI**: sessions, import scanning/import, OME-TIFF or XML export,
+  scripts, and administrative plugins. Most client commands are remote; import
+  also needs the matching server-side Java libraries through `OMERODIR`.
+- **OMERO.web `api` and `webgateway`**: the only OMERO.web apps that official
+  documentation calls stable public APIs. The documented JSON API is
+  version-discovered and has limited object coverage; it is not evidence that
+  every webclient URL is a supported REST endpoint.
+- **OMERO.server scripts**: uploaded plugins executed by server infrastructure.
+  They are different from the bundled local client helpers in `scripts/`.
 
-### 2. Data Access & Retrieval
-**File**: `references/data_access.md`
+## Install a Reproducible Client
 
-Navigate OMERO's hierarchical data structure (Projects → Datasets → Images) and screening data (Screens → Plates → Wells). Retrieve objects, query by attributes, and access metadata.
-
-**Common scenarios:**
-- List all projects and datasets for a user
-- Retrieve images by ID or dataset
-- Access screening plate data
-- Query objects with filters
-
-### 3. Metadata & Annotations
-**File**: `references/metadata.md`
-
-Create and manage annotations including tags, key-value pairs, file attachments, and comments. Link annotations to images, datasets, or other objects.
-
-**Common scenarios:**
-- Add tags to images
-- Attach analysis results as files
-- Create custom key-value metadata
-- Query annotations by namespace
-
-### 4. Image Processing & Rendering
-**File**: `references/image_processing.md`
-
-Access raw pixel data as NumPy arrays, manipulate rendering settings, create derived images, and manage physical dimensions.
-
-**Common scenarios:**
-- Extract pixel data for computational analysis
-- Generate thumbnail images
-- Create maximum intensity projections
-- Modify channel rendering settings
-
-### 5. Regions of Interest (ROIs)
-**File**: `references/rois.md`
-
-Create, retrieve, and analyze ROIs with various shapes (rectangles, ellipses, polygons, masks, points, lines). Extract intensity statistics from ROI regions.
-
-**Common scenarios:**
-- Draw rectangular ROIs on images
-- Create polygon masks for segmentation
-- Analyze pixel intensities within ROIs
-- Export ROI coordinates
-
-### 6. OMERO Tables
-**File**: `references/tables.md`
-
-Store and query structured tabular data associated with OMERO objects. Useful for analysis results, measurements, and metadata.
-
-**Common scenarios:**
-- Store quantitative measurements for images
-- Create tables with multiple column types
-- Query table data with conditions
-- Link tables to specific images or datasets
-
-### 7. Scripts & Batch Operations
-**File**: `references/scripts.md`
-
-Create OMERO.scripts that run server-side for batch processing, automated workflows, and integration with OMERO clients.
-
-**Common scenarios:**
-- Process multiple images in batch
-- Create automated analysis pipelines
-- Generate summary statistics across datasets
-- Export data in custom formats
-
-### 8. Advanced Features
-**File**: `references/advanced.md`
-
-Covers permissions, filesets, cross-group queries, delete operations, and other advanced functionality.
-
-**Common scenarios:**
-- Handle group permissions
-- Access original imported files
-- Perform cross-group queries
-- Delete objects with callbacks
-
-## Installation
+Create a Python 3.12 environment:
 
 ```bash
-uv pip install omero-py
+uv venv --python 3.12 .venv
+source .venv/bin/activate
 ```
 
-**Requirements:**
-- Python 3.7+
-- Zeroc Ice 3.6+
-- Access to an OMERO server (host, port, credentials)
+Install the exact IcePy 3.6.5 wheel matching the interpreter, OS, architecture,
+and wheel tags, then OMERO.py:
 
-## Quick Start
-
-Basic connection pattern:
-
-```python
-from omero.gateway import BlitzGateway
-
-# Connect to OMERO server
-conn = BlitzGateway(username, password, host=host, port=port)
-connected = conn.connect()
-
-if connected:
-    # Perform operations
-    for project in conn.listProjects():
-        print(project.getName())
-
-    # Always close connection
-    conn.close()
-else:
-    print("Connection failed")
+```bash
+# Download the matching 3.6.5 wheel from the official OMERO-linked matrix.
+uv pip install "/absolute/path/to/zeroc_ice-3.6.5-<matching-tags>.whl"
+uv pip install "omero-py==5.22.1"
 ```
 
-**Recommended pattern with context manager:**
+Do not substitute Ice 3.7: the OMERO 5.6 support matrix marks Ice 3.6 as
+recommended and 3.7 as unsupported. A plain install may attempt to compile
+IcePy from source; prefer a reviewed matching wheel. The upstream package is
+GPL-2.0-or-later; this skill’s own files are MIT.
 
-```python
-from omero.gateway import BlitzGateway
+For import/admin commands only, `OMERODIR` must point to a compatible extracted
+OMERO.server directory. A normal remote BlitzGateway client does not require
+that server tree. Read [`references/connection.md`](references/connection.md)
+before installation or authentication work.
 
-with BlitzGateway(username, password, host=host, port=port) as conn:
-    # Connection automatically managed
-    for project in conn.listProjects():
-        print(project.getName())
-    # Automatically closed on exit
+## Credentials and Connection
+
+Set named variables in the calling environment or secret manager. Do not put
+the password on an `omero` CLI command:
+
+```bash
+export OMERO_HOST="omero.example.org"
+export OMERO_PORT="4064"
+export OMERO_USER="researcher"
+export OMERO_SECURE="true"
+# Supply OMERO_PASSWORD through the environment/secret manager, or use
+# OMERO_SESSION_KEY as an alternative. Do not echo either value.
 ```
 
-## Selecting the Right Capability
-
-**For data exploration:**
-- Start with `references/connection.md` to establish connection
-- Use `references/data_access.md` to navigate hierarchy
-- Check `references/metadata.md` for annotation details
-
-**For image analysis:**
-- Use `references/image_processing.md` for pixel data access
-- Use `references/rois.md` for region-based analysis
-- Use `references/tables.md` to store results
-
-**For automation:**
-- Use `references/scripts.md` for server-side processing
-- Use `references/data_access.md` for batch data retrieval
-
-**For advanced operations:**
-- Use `references/advanced.md` for permissions and deletion
-- Check `references/connection.md` for cross-group queries
-
-## Common Workflows
-
-### Workflow 1: Retrieve and Analyze Images
-
-1. Connect to OMERO server (`references/connection.md`)
-2. Navigate to dataset (`references/data_access.md`)
-3. Retrieve images from dataset (`references/data_access.md`)
-4. Access pixel data as NumPy array (`references/image_processing.md`)
-5. Perform analysis
-6. Store results as table or file annotation (`references/tables.md` or `references/metadata.md`)
-
-### Workflow 2: Batch ROI Analysis
-
-1. Connect to OMERO server
-2. Retrieve images with existing ROIs (`references/rois.md`)
-3. For each image, get ROI shapes
-4. Extract pixel intensities within ROIs (`references/rois.md`)
-5. Store measurements in OMERO table (`references/tables.md`)
-
-### Workflow 3: Create Analysis Script
-
-1. Design analysis workflow
-2. Use OMERO.scripts framework (`references/scripts.md`)
-3. Access data through script parameters
-4. Process images in batch
-5. Generate outputs (new images, tables, files)
-
-## Error Handling
-
-Always wrap OMERO operations in try-except blocks and ensure connections are properly closed:
+A password-authenticated, exception-safe read pattern is:
 
 ```python
+import os
 from omero.gateway import BlitzGateway
-import traceback
 
+conn = None
 try:
-    conn = BlitzGateway(username, password, host=host, port=port)
+    conn = BlitzGateway(
+        os.environ["OMERO_USER"],
+        os.environ["OMERO_PASSWORD"],
+        host=os.environ["OMERO_HOST"],
+        port=int(os.environ.get("OMERO_PORT", "4064")),
+        secure=True,
+    )
     if not conn.connect():
-        raise Exception("Connection failed")
+        raise RuntimeError("OMERO connection failed")
 
-    # Perform operations
-
-except Exception as e:
-    print(f"Error: {e}")
-    traceback.print_exc()
+    images = conn.getObjects(
+        "Image",
+        opts={"limit": 25, "offset": 0, "order_by": "obj.id"},
+    )
+    for image in images:
+        print(image.getId())  # Do not print names unless requested.
 finally:
-    if conn:
+    if conn is not None:
         conn.close()
 ```
 
-## Additional Resources
+For existing-session and CLI prompt patterns, certificate verification,
+group context, and cleanup details, read
+[`references/connection.md`](references/connection.md).
 
-- **Official Documentation**: https://omero.readthedocs.io/en/stable/developers/Python.html
-- **BlitzGateway API**: https://omero.readthedocs.io/en/stable/developers/Python.html#omero-blitzgateway
-- **OMERO Model**: https://omero.readthedocs.io/en/stable/developers/Model.html
-- **Community Forum**: https://forum.image.sc/tag/omero
+## Bundled Safe Helpers
 
-## Notes
+All helpers use `argparse`; `--help` works without OMERO installed. Remote
+helpers are dry-run by default and require `--execute`.
 
-- OMERO uses group-based permissions (READ-ONLY, READ-ANNOTATE, READ-WRITE)
-- Images in OMERO are organized hierarchically: Project > Dataset > Image
-- Screening data uses: Screen > Plate > Well > WellSample > Image
-- Always close connections to free server resources
-- Use context managers for automatic resource management
-- Pixel data is returned as NumPy arrays for analysis
+```bash
+python -B scripts/validate_config.py --help
+python -B scripts/inventory.py --help
+python -B scripts/export_image_metadata.py --help
+python -B scripts/plan_transfer.py --help
+```
 
+- `validate_config.py`: validates only named endpoint/auth variables locally;
+  optional DNS resolution still does not contact OMERO.
+- `inventory.py`: bounded, read-only object inventory with paged JSON output.
+- `export_image_metadata.py`: explicit-image annotation/ROI JSON export with
+  redaction defaults and per-category limits; it never downloads file bytes or
+  pixels.
+- `plan_transfer.py`: local-only import scan or per-image export plan; it never
+  invokes OMERO and never emits credential flags.
+
+Read [`references/scripts.md`](references/scripts.md) before using them.
+
+## Capability Guide
+
+- Connection, sessions, groups, TLS:
+  [`references/connection.md`](references/connection.md)
+- Hierarchies, pagination, screening data, import/export:
+  [`references/data_access.md`](references/data_access.md)
+- Tags, map/file/comment annotations, namespaces:
+  [`references/metadata.md`](references/metadata.md)
+- Raw planes, tiles, thumbnails, rendering:
+  [`references/image_processing.md`](references/image_processing.md)
+- ROI model, shape export, statistics caveat:
+  [`references/rois.md`](references/rois.md)
+- Bounded table creation, paging, querying, closure:
+  [`references/tables.md`](references/tables.md)
+- Local helpers and OMERO.server scripts:
+  [`references/scripts.md`](references/scripts.md)
+- Permissions, filesets, web/public links, destructive operations:
+  [`references/advanced.md`](references/advanced.md)
+
+## Final Review Before Remote Work
+
+- Confirm server version and its tested OMERO.py pairing.
+- Confirm target host, SSL router port, user/session, and one group.
+- Confirm exact object IDs/types and hard limits.
+- Confirm whether names, annotation values, file names, ROI labels, owner names,
+  pixels, or original files may leave the server.
+- Show the proposed output path and refuse overwrite unless explicitly allowed.
+- For a write, show the mutation and target IDs separately from any read plan.
+- Close every connection/service even after partial failure.

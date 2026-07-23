@@ -1,637 +1,304 @@
-# Scripts & Batch Operations
-
-This reference covers creating OMERO.scripts for server-side processing and batch operations.
-
-## OMERO.scripts Overview
-
-OMERO.scripts are Python scripts that run on the OMERO server and can be called from OMERO clients (web, insight, CLI). They function as plugins that extend OMERO functionality.
-
-### Key Features
-
-- **Server-Side Execution**: Scripts run on the server, avoiding data transfer
-- **Client Integration**: Callable from any OMERO client with auto-generated UI
-- **Parameter Handling**: Define input parameters with validation
-- **Result Reporting**: Return images, files, or messages to clients
-- **Batch Processing**: Process multiple images or datasets efficiently
-
-## Basic Script Structure
-
-### Minimal Script Template
-
-```python
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import omero
-from omero.gateway import BlitzGateway
-import omero.scripts as scripts
-from omero.rtypes import rlong, rstring, robject
-
-def run_script():
-    """
-    Main script function.
-    """
-    # Script definition
-    client = scripts.client(
-        'Script_Name.py',
-        """
-        Description of what this script does.
-        """,
-
-        # Input parameters
-        scripts.String("Data_Type", optional=False, grouping="1",
-                      description="Choose source of images",
-                      values=[rstring('Dataset'), rstring('Image')],
-                      default=rstring('Dataset')),
-
-        scripts.Long("IDs", optional=False, grouping="2",
-                    description="Dataset or Image ID(s)").ofType(rlong(0)),
-
-        # Outputs
-        namespaces=[omero.constants.namespaces.NSDYNAMIC],
-        version="1.0"
-    )
-
-    try:
-        # Get connection
-        conn = BlitzGateway(client_obj=client)
-
-        # Get script parameters
-        script_params = client.getInputs(unwrap=True)
-        data_type = script_params["Data_Type"]
-        ids = script_params["IDs"]
-
-        # Process data
-        message = process_data(conn, data_type, ids)
-
-        # Return results
-        client.setOutput("Message", rstring(message))
-
-    finally:
-        client.closeSession()
-
-def process_data(conn, data_type, ids):
-    """
-    Process images based on parameters.
-    """
-    # Implementation here
-    return "Processing complete"
-
-if __name__ == "__main__":
-    run_script()
-```
-
-## Script Parameters
-
-### Parameter Types
-
-```python
-# String parameter
-scripts.String("Name", optional=False,
-              description="Enter a name")
-
-# String with choices
-scripts.String("Mode", optional=False,
-              values=[rstring('Fast'), rstring('Accurate')],
-              default=rstring('Fast'))
-
-# Integer parameter
-scripts.Long("ImageID", optional=False,
-            description="Image to process").ofType(rlong(0))
-
-# List of integers
-scripts.List("ImageIDs", optional=False,
-            description="Multiple images").ofType(rlong(0))
-
-# Float parameter
-scripts.Float("Threshold", optional=True,
-             description="Threshold value",
-             min=0.0, max=1.0, default=0.5)
-
-# Boolean parameter
-scripts.Bool("SaveResults", optional=True,
-            description="Save results to OMERO",
-            default=True)
-```
-
-### Parameter Grouping
-
-```python
-# Group related parameters
-scripts.String("Data_Type", grouping="1",
-              description="Source type",
-              values=[rstring('Dataset'), rstring('Image')])
-
-scripts.Long("Dataset_ID", grouping="1.1",
-            description="Dataset ID").ofType(rlong(0))
-
-scripts.List("Image_IDs", grouping="1.2",
-            description="Image IDs").ofType(rlong(0))
-```
-
-## Accessing Input Data
-
-### Get Script Parameters
-
-```python
-# Inside run_script()
-client = scripts.client(...)
-
-# Get parameters as Python objects
-script_params = client.getInputs(unwrap=True)
-
-# Access individual parameters
-data_type = script_params.get("Data_Type", "Image")
-image_ids = script_params.get("Image_IDs", [])
-threshold = script_params.get("Threshold", 0.5)
-save_results = script_params.get("SaveResults", True)
-```
-
-### Get Images from Parameters
-
-```python
-def get_images_from_params(conn, script_params):
-    """
-    Get image objects based on script parameters.
-    """
-    images = []
-
-    data_type = script_params["Data_Type"]
-
-    if data_type == "Dataset":
-        dataset_id = script_params["Dataset_ID"]
-        dataset = conn.getObject("Dataset", dataset_id)
-        if dataset:
-            images = list(dataset.listChildren())
-
-    elif data_type == "Image":
-        image_ids = script_params["Image_IDs"]
-        for image_id in image_ids:
-            image = conn.getObject("Image", image_id)
-            if image:
-                images.append(image)
-
-    return images
-```
-
-## Processing Images
-
-### Batch Image Processing
-
-```python
-def process_images(conn, images, threshold):
-    """
-    Process multiple images.
-    """
-    results = []
-
-    for image in images:
-        print(f"Processing: {image.getName()}")
-
-        # Get pixel data
-        pixels = image.getPrimaryPixels()
-        size_z = image.getSizeZ()
-        size_c = image.getSizeC()
-        size_t = image.getSizeT()
-
-        # Process each plane
-        for z in range(size_z):
-            for c in range(size_c):
-                for t in range(size_t):
-                    plane = pixels.getPlane(z, c, t)
-
-                    # Apply threshold
-                    binary = (plane > threshold).astype(np.uint8)
-
-                    # Count features
-                    feature_count = count_features(binary)
-
-                    results.append({
-                        'image_id': image.getId(),
-                        'image_name': image.getName(),
-                        'z': z, 'c': c, 't': t,
-                        'feature_count': feature_count
-                    })
-
-    return results
-```
-
-## Generating Outputs
-
-### Return Messages
-
-```python
-# Simple message
-message = "Processed 10 images successfully"
-client.setOutput("Message", rstring(message))
-
-# Detailed message
-message = "Results:\n"
-for result in results:
-    message += f"Image {result['image_id']}: {result['count']} cells\n"
-client.setOutput("Message", rstring(message))
-```
-
-### Return Images
-
-```python
-# Return newly created image
-new_image = conn.createImageFromNumpySeq(...)
-client.setOutput("New_Image", robject(new_image._obj))
-```
-
-### Return Files
-
-```python
-# Create and return file annotation
-file_ann = conn.createFileAnnfromLocalFile(
-    output_file_path,
-    mimetype="text/csv",
-    ns="analysis.results"
-)
-
-client.setOutput("Result_File", robject(file_ann._obj))
-```
-
-### Return Tables
-
-```python
-# Create OMERO table and return
-resources = conn.c.sf.sharedResources()
-table = create_results_table(resources, results)
-orig_file = table.getOriginalFile()
-table.close()
-
-# Create file annotation
-file_ann = omero.model.FileAnnotationI()
-file_ann.setFile(orig_file)
-file_ann = conn.getUpdateService().saveAndReturnObject(file_ann)
-
-client.setOutput("Results_Table", robject(file_ann._obj))
-```
-
-## Complete Example Scripts
-
-### Example 1: Maximum Intensity Projection
-
-```python
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import omero
-from omero.gateway import BlitzGateway
-import omero.scripts as scripts
-from omero.rtypes import rlong, rstring, robject
-import numpy as np
-
-def run_script():
-    client = scripts.client(
-        'Maximum_Intensity_Projection.py',
-        """
-        Creates maximum intensity projection from Z-stack images.
-        """,
-
-        scripts.String("Data_Type", optional=False, grouping="1",
-                      description="Process images from",
-                      values=[rstring('Dataset'), rstring('Image')],
-                      default=rstring('Image')),
-
-        scripts.List("IDs", optional=False, grouping="2",
-                    description="Dataset or Image ID(s)").ofType(rlong(0)),
-
-        scripts.Bool("Link_to_Source", optional=True, grouping="3",
-                    description="Link results to source dataset",
-                    default=True),
-
-        version="1.0"
-    )
-
-    try:
-        conn = BlitzGateway(client_obj=client)
-        script_params = client.getInputs(unwrap=True)
-
-        # Get images
-        images = get_images(conn, script_params)
-        created_images = []
-
-        for image in images:
-            print(f"Processing: {image.getName()}")
-
-            # Create MIP
-            mip_image = create_mip(conn, image)
-            if mip_image:
-                created_images.append(mip_image)
-
-        # Report results
-        if created_images:
-            message = f"Created {len(created_images)} MIP images"
-            # Return first image for display
-            client.setOutput("Message", rstring(message))
-            client.setOutput("Result", robject(created_images[0]._obj))
-        else:
-            client.setOutput("Message", rstring("No images created"))
-
-    finally:
-        client.closeSession()
-
-def get_images(conn, script_params):
-    """Get images from script parameters."""
-    images = []
-    data_type = script_params["Data_Type"]
-    ids = script_params["IDs"]
-
-    if data_type == "Dataset":
-        for dataset_id in ids:
-            dataset = conn.getObject("Dataset", dataset_id)
-            if dataset:
-                images.extend(list(dataset.listChildren()))
-    else:
-        for image_id in ids:
-            image = conn.getObject("Image", image_id)
-            if image:
-                images.append(image)
-
-    return images
-
-def create_mip(conn, source_image):
-    """Create maximum intensity projection."""
-    pixels = source_image.getPrimaryPixels()
-    size_z = source_image.getSizeZ()
-    size_c = source_image.getSizeC()
-    size_t = source_image.getSizeT()
-
-    if size_z == 1:
-        print("  Skipping (single Z-section)")
-        return None
-
-    def plane_gen():
-        for c in range(size_c):
-            for t in range(size_t):
-                # Get Z-stack
-                z_stack = []
-                for z in range(size_z):
-                    plane = pixels.getPlane(z, c, t)
-                    z_stack.append(plane)
-
-                # Maximum projection
-                max_proj = np.max(z_stack, axis=0)
-                yield max_proj
-
-    # Create new image
-    new_image = conn.createImageFromNumpySeq(
-        plane_gen(),
-        f"{source_image.getName()}_MIP",
-        1, size_c, size_t,
-        description="Maximum intensity projection",
-        dataset=source_image.getParent()
-    )
-
-    return new_image
-
-if __name__ == "__main__":
-    run_script()
-```
-
-### Example 2: Batch ROI Analysis
-
-```python
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import omero
-from omero.gateway import BlitzGateway
-import omero.scripts as scripts
-from omero.rtypes import rlong, rstring, robject
-import omero.grid
-
-def run_script():
-    client = scripts.client(
-        'Batch_ROI_Analysis.py',
-        """
-        Analyzes ROIs across multiple images and creates results table.
-        """,
-
-        scripts.Long("Dataset_ID", optional=False,
-                    description="Dataset with images and ROIs").ofType(rlong(0)),
-
-        scripts.Long("Channel_Index", optional=True,
-                    description="Channel to analyze (0-indexed)",
-                    default=0, min=0),
-
-        version="1.0"
-    )
-
-    try:
-        conn = BlitzGateway(client_obj=client)
-        script_params = client.getInputs(unwrap=True)
-
-        dataset_id = script_params["Dataset_ID"]
-        channel_index = script_params["Channel_Index"]
-
-        # Get dataset
-        dataset = conn.getObject("Dataset", dataset_id)
-        if not dataset:
-            client.setOutput("Message", rstring("Dataset not found"))
-            return
-
-        # Analyze ROIs
-        results = analyze_rois(conn, dataset, channel_index)
-
-        # Create table
-        table_file = create_results_table(conn, dataset, results)
-
-        # Report
-        message = f"Analyzed {len(results)} ROIs from {dataset.getName()}"
-        client.setOutput("Message", rstring(message))
-        client.setOutput("Results_Table", robject(table_file._obj))
-
-    finally:
-        client.closeSession()
-
-def analyze_rois(conn, dataset, channel_index):
-    """Analyze all ROIs in dataset images."""
-    roi_service = conn.getRoiService()
-    results = []
-
-    for image in dataset.listChildren():
-        result = roi_service.findByImage(image.getId(), None)
-
-        if not result.rois:
-            continue
-
-        # Get shape IDs
-        shape_ids = []
-        for roi in result.rois:
-            for shape in roi.copyShapes():
-                shape_ids.append(shape.id.val)
-
-        # Get statistics
-        stats = roi_service.getShapeStatsRestricted(
-            shape_ids, 0, 0, [channel_index]
-        )
-
-        # Store results
-        for i, stat in enumerate(stats):
-            results.append({
-                'image_id': image.getId(),
-                'image_name': image.getName(),
-                'shape_id': shape_ids[i],
-                'mean': stat.mean[channel_index],
-                'min': stat.min[channel_index],
-                'max': stat.max[channel_index],
-                'sum': stat.sum[channel_index],
-                'area': stat.pointsCount[channel_index]
-            })
-
-    return results
-
-def create_results_table(conn, dataset, results):
-    """Create OMERO table from results."""
-    # Prepare data
-    image_ids = [r['image_id'] for r in results]
-    shape_ids = [r['shape_id'] for r in results]
-    means = [r['mean'] for r in results]
-    mins = [r['min'] for r in results]
-    maxs = [r['max'] for r in results]
-    sums = [r['sum'] for r in results]
-    areas = [r['area'] for r in results]
-
-    # Create table
-    resources = conn.c.sf.sharedResources()
-    repository_id = resources.repositories().descriptions[0].getId().getValue()
-    table = resources.newTable(repository_id, f"ROI_Analysis_{dataset.getId()}")
-
-    # Define columns
-    columns = [
-        omero.grid.ImageColumn('Image', 'Source image', []),
-        omero.grid.LongColumn('ShapeID', 'ROI shape ID', []),
-        omero.grid.DoubleColumn('Mean', 'Mean intensity', []),
-        omero.grid.DoubleColumn('Min', 'Min intensity', []),
-        omero.grid.DoubleColumn('Max', 'Max intensity', []),
-        omero.grid.DoubleColumn('Sum', 'Integrated density', []),
-        omero.grid.LongColumn('Area', 'Area in pixels', [])
-    ]
-    table.initialize(columns)
-
-    # Add data
-    data = [
-        omero.grid.ImageColumn('Image', 'Source image', image_ids),
-        omero.grid.LongColumn('ShapeID', 'ROI shape ID', shape_ids),
-        omero.grid.DoubleColumn('Mean', 'Mean intensity', means),
-        omero.grid.DoubleColumn('Min', 'Min intensity', mins),
-        omero.grid.DoubleColumn('Max', 'Max intensity', maxs),
-        omero.grid.DoubleColumn('Sum', 'Integrated density', sums),
-        omero.grid.LongColumn('Area', 'Area in pixels', areas)
-    ]
-    table.addData(data)
-
-    orig_file = table.getOriginalFile()
-    table.close()
-
-    # Link to dataset
-    file_ann = omero.model.FileAnnotationI()
-    file_ann.setFile(orig_file)
-    file_ann = conn.getUpdateService().saveAndReturnObject(file_ann)
-
-    link = omero.model.DatasetAnnotationLinkI()
-    link.setParent(dataset._obj)
-    link.setChild(file_ann)
-    conn.getUpdateService().saveAndReturnObject(link)
-
-    return file_ann
-
-if __name__ == "__main__":
-    run_script()
-```
-
-## Script Deployment
-
-### Installation Location
-
-Scripts should be placed in the OMERO server scripts directory:
-```
-OMERO_DIR/lib/scripts/
-```
-
-### Recommended Structure
-
-```
-lib/scripts/
-├── analysis/
-│   ├── Cell_Counter.py
-│   └── ROI_Analyzer.py
-├── export/
-│   ├── Export_Images.py
-│   └── Export_ROIs.py
-└── util/
-    └── Helper_Functions.py
-```
-
-### Testing Scripts
+# Bundled Helpers and OMERO.server Scripts
+
+The local files in this skill's `scripts/` directory are client-side safety
+helpers. They are not OMERO.server scripts and are never uploaded
+automatically.
+
+## Shared Safety Model
+
+Every bundled executable:
+
+- uses `argparse`;
+- supports `--help` without OMERO installed;
+- imports `omero` only after argument parsing and only for `--execute`;
+- reads only named `OMERO_*` variables;
+- never loads `.env`;
+- never accepts or prints a password/session key;
+- defaults to local validation or dry-run output;
+- applies hard limits;
+- refuses unsafe output collisions/symlinks;
+- closes remote connections in `finally`.
+
+Remote helpers require `--execute`. That flag authorizes a read-only
+connection, not broader scope or mutation.
+
+## Local Endpoint Validation
 
 ```bash
-# Test script syntax
-python Script_Name.py
-
-# Upload to OMERO
-omero script upload Script_Name.py
-
-# List scripts
-omero script list
-
-# Run script from CLI
-omero script launch Script_ID Dataset_ID=123
+python -B scripts/validate_config.py
+python -B scripts/validate_config.py --require-auth --json
 ```
 
-## Best Practices
+By default it performs only local syntax checks. `--resolve-host` performs DNS
+resolution but does not connect to an OMERO port.
 
-1. **Error Handling**: Always use try-finally to close session
-2. **Progress Updates**: Print status messages for long operations
-3. **Parameter Validation**: Check parameters before processing
-4. **Memory Management**: Process large datasets in batches
-5. **Documentation**: Include clear description and parameter docs
-6. **Versioning**: Include version number in script
-7. **Namespaces**: Use appropriate namespaces for outputs
-8. **Return Objects**: Return created objects for client display
-9. **Logging**: Use print() for server logs
-10. **Testing**: Test with various input combinations
+Output reports which named variables are present and the authentication mode.
+It never displays credential values.
 
-## Common Patterns
+Examples of failures:
 
-### Progress Reporting
+- host contains `http://`, a path, whitespace, or shell syntax;
+- port is not in `1..65535`;
+- `OMERO_SECURE` is not a recognized boolean;
+- only one of `OMERO_USER`/`OMERO_PASSWORD` is present;
+- `--require-auth` is used without either a session key or complete password
+  authentication.
 
-```python
-total = len(images)
-for idx, image in enumerate(images):
-    print(f"Processing {idx + 1}/{total}: {image.getName()}")
-    # Process image
+## Read-Only Inventory
+
+Dry run:
+
+```bash
+python -B scripts/inventory.py \
+  --object-type Image \
+  --limit 50 \
+  --page-size 25
 ```
 
-### Error Collection
+Execute after reviewing endpoint/group/scope:
+
+```bash
+python -B scripts/inventory.py \
+  --object-type Image \
+  --limit 50 \
+  --page-size 25 \
+  --group-id 42 \
+  --execute \
+  --output ./image-inventory.json
+```
+
+Properties:
+
+- allowlisted object types only;
+- overall cap at 1000 and page cap at 200;
+- stable `obj.id` ordering request;
+- one optional explicit group, never cross-group `-1`;
+- object names redacted unless `--include-names`;
+- JSON output written atomically with owner-only permissions;
+- existing output refused unless `--overwrite`.
+
+`limit_reached` means the requested cap was filled; it does not assert that
+more server rows exist.
+
+## Annotation and ROI Export
+
+Dry run:
+
+```bash
+python -B scripts/export_image_metadata.py \
+  --image-id 101 \
+  --image-id 102 \
+  --max-annotations-per-image 100 \
+  --max-rois-per-image 100 \
+  --max-shapes-per-roi 500 \
+  --output ./selected-image-metadata.json
+```
+
+Execute:
+
+```bash
+python -B scripts/export_image_metadata.py \
+  --image-id 101 \
+  --image-id 102 \
+  --group-id 42 \
+  --execute \
+  --output ./selected-image-metadata.json
+```
+
+Default redactions:
+
+- annotation values
+- owner names
+- FileAnnotation filenames
+- ROI/shape labels
+- mask bytes
+
+Optional inclusion flags are independent. The helper never retrieves pixels or
+FileAnnotation bytes. It uses the currently documented `IRoi.findByImage`
+pattern and records that `IRoi` is deprecated.
+
+Because `findByImage` has no page argument, the ROI caps bound serialization
+but may not bound server-side assembly. Do not run it on a known extreme image
+without reviewing the ROI count or using a site-approved paginated API.
+
+## Import/Export Planner
+
+The planner is always local and has no `--execute`.
+
+Import scan plan:
+
+```bash
+python -B scripts/plan_transfer.py import \
+  --target Dataset:id:42 \
+  --max-files 100 \
+  --scan-depth 4 \
+  ./explicit-input
+```
+
+It walks only explicit paths, does not follow directory symlinks, caps depth
+and file count, and proposes `omero import -f` plus a future scoped import
+command. It does not invoke either.
+
+Per-image export plan:
+
+```bash
+python -B scripts/plan_transfer.py export \
+  --format ome-tiff \
+  --output-dir ./reviewed-existing-directory \
+  Image:101 Image:102
+```
+
+It accepts explicit `Image:<id>` selectors only, proposes one output per image,
+and reports collisions. Dataset iteration is intentionally excluded because
+the official export mode is experimental and too easy to broaden.
+
+Global `--output` and `--overwrite` arguments must precede the subcommand:
+
+```bash
+python -B scripts/plan_transfer.py \
+  --output ./transfer-plan.json \
+  import ./explicit-input
+```
+
+No proposed command includes `-w`, `--password`, `-k`, or a session value.
+
+## Running Local Tests
+
+No real OMERO server is needed:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 \
+  python -B -m unittest discover \
+  -s skills/omero-integration/tests \
+  -p "test_*.py"
+```
+
+The tests use temporary directories and fake gateway objects.
+
+## OMERO.server Script Model
+
+OMERO.server scripts are Python plugins registered with the Script Service.
+Clients can launch them and receive typed outputs. Inputs often include an
+explicit data type, object IDs, thresholds, or options.
+
+A minimal structure:
 
 ```python
-errors = []
-for image in images:
+import omero
+import omero.scripts as scripts
+from omero.gateway import BlitzGateway
+from omero.rtypes import rlong, rstring
+
+
+def main():
+    client = scripts.client(
+        "Bounded_Image_Summary.py",
+        "Returns IDs for an explicit bounded image list.",
+        scripts.List(
+            "Image_IDs",
+            optional=False,
+            description="Explicit image IDs (maximum enforced by script)",
+        ).ofType(rlong(0)),
+        namespaces=[omero.constants.namespaces.NSDYNAMIC],
+        version="1.0",
+    )
+
     try:
-        process_image(image)
-    except Exception as e:
-        errors.append(f"{image.getName()}: {str(e)}")
+        inputs = client.getInputs(unwrap=True)
+        image_ids = list(inputs["Image_IDs"])
+        if not 1 <= len(image_ids) <= 25:
+            raise ValueError("Image_IDs must contain 1..25 IDs")
 
-if errors:
-    message = "Completed with errors:\n" + "\n".join(errors)
-else:
-    message = "All images processed successfully"
+        conn = BlitzGateway(client_obj=client)
+        found = []
+        for image_id in image_ids:
+            image = conn.getObject("Image", image_id)
+            if image is not None:
+                found.append(image.getId())
+
+        client.setOutput("Message", rstring(f"Found {len(found)} images"))
+    finally:
+        client.closeSession()
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-### Resource Cleanup
+The script session is supplied by OMERO. Do not read a password or create a
+second login inside a server script.
 
-```python
-try:
-    # Script processing
-    pass
-finally:
-    # Clean up temporary files
-    if os.path.exists(temp_file):
-        os.remove(temp_file)
-    client.closeSession()
+## Server-Script Safety
+
+Even a server script that only reads can be expensive. It must enforce:
+
+- maximum ID count;
+- per-container child cap;
+- plane/tile/byte limits;
+- fixed group context;
+- no cross-group fallback;
+- no user-controlled HQL/code strings;
+- bounded output size;
+- `client.closeSession()` in `finally`.
+
+For writes, additionally require an explicit “save” input or other reviewed
+gate and document every created/linked object. A client-side confirmation is
+not enough if the server script itself accepts unbounded inputs.
+
+Do not use Python `eval()` or `exec()` for parameters. Do not interpolate
+parameter text into HQL, filesystem paths, commands, or table conditions.
+
+## Upload and Launch
+
+Uploading registers executable code and is a mutation:
+
+```bash
+omero script upload ./Bounded_Image_Summary.py
+omero script list
 ```
+
+Before upload:
+
+1. review source and dependencies;
+2. validate against the target OMERO.py/server pairing;
+3. confirm destination script path/category;
+4. confirm administrator authorization;
+5. record returned script ID/version.
+
+Launching is also a remote operation:
+
+```bash
+omero script launch <SCRIPT_ID> Image_IDs=101,102
+```
+
+Use an already prompted session. Confirm the exact script ID, version, group,
+input IDs, expected writes, and resource limits. Never launch based only on a
+script display name.
+
+## Outputs and Temporary Files
+
+Server scripts may return strings, objects, images, or FileAnnotations. For a
+file output:
+
+- use a server-side temporary directory designed for scripts;
+- generate a safe filename independent of user text;
+- cap bytes;
+- classify content before attaching;
+- remove local temporary files in `finally`;
+- close any table or raw store before closing the script session.
+
+Do not place server paths, credentials, session IDs, or stack traces in client
+outputs.
+
+## Script Review Checklist
+
+- Client helper or server plugin clearly identified
+- Dry run and execution separated
+- Credentials absent from arguments/output
+- Object/group/file scope explicit
+- Hard bounds at every expansion
+- Output path safe and collision-aware
+- Lazy optional imports for local helpers
+- Stateful resources closed
+- `IRoi`/other deprecated service dependencies documented
+- No real-server test performed without explicit authorization

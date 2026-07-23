@@ -1,369 +1,293 @@
-# Connection & Session Management
+# Connection, Sessions, and Transport Security
 
-This reference covers establishing and managing connections to OMERO servers using BlitzGateway.
+This reference is current for the skill snapshot dated 2026-07-23. It uses
+`omero-py==5.22.1` and the OMERO.server 5.6.18 documentation.
 
-## Basic Connection
+## Compatibility Before Credentials
 
-### Standard Connection Pattern
+OMERO.server and its Python, web, Java, Bio-Formats, and Ice components have
+independent release numbers. Do not compare their version strings as if they
+were one package.
 
-```python
-from omero.gateway import BlitzGateway
+For the current stable pairing:
 
-# Create connection
-conn = BlitzGateway(username, password, host=host, port=4064)
+- OMERO.server 5.6.18 was tested with OMERO.py 5.22.1 and OMERO.web 5.31.0.
+- `omero-py==5.22.1` declares Python `>=3.10`.
+- The OMERO matrix supports Python 3.10/3.11 and recommends 3.12.
+- Python 3.13/3.14 are listed as upcoming, not supported.
+- Ice 3.6 is recommended; Ice 3.7 is unsupported.
+- The OMERO-linked Glencoe wheel matrix provides IcePy 3.6.5 wheels through
+  Python 3.12 for documented platforms.
 
-# Connect to server
-if conn.connect():
-    print("Connected successfully")
-    # Perform operations
-    conn.close()
-else:
-    print("Failed to connect")
+For a different server release, read that release's history entry and use its
+tested OMERO.py version. A newest-client/old-server pairing may appear to work
+but is not the documented compatibility guarantee.
+
+## Installation
+
+Use an isolated Python 3.12 environment and a platform-matched Ice wheel:
+
+```bash
+uv venv --python 3.12 .venv
+source .venv/bin/activate
+
+# Obtain the matching wheel from the OMERO-linked Ice binary matrix.
+uv pip install "/absolute/path/to/zeroc_ice-3.6.5-<matching-tags>.whl"
+uv pip install "omero-py==5.22.1"
 ```
 
-### Connection Parameters
+Wheel tags must match all of:
 
-- **username** (str): OMERO user account name
-- **password** (str): User password
-- **host** (str): OMERO server hostname or IP address
-- **port** (int): Server port (default: 4064)
-- **secure** (bool): Force encrypted connection (default: False)
+- CPython version (`cp310`, `cp311`, or `cp312`)
+- operating system
+- architecture
+- platform compatibility tags
 
-### Secure Connection
+Do not silently fall back to compiling IcePy if the wheel is rejected. Inspect
+the interpreter and platform first. Do not install Ice 3.7 as a substitute.
 
-To ensure all data transfers are encrypted:
+`OMERODIR` is required for some CLI configuration and must point to a
+compatible extracted OMERO.server tree to enable import and admin commands.
+It is not required merely to use BlitzGateway against a remote server.
 
-```python
-conn = BlitzGateway(username, password, host=host, port=4064, secure=True)
-conn.connect()
-```
+## Named Configuration
 
-## Context Manager Pattern (Recommended)
+The bundled helpers read exactly these variables:
 
-Use context managers for automatic connection management and cleanup:
+- `OMERO_HOST`: required hostname, without `http://`, `https://`, or path
+- `OMERO_PORT`: optional integer, default `4064`
+- `OMERO_USER`: username for password authentication
+- `OMERO_PASSWORD`: password for password authentication
+- `OMERO_SESSION_KEY`: existing session key, alternative to user/password
+- `OMERO_SECURE`: boolean, default `true`
 
-```python
-from omero.gateway import BlitzGateway
+Rules:
 
-with BlitzGateway(username, password, host=host, port=4064) as conn:
-    # Connection automatically established
-    for project in conn.getObjects('Project'):
-        print(project.getName())
-    # Connection automatically closed on exit
-```
+1. Never crawl for `.env` files or read unrelated environment variables.
+2. Never accept a password/session key as a command argument.
+3. Never print an environment dump, password, or session key.
+4. Treat a session key as a bearer credential and expire/logout when finished.
+5. Prefer a secret manager or process-scoped environment over shell history.
 
-**Benefits:**
-- Automatic `connect()` call
-- Automatic `close()` call on exit
-- Exception-safe resource cleanup
-- Cleaner code
+## Password Connection
 
-## Session Management
-
-### Connection from Existing Client
-
-Create BlitzGateway from an existing `omero.client` session:
-
-```python
-import omero.clients
-from omero.gateway import BlitzGateway
-
-# Create client and session
-client = omero.client(host, port)
-session = client.createSession(username, password)
-
-# Create BlitzGateway from existing client
-conn = BlitzGateway(client_obj=client)
-
-# Use connection
-# ...
-
-# Close when done
-conn.close()
-```
-
-### Retrieve Session Information
-
-```python
-# Get current user information
-user = conn.getUser()
-print(f"User ID: {user.getId()}")
-print(f"Username: {user.getName()}")
-print(f"Full Name: {user.getFullName()}")
-print(f"Is Admin: {conn.isAdmin()}")
-
-# Get current group
-group = conn.getGroupFromContext()
-print(f"Current Group: {group.getName()}")
-print(f"Group ID: {group.getId()}")
-```
-
-### Check Admin Privileges
-
-```python
-if conn.isAdmin():
-    print("User has admin privileges")
-
-if conn.isFullAdmin():
-    print("User is full administrator")
-else:
-    # Check specific admin privileges
-    privileges = conn.getCurrentAdminPrivileges()
-    print(f"Admin privileges: {privileges}")
-```
-
-## Group Context Management
-
-OMERO uses groups to manage data access permissions. Users can belong to multiple groups.
-
-### Get Current Group Context
-
-```python
-# Get the current group context
-group = conn.getGroupFromContext()
-print(f"Current group: {group.getName()}")
-print(f"Group ID: {group.getId()}")
-```
-
-### Query Across All Groups
-
-Use group ID `-1` to query across all accessible groups:
-
-```python
-# Set context to query all groups
-conn.SERVICE_OPTS.setOmeroGroup('-1')
-
-# Now queries span all accessible groups
-image = conn.getObject("Image", image_id)
-projects = conn.listProjects()
-```
-
-### Switch to Specific Group
-
-Switch context to work within a specific group:
-
-```python
-# Get group ID from an object
-image = conn.getObject("Image", image_id)
-group_id = image.getDetails().getGroup().getId()
-
-# Switch to that group's context
-conn.SERVICE_OPTS.setOmeroGroup(group_id)
-
-# Subsequent operations use this group context
-projects = conn.listProjects()
-```
-
-### List Available Groups
-
-```python
-# Get all groups for current user
-for group in conn.getGroupsMemberOf():
-    print(f"Group: {group.getName()} (ID: {group.getId()})")
-```
-
-## Advanced Connection Features
-
-### Substitute User Connection (Admin Only)
-
-Administrators can create connections acting as other users:
-
-```python
-# Connect as admin
-admin_conn = BlitzGateway(admin_user, admin_pass, host=host, port=4064)
-admin_conn.connect()
-
-# Get target user
-target_user = admin_conn.getObject("Experimenter", user_id).getName()
-
-# Create connection as that user
-user_conn = admin_conn.suConn(target_user)
-
-# Operations performed as target user
-for project in user_conn.listProjects():
-    print(project.getName())
-
-# Close substitute connection
-user_conn.close()
-admin_conn.close()
-```
-
-### List Administrators
-
-```python
-# Get all administrators
-for admin in conn.getAdministrators():
-    print(f"ID: {admin.getId()}, Name: {admin.getFullName()}, "
-          f"Username: {admin.getOmeName()}")
-```
-
-## Connection Lifecycle
-
-### Closing Connections
-
-Always close connections to free server resources:
-
-```python
-try:
-    conn = BlitzGateway(username, password, host=host, port=4064)
-    conn.connect()
-
-    # Perform operations
-
-except Exception as e:
-    print(f"Error: {e}")
-finally:
-    if conn:
-        conn.close()
-```
-
-### Check Connection Status
-
-```python
-if conn.isConnected():
-    print("Connection is active")
-else:
-    print("Connection is closed")
-```
-
-## Error Handling
-
-### Robust Connection Pattern
-
-```python
-from omero.gateway import BlitzGateway
-import traceback
-
-def connect_to_omero(username, password, host, port=4064):
-    """
-    Establish connection to OMERO server with error handling.
-
-    Returns:
-        BlitzGateway connection object or None if failed
-    """
-    try:
-        conn = BlitzGateway(username, password, host=host, port=port, secure=True)
-        if conn.connect():
-            print(f"Connected to {host}:{port} as {username}")
-            return conn
-        else:
-            print("Failed to establish connection")
-            return None
-    except Exception as e:
-        print(f"Connection error: {e}")
-        traceback.print_exc()
-        return None
-
-# Usage
-conn = connect_to_omero(username, password, host)
-if conn:
-    try:
-        # Perform operations
-        pass
-    finally:
-        conn.close()
-```
-
-## Common Connection Patterns
-
-### Pattern 1: Simple Script
-
-```python
-from omero.gateway import BlitzGateway
-
-# Connection parameters
-HOST = 'omero.example.com'
-PORT = 4064
-USERNAME = 'user'
-PASSWORD = 'pass'
-
-# Connect
-with BlitzGateway(USERNAME, PASSWORD, host=HOST, port=PORT) as conn:
-    print(f"Connected as {conn.getUser().getName()}")
-    # Perform operations
-```
-
-### Pattern 2: Configuration-Based Connection
-
-```python
-import yaml
-from omero.gateway import BlitzGateway
-
-# Load configuration
-with open('omero_config.yaml', 'r') as f:
-    config = yaml.safe_load(f)
-
-# Connect using config
-with BlitzGateway(
-    config['username'],
-    config['password'],
-    host=config['host'],
-    port=config.get('port', 4064),
-    secure=config.get('secure', True)
-) as conn:
-    # Perform operations
-    pass
-```
-
-### Pattern 3: Environment Variables
+Use `try/finally` when connection success must be checked explicitly:
 
 ```python
 import os
 from omero.gateway import BlitzGateway
 
-# Get credentials from environment
-USERNAME = os.environ.get('OMERO_USER')
-PASSWORD = os.environ.get('OMERO_PASSWORD')
-HOST = os.environ.get('OMERO_HOST', 'localhost')
-PORT = int(os.environ.get('OMERO_PORT', 4064))
+conn = BlitzGateway(
+    os.environ["OMERO_USER"],
+    os.environ["OMERO_PASSWORD"],
+    host=os.environ["OMERO_HOST"],
+    port=int(os.environ.get("OMERO_PORT", "4064")),
+    secure=True,
+)
 
-# Connect
-with BlitzGateway(USERNAME, PASSWORD, host=HOST, port=PORT) as conn:
-    # Perform operations
-    pass
+try:
+    if not conn.connect():
+        raise RuntimeError("OMERO connection failed")
+
+    # Keep reads bounded and group-scoped.
+    for image in conn.getObjects(
+        "Image",
+        opts={"limit": 25, "offset": 0, "order_by": "obj.id"},
+    ):
+        print(image.getId())
+finally:
+    conn.close()
 ```
 
-## Best Practices
+BlitzGateway can also be a context manager. Its context manager calls
+`connect()` and closes the underlying client:
 
-1. **Use Context Managers**: Always prefer context managers for automatic cleanup
-2. **Secure Connections**: Use `secure=True` for production environments
-3. **Error Handling**: Wrap connection code in try-except blocks
-4. **Close Connections**: Always close connections when done
-5. **Group Context**: Set appropriate group context before queries
-6. **Credential Security**: Never hardcode credentials; use environment variables or config files
-7. **Connection Pooling**: For web applications, implement connection pooling
-8. **Timeouts**: Consider implementing connection timeouts for long-running operations
+```python
+import os
+from omero.gateway import BlitzGateway
 
-## Troubleshooting
-
-### Connection Refused
-
-```
-Unable to contact ORB
-```
-
-**Solutions:**
-- Verify host and port are correct
-- Check firewall settings
-- Ensure OMERO server is running
-- Verify network connectivity
-
-### Authentication Failed
-
-```
-Cannot connect to server
+with BlitzGateway(
+    os.environ["OMERO_USER"],
+    os.environ["OMERO_PASSWORD"],
+    host=os.environ["OMERO_HOST"],
+    port=int(os.environ.get("OMERO_PORT", "4064")),
+    secure=True,
+) as conn:
+    for project in conn.getObjects(
+        "Project",
+        opts={"limit": 10, "offset": 0, "order_by": "obj.id"},
+    ):
+        print(project.getId())
 ```
 
-**Solutions:**
-- Verify username and password
-- Check user account is active
-- Verify group membership
-- Check server logs for details
+Do not catch an exception merely to print its full representation: connection
+errors may include endpoint or identity details. Report the exception class
+and a scrubbed message; never include credential values.
 
-### Session Timeout
+## Existing Session
 
-**Solutions:**
-- Increase session timeout on server
-- Implement session keepalive
-- Reconnect on timeout
-- Use connection pools for long-running applications
+`BlitzGateway.connect()` accepts `sUuid`, the existing session UUID:
+
+```python
+import os
+from omero.gateway import BlitzGateway
+
+conn = BlitzGateway(
+    host=os.environ["OMERO_HOST"],
+    port=int(os.environ.get("OMERO_PORT", "4064")),
+    secure=True,
+)
+
+try:
+    if not conn.connect(sUuid=os.environ["OMERO_SESSION_KEY"]):
+        raise RuntimeError("Could not join the OMERO session")
+    print(conn.getEventContext().groupId)
+finally:
+    conn.close()
+```
+
+Joining a session does not make it safe to log the key. If a low-level
+`omero.client` is supplied through `BlitzGateway(client_obj=client)`, the
+gateway does not necessarily own every other use of that client. Close it only
+when ownership is clear; the official context-manager example is appropriate
+when nothing else uses the client.
+
+## CLI Login Without a Password Argument
+
+The CLI stores sessions locally. Let it prompt:
+
+```bash
+omero login -s "$OMERO_HOST" -p "$OMERO_PORT" -u "$OMERO_USER"
+omero sessions list
+omero sessions file
+omero logout
+```
+
+Do not use `-w` or `--password`. Although the CLI supports
+`OMERO_PASSWORD`, avoid putting the secret in a persistent shell profile.
+
+The CLI also supports joining a session with `-k`, but entering a session key
+on the command line exposes it in shell history and process listings. Prefer a
+short-lived, protected workflow and never paste the key into logs.
+
+By default, session files are under `~/omero/sessions`. `OMERO_USERDIR` or
+`OMERO_SESSIONDIR` can change the location. Protect any custom directory with
+user-only permissions and remove stale sessions with `omero logout`.
+
+## Group Context
+
+The default connection group comes from the session event context:
+
+```python
+ctx = conn.getEventContext()
+print(ctx.groupId)  # Avoid printing the session ID.
+```
+
+Set one explicit accessible group before scoped queries:
+
+```python
+group_id = 42
+conn.SERVICE_OPTS.setOmeroGroup(str(group_id))
+```
+
+`-1` requests cross-group behavior. It is not a harmless convenience:
+
+```python
+# Only after the user explicitly requests all accessible groups:
+conn.SERVICE_OPTS.setOmeroGroup("-1")
+```
+
+Do not set `-1` by default, and do not combine it with an unbounded query.
+Record the original group if temporarily changing context and restore it
+before subsequent writes.
+
+The CLI can switch its current session group:
+
+```bash
+omero group list
+omero sessions group 42
+```
+
+Confirm the target group before import, link creation, table writes, ownership
+changes, or script execution.
+
+## What `secure=True` Does
+
+Official OMERO security documentation distinguishes authentication from later
+traffic:
+
+- Login and password changes use SSL by default.
+- After login, other traffic is unencrypted by default for performance.
+- In that mode, the session ID is the critical value sent in clear text.
+- `BlitzGateway(..., secure=True)` requests encryption for all transfers.
+- Servers can redirect/disable insecure connections.
+- Default router ports are 4063 (insecure) and 4064 (SSL), but admins may
+  change or prefix them.
+- OMERO.web HTTPS normally uses port 443 and is a separate transport path.
+
+Therefore, default to `secure=True` and the administrator-provided SSL router
+port. Do not infer security merely from the number `4064`.
+
+## Certificate and Host Verification
+
+Encryption is not the same as server identity verification. OME explicitly
+states that standard OMERO clients do not automatically verify the host, so a
+man-in-the-middle attack remains possible without additional configuration.
+
+The official developer guidance lists these Ice properties for certificate
+validation:
+
+- `IceSSL.Ciphers=HIGH` (or a supported explicit cipher family)
+- `IceSSL.VerifyPeer=1`
+- `IceSSL.VerifyDepthMax=0`
+- `IceSSL.UsePlatformCAs=1`, or `IceSSL.CAs=/path/to/cacert.pem`
+- `IceSSL.CheckCertName=1` for exact hostname checking
+- `IceSSL.TrustOnly=...` for documented alternative name restrictions
+- optionally `IceSSL.Protocols=tls1_2` if required by server policy
+
+These are site-specific low-level client settings. Do not invent them from a
+hostname or disable verification to make a connection succeed. Ask the OMERO
+administrator for the CA, expected certificate name, router port, and policy.
+The bundled helpers enforce encrypted transport by default but do not claim to
+configure hostname verification.
+
+For OMERO.web, use an administrator-managed HTTPS deployment with a recognized
+certificate. Never send JSON API credentials over plain HTTP.
+
+## Stateful Services and Reconnection
+
+BlitzGateway reuses stateless `get...Service()` proxies. Stateful services such
+as rendering engines, raw stores, thumbnail stores, tables, and other
+`create...` services should be created, used, and closed in the shortest
+practicable scope.
+
+Gateway recovery may recreate its own services after a connection failure.
+Client-held stateful proxies can then be stale. Do not retain them across long
+idle periods or reconnects.
+
+Generic pattern:
+
+```python
+store = conn.createRawFileStore()
+try:
+    store.setFileId(original_file_id)
+    # Perform one explicitly bounded read.
+finally:
+    store.close()
+```
+
+Closing the gateway is still mandatory even if every stateful child was closed.
+
+## Connection Failure Checklist
+
+Without exposing credentials:
+
+1. Validate `OMERO_HOST` has no URL scheme/path and `OMERO_PORT` is in range.
+2. Confirm the server release and tested OMERO.py pairing.
+3. Confirm Python and Ice wheel tags match.
+4. Confirm the SSL router port and `secure=True`.
+5. Confirm the account is active and has access to the selected group.
+6. For an existing session, confirm it is still valid without printing it.
+7. For certificate verification, confirm CA and expected certificate name.
+8. Close the failed connection before retrying.
+9. Do not retry authentication in a tight loop; server throttling may apply.
