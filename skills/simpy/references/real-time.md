@@ -1,395 +1,174 @@
-# SimPy Real-Time Simulations
+# Real-time simulation
 
-This guide covers real-time simulation capabilities in SimPy, where simulation time is synchronized with wall-clock time.
+Verified 2026-07-23 against SimPy 4.1.2.
 
-## Overview
-
-Real-time simulations synchronize simulation time with actual wall-clock time. This is useful for:
-
-- **Hardware-in-the-loop (HIL)** testing
-- **Human interaction** with simulations
-- **Algorithm behavior analysis** under real-time constraints
-- **System integration** testing
-- **Demonstration** purposes
-
-## RealtimeEnvironment
-
-Replace the standard `Environment` with `simpy.rt.RealtimeEnvironment` to enable real-time synchronization.
-
-### Basic Usage
+`simpy.rt.RealtimeEnvironment` retains the Event/Process API but delays event
+processing so simulation time tracks wall-clock time.
 
 ```python
-import simpy.rt
+from simpy.rt import RealtimeEnvironment
 
-def process(env):
-    while True:
-        print(f'Tick at {env.now}')
-        yield env.timeout(1)
-
-# Real-time environment with 1:1 time mapping
-env = simpy.rt.RealtimeEnvironment(factor=1.0)
-env.process(process(env))
-env.run(until=5)
-```
-
-### Constructor Parameters
-
-```python
-simpy.rt.RealtimeEnvironment(
-    initial_time=0,      # Starting simulation time
-    factor=1.0,          # Real time per simulation time unit
-    strict=True          # Raise errors on timing violations
+env = RealtimeEnvironment(
+    initial_time=0,
+    factor=0.1,
+    strict=True,
 )
 ```
 
-## Time Scaling with Factor
+## Parameters
 
-The `factor` parameter controls how simulation time maps to real time.
+- `initial_time`: starting simulation clock.
+- `factor`: wall-clock seconds per simulation time unit; must be positive.
+  - `1.0`: one simulation unit takes one second;
+  - `0.1`: one simulation unit takes 0.1 seconds;
+  - `60.0`: one simulation unit takes one minute.
+- `strict=True`: raise `RuntimeError` when processing falls more than the allotted
+  factor behind.
 
-### Factor Examples
+`strict=False` suppresses deadline failure. It permits drift; it does not make an
+overloaded simulation accurately synchronized.
+
+## Minimal bounded example
 
 ```python
-import simpy.rt
 import time
+from simpy.rt import RealtimeEnvironment
 
-def timed_process(env, label):
-    start = time.time()
-    print(f'{label}: Starting at {env.now}')
-    yield env.timeout(2)
-    elapsed = time.time() - start
-    print(f'{label}: Completed at {env.now} (real time: {elapsed:.2f}s)')
+def ticker(env, count):
+    for index in range(count):
+        before = time.monotonic()
+        yield env.timeout(1)
+        elapsed = time.monotonic() - before
+        print(index, env.now, elapsed)
 
-# Factor = 1.0: 1 simulation time unit = 1 second
-print('Factor = 1.0 (2 sim units = 2 seconds)')
-env = simpy.rt.RealtimeEnvironment(factor=1.0)
-env.process(timed_process(env, 'Normal speed'))
-env.run()
-
-# Factor = 0.5: 1 simulation time unit = 0.5 seconds
-print('\nFactor = 0.5 (2 sim units = 1 second)')
-env = simpy.rt.RealtimeEnvironment(factor=0.5)
-env.process(timed_process(env, 'Double speed'))
-env.run()
-
-# Factor = 2.0: 1 simulation time unit = 2 seconds
-print('\nFactor = 2.0 (2 sim units = 4 seconds)')
-env = simpy.rt.RealtimeEnvironment(factor=2.0)
-env.process(timed_process(env, 'Half speed'))
-env.run()
+env = RealtimeEnvironment(factor=0.05, strict=True)
+process = env.process(ticker(env, count=3))
+env.run(until=process)
 ```
 
-**Factor interpretation:**
-- `factor=1.0` → 1 simulation time unit takes 1 real second
-- `factor=0.1` → 1 simulation time unit takes 0.1 real seconds (10x faster)
-- `factor=60` → 1 simulation time unit takes 60 real seconds (1 minute)
+Use `time.monotonic()` for elapsed wall time. Calendar time can jump.
 
-## Strict Mode
+## Strict-mode behavior
 
-### strict=True (Default)
-
-Raises `RuntimeError` if computation exceeds allocated real-time budget.
+Callbacks and generator code execute synchronously on the simulation thread. Slow
+computation, blocking I/O, logging, garbage collection, OS scheduling, and loaded
+CI hosts all consume the real-time budget.
 
 ```python
-import simpy.rt
 import time
+import simpy.rt
 
-def heavy_computation(env):
-    print(f'Starting computation at {env.now}')
+def slow(env):
+    time.sleep(0.02)
     yield env.timeout(1)
 
-    # Simulate heavy computation (exceeds 1 second budget)
-    time.sleep(1.5)
-
-    print(f'Computation done at {env.now}')
-
-env = simpy.rt.RealtimeEnvironment(factor=1.0, strict=True)
-env.process(heavy_computation(env))
-
+env = simpy.rt.RealtimeEnvironment(factor=0.01, strict=True)
+env.process(slow(env))
 try:
     env.run()
-except RuntimeError as e:
-    print(f'Error: {e}')
+except RuntimeError:
+    print("simulation missed its real-time budget")
 ```
 
-### strict=False
+This `sleep()` intentionally demonstrates a missed deadline. Do not put blocking
+sleep in ordinary SimPy process logic to represent simulated delay; use
+`env.timeout()`.
 
-Allows simulation to run slower than intended without crashing.
+## Appropriate use
+
+Real-time execution is useful when wall-clock synchronization is intrinsic:
+
+- hardware- or software-in-the-loop tests;
+- human-paced demonstrations;
+- interactive controllers;
+- adapters to an external system with explicit timing contracts.
+
+It is usually inappropriate for Monte Carlo replications: normal `Environment`
+runs faster, is less affected by host load, and preserves the same model-time
+logic.
+
+## External I/O boundary
+
+SimPy itself is single-threaded and does not make external I/O asynchronous.
+Integrating devices or services requires an explicit adapter and failure model.
+Document:
+
+- blocking/nonblocking behavior;
+- timeout and retry policy;
+- conversion between wall and simulation timestamps;
+- thread-safety and event handoff;
+- late/out-of-order data behavior;
+- shutdown and exception propagation.
+
+The bundled skill CLIs intentionally provide no device, network, plugin, or
+external-service integration.
+
+## Drift measurement
+
+Choose a real origin and compare expected elapsed wall time with actual monotonic
+elapsed time:
 
 ```python
-import simpy.rt
 import time
 
-def heavy_computation(env):
-    print(f'Starting at {env.now}')
-    yield env.timeout(1)
+origin_real = time.monotonic()
+origin_sim = env.now
 
-    # Heavy computation
-    time.sleep(1.5)
-
-    print(f'Done at {env.now}')
-
-env = simpy.rt.RealtimeEnvironment(factor=1.0, strict=False)
-env.process(heavy_computation(env))
-env.run()
-
-print('Simulation completed (slower than real-time)')
+def drift_seconds(env, factor):
+    expected = (env.now - origin_sim) * factor
+    actual = time.monotonic() - origin_real
+    return actual - expected
 ```
 
-**Use strict=False when:**
-- Development and debugging
-- Computation time is unpredictable
-- Acceptable to run slower than target rate
-- Analyzing worst-case behavior
+Define sign, sampling instant, percentile, maximum allowed lag, and platform before
+testing. A mean near zero can hide large deadline misses.
 
-## Hardware-in-the-Loop Example
+## Testing strategy
+
+1. Test model logic with normal `Environment`.
+2. Test deterministic ordering and interrupts independently of wall time.
+3. Keep real-time tests short and separately marked.
+4. Use `time.monotonic()` and broad platform-aware bounds.
+5. Test both `strict=True` deadline detection and intentional `strict=False` lag.
+6. Avoid exact-duration assertions.
+7. Record Python/SimPy version, OS, architecture, host load assumptions, and factor.
+
+Example tolerant assertion:
 
 ```python
-import simpy.rt
-
-class HardwareInterface:
-    """Simulated hardware interface."""
-
-    def __init__(self):
-        self.sensor_value = 0
-
-    def read_sensor(self):
-        """Simulate reading from hardware sensor."""
-        import random
-        self.sensor_value = random.uniform(20.0, 30.0)
-        return self.sensor_value
-
-    def write_actuator(self, value):
-        """Simulate writing to hardware actuator."""
-        print(f'Actuator set to {value:.2f}')
-
-def control_loop(env, hardware, setpoint):
-    """Simple control loop running in real-time."""
-    while True:
-        # Read sensor
-        sensor_value = hardware.read_sensor()
-        print(f'[{env.now}] Sensor: {sensor_value:.2f}°C')
-
-        # Simple proportional control
-        error = setpoint - sensor_value
-        control_output = error * 0.1
-
-        # Write actuator
-        hardware.write_actuator(control_output)
-
-        # Control loop runs every 0.5 seconds
-        yield env.timeout(0.5)
-
-# Real-time environment: 1 sim unit = 1 second
-env = simpy.rt.RealtimeEnvironment(factor=1.0, strict=False)
-hardware = HardwareInterface()
-setpoint = 25.0
-
-env.process(control_loop(env, hardware, setpoint))
-env.run(until=5)
+start = time.monotonic()
+env = RealtimeEnvironment(factor=0.02, strict=False)
+env.run(until=env.timeout(2))
+elapsed = time.monotonic() - start
+assert elapsed >= 0.02
+assert elapsed < 1.0
 ```
 
-## Human Interaction Example
+The upper bound is deliberately generous; tune it for controlled hardware, not a
+busy shared runner.
 
-```python
-import simpy.rt
+## Boundaries and stopping
 
-def interactive_process(env):
-    """Process that waits for simulated user input."""
-    print('Simulation started. Events will occur in real-time.')
+Real-time environments inherit `Environment.run()` semantics:
 
-    yield env.timeout(2)
-    print(f'[{env.now}] Event 1: System startup')
+- no `until` can run forever;
+- numeric `until` excludes normal events at the boundary;
+- Event `until` returns the Event value;
+- `peek()`/`step()` remain available.
 
-    yield env.timeout(3)
-    print(f'[{env.now}] Event 2: Initialization complete')
-
-    yield env.timeout(2)
-    print(f'[{env.now}] Event 3: Ready for operation')
-
-# Real-time environment for human-paced demonstration
-env = simpy.rt.RealtimeEnvironment(factor=1.0)
-env.process(interactive_process(env))
-env.run()
-```
-
-## Monitoring Real-Time Performance
-
-```python
-import simpy.rt
-import time
-
-class RealTimeMonitor:
-    def __init__(self):
-        self.step_times = []
-        self.drift_values = []
-
-    def record_step(self, sim_time, real_time, expected_real_time):
-        self.step_times.append(sim_time)
-        drift = real_time - expected_real_time
-        self.drift_values.append(drift)
-
-    def report(self):
-        if self.drift_values:
-            avg_drift = sum(self.drift_values) / len(self.drift_values)
-            max_drift = max(abs(d) for d in self.drift_values)
-            print(f'\nReal-time performance:')
-            print(f'Average drift: {avg_drift*1000:.2f} ms')
-            print(f'Maximum drift: {max_drift*1000:.2f} ms')
-
-def monitored_process(env, monitor, start_time, factor):
-    for i in range(5):
-        step_start = time.time()
-        yield env.timeout(1)
-
-        real_elapsed = time.time() - start_time
-        expected_elapsed = env.now * factor
-        monitor.record_step(env.now, real_elapsed, expected_elapsed)
-
-        print(f'Sim time: {env.now}, Real time: {real_elapsed:.2f}s, ' +
-              f'Expected: {expected_elapsed:.2f}s')
-
-start = time.time()
-factor = 1.0
-env = simpy.rt.RealtimeEnvironment(factor=factor, strict=False)
-monitor = RealTimeMonitor()
-
-env.process(monitored_process(env, monitor, start, factor))
-env.run()
-monitor.report()
-```
-
-## Mixed Real-Time and Fast Simulation
-
-```python
-import simpy.rt
-
-def background_simulation(env):
-    """Fast background simulation."""
-    for i in range(100):
-        yield env.timeout(0.01)
-    print(f'Background simulation completed at {env.now}')
-
-def real_time_display(env):
-    """Real-time display updates."""
-    for i in range(5):
-        print(f'Display update at {env.now}')
-        yield env.timeout(1)
-
-# Note: This is conceptual - SimPy doesn't directly support mixed modes
-# Consider running separate simulations or using strict=False
-env = simpy.rt.RealtimeEnvironment(factor=1.0, strict=False)
-env.process(background_simulation(env))
-env.process(real_time_display(env))
-env.run()
-```
-
-## Converting Standard to Real-Time
-
-Converting a standard simulation to real-time is straightforward:
-
-```python
-import simpy
-import simpy.rt
-
-def process(env):
-    print(f'Event at {env.now}')
-    yield env.timeout(1)
-    print(f'Event at {env.now}')
-    yield env.timeout(1)
-    print(f'Event at {env.now}')
-
-# Standard simulation (runs instantly)
-print('Standard simulation:')
-env = simpy.Environment()
-env.process(process(env))
-env.run()
-
-# Real-time simulation (2 real seconds)
-print('\nReal-time simulation:')
-env_rt = simpy.rt.RealtimeEnvironment(factor=1.0)
-env_rt.process(process(env_rt))
-env_rt.run()
-```
-
-## Best Practices
-
-1. **Factor selection**: Choose factor based on hardware/human constraints
-   - Human interaction: `factor=1.0` (1:1 time mapping)
-   - Fast hardware: `factor=0.01` (100x faster)
-   - Slow processes: `factor=60` (1 sim unit = 1 minute)
-
-2. **Strict mode usage**:
-   - Use `strict=True` for timing validation
-   - Use `strict=False` for development and variable workloads
-
-3. **Computation budget**: Ensure process logic executes faster than timeout duration
-
-4. **Error handling**: Wrap real-time runs in try-except for timing violations
-
-5. **Testing strategy**:
-   - Develop with standard Environment (fast iteration)
-   - Test with RealtimeEnvironment (validation)
-   - Deploy with appropriate factor and strict settings
-
-6. **Performance monitoring**: Track drift between simulation and real time
-
-7. **Graceful degradation**: Use `strict=False` when timing guarantees aren't critical
-
-## Common Patterns
-
-### Periodic Real-Time Tasks
-
-```python
-import simpy.rt
-
-def periodic_task(env, name, period, duration):
-    """Task that runs periodically in real-time."""
-    while True:
-        start = env.now
-        print(f'{name}: Starting at {start}')
-
-        # Simulate work
-        yield env.timeout(duration)
-
-        print(f'{name}: Completed at {env.now}')
-
-        # Wait for next period
-        elapsed = env.now - start
-        wait_time = period - elapsed
-        if wait_time > 0:
-            yield env.timeout(wait_time)
-
-env = simpy.rt.RealtimeEnvironment(factor=1.0)
-env.process(periodic_task(env, 'Task', period=2.0, duration=0.5))
-env.run(until=6)
-```
-
-### Synchronized Multi-Device Control
-
-```python
-import simpy.rt
-
-def device_controller(env, device_id, update_rate):
-    """Control loop for individual device."""
-    while True:
-        print(f'Device {device_id}: Update at {env.now}')
-        yield env.timeout(update_rate)
-
-# All devices synchronized to real-time
-env = simpy.rt.RealtimeEnvironment(factor=1.0)
-
-# Different update rates for different devices
-env.process(device_controller(env, 'A', 1.0))
-env.process(device_controller(env, 'B', 0.5))
-env.process(device_controller(env, 'C', 2.0))
-
-env.run(until=5)
-```
+Always bound real-time runs. A tiny factor combined with a huge event count can
+still consume substantial CPU, and a huge factor can make a short model wait for a
+long wall duration.
 
 ## Limitations
 
-1. **Performance**: Real-time simulation adds overhead; not suitable for high-frequency events
-2. **Synchronization**: Single-threaded; all processes share same time base
-3. **Precision**: Limited by Python's time resolution and system scheduling
-4. **Strict mode**: May raise errors frequently with computationally intensive processes
-5. **Platform-dependent**: Timing accuracy varies across operating systems
+- Wall-clock results are not bit-for-bit timing reproducible across hosts.
+- Python/OS timer granularity and scheduling affect jitter.
+- One slow callback delays all later events.
+- Real-time synchronization does not make simulated processes parallel.
+- `strict=False` can accumulate unbounded lag.
+- Real-time agreement is not model validation.
+
+## Sources
+
+See `sources.md` for the 4.1.2 real-time topical guide and `simpy.rt` API.

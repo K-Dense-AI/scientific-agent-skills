@@ -1,374 +1,225 @@
-# SimPy Events System
+# Events, environments, and scheduling
 
-This guide covers the event system in SimPy, which forms the foundation of discrete-event simulation.
+Verified 2026-07-23 against SimPy 4.1.2 documentation and tagged source.
 
-## Event Basics
+## Scheduler model
 
-Events are the core mechanism for controlling simulation flow. Processes yield events and resume when those events are triggered.
+`Environment` owns a single event queue and processes one event at a time. Tagged
+4.1.2 stores queue entries as `(time, priority, event_id, event)`:
 
-### Event Lifecycle
+1. smallest simulation time first;
+2. smallest numeric priority first (`URGENT=0`, `NORMAL=1` in public event APIs);
+3. smallest strictly increasing event ID first.
 
-Events progress through three states:
+Thus same-time, same-priority events are FIFO by scheduling order. This is
+deterministic sequential execution, even when model processes represent concurrent
+activities. Floating-point discretization can collapse physically distinct times
+onto the same value, so test tie behavior explicitly.
 
-1. **Not triggered** - Initial state as memory objects
-2. **Triggered** - Scheduled in event queue; `triggered` property is `True`
-3. **Processed** - Removed from queue with callbacks executed; `processed` property is `True`
+## Event lifecycle
 
-```python
-import simpy
+An `Event` moves once through:
 
-env = simpy.Environment()
-
-# Create an event
-event = env.event()
-print(f'Triggered: {event.triggered}, Processed: {event.processed}')  # Both False
-
-# Trigger the event
-event.succeed(value='Event result')
-print(f'Triggered: {event.triggered}, Processed: {event.processed}')  # True, False
-
-# Run to process the event
-env.run()
-print(f'Triggered: {event.triggered}, Processed: {event.processed}')  # True, True
-print(f'Value: {event.value}')  # 'Event result'
-```
-
-## Core Event Types
-
-### Timeout
-
-Controls time progression in simulations. Most common event type.
+1. **not triggered** — not scheduled and no value;
+2. **triggered** — outcome/value fixed and scheduled; `event.triggered` is true;
+3. **processed** — removed for callback execution; `event.processed` is true when
+   `event.callbacks is None`.
 
 ```python
 import simpy
-
-def process(env):
-    print(f'Starting at {env.now}')
-    yield env.timeout(5)
-    print(f'Resumed at {env.now}')
-
-    # Timeout with value
-    result = yield env.timeout(3, value='Done')
-    print(f'Result: {result} at {env.now}')
-
-env = simpy.Environment()
-env.process(process(env))
-env.run()
-```
-
-**Usage:**
-- `env.timeout(delay)` - Wait for specified time
-- `env.timeout(delay, value=val)` - Wait and return value
-
-### Process Events
-
-Processes themselves are events, allowing processes to wait for other processes to complete.
-
-```python
-import simpy
-
-def worker(env, name, duration):
-    print(f'{name} starting at {env.now}')
-    yield env.timeout(duration)
-    print(f'{name} finished at {env.now}')
-    return f'{name} result'
-
-def coordinator(env):
-    # Start worker processes
-    worker1 = env.process(worker(env, 'Worker 1', 5))
-    worker2 = env.process(worker(env, 'Worker 2', 3))
-
-    # Wait for worker1 to complete
-    result = yield worker1
-    print(f'Coordinator received: {result}')
-
-    # Wait for worker2
-    result = yield worker2
-    print(f'Coordinator received: {result}')
-
-env = simpy.Environment()
-env.process(coordinator(env))
-env.run()
-```
-
-### Event
-
-Generic event that can be manually triggered.
-
-```python
-import simpy
-
-def waiter(env, event):
-    print(f'Waiting for event at {env.now}')
-    value = yield event
-    print(f'Event received with value: {value} at {env.now}')
-
-def triggerer(env, event):
-    yield env.timeout(5)
-    print(f'Triggering event at {env.now}')
-    event.succeed(value='Hello!')
 
 env = simpy.Environment()
 event = env.event()
-env.process(waiter(env, event))
-env.process(triggerer(env, event))
-env.run()
+assert not event.triggered and not event.processed
+
+event.succeed("ready")
+assert event.triggered and not event.processed
+
+env.step()
+assert event.processed and event.value == "ready"
 ```
 
-## Composite Events
+`event.succeed(value)` and `event.fail(exception)` return that event and may be
+called only once. In 4.1.2 `fail()` requires an `Exception`. `event.trigger(other)`
+copies the other event's success/failure and value, and returns `None`.
 
-### AllOf - Wait for Multiple Events
-
-Triggers when all specified events have occurred.
-
-```python
-import simpy
-
-def process(env):
-    # Start multiple tasks
-    task1 = env.timeout(3, value='Task 1 done')
-    task2 = env.timeout(5, value='Task 2 done')
-    task3 = env.timeout(4, value='Task 3 done')
-
-    # Wait for all to complete
-    results = yield simpy.AllOf(env, [task1, task2, task3])
-    print(f'All tasks completed at {env.now}')
-    print(f'Results: {results}')
-
-    # Alternative syntax using & operator
-    task4 = env.timeout(2)
-    task5 = env.timeout(3)
-    yield task4 & task5
-    print(f'Tasks 4 and 5 completed at {env.now}')
-
-env = simpy.Environment()
-env.process(process(env))
-env.run()
-```
-
-**Returns:** Dictionary mapping events to their values
-
-**Use cases:**
-- Parallel task completion
-- Barrier synchronization
-- Waiting for multiple resources
-
-### AnyOf - Wait for Any Event
-
-Triggers when at least one specified event has occurred.
-
-```python
-import simpy
-
-def process(env):
-    # Start multiple tasks with different durations
-    fast_task = env.timeout(2, value='Fast')
-    slow_task = env.timeout(10, value='Slow')
-
-    # Wait for first to complete
-    results = yield simpy.AnyOf(env, [fast_task, slow_task])
-    print(f'First task completed at {env.now}')
-    print(f'Results: {results}')
-
-    # Alternative syntax using | operator
-    task1 = env.timeout(5)
-    task2 = env.timeout(3)
-    yield task1 | task2
-    print(f'One of the tasks completed at {env.now}')
-
-env = simpy.Environment()
-env.process(process(env))
-env.run()
-```
-
-**Returns:** Dictionary with completed events and their values
-
-**Use cases:**
-- Racing conditions
-- Timeout mechanisms
-- First-to-respond scenarios
-
-## Event Triggering Methods
-
-Events can be triggered in three ways:
-
-### succeed(value=None)
-
-Marks event as successful.
-
-```python
-event = env.event()
-event.succeed(value='Success!')
-```
-
-### fail(exception)
-
-Marks event as failed with an exception.
-
-```python
-def process(env):
-    event = env.event()
-    event.fail(ValueError('Something went wrong'))
-
-    try:
-        yield event
-    except ValueError as e:
-        print(f'Caught exception: {e}')
-
-env = simpy.Environment()
-env.process(process(env))
-env.run()
-```
-
-### trigger(event)
-
-Copies another event's outcome.
-
-```python
-event1 = env.event()
-event1.succeed(value='Original')
-
-event2 = env.event()
-event2.trigger(event1)  # event2 now has same outcome as event1
-```
+A failed event throws its exception into a waiting process. If no process or
+callback defuses it, `Environment.step()` raises it. Treat private `_ok`, `_value`,
+and `_defused` as implementation details.
 
 ## Callbacks
 
-Attach functions to execute when events are triggered.
+Before processing, `event.callbacks` is a mutable list of one-argument callables.
+Yielding an event adds the waiting process's resume method. Processing executes
+callbacks in list order. Once fully processed, callbacks becomes `None`; appending
+then is invalid.
 
 ```python
-import simpy
+log = []
+timeout = env.timeout(2, value=7)
+timeout.callbacks.append(lambda completed: log.append(completed.value))
+env.run()
+assert log == [7]
+```
 
-def callback(event):
-    print(f'Callback executed! Event value: {event.value}')
+Keep callbacks short and non-blocking. A callback runs synchronously inside
+`Environment.step()` and can affect scheduler latency.
 
-def process(env):
-    event = env.timeout(5, value='Done')
-    event.callbacks.append(callback)
-    yield event
+## Timeout
+
+`env.timeout(delay, value=None)` creates a `Timeout`, immediately triggers it, and
+schedules it at `env.now + delay`. Because it is already triggered at construction,
+do not call `succeed()` or `fail()` on it.
+
+```python
+def timer(env):
+    result = yield env.timeout(3, value="elapsed")
+    assert result == "elapsed"
+```
+
+Reject negative delay. Use a consistent numeric time unit; SimPy does not attach
+units or protect against incompatible scales.
+
+## Process
+
+`env.process(generator)` requires a **generator object**, not an ordinary function
+result. It schedules an urgent `Initialize` event. Each yielded event suspends the
+generator; after the event's outcome, SimPy sends its value back or throws its
+failure into the generator.
+
+```python
+def child(env):
+    yield env.timeout(1)
+    return 42
+
+def parent(env):
+    child_process = env.process(child(env))
+    result = yield child_process
+    assert result == 42
 
 env = simpy.Environment()
-env.process(process(env))
+env.process(parent(env))
 env.run()
 ```
 
-**Note:** Yielding an event from a process automatically adds the process's resume method as a callback.
+A `Process` is itself an event. It succeeds with the generator's return value or
+fails with an uncaught exception. `process.is_alive`, `process.target`, and
+`process.name` expose its current status.
 
-## Event Sharing
+Common mistakes:
 
-Multiple processes can wait for the same event.
+- `env.process(worker)` instead of `env.process(worker(env))`;
+- a function without any reachable `yield`, which is not a generator;
+- performing blocking I/O or `time.sleep()` inside a normal Environment process;
+- yielding a number rather than an Event.
 
-```python
-import simpy
+## Condition events
 
-def waiter(env, name, event):
-    print(f'{name} waiting at {env.now}')
-    value = yield event
-    print(f'{name} resumed with {value} at {env.now}')
-
-def trigger_event(env, event):
-    yield env.timeout(5)
-    event.succeed(value='Go!')
-
-env = simpy.Environment()
-shared_event = env.event()
-
-env.process(waiter(env, 'Process 1', shared_event))
-env.process(waiter(env, 'Process 2', shared_event))
-env.process(waiter(env, 'Process 3', shared_event))
-env.process(trigger_event(env, shared_event))
-
-env.run()
-```
-
-**Use cases:**
-- Broadcasting signals
-- Barrier synchronization
-- Coordinated process resumption
-
-## Advanced Event Patterns
-
-### Timeout with Cancellation
+`AnyOf(env, events)` / `a | b` and `AllOf(env, events)` / `a & b` return a
+`Condition`. Yielding one produces a `ConditionValue`, an ordered dict-like mapping
+whose keys are the original Event objects and whose values are their values.
 
 ```python
-import simpy
+def coordinate(env):
+    fast = env.timeout(1, value="fast")
+    slow = env.timeout(2, value="slow")
 
-def process_with_timeout(env):
-    work = env.timeout(10, value='Work complete')
-    timeout = env.timeout(5, value='Timeout!')
+    first = yield fast | slow
+    assert fast in first
+    assert first[fast] == "fast"
 
-    # Race between work and timeout
-    result = yield work | timeout
-
-    if work in result:
-        print(f'Work completed: {result[work]}')
-    else:
-        print(f'Timed out: {result[timeout]}')
-
-env = simpy.Environment()
-env.process(process_with_timeout(env))
-env.run()
+    both = yield fast & slow
+    assert list(both.items()) == [(fast, "fast"), (slow, "slow")]
 ```
 
-### Event Chaining
+For `AllOf`, all input events appear. For `AnyOf`, all target events that occurred
+before the condition itself is processed can appear; do not assume exactly one
+winner when events tie. Input order determines result order.
+
+If any input event fails before the condition succeeds, `AnyOf` and `AllOf` fail.
+Conditions can be nested. `AnyOf` does **not** cancel losing events:
 
 ```python
-import simpy
-
-def event_chain(env):
-    # Create chain of dependent events
-    event1 = env.event()
-    event2 = env.event()
-    event3 = env.event()
-
-    def trigger_sequence(env):
-        yield env.timeout(2)
-        event1.succeed(value='Step 1')
-        yield env.timeout(2)
-        event2.succeed(value='Step 2')
-        yield env.timeout(2)
-        event3.succeed(value='Step 3')
-
-    env.process(trigger_sequence(env))
-
-    # Wait for sequence
-    val1 = yield event1
-    print(f'{val1} at {env.now}')
-    val2 = yield event2
-    print(f'{val2} at {env.now}')
-    val3 = yield event3
-    print(f'{val3} at {env.now}')
-
-env = simpy.Environment()
-env.process(event_chain(env))
-env.run()
+with resource.request() as request:
+    patience = env.timeout(5)
+    result = yield request | patience
+    if request not in result:
+        # Context-manager exit cancels the still-pending request.
+        return
+    yield env.timeout(2)
 ```
 
-### Conditional Events
+An ordinary losing timeout remains scheduled. This is usually harmless but matters
+for event counts and traces.
+
+## `Environment.run()` boundaries
+
+### No criterion
+
+`env.run()` stops only when the event queue is empty. An endless generator such as
+`while True: yield env.timeout(1)` makes it nonterminating.
+
+### Numeric criterion
+
+`env.run(until=10)` creates an internal urgent stop event at time 10. It advances
+`env.now` to 10 but does **not** process ordinary events scheduled exactly at 10:
 
 ```python
-import simpy
-
-def conditional_process(env):
-    temperature = 20
-
-    if temperature > 25:
-        yield env.timeout(5)  # Cooling required
-        print('System cooled')
-    else:
-        yield env.timeout(1)  # No cooling needed
-        print('Temperature acceptable')
-
 env = simpy.Environment()
-env.process(conditional_process(env))
-env.run()
+boundary = env.timeout(10)
+env.run(until=10)
+assert env.now == 10
+assert not boundary.processed
 ```
 
-## Best Practices
+The numeric target must be strictly greater than `env.now`.
 
-1. **Always yield events**: Processes must yield events to pause execution
-2. **Don't trigger events multiple times**: Events can only be triggered once
-3. **Handle failures**: Use try-except when yielding events that might fail
-4. **Composite events for parallelism**: Use AllOf/AnyOf for concurrent operations
-5. **Shared events for broadcasting**: Multiple processes can yield the same event
-6. **Event values for data passing**: Use event values to pass results between processes
+### Event criterion
+
+`env.run(until=event)` attaches a stop callback and returns the event value when
+that callback fires. It raises `RuntimeError` if the schedule empties before the
+criterion is triggered.
+
+Important 4.1.2 implementation detail: `Environment.step()` catches
+`StopSimulation`, preserves callbacks after the stopping callback, and reschedules
+the event at priority `-1`. Since `processed` means callbacks is `None`, the target
+can still report `processed == False` immediately after `run()` returns:
+
+```python
+env = simpy.Environment()
+target = env.timeout(5, value="done")
+assert env.run(until=target) == "done"
+assert target.triggered
+assert not target.processed
+env.step()
+assert target.processed
+```
+
+This behavior follows tagged 4.1.2 `simpy/core.py`; the topical guide's informal
+"processed" wording is not a safe postcondition. Depend on the returned value and
+your model state, not solely on `processed`.
+
+A timeout event and a numeric time can reach the same clock value but differ in
+same-time ordering. Numeric stopping is the clearer half-open horizon.
+
+## Manual stepping
+
+```python
+until = 10
+steps = 0
+max_steps = 100_000
+while env.peek() < until and steps < max_steps:
+    env.step()
+    steps += 1
+if steps == max_steps:
+    raise RuntimeError("event budget reached")
+```
+
+`peek()` returns infinity when empty; `step()` raises `simpy.core.EmptySchedule`
+when no event remains. Explicit step/event caps prevent a zero-delay loop from
+hanging diagnostics.
+
+## Sources
+
+See `sources.md` for versioned environment/event guides, API references, tagged
+`core.py`, and the scheduling guide.

@@ -1,345 +1,474 @@
 #!/usr/bin/env python3
-"""
-SimPy Resource Monitoring Utilities
+"""Bounded resource monitoring and deterministic event tracing for SimPy."""
 
-This module provides reusable classes and functions for monitoring
-SimPy resources during simulation. Includes utilities for tracking
-queue lengths, utilization, wait times, and generating reports.
-"""
+from __future__ import annotations
 
-import simpy
-from collections import defaultdict
-from typing import List, Tuple, Dict, Any
+import argparse
+import csv
+import io
+import json
+from dataclasses import asdict, dataclass
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    import simpy
+
+from _common import (
+    MAX_TRACE_RECORDS,
+    CliError,
+    emit_json,
+    emit_text,
+    integer,
+    load_simpy,
+)
+
+
+@dataclass(frozen=True)
+class ResourceSample:
+    """One resource state observed at a simulation timestamp."""
+
+    time: float
+    event: str
+    count: int
+    queue_length: int
+    utilization: float
 
 
 class ResourceMonitor:
-    """
-    Monitor resource usage with detailed statistics tracking.
+    """Monitor one Resource/PriorityResource/PreemptiveResource instance."""
 
-    Tracks:
-    - Queue lengths over time
-    - Resource utilization
-    - Wait times for requests
-    - Request and release events
-    """
-
-    def __init__(self, env: simpy.Environment, resource: simpy.Resource, name: str = "Resource"):
-        """
-        Initialize the resource monitor.
-
-        Args:
-            env: SimPy environment
-            resource: Resource to monitor
-            name: Name for the resource (for reporting)
-        """
+    def __init__(
+        self,
+        env: simpy.Environment,
+        resource: simpy.Resource,
+        name: str = "resource",
+    ):
+        simpy_module = load_simpy()
+        if not isinstance(
+            resource,
+            (
+                simpy_module.Resource,
+                simpy_module.PriorityResource,
+                simpy_module.PreemptiveResource,
+            ),
+        ):
+            raise CliError("ResourceMonitor requires a SimPy Resource-like object")
+        if getattr(resource, "_simpy_skill_monitor_attached", False):
+            raise CliError("this resource already has a ResourceMonitor")
         self.env = env
         self.resource = resource
         self.name = name
+        self.samples: list[ResourceSample] = []
+        self.wait_times: list[float] = []
+        self._request_times: dict[Any, float] = {}
+        self._original_request = resource.request
+        self._original_release = resource.release
+        setattr(resource, "_simpy_skill_monitor_attached", True)
+        self._record("initial")
+        self._patch()
 
-        # Data storage
-        self.queue_data: List[Tuple[float, int]] = [(0, 0)]
-        self.utilization_data: List[Tuple[float, float]] = [(0, 0.0)]
-        self.request_times: Dict[Any, float] = {}
-        self.wait_times: List[float] = []
-        self.events: List[Tuple[float, str, Dict]] = []
+    def _record(self, event: str, *, at: float | None = None) -> None:
+        time = float(self.env.now if at is None else at)
+        self.samples.append(
+            ResourceSample(
+                time=time,
+                event=event,
+                count=int(self.resource.count),
+                queue_length=len(self.resource.queue),
+                utilization=float(self.resource.count / self.resource.capacity),
+            )
+        )
 
-        # Patch the resource
-        self._patch_resource()
+    def _patch(self) -> None:
+        @wraps(self._original_request)
+        def monitored_request(*args: Any, **kwargs: Any) -> Any:
+            requested_at = float(self.env.now)
+            request = self._original_request(*args, **kwargs)
+            self._request_times[request] = requested_at
+            self._record("request")
 
-    def _patch_resource(self):
-        """Patch resource methods to intercept requests and releases."""
-        original_request = self.resource.request
-        original_release = self.resource.release
+            def granted(_: Any) -> None:
+                start = self._request_times.pop(request, None)
+                if start is not None:
+                    self.wait_times.append(float(self.env.now) - start)
+                self._record("grant")
 
-        def monitored_request(*args, **kwargs):
-            req = original_request(*args, **kwargs)
+            if request.callbacks is not None:
+                request.callbacks.append(granted)
 
-            # Record request event
-            queue_length = len(self.resource.queue)
-            utilization = self.resource.count / self.resource.capacity
+            original_cancel = request.cancel
 
-            self.queue_data.append((self.env.now, queue_length))
-            self.utilization_data.append((self.env.now, utilization))
-            self.events.append((self.env.now, 'request', {
-                'queue_length': queue_length,
-                'utilization': utilization
-            }))
+            @wraps(original_cancel)
+            def monitored_cancel() -> None:
+                original_cancel()
+                self._request_times.pop(request, None)
+                self._record("cancel")
 
-            # Store request time for wait time calculation
-            self.request_times[req] = self.env.now
+            try:
+                request.cancel = monitored_cancel
+            except (AttributeError, TypeError):
+                # Current SimPy events allow instance wrappers. If a future release
+                # changes that implementation, later state samples remain valid but
+                # cancellation instants may need explicit user instrumentation.
+                pass
+            return request
 
-            # Add callback to record when request is granted
-            def on_granted(event):
-                if req in self.request_times:
-                    wait_time = self.env.now - self.request_times[req]
-                    self.wait_times.append(wait_time)
-                    del self.request_times[req]
-
-            req.callbacks.append(on_granted)
-            return req
-
-        def monitored_release(*args, **kwargs):
-            result = original_release(*args, **kwargs)
-
-            # Record release event
-            queue_length = len(self.resource.queue)
-            utilization = self.resource.count / self.resource.capacity
-
-            self.queue_data.append((self.env.now, queue_length))
-            self.utilization_data.append((self.env.now, utilization))
-            self.events.append((self.env.now, 'release', {
-                'queue_length': queue_length,
-                'utilization': utilization
-            }))
-
-            return result
+        @wraps(self._original_release)
+        def monitored_release(*args: Any, **kwargs: Any) -> Any:
+            released = self._original_release(*args, **kwargs)
+            self._record("release")
+            return released
 
         self.resource.request = monitored_request
         self.resource.release = monitored_release
 
-    def average_queue_length(self) -> float:
-        """Calculate time-weighted average queue length."""
-        if len(self.queue_data) < 2:
-            return 0.0
+    def detach(self) -> None:
+        """Restore the resource methods patched by this monitor."""
 
-        total_time = 0.0
-        weighted_sum = 0.0
+        self.resource.request = self._original_request
+        self.resource.release = self._original_release
+        setattr(self.resource, "_simpy_skill_monitor_attached", False)
 
-        for i in range(len(self.queue_data) - 1):
-            time1, length1 = self.queue_data[i]
-            time2, length2 = self.queue_data[i + 1]
-            duration = time2 - time1
-            total_time += duration
-            weighted_sum += length1 * duration
+    def finalize(self, *, at: float | None = None) -> None:
+        """Close the final time interval with the resource's current state."""
 
-        return weighted_sum / total_time if total_time > 0 else 0.0
+        final_time = float(self.env.now if at is None else at)
+        if final_time < self.samples[-1].time:
+            raise CliError("monitor final time cannot precede its latest sample")
+        self._record("final", at=final_time)
 
-    def average_utilization(self) -> float:
-        """Calculate time-weighted average utilization."""
-        if len(self.utilization_data) < 2:
-            return 0.0
+    def _time_weighted(
+        self,
+        attribute: str,
+        *,
+        start: float,
+        end: float,
+    ) -> float:
+        if start < self.samples[0].time:
+            raise CliError("monitor window starts before monitoring began")
+        if end <= start:
+            raise CliError("monitor window end must be greater than start")
+        if end > self.samples[-1].time:
+            raise CliError("call finalize() through the requested window end first")
 
-        total_time = 0.0
-        weighted_sum = 0.0
+        current = self.samples[0]
+        for sample in self.samples:
+            if sample.time <= start:
+                current = sample
+            else:
+                break
+        cursor = start
+        weighted = 0.0
+        for sample in self.samples:
+            if sample.time <= start:
+                continue
+            if sample.time >= end:
+                break
+            weighted += float(getattr(current, attribute)) * (sample.time - cursor)
+            cursor = sample.time
+            current = sample
+        weighted += float(getattr(current, attribute)) * (end - cursor)
+        return weighted / (end - start)
 
-        for i in range(len(self.utilization_data) - 1):
-            time1, util1 = self.utilization_data[i]
-            time2, util2 = self.utilization_data[i + 1]
-            duration = time2 - time1
-            total_time += duration
-            weighted_sum += util1 * duration
+    def average_queue_length(
+        self, *, start: float = 0.0, end: float | None = None
+    ) -> float:
+        """Return the time-weighted queue length over [start, end)."""
 
-        return weighted_sum / total_time if total_time > 0 else 0.0
+        final = self.samples[-1].time if end is None else float(end)
+        return self._time_weighted(
+            "queue_length", start=float(start), end=final
+        )
 
-    def average_wait_time(self) -> float:
-        """Calculate average wait time for requests."""
-        return sum(self.wait_times) / len(self.wait_times) if self.wait_times else 0.0
+    def average_utilization(
+        self, *, start: float = 0.0, end: float | None = None
+    ) -> float:
+        """Return time-weighted allocated capacity over [start, end)."""
 
-    def max_queue_length(self) -> int:
-        """Get maximum queue length observed."""
-        return max(length for _, length in self.queue_data) if self.queue_data else 0
+        final = self.samples[-1].time if end is None else float(end)
+        return self._time_weighted("utilization", start=float(start), end=final)
 
-    def report(self):
-        """Print detailed statistics report."""
-        print(f"\n{'=' * 60}")
-        print(f"RESOURCE MONITOR REPORT: {self.name}")
-        print(f"{'=' * 60}")
-        print(f"Simulation time: 0.00 to {self.env.now:.2f}")
-        print(f"Capacity: {self.resource.capacity}")
-        print(f"\nUtilization:")
-        print(f"  Average: {self.average_utilization():.2%}")
-        print(f"  Final: {self.resource.count / self.resource.capacity:.2%}")
-        print(f"\nQueue Statistics:")
-        print(f"  Average length: {self.average_queue_length():.2f}")
-        print(f"  Max length: {self.max_queue_length()}")
-        print(f"  Final length: {len(self.resource.queue)}")
-        print(f"\nWait Time Statistics:")
-        print(f"  Total requests: {len(self.wait_times)}")
-        if self.wait_times:
-            print(f"  Average wait: {self.average_wait_time():.2f}")
-            print(f"  Max wait: {max(self.wait_times):.2f}")
-            print(f"  Min wait: {min(self.wait_times):.2f}")
-        print(f"\nEvent Summary:")
-        print(f"  Total events: {len(self.events)}")
-        request_count = sum(1 for _, event_type, _ in self.events if event_type == 'request')
-        release_count = sum(1 for _, event_type, _ in self.events if event_type == 'release')
-        print(f"  Requests: {request_count}")
-        print(f"  Releases: {release_count}")
-        print(f"{'=' * 60}")
+    def summary(
+        self, *, start: float = 0.0, end: float | None = None
+    ) -> dict[str, Any]:
+        """Return a JSON-compatible summary of this monitor."""
 
-    def export_csv(self, filename: str):
-        """
-        Export monitoring data to CSV file.
+        final = self.samples[-1].time if end is None else float(end)
+        return {
+            "average_queue_length": self.average_queue_length(
+                start=start, end=final
+            ),
+            "average_utilization": self.average_utilization(
+                start=start, end=final
+            ),
+            "capacity": self.resource.capacity,
+            "end": final,
+            "final_count": self.resource.count,
+            "final_queue_length": len(self.resource.queue),
+            "granted_requests": len(self.wait_times),
+            "maximum_queue_length": max(
+                sample.queue_length for sample in self.samples
+            ),
+            "mean_wait": (
+                sum(self.wait_times) / len(self.wait_times)
+                if self.wait_times
+                else None
+            ),
+            "name": self.name,
+            "pending_requests": len(self._request_times),
+            "samples": len(self.samples),
+            "start": start,
+        }
 
-        Args:
-            filename: Output CSV filename
-        """
-        import csv
+    def export_csv(self, output: str, *, force: bool = False) -> None:
+        """Write state samples to a bounded, private local CSV."""
 
-        with open(filename, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Time', 'Event', 'Queue Length', 'Utilization'])
-
-            for time, event_type, data in self.events:
-                writer.writerow([
-                    time,
-                    event_type,
-                    data['queue_length'],
-                    data['utilization']
-                ])
-
-        print(f"Data exported to {filename}")
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=[
+                "time",
+                "event",
+                "count",
+                "queue_length",
+                "utilization",
+            ],
+        )
+        writer.writeheader()
+        for sample in self.samples:
+            writer.writerow(asdict(sample))
+        emit_text(buffer.getvalue(), output=output, suffixes={".csv"}, force=force)
 
 
 class MultiResourceMonitor:
-    """Monitor multiple resources simultaneously."""
+    """Manage uniquely named ResourceMonitor instances in one environment."""
 
     def __init__(self, env: simpy.Environment):
-        """
-        Initialize multi-resource monitor.
-
-        Args:
-            env: SimPy environment
-        """
+        load_simpy()
         self.env = env
-        self.monitors: Dict[str, ResourceMonitor] = {}
+        self.monitors: dict[str, ResourceMonitor] = {}
 
-    def add_resource(self, resource: simpy.Resource, name: str):
-        """
-        Add a resource to monitor.
-
-        Args:
-            resource: SimPy resource to monitor
-            name: Name for the resource
-        """
+    def add_resource(
+        self, resource: simpy.Resource, name: str
+    ) -> ResourceMonitor:
+        if not name or name in self.monitors:
+            raise CliError("resource monitor names must be non-empty and unique")
         monitor = ResourceMonitor(self.env, resource, name)
         self.monitors[name] = monitor
         return monitor
 
-    def report_all(self):
-        """Generate reports for all monitored resources."""
-        for name, monitor in self.monitors.items():
-            monitor.report()
+    def finalize(self, *, at: float | None = None) -> None:
+        for monitor in self.monitors.values():
+            monitor.finalize(at=at)
 
-    def summary(self):
-        """Print summary statistics for all resources."""
-        print(f"\n{'=' * 60}")
-        print("MULTI-RESOURCE SUMMARY")
-        print(f"{'=' * 60}")
-        print(f"{'Resource':<20} {'Avg Util':<12} {'Avg Queue':<12} {'Avg Wait':<12}")
-        print(f"{'-' * 20} {'-' * 12} {'-' * 12} {'-' * 12}")
-
-        for name, monitor in self.monitors.items():
-            print(f"{name:<20} {monitor.average_utilization():<12.2%} "
-                  f"{monitor.average_queue_length():<12.2f} "
-                  f"{monitor.average_wait_time():<12.2f}")
-
-        print(f"{'=' * 60}")
+    def summaries(
+        self, *, start: float = 0.0, end: float | None = None
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            name: monitor.summary(start=start, end=end)
+            for name, monitor in self.monitors.items()
+        }
 
 
 class ContainerMonitor:
-    """Monitor Container resources (for tracking level changes)."""
+    """Record completed put/get operations and time-weighted Container level."""
 
-    def __init__(self, env: simpy.Environment, container: simpy.Container, name: str = "Container"):
-        """
-        Initialize container monitor.
-
-        Args:
-            env: SimPy environment
-            container: Container to monitor
-            name: Name for the container
-        """
+    def __init__(
+        self,
+        env: simpy.Environment,
+        container: simpy.Container,
+        name: str = "container",
+    ):
+        load_simpy()
+        if getattr(container, "_simpy_skill_monitor_attached", False):
+            raise CliError("this container already has a ContainerMonitor")
         self.env = env
         self.container = container
         self.name = name
-        self.level_data: List[Tuple[float, float]] = [(0, container.level)]
+        self.samples: list[tuple[float, str, float]] = [
+            (float(env.now), "initial", float(container.level))
+        ]
+        self._original_put = container.put
+        self._original_get = container.get
+        setattr(container, "_simpy_skill_monitor_attached", True)
+        self._patch()
 
-        self._patch_container()
+    def _record(self, event: str, *, at: float | None = None) -> None:
+        self.samples.append(
+            (
+                float(self.env.now if at is None else at),
+                event,
+                float(self.container.level),
+            )
+        )
 
-    def _patch_container(self):
-        """Patch container methods to track level changes."""
-        original_put = self.container.put
-        original_get = self.container.get
+    def _patch_operation(
+        self, operation: Callable[..., Any], event_name: str
+    ) -> Callable[..., Any]:
+        @wraps(operation)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            event = operation(*args, **kwargs)
+            if event.callbacks is not None:
+                event.callbacks.append(lambda _: self._record(event_name))
+            return event
 
-        def monitored_put(amount):
-            result = original_put(amount)
+        return wrapper
 
-            def on_put(event):
-                self.level_data.append((self.env.now, self.container.level))
+    def _patch(self) -> None:
+        self.container.put = self._patch_operation(self._original_put, "put")
+        self.container.get = self._patch_operation(self._original_get, "get")
 
-            result.callbacks.append(on_put)
-            return result
+    def finalize(self, *, at: float | None = None) -> None:
+        final_time = float(self.env.now if at is None else at)
+        if final_time < self.samples[-1][0]:
+            raise CliError("monitor final time cannot precede its latest sample")
+        self._record("final", at=final_time)
 
-        def monitored_get(amount):
-            result = original_get(amount)
-
-            def on_get(event):
-                self.level_data.append((self.env.now, self.container.level))
-
-            result.callbacks.append(on_get)
-            return result
-
-        self.container.put = monitored_put
-        self.container.get = monitored_get
-
-    def average_level(self) -> float:
-        """Calculate time-weighted average level."""
-        if len(self.level_data) < 2:
-            return self.level_data[0][1] if self.level_data else 0.0
-
-        total_time = 0.0
-        weighted_sum = 0.0
-
-        for i in range(len(self.level_data) - 1):
-            time1, level1 = self.level_data[i]
-            time2, level2 = self.level_data[i + 1]
-            duration = time2 - time1
-            total_time += duration
-            weighted_sum += level1 * duration
-
-        return weighted_sum / total_time if total_time > 0 else 0.0
-
-    def report(self):
-        """Print container statistics."""
-        print(f"\n{'=' * 60}")
-        print(f"CONTAINER MONITOR REPORT: {self.name}")
-        print(f"{'=' * 60}")
-        print(f"Capacity: {self.container.capacity}")
-        print(f"Current level: {self.container.level:.2f}")
-        print(f"Average level: {self.average_level():.2f}")
-        print(f"Utilization: {self.average_level() / self.container.capacity:.2%}")
-
-        if self.level_data:
-            levels = [level for _, level in self.level_data]
-            print(f"Max level: {max(levels):.2f}")
-            print(f"Min level: {min(levels):.2f}")
-
-        print(f"{'=' * 60}")
+    def average_level(
+        self, *, start: float = 0.0, end: float | None = None
+    ) -> float:
+        final = self.samples[-1][0] if end is None else float(end)
+        if final <= start:
+            raise CliError("monitor window end must be greater than start")
+        if final > self.samples[-1][0]:
+            raise CliError("call finalize() through the requested window end first")
+        current = self.samples[0]
+        for sample in self.samples:
+            if sample[0] <= start:
+                current = sample
+            else:
+                break
+        cursor = start
+        weighted = 0.0
+        for sample in self.samples:
+            if sample[0] <= start:
+                continue
+            if sample[0] >= final:
+                break
+            weighted += current[2] * (sample[0] - cursor)
+            cursor = sample[0]
+            current = sample
+        weighted += current[2] * (final - cursor)
+        return weighted / (final - start)
 
 
-# Example usage
+class EventTraceRecorder:
+    """Trace the next queued event before each Environment.step() call."""
+
+    def __init__(
+        self,
+        env: simpy.Environment,
+        *,
+        max_records: int = 100_000,
+    ):
+        load_simpy()
+        self.env = env
+        self.max_records = integer(
+            max_records,
+            name="max_records",
+            minimum=1,
+            maximum=MAX_TRACE_RECORDS,
+        )
+        self.records: list[dict[str, Any]] = []
+        self.truncated = False
+        self._original_step = env.step
+        self._patch()
+
+    def _patch(self) -> None:
+        @wraps(self._original_step)
+        def tracing_step() -> None:
+            queue = getattr(self.env, "_queue", None)
+            if queue:
+                if len(self.records) < self.max_records:
+                    time, priority, event_id, event = queue[0]
+                    self.records.append(
+                        {
+                            "event_id": int(event_id),
+                            "event_type": type(event).__name__,
+                            "priority": int(priority),
+                            "queue_size_before": len(queue),
+                            "time": float(time),
+                        }
+                    )
+                else:
+                    self.truncated = True
+            self._original_step()
+
+        self.env.step = tracing_step
+
+    def detach(self) -> None:
+        self.env.step = self._original_step
+
+    def export_jsonl(self, output: str, *, force: bool = False) -> None:
+        """Write deterministic JSON Lines without object repr or memory addresses."""
+
+        text = "".join(
+            json.dumps(
+                record,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+            + "\n"
+            for record in self.records
+        )
+        emit_text(text, output=output, suffixes={".jsonl"}, force=force)
+
+
+def _demo() -> tuple[dict[str, Any], ResourceMonitor]:
+    simpy_module = load_simpy()
+    env = simpy_module.Environment()
+    resource = simpy_module.Resource(env, capacity=2)
+    monitor = ResourceMonitor(env, resource, "demo_server")
+
+    def user(identifier: int) -> Any:
+        yield env.timeout(identifier * 0.5)
+        with resource.request() as request:
+            yield request
+            yield env.timeout(1.0 + identifier * 0.1)
+
+    for index in range(8):
+        env.process(user(index))
+    env.run(until=10)
+    monitor.finalize(at=10)
+    return monitor.summary(start=0, end=10), monitor
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run a finite synthetic Resource-monitor demonstration and emit a "
+            "time-weighted summary. No network or external service is used."
+        )
+    )
+    parser.add_argument("--output", help="Optional local .json summary")
+    parser.add_argument("--samples", help="Optional local .csv state samples")
+    parser.add_argument("--force", action="store_true", help="Replace explicit outputs")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        summary, monitor = _demo()
+        if args.samples:
+            monitor.export_csv(args.samples, force=args.force)
+        emit_json(
+            {
+                "monitor": summary,
+                "network_used": False,
+                "schema_version": "1.1",
+            },
+            output=args.output,
+            force=args.force,
+        )
+    except CliError as exc:
+        parser.error(str(exc))
+    return 0
+
+
 if __name__ == "__main__":
-    def example_process(env, name, resource, duration):
-        """Example process using a resource."""
-        with resource.request() as req:
-            yield req
-            print(f"{name} started at {env.now}")
-            yield env.timeout(duration)
-            print(f"{name} finished at {env.now}")
-
-    # Create environment and resource
-    env = simpy.Environment()
-    resource = simpy.Resource(env, capacity=2)
-
-    # Create monitor
-    monitor = ResourceMonitor(env, resource, "Example Resource")
-
-    # Start processes
-    for i in range(5):
-        env.process(example_process(env, f"Process {i}", resource, 3 + i))
-
-    # Run simulation
-    env.run()
-
-    # Generate report
-    monitor.report()
+    raise SystemExit(main())

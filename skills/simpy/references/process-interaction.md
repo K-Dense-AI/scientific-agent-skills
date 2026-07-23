@@ -1,424 +1,269 @@
-# SimPy Process Interaction
+# Process interaction and interrupts
 
-This guide covers the mechanisms for processes to interact and synchronize in SimPy simulations.
+Verified 2026-07-23 against SimPy 4.1.2.
 
-## Interaction Mechanisms Overview
+## Processes are event-yielding generators
 
-SimPy provides three primary ways for processes to interact:
-
-1. **Event-based passivation/reactivation** - Shared events for signaling
-2. **Waiting for process termination** - Yielding process objects
-3. **Interruption** - Forcefully resuming paused processes
-
-## 1. Event-Based Passivation and Reactivation
-
-Processes can share events to coordinate their execution.
-
-### Basic Signal Pattern
+A process function must return a generator object. `env.process(generator)` starts
+it through an urgent `Initialize` event. The generator executes until it yields an
+Event, then resumes with that Event's value or exception.
 
 ```python
 import simpy
 
-def controller(env, signal_event):
-    print(f'Controller: Preparing at {env.now}')
-    yield env.timeout(5)
-    print(f'Controller: Sending signal at {env.now}')
-    signal_event.succeed()
+def operation(env, duration):
+    yield env.timeout(duration)
+    return {"finished_at": env.now}
 
-def worker(env, signal_event):
-    print(f'Worker: Waiting for signal at {env.now}')
-    yield signal_event
-    print(f'Worker: Received signal, starting work at {env.now}')
-    yield env.timeout(3)
-    print(f'Worker: Work complete at {env.now}')
+env = simpy.Environment()
+process = env.process(operation(env, 3))
+result = env.run(until=process)
+assert result == {"finished_at": 3}
+```
+
+Store a `Process` reference when another process must wait for or interrupt it.
+`Process` is itself an Event.
+
+## Waiting for another process
+
+```python
+def stage(env, label, duration):
+    yield env.timeout(duration)
+    return label
+
+def workflow(env):
+    first = env.process(stage(env, "first", 2))
+    first_result = yield first
+
+    second = env.process(stage(env, "second", 3))
+    second_result = yield second
+    return first_result, second_result
+```
+
+For parallel activities, create all Processes before yielding:
+
+```python
+def parallel(env):
+    a = env.process(stage(env, "a", 2))
+    b = env.process(stage(env, "b", 3))
+    results = yield a & b
+    assert results[a] == "a"
+    assert results[b] == "b"
+```
+
+Condition results map Event objects to values. Keep the original Process/Event
+references.
+
+## Shared one-shot events
+
+A plain Event can passivate multiple waiters and broadcast one value:
+
+```python
+def listener(env, signal, log, name):
+    value = yield signal
+    log.append((name, env.now, value))
 
 env = simpy.Environment()
 signal = env.event()
-env.process(controller(env, signal))
-env.process(worker(env, signal))
+log = []
+env.process(listener(env, signal, log, "a"))
+env.process(listener(env, signal, log, "b"))
+signal.succeed("go")
 env.run()
 ```
 
-**Use cases:**
-- Start signals for coordinated operations
-- Completion notifications
-- Broadcasting state changes
-
-### Multiple Waiters
-
-Multiple processes can wait for the same signal event.
+Events are one-shot. For repeated signals, replace the shared Event **after**
+triggering it and ensure all participants read the same shared attribute:
 
 ```python
-import simpy
-
-def broadcaster(env, signal):
-    yield env.timeout(5)
-    print(f'Broadcasting signal at {env.now}')
-    signal.succeed(value='Go!')
-
-def listener(env, name, signal):
-    print(f'{name}: Waiting at {env.now}')
-    msg = yield signal
-    print(f'{name}: Received "{msg}" at {env.now}')
-    yield env.timeout(2)
-    print(f'{name}: Done at {env.now}')
-
-env = simpy.Environment()
-broadcast_signal = env.event()
-
-env.process(broadcaster(env, broadcast_signal))
-for i in range(3):
-    env.process(listener(env, f'Listener {i+1}', broadcast_signal))
-
-env.run()
-```
-
-### Barrier Synchronization
-
-```python
-import simpy
-
-class Barrier:
-    def __init__(self, env, n):
+class Clock:
+    def __init__(self, env):
         self.env = env
-        self.n = n
-        self.count = 0
-        self.event = env.event()
+        self.tick = env.event()
 
-    def wait(self):
-        self.count += 1
-        if self.count >= self.n:
-            self.event.succeed()
-        return self.event
-
-def worker(env, barrier, name, work_time):
-    print(f'{name}: Working at {env.now}')
-    yield env.timeout(work_time)
-    print(f'{name}: Reached barrier at {env.now}')
-    yield barrier.wait()
-    print(f'{name}: Passed barrier at {env.now}')
-
-env = simpy.Environment()
-barrier = Barrier(env, 3)
-
-env.process(worker(env, barrier, 'Worker A', 3))
-env.process(worker(env, barrier, 'Worker B', 5))
-env.process(worker(env, barrier, 'Worker C', 7))
-
-env.run()
+    def pulse(self):
+        current = self.tick
+        self.tick = self.env.event()
+        current.succeed(self.env.now)
 ```
 
-## 2. Waiting for Process Termination
+Passing separate local event variables to two loops and then "resetting" each local
+variable creates disconnected signals. Encapsulate ownership.
 
-Processes are events themselves, so you can yield them to wait for completion.
+## Interrupt delivery
 
-### Sequential Process Execution
+`target_process.interrupt(cause=None)` schedules an urgent `Interruption`. When
+processed, it:
 
-```python
-import simpy
-
-def task(env, name, duration):
-    print(f'{name}: Starting at {env.now}')
-    yield env.timeout(duration)
-    print(f'{name}: Completed at {env.now}')
-    return f'{name} result'
-
-def sequential_coordinator(env):
-    # Execute tasks sequentially
-    result1 = yield env.process(task(env, 'Task 1', 5))
-    print(f'Coordinator: {result1}')
-
-    result2 = yield env.process(task(env, 'Task 2', 3))
-    print(f'Coordinator: {result2}')
-
-    result3 = yield env.process(task(env, 'Task 3', 4))
-    print(f'Coordinator: {result3}')
-
-env = simpy.Environment()
-env.process(sequential_coordinator(env))
-env.run()
-```
-
-### Parallel Process Execution
+1. removes the target process's resume callback from its current target Event;
+2. throws `simpy.Interrupt(cause)` into the generator immediately.
 
 ```python
-import simpy
-
-def task(env, name, duration):
-    print(f'{name}: Starting at {env.now}')
-    yield env.timeout(duration)
-    print(f'{name}: Completed at {env.now}')
-    return f'{name} result'
-
-def parallel_coordinator(env):
-    # Start all tasks
-    task1 = env.process(task(env, 'Task 1', 5))
-    task2 = env.process(task(env, 'Task 2', 3))
-    task3 = env.process(task(env, 'Task 3', 4))
-
-    # Wait for all to complete
-    results = yield task1 & task2 & task3
-    print(f'All tasks completed at {env.now}')
-    print(f'Task 1 result: {task1.value}')
-    print(f'Task 2 result: {task2.value}')
-    print(f'Task 3 result: {task3.value}')
-
-env = simpy.Environment()
-env.process(parallel_coordinator(env))
-env.run()
-```
-
-### First-to-Complete Pattern
-
-```python
-import simpy
-
-def server(env, name, processing_time):
-    print(f'{name}: Starting request at {env.now}')
-    yield env.timeout(processing_time)
-    print(f'{name}: Completed at {env.now}')
-    return name
-
-def load_balancer(env):
-    # Send request to multiple servers
-    server1 = env.process(server(env, 'Server 1', 5))
-    server2 = env.process(server(env, 'Server 2', 3))
-    server3 = env.process(server(env, 'Server 3', 7))
-
-    # Wait for first to respond
-    result = yield server1 | server2 | server3
-
-    # Get the winner
-    winner = list(result.values())[0]
-    print(f'Load balancer: {winner} responded first at {env.now}')
-
-env = simpy.Environment()
-env.process(load_balancer(env))
-env.run()
-```
-
-## 3. Process Interruption
-
-Processes can be interrupted using `process.interrupt()`, which throws an `Interrupt` exception.
-
-### Basic Interruption
-
-```python
-import simpy
-
-def worker(env):
+def worker(env, log):
     try:
-        print(f'Worker: Starting long task at {env.now}')
         yield env.timeout(10)
-        print(f'Worker: Task completed at {env.now}')
+        log.append(("finished", env.now))
     except simpy.Interrupt as interrupt:
-        print(f'Worker: Interrupted at {env.now}')
-        print(f'Interrupt cause: {interrupt.cause}')
+        log.append(("interrupted", env.now, interrupt.cause))
 
-def interrupter(env, target_process):
-    yield env.timeout(5)
-    print(f'Interrupter: Interrupting worker at {env.now}')
-    target_process.interrupt(cause='Higher priority task')
-
-env = simpy.Environment()
-worker_process = env.process(worker(env))
-env.process(interrupter(env, worker_process))
-env.run()
-```
-
-### Resumable Interruption
-
-Process can re-yield the same event after interruption to continue waiting.
-
-```python
-import simpy
-
-def resumable_worker(env):
-    work_left = 10
-
-    while work_left > 0:
-        try:
-            print(f'Worker: Working ({work_left} units left) at {env.now}')
-            start = env.now
-            yield env.timeout(work_left)
-            work_left = 0
-            print(f'Worker: Completed at {env.now}')
-        except simpy.Interrupt:
-            work_left -= (env.now - start)
-            print(f'Worker: Interrupted! {work_left} units left at {env.now}')
-
-def interrupter(env, worker_proc):
+def controller(env, target):
     yield env.timeout(3)
-    worker_proc.interrupt()
-    yield env.timeout(2)
-    worker_proc.interrupt()
+    target.interrupt("maintenance")
 
 env = simpy.Environment()
-worker_proc = env.process(resumable_worker(env))
-env.process(interrupter(env, worker_proc))
+log = []
+worker_process = env.process(worker(env, log))
+env.process(controller(env, worker_process))
 env.run()
+assert log == [("interrupted", 3, "maintenance")]
 ```
 
-### Interrupt with Custom Cause
+Interrupting a terminated process or the currently active process itself raises
+`RuntimeError`.
+
+### The target Event is not canceled
+
+An interrupt removes the Process callback from the Event it was yielding; it does
+not cancel the Event. The generator can re-yield that same Event:
 
 ```python
-import simpy
-
-def machine(env, name):
+def temporarily_distracted(env, opening_event):
     while True:
         try:
-            print(f'{name}: Operating at {env.now}')
-            yield env.timeout(5)
-        except simpy.Interrupt as interrupt:
-            if interrupt.cause == 'maintenance':
-                print(f'{name}: Maintenance required at {env.now}')
-                yield env.timeout(2)
-                print(f'{name}: Maintenance complete at {env.now}')
-            elif interrupt.cause == 'emergency':
-                print(f'{name}: Emergency stop at {env.now}')
-                break
-
-def maintenance_scheduler(env, machine_proc):
-    yield env.timeout(7)
-    machine_proc.interrupt(cause='maintenance')
-    yield env.timeout(10)
-    machine_proc.interrupt(cause='emergency')
-
-env = simpy.Environment()
-machine_proc = env.process(machine(env, 'Machine 1'))
-env.process(maintenance_scheduler(env, machine_proc))
-env.run()
-```
-
-### Preemptive Resource with Interruption
-
-```python
-import simpy
-
-def user(env, name, resource, priority, duration):
-    with resource.request(priority=priority) as req:
-        try:
-            yield req
-            print(f'{name} (priority {priority}): Got resource at {env.now}')
-            yield env.timeout(duration)
-            print(f'{name}: Done at {env.now}')
+            return (yield opening_event)
         except simpy.Interrupt:
-            print(f'{name}: Preempted at {env.now}')
-
-env = simpy.Environment()
-resource = simpy.PreemptiveResource(env, capacity=1)
-
-env.process(user(env, 'Low priority user', resource, priority=10, duration=10))
-env.process(user(env, 'High priority user', resource, priority=1, duration=5))
-env.run()
+            yield env.timeout(1)  # Handle interruption.
+            # Loop and wait for the original opening_event again.
 ```
 
-## Advanced Patterns
+If the original Event occurred during handling, yielding it resumes immediately
+with its value.
 
-### Producer-Consumer with Signaling
+Resource request events need an additional decision:
+
+- still waiting: re-yield the same request;
+- abandoning the wait: call `request.cancel()`;
+- already acquired: release it when leaving.
+
+Using the resource request as a context manager handles release/cancel on exception
+exit.
+
+## Resumable work
+
+A Timeout cannot be "paused." On interruption, calculate completed work and create
+a new Timeout for the remainder:
 
 ```python
-import simpy
+def resumable_job(env, total_work, log):
+    remaining = total_work
+    while remaining > 0:
+        started = env.now
+        try:
+            yield env.timeout(remaining)
+            remaining = 0
+        except simpy.Interrupt as interrupt:
+            remaining -= env.now - started
+            log.append(
+                {
+                    "cause": interrupt.cause,
+                    "remaining": remaining,
+                    "time": env.now,
+                }
+            )
+```
 
-class Buffer:
-    def __init__(self, env, capacity):
-        self.env = env
-        self.capacity = capacity
-        self.items = []
-        self.item_available = env.event()
+Define whether interrupted setup is lost, retained, or repeated. The code above
+assumes linear preempt-resume work.
 
-    def put(self, item):
-        if len(self.items) < self.capacity:
-            self.items.append(item)
-            if not self.item_available.triggered:
-                self.item_available.succeed()
-            return True
-        return False
+## PreemptiveResource interrupts
 
-    def get(self):
-        if self.items:
-            return self.items.pop(0)
-        return None
+A `PreemptiveResource` generates the interrupt, not application code. The cause is
+a `Preempted` record:
 
-def producer(env, buffer):
-    item_id = 0
-    while True:
+```python
+def preemptible(env, resource, priority, work):
+    with resource.request(priority=priority, preempt=True) as request:
+        try:
+            yield request
+            yield env.timeout(work)
+        except simpy.Interrupt as interrupt:
+            cause = interrupt.cause
+            print(
+                "preempted by",
+                cause.by,
+                "used since",
+                cause.usage_since,
+                "resource",
+                cause.resource,
+            )
+```
+
+Do not assume every Interrupt has those attributes; manually generated interrupt
+causes can be any object. Use `isinstance(cause, simpy.resources.resource.Preempted)`
+when the distinction matters.
+
+## Timeout/renege races
+
+```python
+def impatient(env, resource, patience):
+    with resource.request() as request:
+        patience_event = env.timeout(patience)
+        result = yield request | patience_event
+        if request not in result:
+            return {"outcome": "reneged", "time": env.now}
         yield env.timeout(2)
-        item = f'Item {item_id}'
-        if buffer.put(item):
-            print(f'Producer: Added {item} at {env.now}')
-            item_id += 1
-
-def consumer(env, buffer):
-    while True:
-        if buffer.items:
-            item = buffer.get()
-            print(f'Consumer: Retrieved {item} at {env.now}')
-            yield env.timeout(3)
-        else:
-            print(f'Consumer: Waiting for items at {env.now}')
-            yield buffer.item_available
-            buffer.item_available = env.event()
-
-env = simpy.Environment()
-buffer = Buffer(env, capacity=5)
-env.process(producer(env, buffer))
-env.process(consumer(env, buffer))
-env.run(until=20)
+        return {"outcome": "served", "time": env.now}
 ```
 
-### Handshake Protocol
+At an exact tie, `AnyOf` may contain multiple events that occurred before the
+Condition was processed. Decide tie policy explicitly:
 
 ```python
-import simpy
-
-def sender(env, request_event, acknowledge_event):
-    for i in range(3):
-        print(f'Sender: Sending request {i} at {env.now}')
-        request_event.succeed(value=f'Request {i}')
-        yield acknowledge_event
-        print(f'Sender: Received acknowledgment at {env.now}')
-
-        # Reset events for next iteration
-        request_event = env.event()
-        acknowledge_event = env.event()
-        yield env.timeout(1)
-
-def receiver(env, request_event, acknowledge_event):
-    for i in range(3):
-        request = yield request_event
-        print(f'Receiver: Got {request} at {env.now}')
-        yield env.timeout(2)  # Process request
-        acknowledge_event.succeed()
-        print(f'Receiver: Sent acknowledgment at {env.now}')
-
-        # Reset for next iteration
-        request_event = env.event()
-        acknowledge_event = env.event()
-
-env = simpy.Environment()
-request = env.event()
-ack = env.event()
-env.process(sender(env, request, ack))
-env.process(receiver(env, request, ack))
-env.run()
+if request in result:
+    # This policy treats simultaneous grant/patience as served.
+    ...
 ```
 
-## Best Practices
+The losing Timeout remains in the queue. The context manager cancels only a pending
+request, not arbitrary condition members.
 
-1. **Choose the right mechanism**:
-   - Use events for signals and broadcasts
-   - Use process yields for sequential/parallel workflows
-   - Use interrupts for preemption and emergency handling
+## Failure propagation
 
-2. **Exception handling**: Always wrap interrupt-prone code in try-except blocks
+An uncaught process exception fails the Process. A parent yielding that Process
+receives the exception:
 
-3. **Event lifecycle**: Remember that events can only be triggered once; create new events for repeated signaling
+```python
+def broken(env):
+    yield env.timeout(1)
+    raise ValueError("model invariant failed")
 
-4. **Process references**: Store process objects if you need to interrupt them later
+def supervisor(env):
+    try:
+        yield env.process(broken(env))
+    except ValueError:
+        return "handled"
+```
 
-5. **Cause information**: Use interrupt causes to communicate why interruption occurred
+Do not broadly suppress failures merely to keep a simulation running. Convert only
+expected domain failures into explicit state; let invariant/programming errors fail
+tests.
 
-6. **Resumable patterns**: Track progress to enable resumption after interruption
+## Deadlock and liveness checks
 
-7. **Avoid deadlocks**: Ensure at least one process can make progress at any time
+`env.run()` returning because the queue is empty does not prove that every intended
+process completed. Processes can remain waiting on untriggered events with no future
+trigger. Keep references to required completion Processes and run until an explicit
+completion Event; if the schedule empties first, SimPy raises `RuntimeError`.
+
+For production models:
+
+- set a numeric horizon and event/entity caps;
+- count completed and unfinished entities;
+- assert conservation of resources/items;
+- detect zero-delay recurrence;
+- trace a small deterministic scenario before stochastic experiments.
+
+## Sources
+
+See `sources.md` for the versioned Process Interaction, Events, and resource guides
+and API references.

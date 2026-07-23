@@ -1,475 +1,260 @@
-# SimPy Monitoring and Data Collection
+# Monitoring, tracing, and stepping
 
-This guide covers techniques for collecting data and monitoring simulation behavior in SimPy.
+Verified 2026-07-23 against SimPy 4.1.2.
 
-## Monitoring Strategy
+Monitoring is model instrumentation, not an automatic statistical analysis. Define:
 
-Before implementing monitoring, define three things:
+1. the estimand/state (queue waiting only, users in service, total in system);
+2. the observation instant (before request, after request, grant, release, final);
+3. the aggregation rule (time average, entity average, count, quantile);
+4. the analysis window and warm-up;
+5. memory/trace caps.
 
-1. **What to monitor**: Processes, resources, events, or system state
-2. **When to monitor**: On change, at intervals, or at specific events
-3. **How to store data**: Lists, files, databases, or real-time output
+## Prefer explicit domain observations
 
-## 1. Process Monitoring
-
-### State Variable Tracking
-
-Track process state by recording variables when they change.
+Record domain events where their meaning is unambiguous:
 
 ```python
-import simpy
-
-def customer(env, name, service_time, log):
-    arrival_time = env.now
-    log.append(('arrival', name, arrival_time))
-
-    yield env.timeout(service_time)
-
-    departure_time = env.now
-    log.append(('departure', name, departure_time))
-
-    wait_time = departure_time - arrival_time
-    log.append(('wait_time', name, wait_time))
-
-env = simpy.Environment()
-log = []
-
-env.process(customer(env, 'Customer 1', 5, log))
-env.process(customer(env, 'Customer 2', 3, log))
-env.run()
-
-print('Simulation log:')
-for entry in log:
-    print(entry)
-```
-
-### Time-Series Data Collection
-
-```python
-import simpy
-
-def system_monitor(env, system_state, data_log, interval):
-    while True:
-        data_log.append((env.now, system_state['queue_length'], system_state['utilization']))
-        yield env.timeout(interval)
-
-def process(env, system_state):
-    while True:
-        system_state['queue_length'] += 1
+def customer(env, resource, log):
+    arrival = env.now
+    log.append({"event": "arrival", "time": env.now})
+    with resource.request() as request:
+        yield request
+        log.append(
+            {
+                "event": "service_start",
+                "queue_wait": env.now - arrival,
+                "time": env.now,
+            }
+        )
         yield env.timeout(2)
-        system_state['queue_length'] -= 1
-        system_state['utilization'] = system_state['queue_length'] / 10
-        yield env.timeout(3)
-
-env = simpy.Environment()
-system_state = {'queue_length': 0, 'utilization': 0.0}
-data_log = []
-
-env.process(system_monitor(env, system_state, data_log, interval=1))
-env.process(process(env, system_state))
-env.run(until=20)
-
-print('Time series data:')
-for time, queue, util in data_log:
-    print(f'Time {time}: Queue={queue}, Utilization={util:.2f}')
+    log.append({"event": "departure", "time": env.now})
 ```
 
-### Multiple Variable Tracking
+Entity-average wait and time-average queue length are different estimands.
+
+## Why queue samples are timing-sensitive
+
+For `Resource.request()`:
+
+- before the method: the new request is absent;
+- immediately after: an available slot may already be allocated, or the request is
+  in `queue`;
+- when the request Event is processed: waiting Process callbacks run;
+- during release: a queued request may be granted synchronously before the release
+  Event's callbacks finish.
+
+Several states may therefore exist at the same simulation timestamp. Label sample
+phase. Equal-time samples contribute zero duration to a time integral but affect an
+unweighted sample average.
+
+`len(resource.queue)` counts pending requests, not users in service. Total number in
+the congestion point is normally `resource.count + len(resource.queue)`.
+
+For Container/Store, distinguish `level`/`len(items)` from pending
+`put_queue`/`get_queue`.
+
+## Time-weighted state
+
+For a left-continuous piecewise-constant state `q(t)`, compute:
+
+`average = sum(q_i * (t_{i+1} - t_i)) / (end - start)`.
+
+Requirements:
+
+- initial sample at monitoring start;
+- every relevant state transition;
+- final sample exactly at the reporting horizon;
+- warm-up window clipping;
+- nondecreasing timestamps.
+
+Do not use `sum(queue_samples) / len(queue_samples)` as time-average queue length;
+busy periods typically generate more events and become overrepresented.
+
+## Bundled ResourceMonitor
+
+`scripts/resource_monitor.py` wraps one Resource-like instance, records request,
+grant, cancellation, release, and final states, and calculates time-weighted
+utilization/queue length.
 
 ```python
 import simpy
-
-class SimulationData:
-    def __init__(self):
-        self.timestamps = []
-        self.queue_lengths = []
-        self.processing_times = []
-        self.utilizations = []
-
-    def record(self, timestamp, queue_length, processing_time, utilization):
-        self.timestamps.append(timestamp)
-        self.queue_lengths.append(queue_length)
-        self.processing_times.append(processing_time)
-        self.utilizations.append(utilization)
-
-def monitored_process(env, data):
-    queue_length = 0
-    processing_time = 0
-    utilization = 0.0
-
-    for i in range(5):
-        queue_length = i % 3
-        processing_time = 2 + i
-        utilization = queue_length / 10
-
-        data.record(env.now, queue_length, processing_time, utilization)
-        yield env.timeout(2)
+from resource_monitor import ResourceMonitor
 
 env = simpy.Environment()
-data = SimulationData()
-env.process(monitored_process(env, data))
-env.run()
+resource = simpy.Resource(env, capacity=2)
+monitor = ResourceMonitor(env, resource, "server")
 
-print(f'Collected {len(data.timestamps)} data points')
+# Register bounded processes, then run.
+env.run(until=100)
+monitor.finalize(at=100)
+summary = monitor.summary(start=20, end=100)
 ```
 
-## 2. Resource Monitoring
+The warm-up sample state is reconstructed from the last transition at or before
+`start`; the final sample closes the interval. `export_csv()` writes local private
+CSV atomically and refuses overwrite unless requested.
 
-### Monkey-Patching Resources
+Monkey-patching changes method identity and can interact with other wrappers. Attach
+one monitor per instance, patch before processes obtain method references, and call
+`detach()` before another instrumentation layer.
 
-Patch resource methods to intercept and log operations.
+## Generic resource wrappers
+
+The official guide demonstrates pre/post method wrappers:
 
 ```python
-import simpy
+from functools import wraps
 
-def patch_resource(resource, data_log):
-    """Patch a resource to log all requests and releases."""
+def patch_resource(resource, pre=None, post=None):
+    def wrap(operation):
+        @wraps(operation)
+        def wrapper(*args, **kwargs):
+            if pre is not None:
+                pre(resource)
+            event = operation(*args, **kwargs)
+            if post is not None:
+                post(resource)
+            return event
+        return wrapper
 
-    # Save original methods
-    original_request = resource.request
-    original_release = resource.release
-
-    # Create wrapper for request
-    def logged_request(*args, **kwargs):
-        req = original_request(*args, **kwargs)
-        data_log.append(('request', resource._env.now, len(resource.queue)))
-        return req
-
-    # Create wrapper for release
-    def logged_release(*args, **kwargs):
-        result = original_release(*args, **kwargs)
-        data_log.append(('release', resource._env.now, len(resource.queue)))
-        return result
-
-    # Replace methods
-    resource.request = logged_request
-    resource.release = logged_release
-
-def user(env, name, resource):
-    with resource.request() as req:
-        yield req
-        print(f'{name} using resource at {env.now}')
-        yield env.timeout(3)
-        print(f'{name} releasing resource at {env.now}')
-
-env = simpy.Environment()
-resource = simpy.Resource(env, capacity=1)
-log = []
-
-patch_resource(resource, log)
-
-env.process(user(env, 'User 1', resource))
-env.process(user(env, 'User 2', resource))
-env.run()
-
-print('\nResource log:')
-for entry in log:
-    print(entry)
+    for name in ("put", "get", "request", "release"):
+        if hasattr(resource, name):
+            setattr(resource, name, wrap(getattr(resource, name)))
 ```
 
-### Resource Subclassing
+Here "post" means after the method call, not necessarily after the returned Event
+is processed. To observe completion, append a callback while `event.callbacks` is
+still a list. Handle immediately triggered events before the environment steps.
 
-Create custom resource classes with built-in monitoring.
+Subclassing can be clearer for one stable use case, but it still depends on
+protected `_env` in common examples. Prefer an explicit `env` reference.
+
+## Event tracing
+
+The official guide identifies:
+
+- `Environment.schedule()` — event enters the queue;
+- `Environment.step()` — next queued event is processed.
+
+The bundled `EventTraceRecorder` wraps `step()`, reads the next queue tuple, and
+records only:
+
+- simulation time;
+- priority;
+- event ID;
+- event class name;
+- queue size before the step.
+
+It avoids `repr(event)`, which can contain nondeterministic memory addresses. It
+caps records and writes JSON Lines.
 
 ```python
-import simpy
+from resource_monitor import EventTraceRecorder
 
-class MonitoredResource(simpy.Resource):
-    def __init__(self, env, capacity):
-        super().__init__(env, capacity)
-        self.data = []
-        self.utilization_data = []
-
-    def request(self, *args, **kwargs):
-        req = super().request(*args, **kwargs)
-        queue_length = len(self.queue)
-        utilization = self.count / self.capacity
-        self.data.append(('request', self._env.now, queue_length, utilization))
-        self.utilization_data.append((self._env.now, utilization))
-        return req
-
-    def release(self, *args, **kwargs):
-        result = super().release(*args, **kwargs)
-        queue_length = len(self.queue)
-        utilization = self.count / self.capacity
-        self.data.append(('release', self._env.now, queue_length, utilization))
-        self.utilization_data.append((self._env.now, utilization))
-        return result
-
-    def average_utilization(self):
-        if not self.utilization_data:
-            return 0.0
-        return sum(u for _, u in self.utilization_data) / len(self.utilization_data)
-
-def user(env, name, resource):
-    with resource.request() as req:
-        yield req
-        print(f'{name} using resource at {env.now}')
-        yield env.timeout(2)
-
-env = simpy.Environment()
-resource = MonitoredResource(env, capacity=2)
-
-for i in range(5):
-    env.process(user(env, f'User {i+1}', resource))
-
-env.run()
-
-print(f'\nAverage utilization: {resource.average_utilization():.2%}')
-print(f'Total operations: {len(resource.data)}')
+trace = EventTraceRecorder(env, max_records=10_000)
+env.run(until=100)
+trace.detach()
+trace.export_jsonl("trace.jsonl")
 ```
 
-### Container Level Monitoring
+This intentionally accesses `env._queue`, a private implementation detail. Pin
+SimPy and regression-test the tuple shape after upgrades. Full tracing increases
+runtime and memory; use a small deterministic diagnostic scenario.
+
+Summarize without executing model code:
+
+```bash
+python skills/simpy/scripts/event_trace_summary.py trace.jsonl
+python skills/simpy/scripts/event_trace_summary.py resource_samples.csv
+```
+
+The summarizer validates fixed schemas, file size, record count, numeric finiteness,
+and ordering.
+
+## Manual stepping
+
+Stepping is useful for debuggers, GUI integration, invariants, and hard event caps:
 
 ```python
-import simpy
+from simpy.core import EmptySchedule
 
-class MonitoredContainer(simpy.Container):
-    def __init__(self, env, capacity, init=0):
-        super().__init__(env, capacity, init)
-        self.level_data = [(0, init)]
+max_events = 100_000
+processed = 0
+while env.peek() < 100 and processed < max_events:
+    env.step()
+    processed += 1
 
-    def put(self, amount):
-        result = super().put(amount)
-        self.level_data.append((self._env.now, self.level))
-        return result
-
-    def get(self, amount):
-        result = super().get(amount)
-        self.level_data.append((self._env.now, self.level))
-        return result
-
-def producer(env, container, amount, interval):
-    while True:
-        yield env.timeout(interval)
-        yield container.put(amount)
-        print(f'Produced {amount}. Level: {container.level} at {env.now}')
-
-def consumer(env, container, amount, interval):
-    while True:
-        yield env.timeout(interval)
-        yield container.get(amount)
-        print(f'Consumed {amount}. Level: {container.level} at {env.now}')
-
-env = simpy.Environment()
-container = MonitoredContainer(env, capacity=100, init=50)
-
-env.process(producer(env, container, 20, 3))
-env.process(consumer(env, container, 15, 4))
-env.run(until=20)
-
-print('\nLevel history:')
-for time, level in container.level_data:
-    print(f'Time {time}: Level={level}')
+if processed == max_events:
+    raise RuntimeError("event budget exhausted")
+if env.peek() == float("inf"):
+    # Empty schedule; verify intended completion instead of assuming success.
+    pass
 ```
 
-## 3. Event Tracing
+`env.peek() < horizon` gives the same half-open boundary policy as numeric
+`run(until=horizon)`. `<=` processes events at the boundary and is a different
+estimand/termination convention.
 
-### Environment Step Monitoring
+If a stop callback fires during `step()` in 4.1.2, SimPy may reschedule the Event to
+preserve remaining callbacks. See `events.md`.
 
-Monitor all events by patching the environment's step function.
+## Periodic polling
+
+Polling is simple but approximates the state path and adds events:
 
 ```python
-import simpy
-
-def trace(env, callback):
-    """Trace all events processed by the environment."""
-
-    def _trace_step():
-        # Get next event before it's processed
-        if env._queue:
-            time, priority, event_id, event = env._queue[0]
-            callback(time, priority, event_id, event)
-
-        # Call original step
-        return original_step()
-
-    original_step = env.step
-    env.step = _trace_step
-
-def event_callback(time, priority, event_id, event):
-    print(f'Event: time={time}, priority={priority}, id={event_id}, type={type(event).__name__}')
-
-def process(env, name):
-    print(f'{name}: Starting at {env.now}')
-    yield env.timeout(5)
-    print(f'{name}: Done at {env.now}')
-
-env = simpy.Environment()
-trace(env, event_callback)
-
-env.process(process(env, 'Process 1'))
-env.process(process(env, 'Process 2'))
-env.run()
+def poll(env, resource, interval, end, samples):
+    while env.now < end:
+        samples.append((env.now, resource.count, len(resource.queue)))
+        delay = min(interval, end - env.now)
+        if delay <= 0:
+            return
+        yield env.timeout(delay)
 ```
 
-### Event Scheduling Monitor
+Never use a zero/negative interval. Polling can miss short peaks. It is suitable
+for visualization at a declared resolution, not exact time integrals.
 
-Track when events are scheduled.
+## Measurement windows and censoring
 
-```python
-import simpy
+At a finite horizon:
 
-class MonitoredEnvironment(simpy.Environment):
-    def __init__(self):
-        super().__init__()
-        self.scheduled_events = []
+- an entity may arrive but remain queued;
+- service may start but not finish;
+- a future timeout may remain scheduled;
+- numeric `run(until=horizon)` excludes ordinary events exactly at the horizon.
 
-    def schedule(self, event, priority=simpy.core.NORMAL, delay=0):
-        super().schedule(event, priority, delay)
-        scheduled_time = self.now + delay
-        self.scheduled_events.append((scheduled_time, priority, type(event).__name__))
+Report arrived, admitted, rejected, completed, and unfinished counts. A
+completed-only customer mean can be biased when long waits/services are more likely
+to be unfinished. Consider a terminating design that drains the system, a
+right-censoring-aware estimand, or sensitivity to a longer horizon.
 
-def process(env, name, delay):
-    print(f'{name}: Scheduling timeout for {delay} at {env.now}')
-    yield env.timeout(delay)
-    print(f'{name}: Resumed at {env.now}')
+For steady-state replication/deletion, define whether an observation enters the
+analysis by arrival time, service-start time, departure time, or time-integral
+window. Do not choose after seeing favorable results.
 
-env = MonitoredEnvironment()
-env.process(process(env, 'Process 1', 5))
-env.process(process(env, 'Process 2', 3))
-env.run()
+## Monitor non-interference tests
 
-print('\nScheduled events:')
-for time, priority, event_type in env.scheduled_events:
-    print(f'Time {time}, Priority {priority}, Type {event_type}')
-```
+For a deterministic miniature model, compare monitored and unmonitored runs:
 
-## 4. Statistical Monitoring
+- same completion order and timestamps;
+- same resource counts and outputs;
+- same random draws/seed manifest;
+- no pending monitor bookkeeping after completion;
+- identical exception/interrupt behavior.
 
-### Queue Statistics
+Also test:
 
-```python
-import simpy
+- simultaneous request/release;
+- cancellation while queued;
+- preemption;
+- zero queue capacity;
+- final interval closure;
+- warm-up starting between transitions;
+- trace-cap behavior.
 
-class QueueStatistics:
-    def __init__(self):
-        self.arrival_times = []
-        self.departure_times = []
-        self.queue_lengths = []
-        self.wait_times = []
+## Sources
 
-    def record_arrival(self, time, queue_length):
-        self.arrival_times.append(time)
-        self.queue_lengths.append(queue_length)
-
-    def record_departure(self, arrival_time, departure_time):
-        self.departure_times.append(departure_time)
-        self.wait_times.append(departure_time - arrival_time)
-
-    def average_wait_time(self):
-        return sum(self.wait_times) / len(self.wait_times) if self.wait_times else 0
-
-    def average_queue_length(self):
-        return sum(self.queue_lengths) / len(self.queue_lengths) if self.queue_lengths else 0
-
-def customer(env, resource, stats):
-    arrival_time = env.now
-    stats.record_arrival(arrival_time, len(resource.queue))
-
-    with resource.request() as req:
-        yield req
-        departure_time = env.now
-        stats.record_departure(arrival_time, departure_time)
-        yield env.timeout(2)
-
-env = simpy.Environment()
-resource = simpy.Resource(env, capacity=1)
-stats = QueueStatistics()
-
-for i in range(5):
-    env.process(customer(env, resource, stats))
-
-env.run()
-
-print(f'Average wait time: {stats.average_wait_time():.2f}')
-print(f'Average queue length: {stats.average_queue_length():.2f}')
-```
-
-## 5. Data Export
-
-### CSV Export
-
-```python
-import simpy
-import csv
-
-def export_to_csv(data, filename):
-    with open(filename, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Time', 'Metric', 'Value'])
-        writer.writerows(data)
-
-def monitored_simulation(env, data_log):
-    for i in range(10):
-        data_log.append((env.now, 'queue_length', i % 3))
-        data_log.append((env.now, 'utilization', (i % 3) / 10))
-        yield env.timeout(1)
-
-env = simpy.Environment()
-data = []
-env.process(monitored_simulation(env, data))
-env.run()
-
-export_to_csv(data, 'simulation_data.csv')
-print('Data exported to simulation_data.csv')
-```
-
-### Real-time Plotting (requires matplotlib)
-
-```python
-import simpy
-import matplotlib.pyplot as plt
-
-class RealTimePlotter:
-    def __init__(self):
-        self.times = []
-        self.values = []
-
-    def update(self, time, value):
-        self.times.append(time)
-        self.values.append(value)
-
-    def plot(self, title='Simulation Results'):
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.times, self.values)
-        plt.xlabel('Time')
-        plt.ylabel('Value')
-        plt.title(title)
-        plt.grid(True)
-        plt.show()
-
-def monitored_process(env, plotter):
-    value = 0
-    for i in range(20):
-        value = value * 0.9 + (i % 5)
-        plotter.update(env.now, value)
-        yield env.timeout(1)
-
-env = simpy.Environment()
-plotter = RealTimePlotter()
-env.process(monitored_process(env, plotter))
-env.run()
-
-plotter.plot('Process Value Over Time')
-```
-
-## Best Practices
-
-1. **Minimize overhead**: Only monitor what's necessary; excessive logging can slow simulations
-
-2. **Structured data**: Use classes or named tuples for complex data points
-
-3. **Time-stamping**: Always include timestamps with monitored data
-
-4. **Aggregation**: For long simulations, aggregate data rather than storing every event
-
-5. **Lazy evaluation**: Consider collecting raw data and computing statistics after simulation
-
-6. **Memory management**: For very long simulations, periodically flush data to disk
-
-7. **Validation**: Verify monitoring code doesn't affect simulation behavior
-
-8. **Separation of concerns**: Keep monitoring code separate from simulation logic
-
-9. **Reusable components**: Create generic monitoring classes that can be reused across simulations
+See `sources.md` for the official monitoring, environment, time/scheduling, and
+tagged core source links.

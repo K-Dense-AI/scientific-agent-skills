@@ -1,275 +1,274 @@
-# SimPy Shared Resources
+# Shared resources
 
-This guide covers all resource types in SimPy for modeling congestion points and resource allocation.
+Verified 2026-07-23 against SimPy 4.1.2.
 
-## Resource Types Overview
+All resource operations return Events. An operation that cannot complete waits in
+the corresponding queue; yielding the Event suspends the process. Resource events
+are context managers so exception/interrupt unwinding can release an acquired
+request or cancel a pending operation.
 
-SimPy provides three main categories of shared resources:
+## Choose by modeled quantity
 
-1. **Resources** - Limited capacity resources (e.g., gas pumps, servers)
-2. **Containers** - Homogeneous bulk materials (e.g., fuel tanks, silos)
-3. **Stores** - Python object storage (e.g., item queues, warehouses)
+| Primitive | Modeled state | Waiting operation |
+|---|---|---|
+| `Resource` | limited concurrent users | `request()` |
+| `PriorityResource` | users plus priority queue | `request(priority=...)` |
+| `PreemptiveResource` | priority users that may be displaced | `request(..., preempt=...)` |
+| `Container` | homogeneous numeric level | `put(amount)`, `get(amount)` |
+| `Store` | FIFO concrete objects | `put(item)`, `get()` |
+| `FilterStore` | objects selected by predicate | `get(filter)` |
+| `PriorityStore` | comparable/priority-wrapped objects | `put(item)`, `get()` |
 
-## 1. Resources
+These primitives implement synchronization and congestion. They do not decide
+whether a queue discipline or capacity assumption is valid for the real system.
 
-Model resources that can be used by a limited number of processes at a time.
+## Resource
 
-### Resource (Basic)
+`Resource(env, capacity=1)` is semaphore-like. `capacity` must be positive.
+Observable state:
 
-The basic resource is a semaphore with specified capacity.
+- `count`: allocated slots;
+- `users`: granted request events;
+- `queue`: pending request events;
+- `capacity`: maximum simultaneous users.
 
 ```python
 import simpy
 
+def user(env, resource, duration):
+    with resource.request() as request:
+        yield request
+        yield env.timeout(duration)
+
 env = simpy.Environment()
-resource = simpy.Resource(env, capacity=2)
-
-def process(env, resource, name):
-    with resource.request() as req:
-        yield req
-        print(f'{name} has the resource at {env.now}')
-        yield env.timeout(5)
-        print(f'{name} releases the resource at {env.now}')
-
-env.process(process(env, resource, 'Process 1'))
-env.process(process(env, resource, 'Process 2'))
-env.process(process(env, resource, 'Process 3'))
+server = simpy.Resource(env, capacity=2)
+for duration in (2, 3, 4):
+    env.process(user(env, server, duration))
 env.run()
 ```
 
-**Key properties:**
-- `capacity` - Maximum number of concurrent users (default: 1)
-- `count` - Current number of users
-- `queue` - List of queued requests
-
-### PriorityResource
-
-Extends basic resource with priority levels (lower numbers = higher priority).
+The context manager calls `release(request)` after an acquired request and
+`cancel()` for an abandoned pending request. With manual management, always release
+the exact request token:
 
 ```python
-import simpy
+request = resource.request()
+try:
+    yield request
+    yield env.timeout(2)
+finally:
+    if request in resource.users:
+        resource.release(request)
+    elif not request.triggered:
+        request.cancel()
+```
+
+`release()` succeeds immediately, even if passed a request that is not a current
+user; such a call does not make the model logically correct. Prefer the context
+manager.
+
+## PriorityResource
+
+`PriorityResource` orders pending `PriorityRequest`s by smaller numeric priority,
+then request time. Equal-priority, equal-time ties use deterministic scheduler/queue
+ordering.
+
+```python
+def prioritized(env, resource, name, priority):
+    with resource.request(priority=priority) as request:
+        yield request
+        print(name, "started", env.now)
+        yield env.timeout(2)
 
 env = simpy.Environment()
 resource = simpy.PriorityResource(env, capacity=1)
-
-def process(env, resource, name, priority):
-    with resource.request(priority=priority) as req:
-        yield req
-        print(f'{name} (priority {priority}) has the resource at {env.now}')
-        yield env.timeout(5)
-
-env.process(process(env, resource, 'Low priority', priority=10))
-env.process(process(env, resource, 'High priority', priority=1))
+env.process(prioritized(env, resource, "routine", 10))
+env.process(prioritized(env, resource, "urgent", 0))
 env.run()
 ```
 
-**Use cases:**
-- Emergency services (ambulances before regular vehicles)
-- VIP customer queues
-- Job scheduling with priorities
+Priority does not preempt a current user. A later high-priority request only
+overtakes queued lower-priority requests.
 
-### PreemptiveResource
+## PreemptiveResource
 
-Allows high-priority requests to interrupt lower-priority users.
+`PreemptiveResource` extends `PriorityResource`. A request accepts:
+
+- `priority`: lower number means higher priority;
+- `preempt=True`: permit displacement of a lower-priority current user.
 
 ```python
-import simpy
-
-env = simpy.Environment()
-resource = simpy.PreemptiveResource(env, capacity=1)
-
-def process(env, resource, name, priority):
-    with resource.request(priority=priority) as req:
+def task(env, resource, name, priority, duration):
+    with resource.request(priority=priority, preempt=True) as request:
         try:
-            yield req
-            print(f'{name} acquired resource at {env.now}')
-            yield env.timeout(10)
-            print(f'{name} finished at {env.now}')
-        except simpy.Interrupt:
-            print(f'{name} was preempted at {env.now}')
+            yield request
+            started = env.now
+            yield env.timeout(duration)
+        except simpy.Interrupt as interrupt:
+            cause = interrupt.cause
+            used = env.now - cause.usage_since
+            print(name, "preempted by", cause.by.name, "after", used)
 
-env.process(process(env, resource, 'Low priority', priority=10))
-env.process(process(env, resource, 'High priority', priority=1))
+env = simpy.Environment()
+cpu = simpy.PreemptiveResource(env, capacity=1)
+env.process(task(env, cpu, "background", 5, 10))
+
+def urgent(env):
+    yield env.timeout(2)
+    yield env.process(task(env, cpu, "urgent", 0, 1))
+
+env.process(urgent(env))
 env.run()
 ```
 
-**Use cases:**
-- Operating system CPU scheduling
-- Emergency room triage
-- Network packet prioritization
+The preempted process receives `simpy.Interrupt`. Its `cause` is
+`simpy.resources.resource.Preempted`:
 
-## 2. Containers
+- `cause.by`: Process that made the preempting request;
+- `cause.usage_since`: time the displaced request began using the resource;
+- `cause.resource`: resource involved.
 
-Model production and consumption of homogeneous bulk materials (continuous or discrete).
+The timeout representing interrupted work is not canceled; the process's callback
+is removed from it. Track completed work and schedule a new timeout to resume.
+
+Priority outranks the preempt flag. A queued request with higher priority and
+`preempt=False` can prevent a lower-priority preempting request from displacing a
+user. Do not mix policies without a tested discipline specification.
+
+## Container
+
+`Container(env, capacity=float("inf"), init=0)` models homogeneous matter. Current
+state is `level`.
+
+- `put(amount)` waits until `level + amount <= capacity`;
+- `get(amount)` waits until `level >= amount`;
+- amounts must be strictly positive;
+- `0 <= init <= capacity`.
 
 ```python
-import simpy
-
 env = simpy.Environment()
-container = simpy.Container(env, capacity=100, init=50)
+tank = simpy.Container(env, capacity=100, init=40)
 
-def producer(env, container):
-    while True:
-        yield env.timeout(5)
-        yield container.put(20)
-        print(f'Produced 20. Level: {container.level}')
+def transfer(env):
+    yield tank.put(30)
+    assert tank.level == 70
+    yield tank.get(20)
+    assert tank.level == 50
 
-def consumer(env, container):
-    while True:
-        yield env.timeout(7)
-        yield container.get(15)
-        print(f'Consumed 15. Level: {container.level}')
-
-env.process(producer(env, container))
-env.process(consumer(env, container))
-env.run(until=50)
+env.process(transfer(env))
+env.run()
 ```
 
-**Key properties:**
-- `capacity` - Maximum amount (default: float('inf'))
-- `level` - Current amount
-- `init` - Initial amount (default: 0)
+Pending operations are visible through `put_queue` and `get_queue`. A blocked put
+or get can deadlock the model if no future process can change the level. Bound
+execution and assert conservation:
 
-**Operations:**
-- `put(amount)` - Add to container (blocks if full)
-- `get(amount)` - Remove from container (blocks if insufficient)
+`initial + completed_puts - completed_gets == final_level`.
 
-**Use cases:**
-- Gas station fuel tanks
-- Buffer storage in manufacturing
-- Water reservoirs
-- Battery charge levels
+## Store
 
-## 3. Stores
-
-Model production and consumption of Python objects.
-
-### Store (Basic)
-
-Generic FIFO object storage.
+`Store(env, capacity=float("inf"))` holds concrete Python objects. `put(item)` waits
+when full; `get()` waits when empty. Available objects are in `items`; pending
+operations are in `put_queue` and `get_queue`.
 
 ```python
-import simpy
-
 env = simpy.Environment()
-store = simpy.Store(env, capacity=2)
+buffer = simpy.Store(env, capacity=2)
 
-def producer(env, store):
-    for i in range(5):
+def producer(env):
+    for item in ("a", "b", "c"):
+        yield buffer.put(item)
+
+def consumer(env):
+    for _ in range(3):
+        item = yield buffer.get()
+        print(item)
+
+env.process(producer(env))
+env.process(consumer(env))
+env.run()
+```
+
+Store is FIFO for available items and ordinary pending requests.
+
+## FilterStore
+
+`FilterStore.get(predicate)` takes the first available item for which the predicate
+returns truthy:
+
+```python
+env = simpy.Environment()
+machines = simpy.FilterStore(env, capacity=2)
+machines.items = [
+    {"id": "small", "size": 1},
+    {"id": "large", "size": 2},
+]
+
+def borrow_large(env):
+    machine = yield machines.get(lambda item: item["size"] >= 2)
+    yield env.timeout(1)
+    yield machines.put(machine)
+
+env.process(borrow_large(env))
+env.run()
+```
+
+Unlike a plain FIFO get queue, a later FilterStore request can complete before an
+earlier request when only the later predicate matches. Predicates execute inside
+resource processing: keep them deterministic, fast, side-effect-free, and defined
+in trusted model code. The bundled JSON CLIs do not accept predicate code.
+
+## PriorityStore
+
+`PriorityStore` returns the smallest item according to comparison. Prefer
+`simpy.PriorityItem(priority, item)` so payloads need not be comparable:
+
+```python
+env = simpy.Environment()
+work = simpy.PriorityStore(env)
+
+def schedule(env):
+    yield work.put(simpy.PriorityItem(10, "routine"))
+    yield work.put(simpy.PriorityItem(1, "urgent"))
+    first = yield work.get()
+    assert first.item == "urgent"
+
+env.process(schedule(env))
+env.run()
+```
+
+Equal-priority payloads preserve the wrapper's comparison behavior; if business
+policy requires a specific tie-breaker, include one explicitly in a comparable
+dataclass/tuple and test it.
+
+## Waiting, cancellation, and reneging
+
+Use a condition to race a request against patience:
+
+```python
+def customer(env, resource, patience):
+    with resource.request() as request:
+        result = yield request | env.timeout(patience)
+        if request not in result:
+            return "reneged"  # Pending request canceled on context exit.
         yield env.timeout(2)
-        item = f'Item {i}'
-        yield store.put(item)
-        print(f'Produced {item} at {env.now}')
-
-def consumer(env, store):
-    while True:
-        yield env.timeout(3)
-        item = yield store.get()
-        print(f'Consumed {item} at {env.now}')
-
-env.process(producer(env, store))
-env.process(consumer(env, store))
-env.run()
+        return "served"
 ```
 
-**Key properties:**
-- `capacity` - Maximum number of items (default: float('inf'))
-- `items` - List of stored items
+If retaining resource events outside a context manager:
 
-**Operations:**
-- `put(item)` - Add item to store (blocks if full)
-- `get()` - Remove and return item (blocks if empty)
+- re-yield after a temporary interrupt if still waiting;
+- call `cancel()` when permanently abandoning a pending put/get/request;
+- release only an acquired Resource request;
+- account for losing timeouts that remain in the event queue.
 
-### FilterStore
+## Monitoring caveat
 
-Allows retrieval of specific objects based on filter functions.
+Resource state may change synchronously when an operation is created and again when
+its callbacks are processed. Label whether a sample is pre-call, post-call, grant,
+release, or final. Time-weight state paths; do not average event samples. See
+`monitoring.md`.
 
-```python
-import simpy
+## Sources
 
-env = simpy.Environment()
-store = simpy.FilterStore(env, capacity=10)
-
-def producer(env, store):
-    for color in ['red', 'blue', 'green', 'red', 'blue']:
-        yield env.timeout(1)
-        yield store.put({'color': color, 'time': env.now})
-        print(f'Produced {color} item at {env.now}')
-
-def consumer(env, store, color):
-    while True:
-        yield env.timeout(2)
-        item = yield store.get(lambda x: x['color'] == color)
-        print(f'{color} consumer got item from {item["time"]} at {env.now}')
-
-env.process(producer(env, store))
-env.process(consumer(env, store, 'red'))
-env.process(consumer(env, store, 'blue'))
-env.run(until=15)
-```
-
-**Use cases:**
-- Warehouse item picking (specific SKUs)
-- Job queues with skill matching
-- Packet routing by destination
-
-### PriorityStore
-
-Items retrieved in priority order (lowest first).
-
-```python
-import simpy
-
-class PriorityItem:
-    def __init__(self, priority, data):
-        self.priority = priority
-        self.data = data
-
-    def __lt__(self, other):
-        return self.priority < other.priority
-
-env = simpy.Environment()
-store = simpy.PriorityStore(env, capacity=10)
-
-def producer(env, store):
-    items = [(10, 'Low'), (1, 'High'), (5, 'Medium')]
-    for priority, name in items:
-        yield env.timeout(1)
-        yield store.put(PriorityItem(priority, name))
-        print(f'Produced {name} priority item')
-
-def consumer(env, store):
-    while True:
-        yield env.timeout(5)
-        item = yield store.get()
-        print(f'Retrieved {item.data} priority item')
-
-env.process(producer(env, store))
-env.process(consumer(env, store))
-env.run()
-```
-
-**Use cases:**
-- Task scheduling
-- Print job queues
-- Message prioritization
-
-## Choosing the Right Resource Type
-
-| Scenario | Resource Type |
-|----------|---------------|
-| Limited servers/machines | Resource |
-| Priority-based queuing | PriorityResource |
-| Preemptive scheduling | PreemptiveResource |
-| Fuel, water, bulk materials | Container |
-| Generic item queue (FIFO) | Store |
-| Selective item retrieval | FilterStore |
-| Priority-ordered items | PriorityStore |
-
-## Best Practices
-
-1. **Capacity planning**: Set realistic capacities based on system constraints
-2. **Request patterns**: Use context managers (`with resource.request()`) for automatic cleanup
-3. **Error handling**: Wrap preemptive resources in try-except for Interrupt handling
-4. **Monitoring**: Track queue lengths and utilization (see monitoring.md)
-5. **Performance**: FilterStore and PriorityStore have O(n) retrieval time; use wisely for large stores
+See `sources.md` for the 4.1.2 shared-resource guide and API reference.
