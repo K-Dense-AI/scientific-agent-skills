@@ -351,7 +351,7 @@ Not every diagram is simple, and that's fine. The goal is **clarity at every sca
 
 ### Composing multiple diagrams
 
-When a single diagram isn't enough — multiple audiences, overview + detail needs, or before/after migration docs — see **[Composing Complex Diagram Sets](mermaid_diagrams/complex_examples.md)** for patterns and production-quality examples showing how to combine flowcharts, sequences, ER diagrams, and more into cohesive documentation.
+When a single diagram isn't enough — multiple audiences, overview + detail needs, or before/after migration docs — see **[Composing Complex Diagram Sets](diagrams/complex_examples.md)** for patterns and production-quality examples showing how to combine flowcharts, sequences, ER diagrams, and more into cohesive documentation.
 
 ---
 
@@ -361,29 +361,29 @@ Read the "best for" column, then follow the link to the type file for the exempl
 
 | You want to show...                      | Type             | File                                                |
 | ---------------------------------------- | ---------------- | --------------------------------------------------- |
-| Steps in a process / decisions           | **Flowchart**    | [flowchart.md](mermaid_diagrams/flowchart.md)       |
-| Who talks to whom, when                  | **Sequence**     | [sequence.md](mermaid_diagrams/sequence.md)         |
-| Class hierarchy / type relationships     | **Class**        | [class.md](mermaid_diagrams/class.md)               |
-| Status transitions / lifecycle           | **State**        | [state.md](mermaid_diagrams/state.md)               |
-| Database schema / data model             | **ER**           | [er.md](mermaid_diagrams/er.md)                     |
-| Project timeline / roadmap               | **Gantt**        | [gantt.md](mermaid_diagrams/gantt.md)               |
-| Parts of a whole (proportions)           | **Pie**          | [pie.md](mermaid_diagrams/pie.md)                   |
-| Git branching / merge strategy           | **Git Graph**    | [git_graph.md](mermaid_diagrams/git_graph.md)       |
-| Concept hierarchy / brainstorm           | **Mindmap**      | [mindmap.md](mermaid_diagrams/mindmap.md)           |
-| Events over time (chronological)         | **Timeline**     | [timeline.md](mermaid_diagrams/timeline.md)         |
-| User experience / satisfaction map       | **User Journey** | [user_journey.md](mermaid_diagrams/user_journey.md) |
-| Two-axis prioritization / comparison     | **Quadrant**     | [quadrant.md](mermaid_diagrams/quadrant.md)         |
-| Requirements traceability                | **Requirement**  | [requirement.md](mermaid_diagrams/requirement.md)   |
-| System architecture (zoom levels)        | **C4**           | [c4.md](mermaid_diagrams/c4.md)                     |
-| Flow magnitude / resource distribution   | **Sankey**       | [sankey.md](mermaid_diagrams/sankey.md)             |
-| Numeric trends (bar + line charts)       | **XY Chart**     | [xy_chart.md](mermaid_diagrams/xy_chart.md)         |
-| Component layout / spatial arrangement   | **Block**        | [block.md](mermaid_diagrams/block.md)               |
-| Work item status board                   | **Kanban**       | [kanban.md](mermaid_diagrams/kanban.md)             |
-| Binary protocol / data format            | **Packet**       | [packet.md](mermaid_diagrams/packet.md)             |
-| Infrastructure topology                  | **Architecture** | [architecture.md](mermaid_diagrams/architecture.md) |
-| Multi-dimensional comparison / skills    | **Radar**        | [radar.md](mermaid_diagrams/radar.md)               |
-| Hierarchical proportions / budget        | **Treemap**      | [treemap.md](mermaid_diagrams/treemap.md)           |
-| Code-style sequence (programming syntax) | **ZenUML**       | [zenuml.md](mermaid_diagrams/zenuml.md)             |
+| Steps in a process / decisions           | **Flowchart**    | [flowchart.md](diagrams/flowchart.md)       |
+| Who talks to whom, when                  | **Sequence**     | [sequence.md](diagrams/sequence.md)         |
+| Class hierarchy / type relationships     | **Class**        | [class.md](diagrams/class.md)               |
+| Status transitions / lifecycle           | **State**        | [state.md](diagrams/state.md)               |
+| Database schema / data model             | **ER**           | [er.md](diagrams/er.md)                     |
+| Project timeline / roadmap               | **Gantt**        | [gantt.md](diagrams/gantt.md)               |
+| Parts of a whole (proportions)           | **Pie**          | [pie.md](diagrams/pie.md)                   |
+| Git branching / merge strategy           | **Git Graph**    | [git_graph.md](diagrams/git_graph.md)       |
+| Concept hierarchy / brainstorm           | **Mindmap**      | [mindmap.md](diagrams/mindmap.md)           |
+| Events over time (chronological)         | **Timeline**     | [timeline.md](diagrams/timeline.md)         |
+| User experience / satisfaction map       | **User Journey** | [user_journey.md](diagrams/user_journey.md) |
+| Two-axis prioritization / comparison     | **Quadrant**     | [quadrant.md](diagrams/quadrant.md)         |
+| Requirements traceability                | **Requirement**  | [requirement.md](diagrams/requirement.md)   |
+| System architecture (zoom levels)        | **C4**           | [c4.md](diagrams/c4.md)                     |
+| Flow magnitude / resource distribution   | **Sankey**       | [sankey.md](diagrams/sankey.md)             |
+| Numeric trends (bar + line charts)       | **XY Chart**     | [xy_chart.md](diagrams/xy_chart.md)         |
+| Component layout / spatial arrangement   | **Block**        | [block.md](diagrams/block.md)               |
+| Work item status board                   | **Kanban**       | [kanban.md](diagrams/kanban.md)             |
+| Binary protocol / data format            | **Packet**       | [packet.md](diagrams/packet.md)             |
+| Infrastructure topology                  | **Architecture** | [architecture.md](diagrams/architecture.md) |
+| Multi-dimensional comparison / skills    | **Radar**        | [radar.md](diagrams/radar.md)               |
+| Hierarchical proportions / budget        | **Treemap**      | [treemap.md](diagrams/treemap.md)           |
+| Code-style sequence (programming syntax) | **ZenUML**       | [zenuml.md](diagrams/zenuml.md)             |
 
 **Pick the most specific type.** Don't default to flowcharts — match your content to the diagram type that was designed for it. A sequence diagram communicates service interactions better than a flowchart ever will.
 
