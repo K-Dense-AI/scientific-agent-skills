@@ -1,326 +1,292 @@
-# Advanced Brainstorming Methodologies
-
-This reference document provides detailed descriptions of structured brainstorming frameworks that can be applied to scientific ideation. Consult these when standard techniques need supplementation or when the scientist requests a specific methodology.
-
-## SCAMPER Framework
-
-SCAMPER is an acronym for seven different ways to approach a problem or idea. Particularly useful for improving existing methods or adapting known techniques.
-
-### Substitute
-- What elements can be replaced? (materials, methods, models, assumptions)
-- What other processes could achieve similar results?
-- What if you used a different organism/system/dataset?
-
-**Scientific applications:**
-- Substitute chemical catalysts with biological enzymes
-- Replace traditional microscopy with super-resolution techniques
-- Use computational models instead of animal models
-
-### Combine
-- What ideas, methods, or technologies can be merged?
-- What collaborations would create synergy?
-- Can you combine data sources or techniques?
-
-**Scientific applications:**
-- Merge genomics with metabolomics for multi-omics analysis
-- Combine machine learning with traditional statistical methods
-- Integrate field observations with laboratory experiments
-
-### Adapt
-- What can be borrowed from other fields?
-- How have others solved similar problems?
-- What analogous systems exist in nature or other disciplines?
-
-**Scientific applications:**
-- Adapt evolutionary algorithms to drug design
-- Use concepts from network theory to understand protein interactions
-- Apply ecological principles to microbiome research
-
-### Modify (Magnify/Minify)
-- What can be amplified, exaggerated, or made more prominent?
-- What can be reduced, simplified, or made more subtle?
-- Change scale, frequency, or magnitude?
-
-**Scientific applications:**
-- Scale up from single cells to populations
-- Miniaturize assays for high-throughput screening
-- Increase temporal resolution of measurements
-- Simplify complex models to essential components
-
-### Put to Another Use
-- What new applications could this serve?
-- Can this be used in a different context?
-- What unexpected applications might exist?
-
-**Scientific applications:**
-- Repurpose existing drugs for new diseases
-- Use industrial waste products as research materials
-- Apply failed experiments' insights to different questions
-
-### Eliminate
-- What can be removed or simplified?
-- What's unnecessary?
-- What if you did less but better?
-
-**Scientific applications:**
-- Remove confounding variables
-- Eliminate expensive reagents or equipment requirements
-- Simplify experimental protocols
-- Remove assumptions to see what's truly necessary
+# Brainstorming and Elicitation Methods
+
+Use methods as fit-for-purpose process choices, not creativity guarantees. The
+best-supported finding in classic laboratory work is narrow: interacting
+face-to-face groups often produce fewer nonredundant ideas than the pooled
+output of the same number of people working independently, with turn-taking
+(`production blocking`) an important mechanism. That does not establish that
+independent work is always better for learning, synthesis, commitment,
+selection, or every real-world task. See `sources.md` for studies and
+limitations.
+
+## Choose by purpose
+
+| Need | Suitable pattern | Main caution |
+|---|---|---|
+| Broad initial idea pool | Independent generation, then structured sharing | A larger pool is not automatically a better decision |
+| Equal participation and same-day prioritization | Nominal group technique (NGT) | Votes show panel preference, not scientific truth |
+| Iterative geographically distributed judgment | Delphi | Consensus can stabilize around shared bias |
+| Quantitative uncertain values for a model | Structured expert elicitation | Expert judgment does not replace empirical evidence |
+| Explore a combinatorial design space | Morphological analysis | Combinations may be infeasible or meaningless |
+| Reframe an existing concept | SCAMPER or assumption reversal | Prompting heuristics have context-dependent evidence |
+| Stress-test shortlisted ideas | Red team, premortem, alternative explanations | Critique needs an explicit response and owner |
+
+For consequential decisions, state why the chosen process fits the question,
+who is included, what information participants see, and how uncertainty and
+dissent will be retained.
+
+## Independent-then-interactive generation
+
+This is the default for a live research session.
+
+1. Give every participant the same neutral question, constraints, and time.
+2. Ask them to write ideas privately and in parallel.
+3. Capture each idea before anyone sees another participant's answer.
+4. Pool ideas with stable IDs; optionally mask contributor identity.
+5. Clarify in a round robin without advocacy or scoring.
+6. Add a second private round after participants have seen the pool.
+7. Cluster by a declared relation while preserving original text.
+8. Move to a separately announced evaluation phase.
+
+Why use it:
+
+- Parallel work avoids waiting to speak.
+- Human-first generation limits early leader, example, and AI anchors.
+- The second private round permits stimulation from others' ideas without
+  requiring immediate public performance.
+
+Limits:
+
+- Classic brainstorming studies often used short, artificial tasks and student
+  samples.
+- Pooled individual output may contain redundancy and miss benefits of
+  dialogue, knowledge integration, or implementation commitment.
+- Higher idea counts do not guarantee better final selections. One experiment
+  found nominal groups produced more and more-original ideas, but selected
+  ideas were not better than those of interactive groups.
+
+## Nominal group technique
+
+NGT is a facilitated, usually synchronous process for eliciting and
+prioritizing contributions. A common four-stage form is:
+
+1. **Silent generation:** participants independently answer one precise
+   question.
+2. **Round-robin recording:** each person contributes one item at a time until
+   all items are recorded.
+3. **Clarification:** discuss meaning, not merit; merge only with originators'
+   agreement and preserve a merge log.
+4. **Independent rating or ranking:** participants vote privately using
+   predeclared rules.
+
+Use NGT when equal airtime, traceability, and prompt prioritization matter.
+Report:
+
+- recruitment and relevant perspectives;
+- exact question and materials shown in advance;
+- group size, facilitator, accessibility adaptations, and conflicts;
+- how items were edited, merged, removed, or added;
+- rating scale, consensus or retention rule, missing votes, ties, and
+  abstentions;
+- full distribution, not only top-ranked items.
+
+Do not:
+
+- call a ranked list “validated”;
+- drop low-ranked minority concerns when they concern safety or ethics;
+- infer population prevalence from a purposive panel;
+- silently modify NGT and still imply a standardized procedure.
+
+NGT is flexible, and reviews document substantial variation in implementation.
+Describe the procedure actually used.
+
+## Delphi
+
+Delphi is an iterative, usually anonymous elicitation process with controlled
+feedback between rounds. It is useful when participants are dispersed,
+face-to-face status effects are a concern, or judgments need time for revision.
+
+### Minimal defensible design
+
+1. Define why Delphi is appropriate and what decision it will inform.
+2. Predefine “expertise” or stakeholder eligibility; sample multiple relevant
+   perspectives rather than only prestigious titles.
+3. Pilot unambiguous questions and scales.
+4. Predefine the number or stopping logic for rounds, feedback statistics,
+   consensus rule, missing-data handling, and treatment of new items.
+5. Collect round 1 independently.
+6. Return controlled feedback that includes the distribution and anonymized
+   reasons, not only a mean.
+7. Let participants retain or revise judgments and explain important changes.
+8. Report attrition by round, disagreement, stability, and items without
+   consensus.
+
+### Interpretation
+
+- Consensus means convergence among this panel under this protocol.
+- It does not establish correctness, causality, clinical effectiveness, or
+  ethical acceptability.
+- Anonymity can reduce interpersonal pressure but also removes conversational
+  repair and may obscure conflicts of interest.
+- Repeated feedback may manufacture agreement. Preserve rationales and
+  minority estimates.
+- “Modified Delphi” is not self-explanatory; list every modification.
+
+Use the CREDES checklist or the 2023 RAND methodological guidance when a Delphi
+result will be published or relied upon. Those resources are indexed in
+`sources.md`.
+
+## Structured expert elicitation
+
+Use structured expert elicitation when empirical evidence is incomplete and a
+decision model needs quantities or probability distributions—not simply a list
+of ideas. Follow domain guidance where available.
+
+High-level sequence:
+
+1. Define the target quantity, unit, conditioning information, time horizon,
+   and resolution criterion.
+2. Review available evidence systematically before asking for judgment.
+3. Select experts for relevant and complementary expertise; disclose conflicts.
+4. Train participants to express uncertainty and test the instrument.
+5. Elicit individual judgments before group aggregation.
+6. Ask for plausible bounds and reasons, then a central estimate; avoid
+   presenting a preferred anchor.
+7. Record assumptions, dependencies, and what evidence would change the
+   estimate.
+8. Apply a declared mathematical or behavioral aggregation method.
+9. Test sensitivity to experts, aggregation rules, and assumptions.
+10. Document the complete process and distinguish expert judgment from data.
+
+EFSA's guidance emphasizes framing, expert selection, uncertainty elicitation,
+aggregation, and documentation because unaided judgment—especially about
+uncertainty—can be biased. Cooke's Classical Model and other protocols have
+additional requirements; do not imitate only their scoring labels.
 
-### Reverse/Rearrange
-- What if you worked backwards?
-- Can you invert the process?
-- What if you changed the sequence?
+## Divergence and convergence
 
-**Scientific applications:**
-- Work backwards from desired outcomes to methods
-- Reverse causality questions (what if the effect causes the cause?)
-- Rearrange experimental order
-- Invert the control and experimental groups conceptually
-
-## Six Thinking Hats
-
-A method for exploring ideas from six distinct perspectives, ensuring comprehensive analysis. Have the scientist metaphorically "wear" different hats to shift thinking modes.
-
-### White Hat (Facts and Information)
-- What data do we have?
-- What information is missing?
-- What facts are known?
-- What measurements exist?
-
-**Usage:** Start here to establish baseline knowledge
-
-### Red Hat (Emotions and Intuition)
-- What's your gut feeling?
-- What excites or worries you?
-- What seems promising intuitively?
-- What emotional responses arise?
-
-**Usage:** Allow intuitive responses without justification
-
-### Black Hat (Critical Judgment)
-- What could go wrong?
-- What are the weaknesses?
-- Why might this fail?
-- What are the risks?
+Treat divergence and convergence as facilitation modes, not cleanly separable
+mental faculties.
 
-**Usage:** Identify potential problems constructively
+### Divergence
 
-### Yellow Hat (Optimistic View)
-- What's the best-case scenario?
-- What are the benefits?
-- Why might this work brilliantly?
-- What value could this create?
+Aim for a varied candidate set:
 
-**Usage:** Explore positive possibilities fully
+- defer comparative judgment for a fixed interval;
+- vary scale, population, mechanism, measurement, time horizon, and level of
+  intervention;
+- request alternatives that predict different observations;
+- include null mechanisms and “do nothing / measure first” options;
+- capture assumptions and uncertainties while the idea is generated.
 
-### Green Hat (Creativity)
-- What alternatives exist?
-- What wild ideas come to mind?
-- What if anything were possible?
-- What creative solutions emerge?
+### Transition
 
-**Usage:** Generate novel ideas without constraint
+The facilitator explicitly closes generation, freezes the initial register,
+and introduces evaluation criteria. This process separation reduces premature
+evaluation, but evidence does not support claiming that it always improves
+selected idea quality.
 
-### Blue Hat (Process Control)
-- What's the big picture?
-- What have we learned?
-- What should we do next?
-- How do we organize these ideas?
-
-**Usage:** Step back to synthesize and plan
-
-## Morphological Analysis
-
-Systematic exploration of all possible combinations of different dimensions of a problem. Particularly powerful for complex research questions with multiple variables.
-
-### Method:
-1. **Identify key dimensions** of the research question (organism, technique, variable, scale, etc.)
-2. **List options** for each dimension
-3. **Create combinations** systematically
-4. **Evaluate** promising combinations
-
-### Example: Drug Delivery Research
-
-| Dimension | Options |
-|-----------|---------|
-| Carrier | Liposomes, Nanoparticles, Viruses, Exosomes |
-| Target | Brain, Tumor, Liver, Specific cell type |
-| Trigger | pH, Temperature, Light, Enzyme |
-| Cargo | Small molecule, Protein, RNA, DNA |
-
-This creates 4×4×4×4 = 256 possible combinations to explore.
-
-### Scientific applications:
-- Design comprehensive experimental matrices
-- Identify unexplored parameter spaces
-- Systematically consider all methodological options
-- Find unique combinations others haven't tried
-
-## TRIZ (Theory of Inventive Problem Solving)
-
-Originally developed for engineering, TRIZ principles apply remarkably well to scientific challenges. Based on patterns identified across millions of patents.
-
-### Key Concepts:
-
-#### Contradictions
-Identify competing requirements and find principles that resolve them.
-
-**Example contradictions in science:**
-- Need high sensitivity vs. need high specificity
-- Want more data vs. limited resources
-- Need fast results vs. need accuracy
-
-#### Principles for Resolution:
-1. **Segmentation** - Divide into parts, increase modularity
-2. **Taking out** - Remove interfering components
-3. **Local quality** - Optimize each part for its specific function
-4. **Asymmetry** - Break symmetry for advantage
-5. **Merging** - Combine similar operations
-6. **Universality** - Make objects perform multiple functions
-7. **Nesting** - Place objects inside each other
-8. **Counterweight** - Use opposing forces
-9. **Prior action** - Perform changes in advance
-10. **Cushion in advance** - Prepare emergency measures
-
-### Ideal Final Result
-Imagine the perfect solution where the problem solves itself or disappears.
-
-**Questions:**
-- What if the system optimized itself?
-- What if the measurement didn't require intervention?
-- What if the sample prepared itself?
-
-### Use of Resources
-Identify unused resources in the system (waste products, byproducts, available data, existing equipment).
-
-## Biomimicry Approach
-
-Look to nature's 3.8 billion years of R&D for solutions. Particularly powerful in biology, chemistry, materials science, and engineering.
-
-### The Process:
-
-#### 1. Define the Function
-Focus on what you need to accomplish, not how.
-- "I need to transport molecules across a membrane"
-- "I need to sense trace chemicals"
-- "I need to self-assemble structures"
-
-#### 2. Biologize the Question
-Reframe in biological terms:
-- "How does nature move substances across barriers?"
-- "How do organisms detect minute concentrations?"
-- "How do biological systems build themselves?"
-
-#### 3. Discover Natural Models
-Search for organisms that excel at this function:
-- Which species are champions at this?
-- What ecosystems manage this process?
-- What molecular mechanisms exist?
-
-#### 4. Abstract the Strategy
-Identify the underlying principle, not just the literal mechanism:
-- What's the core strategy?
-- What patterns repeat?
-- What universal principles apply?
-
-#### 5. Apply to Your Challenge
-Adapt the natural strategy to your scientific context:
-- How can this principle be implemented?
-- What would be the scientific equivalent?
-- What modifications are needed?
-
-### Scientific Examples:
-- **Gecko feet → Adhesives**: Van der Waals forces in nanoscale structures
-- **Lotus leaf → Self-cleaning surfaces**: Superhydrophobic micro-textures
-- **Firefly bioluminescence → Imaging**: Luciferase reporters
-- **Shark skin → Antibacterial surfaces**: Microscale patterns inhibit bacteria
-- **Octopus camouflage → Adaptive materials**: Responsive color-changing systems
-
-### Nature's Strategies:
-- **Self-assembly**: Components organize without external direction
-- **Adaptation**: Systems adjust to environmental changes
-- **Resilience**: Systems recover from disturbance
-- **Efficiency**: Maximum output for minimum input
-- **Multifunctionality**: One structure serves many purposes
-- **Redundancy**: Backup systems ensure reliability
-
-## Additional Techniques
-
-### Provocation Technique
-Use deliberately absurd or impossible statements to break mental patterns.
-
-**Format**: "Po (Provocation Operation) + [impossible statement]"
-
-**Examples:**
-- Po: The experiment runs itself
-- Po: Results arrive before the experiment
-- Po: The sample tells you what to test
-- Po: Funding is unlimited
-- Po: Time runs backwards
-
-**Then ask:** "What's interesting about this?" and "How could we move toward this?"
-
-### Random Input
-Introduce a completely random word, concept, or image and force connections to the problem.
-
-**Method:**
-1. Select a random noun (use a random word generator or dictionary)
-2. Explore its properties and associations
-3. Force connections to the research question
-4. See what unexpected ideas emerge
-
-**Example:**
-Random word: "Bridge"
-- What bridges are needed in my research? (Between fields? Scales? Concepts?)
-- How can I bridge gaps? (Data gaps? Knowledge gaps?)
-- What acts as a bridge in biological systems?
-
-### Reverse Assumptions
-List fundamental assumptions, then deliberately reverse each one.
-
-**Example in molecular biology:**
-- Assumption: "Proteins fold after translation"
-- Reverse: "What if proteins folded during translation?" → co-translational folding research
-- Assumption: "DNA is the template"
-- Reverse: "What if RNA is the template?" → reverse transcription, RNA world hypothesis
-
-### Future Backwards
-Imagine it's 10 years in the future and the problem has been solved brilliantly. Work backwards to figure out how it happened.
-
-**Questions:**
-- What breakthrough enabled this?
-- What had to happen first?
-- What obstacles were overcome?
-- What unexpected development made it possible?
-
-## Selecting a Method
-
-Choose based on the situation:
-
-- **SCAMPER**: When improving existing methods or adapting known approaches
-- **Six Hats**: When the scientist needs to break out of one thinking mode
-- **Morphological Analysis**: For systematic exploration of complex parameter spaces
-- **TRIZ**: When facing apparent contradictions or impossible requirements
-- **Biomimicry**: When the function exists in nature or biological inspiration is relevant
-- **Provocation**: When completely stuck or thinking is too conventional
-- **Random Input**: When the conversation feels stale or circular
-- **Reverse Assumptions**: When fundamental rethinking is needed
-- **Future Backwards**: When envisioning breakthrough outcomes
-
-## Combining Methods
-
-These methods work powerfully in combination:
-- Use **Six Hats** to approach **SCAMPER** questions from different perspectives
-- Apply **Biomimicry** to find natural solutions, then use **TRIZ** to abstract principles
-- Use **Morphological Analysis** to map the space, then **Random Input** to explore unexpected corners
-- Start with **Reverse Assumptions** to break frames, then **SCAMPER** to build new approaches
-
-## Notes on Application
-
-- Don't announce the method unless the scientist asks—just use it naturally in conversation
-- Methods are tools, not rigid procedures—adapt as needed
-- Sometimes the best approach is no explicit method—just curious questioning
-- Watch for when a method is generating energy vs. when it feels forced
-- Be ready to switch methods if one isn't working
+### Convergence
+
+- clarify and cluster without erasing distinctions;
+- define originality and usefulness for this decision;
+- rate independently before discussion;
+- show score distributions and qualitative reasons;
+- run adversarial, evidence, feasibility, and ethics reviews;
+- revisit ideas when criteria or evidence change.
+
+Experiments on idea selection show that people can select poorly from their
+own pools. Explicit criteria can improve selection on the named dimension
+while producing trade-offs in satisfaction or perceived effectiveness.
+Therefore, keep criteria plural and make trade-offs visible.
+
+## Generative prompt families
+
+These are scaffolds, not validated scientific methods.
+
+### Assumption inventory and reversal
+
+1. List descriptive, causal, measurement, operational, and value assumptions.
+2. Mark each as evidenced, conventional, required, or uncertain.
+3. Reverse or remove one assumption.
+4. Ask what observation would follow and whether the reversal is coherent.
+
+Do not confuse a provocative reversal with a plausible hypothesis.
+
+### Scale and boundary shifts
+
+Vary:
+
+- spatial or organizational level;
+- time scale and lag;
+- population, environment, or boundary conditions;
+- dose, intensity, or resolution;
+- unit of analysis and measurement modality.
+
+Ask which mechanisms remain invariant and which predictions change.
+
+### Cross-domain analogy
+
+Write the mapping explicitly:
+
+- source system and target system;
+- relation being transferred;
+- known mismatches;
+- testable implication;
+- evidence needed before transfer is credible.
+
+An analogy generates a question; it is not evidence for the target mechanism.
+
+### Morphological analysis
+
+1. Define independent dimensions of the problem.
+2. List bounded options for each dimension.
+3. Generate combinations systematically.
+4. Remove combinations that violate stated constraints.
+5. Sample remaining combinations transparently if the full product is too
+   large.
+6. Record why combinations were excluded.
+
+Do not equate an unlisted combination with novelty. Check literature and
+feasibility.
+
+### SCAMPER
+
+For an existing method or concept, ask whether to **Substitute, Combine, Adapt,
+Modify, Put to another use, Eliminate, or Reverse/Rearrange**. For each output,
+add a mechanism, expected observation, and failure mode. Avoid generic
+technology substitution without a scientific reason.
+
+### Constraint ladder
+
+Run three rounds:
+
+1. current real constraints;
+2. one negotiable constraint removed;
+3. a stricter safety, cost, time, or accessibility constraint added.
+
+Compare which ideas survive and which assumptions drive the difference.
+
+### Premortem and alternatives
+
+Assume the favored idea produced an uninterpretable or harmful result. List
+causes across theory, measurement, sampling, execution, analysis, governance,
+and misuse. Then ask for at least two mechanisms that predict the same apparent
+success. Convert each into a check or discriminating observation.
+
+## Method combinations
+
+Useful combinations include:
+
+- independent generation → NGT clarification/rating → adversarial review;
+- morphological analysis → independent rating → feasibility gate;
+- Delphi → structured uncertainty elicitation for unresolved quantitative
+  items;
+- human-first round → disclosed AI counterexamples → second human-only round;
+- literature check → assumption reversal → updated decision matrix.
+
+Never stack methods merely to look rigorous. Every stage should have a stated
+purpose, output, and stop rule.
+
+## Stop conditions
+
+Pause or end the process when:
+
+- the question cannot be scoped without confidential or controlled details;
+- the group lacks a perspective essential to safety or interpretation;
+- a clinical, ethics, biosafety, security, legal, or regulatory gate is
+  triggered;
+- participants cannot dissent safely;
+- criteria or weights are being changed to favor a known option;
+- a literature check is too incomplete to support a novelty claim;
+- the accountable decision owner is absent.
