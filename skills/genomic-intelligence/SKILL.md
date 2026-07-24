@@ -98,7 +98,7 @@ in `references/tasks.md`.
 Two hard rules the model enforces:
 
 - **`expression` needs exactly 9,198 bp**, a window **centred on the TSS**
-  (2 × 4,599). Any other length is rejected. Use the acquisition helpers below to
+  (4,599 upstream + TSS + 4,598 downstream). Any other length is rejected. Use the acquisition helpers below to
   build it — do not truncate by hand.
 - **`expression` needs a `description`** — a cell-type / assay string (e.g.
   `"K562 cells"`), passed as `options.description`.
@@ -107,16 +107,18 @@ Two hard rules the model enforces:
 
 You rarely start from a raw 9,198 bp string. Acquire sequence first:
 
-- **From a gene symbol or region** → fetch reference sequence from Ensembl
-  (public, no key). MCP: `fetch_ensembl_sequence`, `fetch_region`,
-  `find_genes`. REST users can query Ensembl REST directly.
+- **From a gene symbol** → MCP `fetch_ensembl_sequence(gene=...)`; **from
+  coordinates** → `fetch_region(region=...)`. Both fetch public Ensembl reference
+  sequence (no key). REST users can query Ensembl REST directly. (`find_genes` is
+  the annotation task, not an acquisition tool.)
 - **For `expression`** → use the TSS-centred fetch so the window is exactly
   9,198 bp. MCP: `fetch_gene_for_expression` (handles the centring). Do not
   build the window by hand.
-- **From a local FASTA** → MCP `load_local_fasta` / `store_inline_sequence`, or
-  read the file yourself for REST.
-- **A demo sequence** → MCP `load_demo_sequence` returns a ready handle (great
-  for a keyless smoke test).
+- **From a local FASTA** → MCP `store_inline_sequence`, or read the file yourself
+  for REST. (`load_local_fasta` exists only in local deployments, not on the
+  hosted server.)
+- **A demo sequence** → MCP `load_demo_sequence(name=...)` returns a ready handle
+  (great for a keyless smoke test); `name` is required.
 
 See `references/sequence-acquisition.md` for the exact Ensembl calls and the
 expression-window math.
@@ -178,9 +180,10 @@ On an MCP host, acquire a handle, then predict against it — sequences stay out
 the context:
 
 ```
-# 1. Acquire a sequence handle (any of these return a sequence_ref):
-load_demo_sequence()                      # keyless smoke test
-fetch_ensembl_sequence(region="TP53")     # gene or region -> handle
+# 1. Acquire a sequence handle (each returns a sequence_ref):
+load_demo_sequence(name="promoter_tp53")  # keyless smoke test; `name` is REQUIRED
+fetch_ensembl_sequence(gene="TP53")       # gene symbol or Ensembl ID -> handle
+fetch_region(region="chr11:5,225,000-5,235,000")   # coordinates -> handle
 fetch_gene_for_expression(gene="HBB")     # TSS-centred 9,198 bp handle for expression
 
 # 2. Predict against the handle:
@@ -188,7 +191,11 @@ predict_promoter(sequence_ref=<ref>)
 predict_expression(sequence_ref=<ref>, description="K562 cells")
 predict_splice(sequence_ref=<ref>)        # + predict_enhancer / predict_chromatin
 
-# 3. Annotation is async: submit, then poll get_job(job_id) until terminal.
+# 3. Annotation on MCP is `find_genes` (there is no predict_annotation).
+#    It takes a handle, not a region, and runs async internally:
+find_genes(sequence_ref=<ref>)            # wait=True (default) returns the result
+find_genes(sequence_ref=<ref>, wait=False)  # -> job_id; poll get_job(job_id)
+
 # Discover models with list_models(task); reference context lives in the
 # gi://models, gi://docs/tasks, and gi://account MCP resources.
 ```
@@ -198,8 +205,10 @@ predict_splice(sequence_ref=<ref>)        # + predict_enhancer / predict_chromat
 To answer "what genes are in this region and how are they expressed?", use the
 composite:
 
-- **MCP:** `find_genes_and_predict_expression(region=..., description=...)` —
-  finds genes in the region and returns an expression prediction for each.
+- **MCP:** `find_genes_and_predict_expression(sequence_ref=..., description=...)`
+  — takes a **handle, not a region** (acquire one with `fetch_region` first);
+  `description` is required. Finds genes in the sequence and returns an
+  expression prediction for each.
 - **REST:** call gene discovery, then loop `expression` per gene (build each
   TSS-centred 9,198 bp window via the acquisition helpers).
 
@@ -211,9 +220,8 @@ composite:
 | 401 | Missing/invalid key (REST) | Set `GI_API_KEY`; or use the keyless MCP demo |
 | 413 | Sequence too long | Stay within the task's length bound (≤500,000 bp) |
 | 429 | Rate / concurrency cap | Back off and retry; ask GI to raise your tier |
+| 422 | Validation failed (`validation_failed`) | The most common failure: expression not exactly 9,198 bp, or a sequence below the model's minimum length |
 | 5xx | Server error | Retry; if persistent, contact support |
-
-`references/errors.md` has the full list and the exact error strings.
 
 ## Reference files
 

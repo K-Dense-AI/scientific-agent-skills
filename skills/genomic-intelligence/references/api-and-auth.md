@@ -35,8 +35,9 @@ Request body: `{sequence, sequence_name, model?, options?}`. `options` is
 task-specific — most notably `options.description` (required for `expression`).
 
 Success is a `{data, meta}` envelope; `data` is task-specific (see `tasks.md`),
-`meta` carries model + request info. Errors use a `{error}` envelope — see
-`errors.md`.
+`meta` carries model + request info. Errors use an `{error}` envelope carrying
+`code`, `message`, `status` and `request_id`; the most common is `422`
+`validation_failed` (wrong sequence length).
 
 ## Partner tiers
 
