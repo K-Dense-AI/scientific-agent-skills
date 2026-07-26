@@ -1,378 +1,392 @@
 ---
 name: openpiv
-description: Particle Image Velocimetry (PIV) library for analyzing fluid flow from image pairs. Use when analyzing fluid dynamics experiments, extracting velocity fields from PIV images, or processing flow visualization data. Best for measuring 2D/3D velocity fields, validating PIV vectors, post-processing flow data, and computing vorticity/strain rates. For GPU-accelerated PIV consider OpenPIV-python with CUDA support.
+description: Particle Image Velocimetry (PIV) analysis with OpenPIV. Use when extracting velocity fields from PIV image pairs, analyzing fluid dynamics or flow visualization experiments, cross-correlating interrogation windows, validating and replacing spurious PIV vectors, or computing vorticity, strain rate, and turbulence statistics from measured velocity fields.
 license: BSD-3-Clause
-compatibility: Requires Python 3.8+ and openpiv package (uv pip install openpiv), numpy, matplotlib.
-metadata: {"version": "1.0", "skill-author": "OpenPIV Team"}
+compatibility: Requires Python 3.10+ with openpiv installed (uv pip install openpiv). numpy, scipy, scikit-image, and matplotlib arrive as dependencies. No network access needed after install.
+allowed-tools: Read Write Edit Bash
+metadata:
+  version: "1.0"
+  skill-author: OpenPIV Team
+  tested-against: "openpiv 0.25.4"
 ---
 
 # OpenPIV
 
 ## Overview
 
-OpenPIV (Open Particle Image Velocimetry) is a powerful Python library for analyzing fluid flow from PIV image pairs. Work with OpenPIV's comprehensive toolkit for preprocessing, cross-correlation analysis, vector validation, and post-processing capabilities for accurate velocity field measurement, flow visualization, and fluid dynamics research.
+OpenPIV (Open Particle Image Velocimetry) analyzes fluid flow from PIV image pairs. It covers
+preprocessing, cross-correlation, vector validation, outlier replacement, smoothing, and scaling to
+physical units.
+
+Everything below is verified against **openpiv 0.25.4**. The API moves between releases — check
+`inspect.signature()` before trusting a snippet against a different version.
+
+## When to use
+
+Use this skill when working with experimental PIV or flow-visualization image pairs: measuring 2D
+velocity fields, tuning interrogation-window parameters, validating vectors, or deriving vorticity,
+strain rate, and turbulence statistics. For *simulating* flow rather than measuring it, use a CFD
+skill instead.
 
 ## Quick Start
 
-### Installation and Basic Usage
-
 Install OpenPIV:
-```python
+
+```bash
 uv pip install openpiv
+
+# Pin it when the analysis needs to be reproducible -- this is the version every
+# snippet below was checked against.
+uv pip install "openpiv==0.25.4"
 ```
 
 Run PIV analysis on an image pair:
-```python
-from openpiv import tools, pyprocess, validation, filters, scaling
-import numpy as np
-import matplotlib.pyplot as plt
 
-# Load images
+```python
+import numpy as np
+from openpiv import tools, pyprocess, validation, filters, scaling
+
 frame_a = tools.imread("image_a.bmp")
 frame_b = tools.imread("image_b.bmp")
 
-# Run PIV analysis
-u, v, sig2noise = pyprocess.extended_search_area_piv(
+# Cross-correlate. Returns (u, v, s2n) whenever sig2noise_method is not None.
+u, v, s2n = pyprocess.extended_search_area_piv(
     frame_a.astype(np.int32),
     frame_b.astype(np.int32),
     window_size=32,
     overlap=12,
     dt=0.02,
     search_area_size=38,
+    correlation_method="linear",   # required for search_area_size > window_size
+    sig2noise_method="peak2peak",
 )
 
-# Get coordinates
 x, y = pyprocess.get_coordinates(
     image_size=frame_a.shape,
     search_area_size=38,
     overlap=12,
 )
 
-# Validate and filter
-flags = validation.sig2noise_val(sig2noise, threshold=1.05)
+# flags is a boolean array: True marks a spurious vector.
+flags = validation.sig2noise_val(s2n, threshold=1.05)
 u, v = filters.replace_outliers(u, v, flags, method="localmean", max_iter=3, kernel_size=2)
 
-# Scale to physical units
+# Scale to physical units, then flip to image coordinates for plotting.
 x, y, u, v = scaling.uniform(x, y, u, v, scaling_factor=96.52)
+x, y, u, v = tools.transform_coordinates(x, y, u, v)
 
-# Save results
 tools.save("vectors.txt", x, y, u, v, flags)
+```
+
+Or use the bundled CLI, which wraps exactly that pipeline:
+
+```bash
+python skills/openpiv/scripts/runner.py \
+    --image frame_a.bmp --image frame_b.bmp --output_dir results --verbose
 ```
 
 ## Core Concepts
 
 ### PIV Fundamentals
 
-Particle Image Velocimetry (PIV) is an optical method for measuring fluid flow velocities. It works by tracking illuminated particles in a flow between two consecutive images.
-
-**Key principles:**
-- Seed the flow with tracer particles
-- Capture two frames with known time separation
-- Use cross-correlation to find displacement
-- Convert pixel displacement to physical velocity
+Particle Image Velocimetry is an optical method for measuring fluid velocity by tracking illuminated
+tracer particles between two images.
 
 **Process flow:**
-1. Capture image pair (frame_a, frame_b) with time delta dt
-2. Divide images into interrogation windows
-3. Cross-correlate windows to find peak displacement
-4. Validate vectors using signal-to-noise ratio
-5. Replace erroneous vectors with interpolated values
-6. Scale to physical units (pixels → meters)
+
+1. Capture an image pair (`frame_a`, `frame_b`) separated by a known time `dt`.
+2. Divide the images into interrogation windows.
+3. Cross-correlate matching windows to find peak displacement.
+4. Validate vectors (signal-to-noise, global range, local median).
+5. Replace spurious vectors with interpolated values.
+6. Scale pixel displacements to physical units.
 
 ### Interrogation Window Parameters
 
-**Window Size:** Size of the correlation window in pixels (typically 16-128 px). Larger windows give better accuracy but lower spatial resolution.
+**`window_size`** — correlation window in pixels (typically 16–128). Larger windows give better
+correlation but coarser spatial resolution.
 
-**Overlap:** Number of pixels shared between adjacent windows (typically 50-75% of window_size). Higher overlap increases resolution but computational cost.
+**`overlap`** — pixels shared between adjacent windows (typically 50–75% of `window_size`). Higher
+overlap raises vector density and cost, but adjacent vectors become correlated rather than
+independent.
 
-**Search Area:** Size of the area in second frame to search for matching (typically window_size + 4-8 pixels for subpixel accuracy).
+**`search_area_size`** — the window searched in the second frame. Must be ≥ `window_size`; a few
+pixels larger accommodates larger displacements. Pair an extended search area with
+`correlation_method="linear"` — the default `"circular"` relies on FFT wrap-around and aliases large
+displacements into small ones. See `references/advanced_algorithms.md`.
 
-**Relationship:**
-- Higher window_size → better accuracy, lower resolution
-- Higher overlap → higher resolution, more computation
-- Search area > window_size allows for larger displacements
+Rules of thumb: keep the largest displacement under about a quarter of `window_size`, and aim for
+5–10 particles per window.
 
 ### Signal-to-Noise Ratio
 
-The sig2noise ratio measures the reliability of cross-correlation peaks:
-- Higher values indicate more confident vector matches
-- Typical threshold: 1.05 to 1.3 (lower = more strict)
-- Vectors below threshold are flagged as invalid
+`s2n` measures how distinct the correlation peak is. `sig2noise_method` controls how it is computed —
+`"peak2mean"` (the function default) or `"peak2peak"`. **The two are on different scales**, so a
+threshold tuned for one is meaningless for the other. Typical `peak2peak` thresholds are 1.05–1.3.
 
 ```python
-# Validate using sig2noise
-flags = validation.sig2noise_val(sig2noise, threshold=1.05)
-# flags = 0 means valid, flags != 0 means invalid
+flags = validation.sig2noise_val(s2n, threshold=1.05)
+# flags is bool: True == spurious. `~flags` selects the good vectors.
 ```
 
 ## Common Operations
 
-### Basic PIV Processing
-
-```python
-from openpiv import tools, pyprocess, validation, filters, scaling
-import numpy as np
-
-# Load and process
-frame_a = tools.imread("frame_a.tif")
-frame_b = tools.imread("frame_b.tif")
-
-# Run cross-correlation
-u, v, sig2noise = pyprocess.extended_search_area_piv(
-    frame_a, frame_b,
-    window_size=32,
-    overlap=16,
-    dt=0.02,
-    search_area_size=38,
-)
-
-# Get grid coordinates
-x, y = pyprocess.get_coordinates(
-    image_size=frame_a.shape,
-    search_area_size=38,
-    overlap=16,
-)
-
-# Validate
-flags = validation.sig2noise_val(sig2noise, threshold=1.2)
-
-# Replace outliers
-u, v = filters.replace_outliers(u, v, flags, method="localmean")
-
-# Scale to physical units
-x, y, u, v = scaling.uniform(x, y, u, v, scaling_factor=96.52)
-
-# Transform coordinates
-x, y, u, v = tools.transform_coordinates(x, y, u, v)
-
-# Mask invalid vectors
-u = np.where(flags == 0, u, np.nan)
-v = np.where(flags == 0, v, np.nan)
-```
-
 ### Dynamic Masking
 
-Apply masking to exclude regions with high luminosity or reflections:
+Masking lives in `openpiv.preprocess`, **not** in an `openpiv.masking` module. It returns an
+`(image, mask)` tuple and expects a float image.
 
 ```python
-from openpiv import masking
+from openpiv import preprocess
 
-# Apply dynamic mask (Shirai method)
-mask_a = masking.dynamic_masking(frame_a, method="shirai")
-mask_b = masking.dynamic_masking(frame_b, method="shirai")
-
-frame_a_masked = frame_a * mask_a
-frame_b_masked = frame_b * mask_b
+# method="edges" for dark, sharp-edged objects; "intensity" for high-contrast objects.
+frame_a_masked, mask_a = preprocess.dynamic_masking(
+    frame_a.astype(np.float64), method="intensity", filter_size=7, threshold=0.005
+)
+frame_b_masked, mask_b = preprocess.dynamic_masking(
+    frame_b.astype(np.float64), method="intensity", filter_size=7, threshold=0.005
+)
 ```
+
+Feed the **returned image** into the correlation step — it already has the masked region zeroed. Do
+not multiply the original frame by `mask`: masking is already applied, and for `method="edges"` the
+mask comes back as `uint8` 0/255 rather than boolean, so multiplying rescales the image by 255.
 
 ### Multi-Pass Processing
 
-For better accuracy with large displacements, use multiple passes with decreasing window sizes:
+Multi-pass (window deformation) lives in `openpiv.windef`, driven by a `PIVSettings` dataclass.
+`pyprocess` has no multi-pass entry point.
 
 ```python
-# First pass - larger windows
-u1, v1, sig2noise1 = pyprocess.extended_search_area_piv(
-    frame_a, frame_b,
-    window_size=64,
-    overlap=32,
-    search_area_size=64,
+import numpy as np
+from openpiv import scaling, windef
+
+settings = windef.PIVSettings()
+settings.windowsizes = (64, 32, 16)   # one entry per pass, decreasing (this is also the default)
+settings.overlap = (32, 16, 8)        # same length as windowsizes
+settings.num_iterations = 3           # number of passes to actually run
+settings.sig2noise_threshold = 1.05
+
+x, y, u, v, flags = windef.simple_multipass(
+    frame_a.astype(np.int32), frame_b.astype(np.int32), settings
 )
 
-# Second pass - smaller windows with initial guess
-u2, v2, sig2noise2 = pyprocess.iterative_warping_piv(
-    frame_a, frame_b,
-    window_size=32,
-    overlap=16,
-    u0=u1, v0=v1,  # Use first pass as initial guess
-)
+# Output is in PIXELS PER FRAME -- convert yourself. scaling.uniform only divides
+# by scaling_factor, so apply dt separately.
+dt = 0.02
+x, y, u, v = scaling.uniform(x, y, u, v, scaling_factor=96.52)
+u, v = u / dt, v / dt
 ```
+
+`simple_multipass` already validates, replaces outliers, fills remaining NaNs with zeros, and calls
+`transform_coordinates` — do not repeat those steps.
+
+**Units trap:** `PIVSettings` has `dt` and `scaling_factor` fields, but `windef` never uses either —
+`first_pass` calls `extended_search_area_piv` without `dt`, so the whole multi-pass chain works in
+pixels per frame. Setting `settings.dt = 0.02` changes nothing about the returned values. Convert
+after the fact, as above.
+
+For control over individual passes, `windef.first_pass` and `windef.multipass_img_deform` are the
+lower-level building blocks.
 
 ## Validation and Post-Processing
 
 ### Validation Methods
 
-**Signal-to-Noise Ratio Validation:**
+Every validator returns a boolean array where **True marks a spurious vector**.
+
 ```python
-flags = validation.sig2noise_val(sig2noise, threshold=1.05)
+# Signal-to-noise
+flags = validation.sig2noise_val(s2n, threshold=1.05)
+
+# Global range -- takes (min, max) TUPLES, positionally or as u_thresholds/v_thresholds.
+flags = validation.global_val(u, v, (-300, 300), (-300, 300))
+
+# Local median -- u_threshold and v_threshold are REQUIRED; size is the neighbourhood half-width.
+flags = validation.local_median_val(u, v, u_threshold=30.0, v_threshold=30.0, size=1)
+
+# Combine with boolean OR (not np.maximum -- these are bool arrays).
+flags = (
+    validation.sig2noise_val(s2n, threshold=1.05)
+    | validation.global_val(u, v, (-300, 300), (-300, 300))
+    | validation.local_median_val(u, v, u_threshold=30.0, v_threshold=30.0)
+)
 ```
 
-**Global Range Validation:**
-```python
-flags = validation.global_val(u, v, u_threshold=10, v_threshold=10)
-```
-
-**Local Median Validation:**
-```python
-flags = validation.local_median_val(u, v, u_threshold=2.5, v_threshold=2.5)
-```
-
-**Combined Validation:**
-```python
-flags = validation.sig2noise_val(sig2noise, threshold=1.05)
-flags = np.maximum(flags, validation.local_median_val(u, v))
-```
+**Set these thresholds in the units of `u` and `v`, not in pixels per frame.**
+`extended_search_area_piv` divides by `dt`, so with `dt=0.02` a 3 px/frame displacement arrives as
+150 px/s. The thresholds above suit that case; the `(-30, 30)` figure that PIV literature and
+`PIVSettings.min_max_u_disp` use is a px/frame limit, and applying it to px/s output rejects the
+entire field. Either validate before scaling, or scale the thresholds by `1/dt` too.
 
 ### Outlier Replacement
 
-Replace invalid vectors with interpolated values:
+```python
+u, v = filters.replace_outliers(
+    u, v, flags, method="localmean", max_iter=3, tol=1e-3, kernel_size=2
+)
+```
+
+`method` accepts `"localmean"`, `"disk"`, or `"distance"` — and only those three. An unrecognized
+name is not rejected; it falls through to an all-zero kernel and silently returns a useless field.
+Note that replacement *fills* the flagged
+positions with interpolated values — if you then overwrite them with NaN, the replacement was
+wasted. Choose one or the other:
 
 ```python
-# Local mean replacement
-u, v = filters.replace_outliers(
-    u, v, flags,
-    method="localmean",
-    max_iter=3,
-    kernel_size=2,
-)
-
-# Disc replacement (neighboring vectors)
-u, v = filters.replace_outliers(
-    u, v, flags,
-    method="disc",
-    max_iter=3,
-    kernel_size=2,
-)
+# Keep flagged vectors out of the analysis entirely, instead of interpolating them.
+u = np.where(flags, np.nan, u)
+v = np.where(flags, np.nan, v)
 ```
 
 ### Smoothing
 
-Apply smoothing to reduce noise in velocity fields:
+Smoothing is `openpiv.smoothn.smoothn`; there is no `openpiv.smooth` module. It returns a tuple
+whose first element is the smoothed field, and it does not accept NaN input.
 
 ```python
-from openpiv import smooth
+from openpiv.smoothn import smoothn
 
-u_smooth = smooth.smooth(u, kernel_size=3, order=2)
-v_smooth = smooth.smooth(v, kernel_size=3, order=2)
+u_smooth, *_ = smoothn(np.nan_to_num(u), s=0.5)  # s: larger == smoother
+v_smooth, *_ = smoothn(np.nan_to_num(v), s=0.5)
+u_smooth = np.asarray(u_smooth)
 ```
 
 ## Visualization
 
 ### Vector Field Plotting
 
+`display_vector_field` reads a saved vectors file and calls `plt.show()` internally, so select a
+non-interactive backend for batch runs.
+
 ```python
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from openpiv import tools
 
-# Plot on image
 fig, ax = plt.subplots(figsize=(8, 8))
 tools.display_vector_field(
     "vectors.txt",
     ax=ax,
-    scaling_factor=96.52,
+    scaling_factor=96.52,   # same factor used in scaling.uniform, to map back onto the image
     scale=50,
     width=0.0035,
     on_img=True,
     image_name="frame_a.bmp",
 )
-plt.savefig("vector_field.png", dpi=150)
-plt.close()
+fig.savefig("vector_field.png", dpi=150, bbox_inches="tight")
+plt.close(fig)
 ```
 
 ### Custom Visualization
 
 ```python
-import matplotlib.pyplot as plt
 import numpy as np
-
-valid_mask = ~np.isnan(u)
+import matplotlib.pyplot as plt
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-# Velocity magnitude
 mag = np.sqrt(u**2 + v**2)
-im0 = axes[0].imshow(mag, cmap='viridis')
-axes[0].set_title('Velocity Magnitude')
-plt.colorbar(im0, ax=axes[0])
+for ax, field, title, cmap in [
+    (axes[0], mag, "Velocity Magnitude", "viridis"),
+    (axes[1], u, "U Velocity", "RdBu_r"),
+    (axes[2], v, "V Velocity", "RdBu_r"),
+]:
+    im = ax.imshow(field, cmap=cmap)
+    ax.set_title(title)
+    plt.colorbar(im, ax=ax)
 
-# U component
-im1 = axes[1].imshow(u, cmap='RdBu_r')
-axes[1].set_title('U Velocity')
-plt.colorbar(im1, ax=axes[1])
-
-# V component
-im2 = axes[2].imshow(v, cmap='RdBu_r')
-axes[2].set_title('V Velocity')
-plt.colorbar(im2, ax=axes[2])
-
-plt.tight_layout()
-plt.savefig("velocity_components.png")
-plt.close()
+fig.tight_layout()
+fig.savefig("velocity_components.png")
+plt.close(fig)
 ```
 
 ## Analysis Functions
 
-### Vorticity Calculation
+`scripts/analyze.py` bundles these against a `params.npz` written by `runner.py`. It infers the
+physical grid spacing from the saved coordinates, so the derivatives come out per unit length:
 
 ```python
-def compute_vorticity(u, v, dx=1.0):
-    """Compute vorticity from velocity field."""
-    dv_dx = np.gradient(v, dx, axis=1)
-    du_dy = np.gradient(u, dx, axis=0)
-    return dv_dx - du_dy
+import sys
+sys.path.insert(0, "skills/openpiv/scripts")
+from analyze import PIVAnalyzer
 
-vorticity = compute_vorticity(u, v, dx=1.0)
+piv = PIVAnalyzer("results/params.npz")
+vorticity = piv.compute_vorticity()          # dv/dx - du/dy
+exx, eyy, exy = piv.compute_strain()
+stats = piv.compute_statistics()             # u_mean, v_mean, rms_u, rms_v, tke
+piv.plot_vector_field(save_path="quiver.png")
 ```
 
-### Strain Rate Computation
+The standalone forms, if you would rather compute them inline:
+
+### Vorticity
 
 ```python
-def compute_strain(u, v, dx=1.0):
-    """Compute strain rate tensor components."""
+def compute_vorticity(u, v, dx=1.0, dy=None):
+    """Out-of-plane vorticity dv/dx - du/dy. Pass the physical grid spacing, not 1.0."""
+    dy = dx if dy is None else dy
+    return np.gradient(v, dx, axis=1) - np.gradient(u, dy, axis=0)
+```
+
+The grid spacing is `(window_size - overlap) / scaling_factor` in physical units, so leaving `dx=1.0`
+yields vorticity per grid cell, not per unit length.
+
+### Strain Rate
+
+```python
+def compute_strain(u, v, dx=1.0, dy=None):
+    """Return (exx, eyy, exy) of the 2D strain-rate tensor."""
+    dy = dx if dy is None else dy
     du_dx = np.gradient(u, dx, axis=1)
-    du_dy = np.gradient(u, dx, axis=0)
+    du_dy = np.gradient(u, dy, axis=0)
     dv_dx = np.gradient(v, dx, axis=1)
-    dv_dy = np.gradient(v, dx, axis=0)
-    
-    # Strain rate tensor
-    exx = du_dx
-    eyy = dv_dy
-    exy = 0.5 * (du_dy + dv_dx)
-    
-    return exx, eyy, exy
+    dv_dy = np.gradient(v, dy, axis=0)
+    return du_dx, dv_dy, 0.5 * (du_dy + dv_dx)
 ```
 
 ### Turbulence Statistics
 
 ```python
 def compute_statistics(u, v):
-    """Compute turbulence statistics."""
-    u_mean = np.nanmean(u)
-    v_mean = np.nanmean(v)
-    
-    u_prime = u - u_mean
-    v_prime = v - v_mean
-    
-    rms_u = np.nanstd(u_prime)
-    rms_v = np.nanstd(v_prime)
-    
-    turbulent_kinetic_energy = 0.5 * (rms_u**2 + rms_v**2)
-    
+    """Single-frame spatial statistics. NOT Reynolds decomposition."""
+    u_prime = u - np.nanmean(u)
+    v_prime = v - np.nanmean(v)
+    rms_u, rms_v = np.nanstd(u_prime), np.nanstd(v_prime)
     return {
-        'u_mean': u_mean,
-        'v_mean': v_mean,
-        'rms_u': rms_u,
-        'rms_v': rms_v,
-        'tke': turbulent_kinetic_energy,
+        "u_mean": np.nanmean(u),
+        "v_mean": np.nanmean(v),
+        "rms_u": rms_u,
+        "rms_v": rms_v,
+        "tke": 0.5 * (rms_u**2 + rms_v**2),
     }
 ```
 
+**Caveat:** subtracting the *spatial* mean of one frame measures spatial variance, which equals
+turbulent intensity only for a homogeneous field. Genuine Reynolds decomposition needs an ensemble of
+image pairs: average over the time axis, then subtract that mean field from each realization.
+
 ## CLI Usage
 
-### Command Line Interface
-
 ```bash
-# Process image pair
-python skills/openpiv/scripts/runner.py --image img1.bmp --image img2.bmp --output_dir results --verbose
+# Basic run
+python skills/openpiv/scripts/runner.py \
+    --image img1.bmp --image img2.bmp --output_dir results --verbose
 
-# With custom parameters
+# Tuned parameters with dynamic masking
 python skills/openpiv/scripts/runner.py \
     --image frame_a.bmp \
     --image frame_b.bmp \
     --output_dir results \
     --window_size 32 \
     --overlap 12 \
+    --search_area 38 \
     --dt 0.02 \
     --scaling 96.52 \
+    --threshold 1.05 \
+    --mask dynamic \
+    --mask_method intensity \
     --verbose
 ```
 
@@ -380,75 +394,70 @@ python skills/openpiv/scripts/runner.py \
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--image` | required | Image file (specify twice for pair) |
-| `--output_dir` | results | Output directory |
-| `--algorithm` | openpiv_piv | PIV algorithm choice |
-| `--mask` | none | Mask type: none, dynamic, static |
+| `--image` | required | Image file; specify exactly twice for the pair |
+| `--output_dir` | `results` | Output directory (created if absent) |
 | `--window_size` | 32 | Interrogation window size (px) |
 | `--overlap` | 12 | Window overlap (px) |
-| `--search_area` | 38 | Search area size (px) |
+| `--search_area` | 38 | Search area size (px), must be ≥ `--window_size` |
 | `--dt` | 0.02 | Time between frames (s) |
-| `--scaling` | 96.52 | Scaling factor (pixels/meter) |
-| `--verbose` | False | Print progress messages |
+| `--scaling` | 96.52 | Scaling factor, pixels per physical unit (e.g. px/mm) |
+| `--threshold` | 1.05 | `peak2peak` signal-to-noise threshold |
+| `--mask` | `none` | `none` or `dynamic` (`openpiv.preprocess.dynamic_masking`) |
+| `--mask_method` | `intensity` | `edges` or `intensity`, used only with `--mask dynamic` |
+| `--drop_invalid` | off | NaN out flagged vectors instead of keeping interpolated values |
+| `--verbose` | off | Print progress messages |
+
+Verify an install end to end against OpenPIV's own bundled image pair:
+
+```bash
+python skills/openpiv/scripts/run_example.py --output_dir /tmp/openpiv-demo
+```
 
 ## Output Files
 
-### Generated Files
+- **vectors.txt** — tab-delimited, `%.4e` formatted, with a `# x y u v flags mask` comment header
+- **params.npz** — NumPy archive with `x`, `y`, `u`, `v`, `flags` arrays
+- **vector_field.png** — vector field drawn over the first frame
 
-- **vectors.txt** - Text file with x, y, u, v, flags columns
-- **params.npz** - NumPy archive with x, y, u, v, flags arrays
-- **vector_field.png** - Vector field visualization on image
-
-### vectors.txt Format
-
+```text
+# x	y	u	v	flags	mask
+2.1757e-01	3.5226e+00	-6.2220e-02	-2.7081e+00	0.0000e+00	0.0000e+00
+4.8695e-01	3.5226e+00	-3.1587e-01	-2.9800e+00	0.0000e+00	0.0000e+00
 ```
-x       y       u       v       flags
-0.0     0.0     0.125   -0.034  0
-4.0     0.0     0.132   -0.041  0
-...
-```
+
+`flags` is written as a float, `0` for a valid vector and `1` for a flagged one.
 
 ## Best Practices
 
 ### Parameter Selection
 
-1. **Window Size:**
-   - Use 32x32 for typical applications
-   - Larger (64, 128) for high accuracy, lower resolution
-   - Smaller (16, 24) for higher resolution, more noise
-
-2. **Overlap:**
-   - 50-75% of window size is typical
-   - Higher overlap → smoother results, more computation
-
-3. **Threshold:**
-   - 1.05 for strict validation (more vectors rejected)
-   - 1.2 for relaxed validation (more vectors kept)
-
-4. **Scaling Factor:**
-   - Calibrate using known reference (e.g., calibration grid)
-   - Common values: 96.52 px/mm for certain setups
+1. **Window size** — 32×32 suits most cases. 64/128 for better correlation at coarser resolution;
+   16/24 for finer resolution at the cost of noise.
+2. **Overlap** — 50–75% of window size.
+3. **Threshold** — raise it to reject more vectors; always re-tune after switching
+   `sig2noise_method`.
+4. **Scaling factor** — calibrate against a known reference such as a calibration grid, and keep the
+   units straight (`96.52` in OpenPIV's `test1` tutorial data is px/mm).
 
 ### Image Quality
 
-- Ensure particles are visible and well-distributed
-- Avoid saturated regions (overexposure)
-- Use adequate particle density (5-10 particles per window)
-- Minimize background noise
+- Particles visible and evenly distributed, 5–10 per interrogation window
+- No saturated or overexposed regions
+- Minimal background noise; consider background subtraction across a run
 
 ### Processing Tips
 
-1. **Start with default parameters**, then tune based on results
-2. **Check sig2noise ratio** - low values indicate poor correlation
-3. **Visualize early** - inspect vector field for obvious issues
-4. **Use multi-pass** for flows with large velocity gradients
-5. **Apply masking** to exclude regions of interest
+1. Start from the defaults, then tune against the vector field you get.
+2. Inspect the `s2n` distribution — a low median means poor correlation, not a bad threshold.
+3. Visualize early; obvious problems (uniform vectors, edge artifacts) show up immediately.
+4. Use multi-pass (`windef`) for flows with large velocity gradients or displacements.
+5. Mask reflections and solid boundaries rather than letting them generate vectors.
 
 ## Resources
 
-This skill includes comprehensive reference documentation:
-
 ### references/
-- `advanced_algorithms.md` - Advanced PIV algorithms, synthetic aperture, tomographic PIV
 
-Load these references as needed when users require detailed information about specific topics.
+- `advanced_algorithms.md` — correlation and subpixel methods, multi-pass window deformation,
+  `PIVSettings` fields, 3D and phase-separation modules
+
+Load the reference when detailed algorithm or settings information is needed.
