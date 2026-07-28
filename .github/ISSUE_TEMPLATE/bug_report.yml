@@ -1,0 +1,95 @@
+name: Bug report
+description: A skill or repository tool behaves incorrectly — wrong output, broken script, failing install, or instructions an agent cannot follow.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please do **not** use this form for security
+        vulnerabilities — use [private vulnerability reporting](https://github.com/K-Dense-AI/scientific-agent-skills/security/advisories/new)
+        instead, as described in [SECURITY.md](https://github.com/K-Dense-AI/scientific-agent-skills/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the repository is affected?
+      options:
+        - A skill under skills/
+        - Repository tooling (scan_skills.py, tests, CI workflows)
+        - Documentation (README, CONTRIBUTING, AGENTS)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: skill
+    attributes:
+      label: Skill name
+      description: The skill directory name, exactly as it appears under `skills/`. Leave blank if this is not skill-specific.
+      placeholder: scanpy
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did the skill or tool actually do?
+      placeholder: The skill's example call to sc.pp.neighbors() fails with a TypeError.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that triggers it. Include the prompt you gave the agent, if relevant.
+      placeholder: |
+        1. Load the `scanpy` skill in Claude Code
+        2. Ask: "cluster my AnnData object"
+        3. Run the code the agent produces
+        4. See the error below
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Paste the traceback or scanner output. This is rendered as a code block, so no backticks are needed.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Skill behavior varies by agent host and model, so please tell us where you saw this.
+      value: |
+        - Agent host (Claude Code, Cursor, Codex, other):
+        - Model:
+        - Repository version or commit:
+        - Python version:
+        - Operating system:
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability. (Those go through private reporting.)
+          required: true

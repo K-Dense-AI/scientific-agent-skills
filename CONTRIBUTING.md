@@ -2,6 +2,8 @@
 
 Thanks for helping improve Scientific Agent Skills. This guide explains how to add or update a skill in this repository while following the open [Agent Skills specification](https://agentskills.io/specification).
 
+Participation in this project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Ways to Contribute
 
 - Add a new scientific package, database, platform, workflow, or research method skill.

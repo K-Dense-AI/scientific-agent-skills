@@ -1,0 +1,90 @@
+name: New skill request
+description: Propose a skill for a scientific package, database, platform, workflow, or research method that the library does not cover yet.
+title: "[New skill]: "
+labels: ["enhancement", "skill-request", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [skill list in the README](https://github.com/K-Dense-AI/scientific-agent-skills#readme)
+        first — the library already ships a large number of skills. If you plan to
+        write this skill yourself, [CONTRIBUTING.md](https://github.com/K-Dense-AI/scientific-agent-skills/blob/main/CONTRIBUTING.md)
+        has the required format and validation steps.
+
+  - type: input
+    id: name
+    attributes:
+      label: Proposed skill name
+      description: Lowercase letters, numbers, and single hyphens only — this becomes the directory name under `skills/`.
+      placeholder: alphafold-db
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Scientific package or library
+        - Database or public data resource
+        - Platform, service, or API
+        - Analysis workflow or research method
+        - Laboratory instrument or hardware
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What the skill would do
+      description: What should an agent be able to accomplish with it that it cannot do reliably today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: when
+    attributes:
+      label: When an agent should use it
+      description: The situations that should trigger this skill. This becomes the "when to use" half of the skill description.
+    validations:
+      required: true
+
+  - type: textarea
+    id: docs
+    attributes:
+      label: Official documentation and sources
+      description: Links to the package docs, API reference, publication, or database homepage a skill author would need.
+      placeholder: |
+        - Docs: https://...
+        - API reference: https://...
+        - Paper: https://doi.org/...
+    validations:
+      required: true
+
+  - type: textarea
+    id: credentials
+    attributes:
+      label: Credentials or access requirements
+      description: Does it need an API key, licence, registration, or institutional access? Name the environment variables if you know them.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to write this skill?
+      options:
+        - "Yes — I plan to open a pull request"
+        - "Maybe, with some guidance"
+        - "No, I am requesting it"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the README skill list and this skill does not already exist.
+          required: true

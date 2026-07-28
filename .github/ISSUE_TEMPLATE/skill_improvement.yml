@@ -1,0 +1,68 @@
+name: Improve an existing skill
+description: An existing skill is outdated, unclear, or incomplete — stale API, missing workflow, weak examples, or a description that triggers at the wrong time.
+title: "[Improve]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: input
+    id: skill
+    attributes:
+      label: Skill name
+      description: The skill directory name, exactly as it appears under `skills/`.
+      placeholder: transformers
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What needs improving
+      multiple: true
+      options:
+        - Outdated API or deprecated calls
+        - Missing workflow or capability
+        - Examples are wrong, untested, or too thin
+        - Instructions are ambiguous for an agent
+        - Description triggers too often or not often enough
+        - Missing or broken references
+        - Missing tests
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What does the skill say or do today? Quote the relevant part of `SKILL.md` or a reference file, with the file path.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed change
+      description: What should it say or do instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Supporting sources
+      description: Upstream release notes, migration guides, or docs that show the current content is out of date.
+      placeholder: |
+        - Changelog: https://...
+        - Migration guide: https://...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to make this change?
+      options:
+        - "Yes — I plan to open a pull request"
+        - "Maybe, with some guidance"
+        - "No, I am reporting it"
+    validations:
+      required: true

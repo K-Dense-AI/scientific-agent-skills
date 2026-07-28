@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/K-Dense-AI/scientific-agent-skills/security/advisories/new
+    about: Do not open a public issue. Use private vulnerability reporting so the report stays confidential until a fix ships. See SECURITY.md.
+  - name: Contributing guide
+    url: https://github.com/K-Dense-AI/scientific-agent-skills/blob/main/CONTRIBUTING.md
+    about: Read this before proposing a skill change — skill format, validation, tests, and the pull request checklist.
+  - name: Agent Skills specification
+    url: https://agentskills.io/specification
+    about: The open specification every skill in this repository follows.
+  - name: K-Dense documentation
+    url: https://k-dense.ai
+    about: Product documentation and general questions about K-Dense.
