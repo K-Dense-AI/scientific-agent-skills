@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-_VALID_BACKENDS = {"local", "claude", "foundry"}
+_VALID_BACKENDS = {"local", "claude", "foundry", "minimax"}
 
 
 def default_screenpipe_probe(config):
@@ -41,6 +41,10 @@ def default_llm_probe(config):
         if not os.environ.get("FOUNDRY_API_KEY"):
             return ("error", "FOUNDRY_API_KEY not set")
         return ("ok", "FOUNDRY_API_KEY present (not probed)")
+    if kind == "minimax":
+        if not os.environ.get("MINIMAX_API_KEY"):
+            return ("error", "MINIMAX_API_KEY not set")
+        return ("ok", "MINIMAX_API_KEY present (not probed)")
     return ("error", f"unknown backend: {kind!r}")
 
 
