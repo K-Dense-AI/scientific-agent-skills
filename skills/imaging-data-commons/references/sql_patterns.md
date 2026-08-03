@@ -1,6 +1,6 @@
 # SQL Query Patterns for IDC
 
-**Tested with:** idc-index 0.12.3 (IDC data version v24)
+**Tested with:** idc-index 0.12.5 (IDC data version v24)
 
 Quick reference for common SQL query patterns when working with IDC data. For detailed examples with context, see the "Core Capabilities" section in the main SKILL.md.
 
@@ -187,6 +187,51 @@ client.sql_query("""
 ```
 
 See `references/clinical_data_guide.md` for complete patterns including value mapping and patient cohort selection.
+
+## Version Tracking — "What's New in IDC vX?"
+
+Use `series_init_idc_version` and `series_revised_idc_version` in the main `index` table. Do NOT
+use `prior_versions_index` for this — it contains only removed series.
+
+```python
+VERSION = 24  # Replace with target version
+
+# Series added for the first time in vVERSION
+client.sql_query(f"""
+    SELECT collection_id,
+           COUNT(DISTINCT SeriesInstanceUID) as new_series,
+           ROUND(SUM(series_size_MB)/1000, 2) as size_GB
+    FROM index
+    WHERE series_init_idc_version = {VERSION}
+    GROUP BY collection_id
+    ORDER BY new_series DESC
+""")
+
+# Series revised (updated content) in vVERSION but originally added earlier
+client.sql_query(f"""
+    SELECT collection_id,
+           COUNT(DISTINCT SeriesInstanceUID) as revised_series
+    FROM index
+    WHERE series_revised_idc_version = {VERSION}
+      AND series_init_idc_version < {VERSION}
+    GROUP BY collection_id
+    ORDER BY revised_series DESC
+""")
+
+# When was each collection first added to IDC?
+client.fetch_index("version_metadata_index")
+client.sql_query("""
+    WITH first_versions AS (
+        SELECT collection_id, MIN(series_init_idc_version) as first_version
+        FROM index
+        GROUP BY collection_id
+    )
+    SELECT f.collection_id, f.first_version, v.version_timestamp as first_release_date
+    FROM first_versions f
+    JOIN version_metadata_index v ON f.first_version = v.idc_version
+    ORDER BY f.first_version DESC
+""")
+```
 
 ## Troubleshooting
 
