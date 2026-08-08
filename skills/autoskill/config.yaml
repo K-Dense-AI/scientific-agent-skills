@@ -6,7 +6,7 @@
 # Local is the default — your screen content never leaves the machine.
 # Cloud backends (claude, foundry) are available for users who explicitly
 # opt in; see the backend sections below.
-backend: local    # local | claude | foundry
+backend: local    # local | claude | foundry | minimax
 
 # Per-backend settings. Only the selected backend's block is used.
 local:
@@ -25,6 +25,15 @@ foundry:
   endpoint: https://foundry.example.com/anthropic
   model: claude-opus-4-7
   # api_key read from FOUNDRY_API_KEY env var
+
+minimax:
+  region: global_en        # global_en | cn_zh
+  protocol: openai         # openai | anthropic
+  model: MiniMax-M3        # MiniMax-M3 | MiniMax-M2.7
+  thinking: adaptive       # MiniMax-M3: adaptive | disabled; MiniMax-M2.7: always_on
+  # api_key read from MINIMAX_API_KEY env var
+  # Optional endpoint override; defaults come from region + protocol.
+  # endpoint: https://api.minimax.io/v1
 
 # Screenpipe HTTP endpoint. For TLS, point this at your local Caddy proxy
 # (see references/https-proxy.md).

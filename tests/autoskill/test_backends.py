@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from backends import ClaudeBackend, LocalBackend, make_backend
+from backends import ClaudeBackend, LocalBackend, MiniMaxBackend, make_backend
 
 
 def _mock_client(handler, base_url=""):
@@ -110,6 +110,86 @@ def test_make_backend_returns_local_backend_for_local_config():
     assert backend.model == "qwen2.5:14b"
 
 
+def test_minimax_backend_posts_to_openai_compatible_endpoint():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "minimax reply"}}]
+        })
+
+    backend = MiniMaxBackend(
+        api_key="k",
+        model="MiniMax-M3",
+        endpoint="https://api.minimax.io/v1",
+        protocol="openai",
+        thinking="disabled",
+        client=_mock_client(handler, base_url="https://api.minimax.io/v1"),
+    )
+    result = backend("prompt")
+
+    assert result == "minimax reply"
+    assert calls[0].url.path.endswith("/chat/completions")
+    assert calls[0].headers["Authorization"] == "Bearer k"
+    import json as _json
+    payload = _json.loads(calls[0].read())
+    assert payload["model"] == "MiniMax-M3"
+    assert payload["thinking"] == {"type": "disabled"}
+    assert payload["messages"][0]["content"] == "prompt"
+
+
+def test_minimax_backend_posts_to_anthropic_compatible_endpoint():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "ok"}]})
+
+    backend = MiniMaxBackend(
+        api_key="k",
+        model="MiniMax-M2.7",
+        endpoint="https://api.minimaxi.com/anthropic",
+        protocol="anthropic",
+        client=_mock_client(handler, base_url="https://api.minimaxi.com/anthropic"),
+    )
+    result = backend("hi")
+
+    assert result == "ok"
+    assert str(calls[0].url).startswith("https://api.minimaxi.com/anthropic/v1/messages")
+    import json as _json
+    payload = _json.loads(calls[0].read())
+    assert payload["model"] == "MiniMax-M2.7"
+    assert payload["thinking"] == {"type": "enabled"}
+
+
+def test_minimax_backend_rejects_unsupported_thinking_mode():
+    with pytest.raises(ValueError, match="thinking mode"):
+        MiniMaxBackend(
+            api_key="k",
+            model="MiniMax-M2.7",
+            endpoint="https://api.minimax.io/v1",
+            thinking="disabled",
+        )
+
+
+def test_make_backend_returns_minimax_backend_with_cn_endpoint(monkeypatch):
+    monkeypatch.setenv("MINIMAX_API_KEY", "k")
+    backend = make_backend({
+        "backend": "minimax",
+        "minimax": {
+            "region": "cn_zh",
+            "protocol": "anthropic",
+            "model": "MiniMax-M2.7",
+        },
+    })
+
+    assert isinstance(backend, MiniMaxBackend)
+    assert backend.model == "MiniMax-M2.7"
+    assert backend.protocol == "anthropic"
+    assert "api.minimaxi.com" in str(backend.client.base_url)
+
+
 def test_make_backend_raises_on_unknown_backend():
     with pytest.raises(ValueError, match="unknown backend"):
         make_backend({"backend": "mystery"})
@@ -119,3 +199,9 @@ def test_make_backend_raises_when_anthropic_key_missing(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         make_backend({"backend": "claude", "claude": {"model": "m"}})
+
+
+def test_make_backend_raises_when_minimax_key_missing(monkeypatch):
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="MINIMAX_API_KEY"):
+        make_backend({"backend": "minimax", "minimax": {"model": "MiniMax-M3"}})
