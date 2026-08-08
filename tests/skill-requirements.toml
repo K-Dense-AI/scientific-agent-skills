@@ -130,6 +130,9 @@ packages = []
 [skills.ontology-term-resolution]
 packages = []
 
+[skills.ncats-arax]
+packages = []
+
 [skills.peer-review]
 packages = []
 

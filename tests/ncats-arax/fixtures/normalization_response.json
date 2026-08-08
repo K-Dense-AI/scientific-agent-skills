@@ -1,0 +1,28 @@
+{
+  "ivacaftor": {
+    "categories": {
+      "biolink:Drug": 3,
+      "biolink:SmallMolecule": 2
+    },
+    "id": {
+      "identifier": "CHEBI:66901",
+      "name": "ivacaftor",
+      "category": "biolink:SmallMolecule",
+      "SRI_normalizer_name": "ivacaftor"
+    },
+    "knowledge_graph": {},
+    "nodes": [
+      {
+        "identifier": "CHEBI:66901",
+        "name": "ivacaftor",
+        "category": "biolink:SmallMolecule"
+      },
+      {
+        "identifier": "PUBCHEM.COMPOUND:16220172",
+        "name": "Ivacaftor — synonym",
+        "category": "biolink:SmallMolecule"
+      }
+    ],
+    "total_synonyms": 2
+  }
+}

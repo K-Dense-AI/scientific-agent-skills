@@ -1,0 +1,77 @@
+{
+  "status": "Success",
+  "schema_version": "1.5.0",
+  "biolink_version": "4.2.1",
+  "tool_version": "1.5.4",
+  "total_results_count": 1,
+  "logs": [],
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {"ids": ["CHEBI:66901"], "categories": ["biolink:SmallMolecule"]},
+        "n1": {"categories": ["biolink:Gene"]},
+        "n2": {"ids": ["MONDO:0009061"], "categories": ["biolink:Disease"]}
+      },
+      "edges": {
+        "e0": {"subject": "n0", "object": "n1", "predicates": ["biolink:affects"]},
+        "e1": {"subject": "n1", "object": "n2", "predicates": ["biolink:associated_with"]}
+      }
+    },
+    "knowledge_graph": {
+      "nodes": {
+        "CHEBI:66901": {"name": "ivacaftor"},
+        "NCBIGene:1080": {"name": "CFTR"},
+        "MONDO:0009061": {"name": "cystic fibrosis"}
+      },
+      "edges": {
+        "kg-drug-gene": {
+          "subject": "CHEBI:66901",
+          "predicate": "biolink:affects",
+          "object": "NCBIGene:1080",
+          "qualifiers": [
+            {"qualifier_type_id": "biolink:object_aspect_qualifier", "qualifier_value": "activity"},
+            {"qualifier_type_id": "biolink:object_direction_qualifier", "qualifier_value": "increased"}
+          ],
+          "sources": [
+            {"resource_id": "infores:drugcentral", "resource_role": "primary_knowledge_source"},
+            {"resource_id": "infores:rtx-kg2", "resource_role": "aggregator_knowledge_source", "upstream_resource_ids": ["infores:drugcentral"]}
+          ],
+          "attributes": [{"attribute_type_id": "biolink:publications", "value": ["PMID:200"]}]
+        },
+        "kg-gene-disease": {
+          "subject": "NCBIGene:1080",
+          "predicate": "biolink:gene_associated_with_condition",
+          "object": "MONDO:0009061",
+          "sources": [
+            {"resource_id": "infores:disgenet", "resource_role": "primary_knowledge_source"},
+            {"resource_id": "infores:arax", "resource_role": "aggregator_knowledge_source", "upstream_resource_ids": ["infores:rtx-kg2"]}
+          ],
+          "attributes": [{"attribute_type_id": "biolink:publications", "value": "PMID:201"}]
+        }
+      }
+    },
+    "auxiliary_graphs": {
+      "sg-two": {"edges": ["kg-drug-gene", "kg-gene-disease"]}
+    },
+    "results": [
+      {
+        "node_bindings": {
+          "n0": [{"id": "CHEBI:66901"}],
+          "n1": [{"id": "NCBIGene:1080"}],
+          "n2": [{"id": "MONDO:0009061"}]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:arax",
+            "score": null,
+            "support_graphs": ["sg-two"],
+            "edge_bindings": {
+              "e0": [{"id": "kg-drug-gene"}],
+              "e1": [{"id": "kg-gene-disease"}]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

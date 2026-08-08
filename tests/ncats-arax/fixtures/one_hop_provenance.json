@@ -1,0 +1,118 @@
+{
+  "status": "Success",
+  "description": "Normal completion",
+  "schema_version": "1.5.0",
+  "biolink_version": "4.2.1",
+  "tool_version": "1.5.4",
+  "total_results_count": 1,
+  "logs": [],
+  "message": {
+    "query_graph": {
+      "nodes": {
+        "n0": {"ids": ["CHEBI:31690"], "categories": ["biolink:SmallMolecule"]},
+        "n1": {"ids": ["NCBIGene:25"], "categories": ["biolink:Gene"]}
+      },
+      "edges": {
+        "e0": {"subject": "n0", "object": "n1", "predicates": ["biolink:affects"]}
+      }
+    },
+    "knowledge_graph": {
+      "nodes": {
+        "CHEBI:31690": {"name": "imatinib methanesulfonate", "categories": ["biolink:SmallMolecule"]},
+        "NCBIGene:25": {"name": "ABL1", "categories": ["biolink:Gene"]},
+        "NCBIGene:999": {"name": "Unbound β node", "categories": ["biolink:Gene"]}
+      },
+      "edges": {
+        "kg-e0-primary": {
+          "subject": "CHEBI:31690",
+          "predicate": "biolink:affects",
+          "object": "NCBIGene:25",
+          "qualifiers": [
+            {"qualifier_type_id": "biolink:object_aspect_qualifier", "qualifier_value": "activity"},
+            {"qualifier_type_id": "biolink:object_direction_qualifier", "qualifier_value": "decreased"}
+          ],
+          "sources": [
+            {
+              "resource_id": "infores:drugbank",
+              "resource_role": "primary_knowledge_source",
+              "source_record_urls": ["https://example.org/drugbank/one"]
+            },
+            {
+              "resource_id": "infores:rtx-kg2",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": ["infores:drugbank"]
+            },
+            {
+              "resource_id": "infores:arax",
+              "resource_role": "aggregator_knowledge_source",
+              "upstream_resource_ids": ["infores:rtx-kg2"]
+            }
+          ],
+          "attributes": [
+            {"attribute_type_id": "biolink:publications", "value": "PMID:100"}
+          ]
+        },
+        "kg-e0-secondary": {
+          "subject": "CHEBI:31690",
+          "predicate": "biolink:affects",
+          "object": "NCBIGene:25",
+          "qualifiers": [
+            {"qualifier_type_id": "biolink:object_direction_qualifier", "qualifier_value": "decreased"}
+          ],
+          "sources": [
+            {"resource_id": "infores:semmeddb", "resource_role": "primary_knowledge_source"},
+            {"resource_id": "infores:ctd", "resource_role": "supporting_data_source"}
+          ],
+          "attributes": [
+            {"attribute_type_id": "biolink:publications", "value": ["PMID:101", "PMID:100"]}
+          ]
+        },
+        "kg-e0-tertiary": {
+          "subject": "CHEBI:31690",
+          "predicate": "biolink:related_to",
+          "object": "NCBIGene:25",
+          "sources": [
+            {"resource_id": "infores:dgidb", "resource_role": "primary_knowledge_source"}
+          ],
+          "attributes": []
+        },
+        "kg-unbound": {
+          "subject": "CHEBI:31690",
+          "predicate": "biolink:related_to",
+          "object": "NCBIGene:999",
+          "sources": [],
+          "attributes": []
+        }
+      }
+    },
+    "auxiliary_graphs": {
+      "sg-one": {"edges": ["kg-e0-primary"]}
+    },
+    "results": [
+      {
+        "description": "Imatinib–ABL1 candidate",
+        "node_bindings": {
+          "n0": [{"id": "CHEBI:31690", "query_id": "CHEBI:31690", "attributes": []}],
+          "n1": [{"id": "NCBIGene:25", "query_id": "NCBIGene:25", "attributes": []}]
+        },
+        "analyses": [
+          {
+            "resource_id": "infores:arax",
+            "score": null,
+            "support_graphs": ["sg-one"],
+            "edge_bindings": {
+              "e0": [{"id": "kg-e0-primary"}, {"id": "kg-e0-secondary"}]
+            }
+          },
+          {
+            "resource_id": "infores:arax",
+            "score": null,
+            "edge_bindings": {
+              "e0": [{"id": "kg-e0-tertiary"}]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

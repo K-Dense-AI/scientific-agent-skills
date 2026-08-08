@@ -1,0 +1,35 @@
+{
+  "status": "Success",
+  "schema_version": "1.5.0",
+  "biolink_version": "4.2.1",
+  "tool_version": "1.5.4",
+  "logs": [],
+  "message": {
+    "knowledge_graph": {
+      "nodes": {
+        "CHEBI:31690": {"name": "imatinib"},
+        "NCBIGene:25": {"name": "ABL1"}
+      },
+      "edges": {
+        "kg-reversed": {
+          "subject": "NCBIGene:25",
+          "predicate": "biolink:affected_by",
+          "object": "CHEBI:31690",
+          "sources": [{"resource_id": "infores:drugbank", "resource_role": "primary_knowledge_source"}],
+          "attributes": []
+        }
+      }
+    },
+    "results": [
+      {
+        "node_bindings": {
+          "n0": [{"id": "CHEBI:31690"}],
+          "n1": [{"id": "NCBIGene:25"}]
+        },
+        "analyses": [
+          {"resource_id": "infores:arax", "score": null, "edge_bindings": {"e0": [{"id": "kg-reversed"}]}}
+        ]
+      }
+    ]
+  }
+}
