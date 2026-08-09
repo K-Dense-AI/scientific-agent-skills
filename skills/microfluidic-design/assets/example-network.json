@@ -1,0 +1,19 @@
+{
+  "title": "Two parallel organ-on-chip culture chambers fed from one pressure inlet",
+  "fluid": "culture-medium",
+  "temperature_c": 37,
+  "boundary_conditions": {
+    "inlet": {"pressure": "2 kPa"},
+    "outlet": {"pressure": "0 Pa"}
+  },
+  "channels": [
+    {"id": "feed", "from": "inlet", "to": "split",
+     "width": "500 um", "height": "100 um", "length": "5 mm"},
+    {"id": "chamber_a", "from": "split", "to": "merge",
+     "width": "1 mm", "height": "100 um", "length": "10 mm"},
+    {"id": "chamber_b", "from": "split", "to": "merge",
+     "width": "600 um", "height": "100 um", "length": "10 mm"},
+    {"id": "drain", "from": "merge", "to": "outlet",
+     "width": "500 um", "height": "100 um", "length": "5 mm"}
+  ]
+}

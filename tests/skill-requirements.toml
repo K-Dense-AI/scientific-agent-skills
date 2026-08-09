@@ -676,6 +676,9 @@ packages = ["astropy", "matplotlib", "numpy", "pandas", "dask"]
 [skills.fluidsim]
 packages = ["fluidsim", "fluidfft", "pyfftw", "h5py", "numpy"]
 
+[skills.microfluidic-design]
+packages = []
+
 [skills.openpiv]
 packages = ["openpiv", "numpy", "scipy", "scikit-image", "matplotlib"]
 
