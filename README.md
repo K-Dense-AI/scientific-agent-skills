@@ -51,6 +51,18 @@ These skills enable your AI agent to seamlessly work with specialized scientific
 
 > 🎬 **New to Scientific Agent Skills?** Watch our [Getting Started with Scientific Agent Skills](https://youtu.be/ZxbnDaD_FVg) video for a quick walkthrough.
 
+### 🎥 More tutorials
+
+Recorded walkthroughs of these skills on real research tasks, from the [K-Dense YouTube channel](https://www.youtube.com/@K-Dense-Inc):
+
+| Video | What it covers |
+|-------|----------------|
+| [Skills 101: Build Your Own Scientific Agent Skill](https://youtu.be/lVZbHiwzMEg) | Writing, testing, and packaging a new skill from scratch |
+| [Literature Review and Hypothesis Generation](https://youtu.be/wKJp8y4ZyiM) | Searching the literature and generating grounded hypotheses |
+| [Draft and Budget an Experimental Protocol](https://youtu.be/Yz2L5s_M_34) | Turning a planned experiment into a costed, written protocol |
+| [Draft Responses to Reviewer Comments](https://youtu.be/0MmU-Pmtg1o) | Building a point-by-point rebuttal from reviewer feedback |
+| [Can AI Reproduce a Nature Medicine Paper?](https://youtu.be/4WTCK9kSfdk) | An end-to-end reproduction attempt on a published analysis |
+
 ---
 
 ## 📦 What's Included
