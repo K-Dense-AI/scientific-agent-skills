@@ -25,14 +25,18 @@ commit it.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/tasks/{task}/predict` | Run a task (sync, or async for `annotation` with `Prefer: respond-async`) |
+| POST | `/v1/tasks/{task}/predict` | Run a task (sync, or async for `annotation` with `Prefer: respond-async`). `task` ∈ promoter, splice, enhancer, chromatin, annotation |
+| POST | `/v1/tasks/expression/predict` | Expression — same URL shape, but its own published operation and its own (stricter) request schema |
 | GET | `/v1/tasks/jobs/{job_id}` | Poll an async job (202 running → 200 terminal) |
 | GET | `/v1/tasks/{task}/models` | List available model IDs for a task |
 
 ## Request / response
 
 Request body: `{sequence, sequence_name, model?, options?}`. `options` is
-task-specific — most notably `options.description` (required for `expression`).
+task-specific. **`expression` differs**: its body is
+`{sequence, options, tss_index?, sequence_name?, model?}`, is closed to unknown
+fields, requires `options.description` (the only key it accepts), and requires
+`tss_index` unless `sequence` is exactly 9,198 bp. See `tasks.md#expression`.
 
 Success is a `{data, meta}` envelope; `data` is task-specific (see `tasks.md`),
 `meta` carries model + request info. Errors use an `{error}` envelope carrying

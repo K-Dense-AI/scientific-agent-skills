@@ -92,7 +92,7 @@ envelope. What differs per task:
 | `splice` | sync | 1–500,000 bp | donor/acceptor sites (long-context BigBird) |
 | `enhancer` | sync | 1–500,000 bp | dev + housekeeping scores (DeepSTARR, *Drosophila*) |
 | `chromatin` | sync | 1–500,000 bp | hundreds of tracks (DeepSEA) |
-| `expression` | sync | **exactly 9,198 bp** | log(TPM+1); needs a cell-type `description` |
+| `expression` | sync | **9,198–500,000 bp** | log(TPM+1); needs `tss_index` unless exactly 9,198 bp, plus a cell-type `description` |
 | `annotation` | **async** | 1–500,000 bp | de-novo transcripts; submit + poll |
 
 **Omit `model` and the API uses the task's default** — that is the recommended
@@ -103,13 +103,33 @@ tasks), discover IDs at call time with `GET /v1/tasks/{task}/models` (REST) or
 `list_models` (MCP) — and **never invent one**. Full per-task output shapes are
 in `references/tasks.md`.
 
-Two hard rules the model enforces:
+`expression` is the one task with its own published operation (same URL,
+`POST /v1/tasks/expression/predict`, its own request schema). Three hard rules
+it enforces — every violation is a `422`, nothing is padded or clamped, and
+there is no opt-out flag, header, or query parameter:
 
-- **`expression` needs exactly 9,198 bp**, a window **centred on the TSS**
-  (4,599 upstream + TSS + 4,598 downstream). Any other length is rejected. Use the acquisition helpers below to
-  build it — do not truncate by hand.
-- **`expression` needs a `description`** — a cell-type / assay string (e.g.
-  `"K562 cells"`), passed as `options.description`.
+- **It always scores exactly one 9,198 bp TSS-centred window** —
+  `sequence[tss_index-4599 : tss_index+4599]`. The endpoint itself accepts
+  **9,198–500,000 bp**; anything below 9,198 bp is rejected outright.
+- **`tss_index` is required unless the sequence is exactly 9,198 bp.** It is the
+  0-based TSS offset into the **whitespace-stripped** sequence, bounded by
+  `4599 ≤ tss_index ≤ len(sequence) − 4599`. At exactly 9,198 bp it defaults to
+  4,599, the only legal value there. So you may submit a whole locus (up to
+  500 kb) and let the server cut the window — but the server does **not**
+  discover the TSS for you (that is the composite workflow's job), and does
+  **not** reverse-complement: submit gene-sense sequence.
+- **`options.description`** — a cell-type / assay string (e.g. `"K562 cells"`) —
+  is required, and is the **only** key `expression` accepts inside `options`.
+  Unknown top-level body fields are rejected too.
+
+> Gotcha: the legal `tss_index` range is wide, so an offset that is merely
+> *wrong* (counted over raw FASTA characters including newlines, or relative to
+> a locus start rather than the submitted slice) does not error — it returns a
+> confident `200` for the wrong window. Assert on
+> `meta.task_specific_counts.scored_window` / `.tss_index` in the response.
+> Also note `data.input.sequence_length` is the **scored** length (always
+> 9,198); the length you submitted is `data.input.submitted_sequence_length`
+> (and `meta.sequence_length`).
 
 ## Sequence acquisition
 
@@ -120,8 +140,10 @@ You rarely start from a raw 9,198 bp string. Acquire sequence first:
   sequence (no key). REST users can query Ensembl REST directly. (`find_genes` is
   the annotation task, not an acquisition tool.)
 - **For `expression`** → use the TSS-centred fetch so the window is exactly
-  9,198 bp. MCP: `fetch_gene_for_expression` (handles the centring). Do not
-  build the window by hand.
+  9,198 bp. MCP: `fetch_gene_for_expression` (handles the centring). Otherwise
+  fetch a wider locus and pass the TSS as `tss_index` so the server cuts the
+  window — but compute that offset on the stripped nucleotide string, not on
+  file characters.
 - **From a local FASTA** → MCP `store_inline_sequence`, or read the file yourself
   for REST. (`load_local_fasta` exists only in local deployments, not on the
   hosted server.)
@@ -141,22 +163,29 @@ import os, requests
 BASE = os.environ.get("GI_BASE_URL", "https://api.genomicintelligence.ai")
 HEADERS = {"Authorization": f"Bearer {os.environ['GI_API_KEY']}"}
 
-def predict(task, sequence, sequence_name, model=None, options=None):
+def predict(task, sequence, sequence_name, model=None, options=None, tss_index=None):
     body = {"sequence": sequence, "sequence_name": sequence_name}
     if model:   body["model"] = model
     if options: body["options"] = options
+    if tss_index is not None: body["tss_index"] = tss_index   # expression only
     r = requests.post(f"{BASE}/v1/tasks/{task}/predict", headers=HEADERS, json=body)
-    r.raise_for_status()          # 400 invalid; 401 no/bad key; 413 too long; 429 rate limit
+    r.raise_for_status()          # 422 validation; 401 no/bad key; 413 too long; 429 rate limit
     return r.json()               # {"data": {...}, "meta": {...}}
 
 # Promoter:
 out = predict("promoter", seq, "TP53_region")
 print(out["data"]["summary"])
 
-# Expression — exactly 9,198 bp + a cell-type description:
+# Expression — a pre-cut 9,198 bp TSS-centred window (tss_index defaults to 4,599):
 out = predict("expression", tss_window_9198bp, "HBB",
               options={"description": "K562 cells"})
 print(out["data"]["prediction"]["expression_log_tpm"])
+
+# Expression — a whole locus; the server slices ±4,599 bp around the TSS you name.
+# tss_index is 0-based into the whitespace-stripped sequence.
+out = predict("expression", locus_seq, "HBB",
+              options={"description": "K562 cells"}, tss_index=tss_offset_in_locus)
+print(out["meta"]["task_specific_counts"]["scored_window"])   # confirm the window scored
 ```
 
 ### Async: annotation
@@ -224,11 +253,11 @@ composite:
 
 | Code | Meaning | Action |
 |---|---|---|
-| 400 | Invalid request / bad sequence | Check the body; expression must be exactly 9,198 bp and carry `description` |
+| 400 | Invalid request / bad sequence | Check the body shape |
 | 401 | Missing/invalid key (REST) | Set `GI_API_KEY`; or use the keyless MCP demo |
 | 413 | Sequence too long | Stay within the task's length bound (≤500,000 bp) |
 | 429 | Rate / concurrency cap | Back off and retry; ask GI to raise your tier |
-| 422 | Validation failed (`validation_failed`) | The most common failure: expression not exactly 9,198 bp, or a sequence below the model's minimum length |
+| 422 | Validation failed (`validation_failed`) | The most common failure: expression below 9,198 bp, a missing or out-of-range `tss_index`, or a missing `options.description` |
 | 5xx | Server error | Retry; if persistent, contact support |
 
 ## Reference files
@@ -240,4 +269,4 @@ composite:
 - `references/mcp.md` — the hosted MCP tool list, the handle-based flow, and the
   `gi://` resources.
 - `references/sequence-acquisition.md` — Ensembl fetch calls and the
-  expression-window (9,198 bp, TSS-centred) math.
+  expression-window (9,198 bp, TSS-centred) math, including `tss_index`.
