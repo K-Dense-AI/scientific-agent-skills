@@ -82,18 +82,53 @@ means you hit a cap — back off and retry, or ask GI to raise your tier.
 
 ## The six tasks
 
-All REST tasks share one shape: `POST /v1/tasks/{task}/predict` with body
-`{sequence, sequence_name, model?, options?}`, returning a `{data, meta}`
-envelope. What differs per task:
+Each task is **its own published operation** with its own request schema, its own
+minimum length, and its own closed `options` object — `POST
+/v1/tasks/promoter/predict`, `/v1/tasks/splice/predict`,
+`/v1/tasks/enhancer/predict`, `/v1/tasks/chromatin/predict`,
+`/v1/tasks/annotation/predict`, `/v1/tasks/expression/predict`. The URLs are the
+same strings clients already POST to, so no URL construction changes; the shared
+`PredictRequest` schema is gone. Body is `{sequence, sequence_name?, model?,
+options?}`, returning a `{data, meta}` envelope. What differs per task:
 
-| Task | Mode | Length bound | Notes |
-|---|---|---|---|
-| `promoter` | sync | 1–500,000 bp | sliding-window promoter regions |
-| `splice` | sync | 1–500,000 bp | donor/acceptor sites (long-context BigBird) |
-| `enhancer` | sync | 1–500,000 bp | dev + housekeeping scores (DeepSTARR, *Drosophila*) |
-| `chromatin` | sync | 1–500,000 bp | hundreds of tracks (DeepSEA) |
-| `expression` | sync | **9,198–500,000 bp** | log(TPM+1); needs `tss_index` unless exactly 9,198 bp, plus a cell-type `description` |
-| `annotation` | **async** | 1–500,000 bp | de-novo transcripts; submit + poll |
+| Task | Mode | Accepted length | Model context window | Notes |
+|---|---|---|---|---|
+| `promoter` | sync | 300–500,000 bp | 2,000 bp | sliding-window promoter regions |
+| `splice` | sync | 100–500,000 bp | 15,000 bp | donor/acceptor sites (long-context BigBird); strand-specific — feed transcript orientation |
+| `enhancer` | sync | 50–500,000 bp | 249 bp | dev + housekeeping scores (DeepSTARR, *Drosophila*) |
+| `chromatin` | sync | 200–500,000 bp | 1,000 bp | hundreds of tracks (DeepSEA) |
+| `expression` | sync | **9,198–500,000 bp** | 9,198 bp (fixed) | log(TPM+1); needs `tss_index` unless exactly 9,198 bp, plus a cell-type `description` |
+| `annotation` | **async** | 1,000–500,000 bp | n/a | de-novo transcripts; submit + poll |
+
+**The minimum is admission control, not regime.** A request above the floor but
+shorter than the selected model's `bio_spec.context_window_bp` is *accepted and
+scored* — against a window padded out to the context window. Enhancer is the
+sharp case: the bound is 50 bp (DeepSTARR's gate) but the context window is
+249 bp, so 50–248 bp is scored mostly on padding. Compare your length against
+`context_window_bp` from `GET /v1/tasks/{task}/models` to know whether the model
+saw real sequence. Longer-than-context input is fine — the scanner steps a
+prediction window at a time and pads only the final partial window.
+
+Under the floor and over the 500,000 bp cap are **both `422 validation_failed`**
+at `loc ["body","sequence"]`; over-length is *not* a `413`. All lengths are
+measured after whitespace is stripped, so a line-wrapped FASTA body can be pasted
+verbatim (a `>` header line still fails the alphabet check).
+
+`options` is typed and **closed** (`additionalProperties: false`) per task — an
+unknown key is a hard `422 validation_failed` with `type: "extra_forbidden"`,
+never ignored:
+
+| Task | `options` keys |
+|---|---|
+| promoter | `threshold` (0–1, default 0.5) |
+| splice | `threshold` (0–1, default 0.5), `site_types` (subset of `["donor","acceptor"]`, default both) |
+| enhancer | *(none)* |
+| chromatin | `threshold` (0–1, default 0.5) |
+| annotation | `batch_size` (1–128, default 8), `shift_coordinates`, `reverse_complement` (default true) |
+| expression | `description` — **required**, and the only key |
+
+`Prefer: respond-async` is a declared header on **all six** predict operations
+and on the composite, not just `annotation` — see [Async](#async-any-task-annotation-always).
 
 **Omit `model` and the API uses the task's default** — that is the recommended
 call. Default model IDs are intentionally **not** documented here: defaults
@@ -103,10 +138,10 @@ tasks), discover IDs at call time with `GET /v1/tasks/{task}/models` (REST) or
 `list_models` (MCP) — and **never invent one**. Full per-task output shapes are
 in `references/tasks.md`.
 
-`expression` is the one task with its own published operation (same URL,
-`POST /v1/tasks/expression/predict`, its own request schema). Three hard rules
-it enforces — every violation is a `422`, nothing is padded or clamped, and
-there is no opt-out flag, header, or query parameter:
+`expression` is the strictest of the six: alone among them its schema requires
+`options` as well as `sequence`. Three hard rules it enforces — every violation
+is a `422`, nothing is padded or clamped, and there is no opt-out flag, header,
+or query parameter:
 
 - **It always scores exactly one 9,198 bp TSS-centred window** —
   `sequence[tss_index-4599 : tss_index+4599]`. The endpoint itself accepts
@@ -130,6 +165,11 @@ there is no opt-out flag, header, or query parameter:
 > Also note `data.input.sequence_length` is the **scored** length (always
 > 9,198); the length you submitted is `data.input.submitted_sequence_length`
 > (and `meta.sequence_length`).
+>
+> Both `tss_index` violations — "required unless exactly 9,198 bp" and the range
+> check — come from a whole-model validator, so they report at `loc: ["body"]`,
+> **never** `body.tss_index`. Match on `error.code == "validation_failed"`; use
+> the message for display only, and never branch on `loc`.
 
 ## Sequence acquisition
 
@@ -168,8 +208,13 @@ def predict(task, sequence, sequence_name, model=None, options=None, tss_index=N
     if model:   body["model"] = model
     if options: body["options"] = options
     if tss_index is not None: body["tss_index"] = tss_index   # expression only
+    # Each task is its own published operation, but the URL string is unchanged.
     r = requests.post(f"{BASE}/v1/tasks/{task}/predict", headers=HEADERS, json=body)
-    r.raise_for_status()          # 422 validation; 401 no/bad key; 413 too long; 429 rate limit
+    # 422 validation_failed  — sequence under the task floor OR over 500,000 bp,
+    #                          bad tss_index, missing options.description,
+    #                          or ANY unknown body/options key (options is closed)
+    # 401 no/bad key · 404 unknown task · 413 body over 16 MiB · 429 rate limit
+    r.raise_for_status()
     return r.json()               # {"data": {...}, "meta": {...}}
 
 # Promoter:
@@ -188,10 +233,14 @@ out = predict("expression", locus_seq, "HBB",
 print(out["meta"]["task_specific_counts"]["scored_window"])   # confirm the window scored
 ```
 
-### Async: annotation
+### Async (any task; annotation always)
 
-`annotation` is submit-then-poll. Send `Prefer: respond-async`, get a `job_id`,
-poll until terminal:
+`Prefer: respond-async` is a declared header parameter on all six predict
+operations and on the composite. A `202` carries the same `{data, meta}` envelope
+as a sync `200`, with `data = {job_id, status: "accepted", links}`; the job id is
+also in the `Content-Location` and `X-Job-Id` response headers. Async is
+JSON-only — combining it with a text `format` is rejected. `annotation` is the
+task that needs it:
 
 ```python
 import time
@@ -246,19 +295,56 @@ composite:
   — takes a **handle, not a region** (acquire one with `fetch_region` first);
   `description` is required. Finds genes in the sequence and returns an
   expression prediction for each.
-- **REST:** call gene discovery, then loop `expression` per gene (build each
-  TSS-centred 9,198 bp window via the acquisition helpers).
+- **REST:** one call — `POST /v1/workflows/find-genes-and-predict-expression`,
+  body `{sequence, options}` with `sequence` 1,000–500,000 bp and
+  `options.description` (cell type / assay) required; a missing or empty
+  description is a `422 validation_failed`. It annotates, centres a 9,198 bp
+  window on each discovered gene's TSS (padding with `N` up to half the window
+  rather than dropping an edge gene), and returns a prediction per gene.
+  `meta.task_specific_counts` = `{genes_found, genes_predicted, genes_skipped}`
+  with `genes_predicted + genes_skipped == genes_found`; per-gene causes in
+  `data.expression_predictions[].skip_reason`. Above **50,000 bp** it forces
+  async: a synchronous request over that size is `413 sync_too_large` with
+  `error.details = {sequence_length, threshold}` — retry the same body with
+  `Prefer: respond-async`.
 
 ## Errors
 
-| Code | Meaning | Action |
-|---|---|---|
-| 400 | Invalid request / bad sequence | Check the body shape |
-| 401 | Missing/invalid key (REST) | Set `GI_API_KEY`; or use the keyless MCP demo |
-| 413 | Sequence too long | Stay within the task's length bound (≤500,000 bp) |
-| 429 | Rate / concurrency cap | Back off and retry; ask GI to raise your tier |
-| 422 | Validation failed (`validation_failed`) | The most common failure: expression below 9,198 bp, a missing or out-of-range `tss_index`, or a missing `options.description` |
-| 5xx | Server error | Retry; if persistent, contact support |
+| Code | `error.code` | Meaning | Action |
+|---|---|---|---|
+| 400 | `bad_request` | Malformed request | Check the body shape |
+| 401 / 403 | `unauthorized` / `forbidden` | Missing/invalid key (REST) | Set `GI_API_KEY`; or use the keyless MCP demo |
+| 404 | `not_found` | **Unknown task** (`/v1/tasks/bogus/predict`) or unknown job | Check the task name — an unrecognised task is a 404, not a 422 |
+| 413 | `payload_too_large` | Raw request body over **16 MiB** | Split the input — this is the body cap, not the sequence cap |
+| 413 | `sync_too_large` | Composite called synchronously above 50,000 bp | Retry with `Prefer: respond-async` |
+| 415 | `unsupported_format` | Unsupported `format` query value | Use a format the task supports; there is no silent fallback to JSON |
+| 422 | `validation_failed` | The most common failure: sequence **under the task floor or over 500,000 bp**, expression below 9,198 bp, a missing/out-of-range `tss_index`, a missing `options.description`, or **any unknown body or `options` key** | Read the message; fix the body |
+| 429 | `rate_limited` / `too_many_requests` | Rate / concurrency cap | Back off (honour `Retry-After`); ask GI to raise your tier |
+| 5xx | `internal_error` / `service_unavailable` / `model_loading` / `timeout` | Server error | Retry; if persistent, contact support |
+
+`error.code` is a closed 21-value enum (`bad_request`, `unauthorized`,
+`forbidden`, `not_found`, `conflict`, `job_expired`, `payload_too_large`,
+`sync_too_large`, `unsupported_format`, `validation_failed`,
+`too_many_requests`, `rate_limited`, `internal_error`, `timeout`,
+`insufficient_memory`, `model_not_found`, `task_not_supported_by_model`,
+`model_loading`, `service_unavailable`, `http_error`, `unknown`); treat an
+unlisted value as a generic failure, not a parse error.
+
+**Branch on `code`, never on `details` or `loc`.** `details` is documented as
+keyed on the sibling `code`, but a validation failure currently arrives as a bare
+FastAPI error *array* (`[{loc, msg, type}, …]`) rather than the `{errors: […]}`
+object the schema declares — read it defensively and keep control flow off it.
+
+`error.request_id` is always populated and mirrors the `X-Request-Id` header.
+Every response carries `RateLimit-Limit`, `RateLimit-Remaining`,
+`RateLimit-Reset`, `RateLimit-Policy`; a `429` adds `Retry-After`.
+
+> Schema-version note: this describes the contract served from `2026.08.19.4`.
+> `api.genomicintelligence.ai` may still be on `2026.08.18.1` until that build is
+> promoted, where the six literal operations, the typed `options`, the per-task
+> floors, the published composite, the `Prefer` parameter, the `code` enum and the
+> new `bio_spec` fields are not yet present. URLs and envelopes are the same
+> either way — check `info.version` in `/v1/openapi.json`.
 
 ## Reference files
 

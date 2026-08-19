@@ -59,6 +59,10 @@ reference sequence for the requested coordinates.
 
 ## Limits
 
-Bounded by the task's own cap (500,000 bp for every task; expression additionally
-has a 9,198 bp **floor**). Ensembl enforces its own per-request size limits; fetch very large
+Bounded by the task's own cap (500,000 bp for every task) and its **floor**:
+promoter 300, splice 100, enhancer 50, chromatin 200, annotation 1,000,
+expression 9,198 bp. Clearing the floor only gets the request accepted — fetch at
+least the model's `context_window_bp` (promoter 2,000, splice 15,000, enhancer
+249, chromatin 1,000) if you want the score to reflect real sequence rather than
+padding. Ensembl enforces its own per-request size limits; fetch very large
 ranges in pieces.
