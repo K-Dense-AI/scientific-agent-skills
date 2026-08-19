@@ -1,7 +1,7 @@
 ---
 name: datalad
 description: Retrieve, version, and publish scientific datasets with DataLad and git-annex, and capture computational provenance with datalad run, rerun, and containers-run. Use when cloning or fetching data from OpenNeuro, DANDI, datasets.datalad.org, or any DataLad dataset; when a file in a dataset reads as a broken symlink or a small pointer instead of real data; when an analysis needs a machine-readable record of how each output was produced so it can be re-executed; or when publishing a dataset to siblings such as a GitHub repository plus a storage remote. Also use to decide between DataLad and plain Git for a data-carrying repository.
-compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 8.20200309 or newer. Install git-annex from a system package manager or conda-forge rather than pip, since it is not a Python package. Container-based provenance also needs the datalad-container extension (1.2.x) and Singularity/Apptainer or Docker. clone, get, and push need network access; credentialed remotes read secrets from the system keyring or from DATALAD_CREDENTIAL_<NAME>_<COMPONENT> environment variables.
+compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 8.20200309 or newer. git-annex is not written in Python but installs from PyPI (uv pip install git-annex), a system package manager, or conda-forge. Container-based provenance also needs the datalad-container extension (1.2.x) and Singularity/Apptainer or Docker. clone, get, and push need network access; credentialed remotes read secrets from the system keyring or from DATALAD_CREDENTIAL_<NAME>_<COMPONENT> environment variables.
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
@@ -49,7 +49,10 @@ adds indirection without buying anything.
 ## Installation
 
 ```bash
-# git-annex is NOT a Python package; install it first from the system
+# git-annex is NOT written in Python but is available from PyPI if you already
+# have git itself installed:
+uv pip install git-annex
+# You can also install it first from the system
 # (Debian/Ubuntu: apt install git-annex; macOS: brew install git-annex;
 #  conda-forge: conda install -c conda-forge git-annex)
 uv pip install datalad
@@ -57,6 +60,11 @@ uv pip install datalad-container   # only for containers-run
 
 datalad wtf --section dependencies   # confirm git-annex version is visible
 ```
+
+The PyPI `git-annex` package ships the prebuilt binary as a wheel for Linux, macOS, and
+Windows rather than building the Haskell sources, so it installs like any other Python
+dependency and can be pinned in the same environment as DataLad. It does not bring git
+along with it.
 
 `datalad wtf` prints the resolved environment and is the first thing to run when behaviour
 looks impossible. An old or missing git-annex is behind a large share of confusing errors.
@@ -161,9 +169,9 @@ The image itself is tracked in the dataset, so the software environment travels 
 data and the provenance record rather than living in someone's shell history. When only
 one container is configured, `-n` may be omitted.
 
-See [provenance.md](references/provenance.md) for the YODA project layout, the run record
-format, `--explicit` and `--assume-ready` semantics, and exporting provenance toward W3C
-PROV.
+See [provenance.md](references/provenance.md) for the STAMPED principles and the YODA
+project layout, the run record format, `--explicit` and `--assume-ready` semantics, and
+exporting provenance toward W3C PROV.
 
 ## Saving and inspecting changes
 
@@ -235,9 +243,9 @@ deprecated; the current spelling is `--reckless availability`, and it means what
   (`registry.datalad.org`, OpenNeuro, DANDI, `datasets.datalad.org` and the `///`
   shortcut), clone and get options, subdataset handling, annex content states, dropping
   and removing, and `fsck` repair.
-- [provenance.md](references/provenance.md): the YODA principles and layout, the run
-  record format, `run` and `rerun` options in full, `containers-run`, and the current
-  state of exporting DataLad provenance toward W3C PROV.
+- [provenance.md](references/provenance.md): the STAMPED principles and the YODA layout,
+  the run record format, `run` and `rerun` options in full, `containers-run`, and the
+  current state of exporting DataLad provenance toward W3C PROV.
 - [publishing.md](references/publishing.md): siblings and their actions,
   `create-sibling-*` variants, RIA stores, special remotes, `push` semantics, and
   credential handling.
@@ -255,6 +263,7 @@ dataset with DataLad, validates it with the BIDS tooling, then runs a BIDS-App u
 - DataLad Handbook: <https://handbook.datalad.org/en/latest/>
 - `datalad run` chapter: <https://handbook.datalad.org/en/latest/basics/101-108-run.html>
 - YODA principles: <https://handbook.datalad.org/en/latest/basics/101-127-yoda.html>
+- STAMPED principles (operationalized from YODA): <https://stamped-principles.org>
 - datalad-container: <https://docs.datalad.org/projects/container/en/stable/>
 - git-annex: <https://git-annex.branchable.com/>
 - Dataset registry: <https://registry.datalad.org>

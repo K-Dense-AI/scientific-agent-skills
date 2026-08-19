@@ -8,20 +8,44 @@ carries the change, which means the evidence cannot drift away from the result. 
 rerun` then reads that record back and re-executes it, so "is this reproducible" becomes a
 command rather than an argument.
 
-## Project layout: YODA
+## Principles: STAMPED, and the YODA layout it grew out of
 
-YODA ("YODAs Organigram on Data Analysis") is the layout convention DataLad analyses are
-built on. Three principles:
+YODA ("YODAs Organigram on Data Analysis") is the convention DataLad analyses were
+originally built on, and it is still what `datalad create -c yoda` configures. Its three
+principles (one thing one dataset, record where the data came from, record what was done
+to it) describe what a well-formed analysis looks like, but they were inspirational rather
+than operational: there is nothing in them to check a dataset against.
 
-- **P1, one thing one dataset.** Data, code, environments, and results live in dedicated
-  modular datasets rather than one directory of everything.
-- **P2, record where you got it from and where it is now.** Input data enters as a
-  subdataset cloned from its source, so its origin and version are recorded rather than
-  described.
-- **P3, record what you did to it and with what.** Every derived file is produced by a
-  tracked command, not by an unrecorded interactive session.
+STAMPED (<https://stamped-principles.org>) is the operationalized successor, formalized by
+some of the original YODA authors. It states seven properties of a reproducible research
+object, each backed by normative MUST/SHOULD/MAY requirements:
 
-Apply it at creation time:
+| Property | Core requirement |
+|---|---|
+| **S**elf-contained | Everything essential to replicate the computation is reachable within a single top-level research object |
+| **T**racked | Persistent content identification and provenance are recorded for every component and every modification, including the versions involved |
+| **A**ctionable | The object carries enough instruction to reproduce all results, specified as *executable* specifications rather than prose |
+| **M**odular | Components are organized as independently versioned modules, included directly or linked as subdatasets |
+| **P**ortable | Procedures depend on no undocumented host state; environments are explicitly specified and version controlled |
+| **E**phemeral | Results are produced in disposable environments built only from the object's own contents |
+| **D**istributable | Every referenced module and component is persistently retrievable by others |
+
+**Actionable is the property `datalad run` exists to satisfy.** A README describing how a
+figure was produced is documentation; a run record is an executable specification, and
+`datalad rerun` is what makes it executable. The same commit satisfies Tracked, because
+the command, its inputs, its outputs, and the versions they were taken at are recorded
+next to the change rather than in a separate log that can drift away from it. Modular maps
+onto subdatasets, Portable and Ephemeral onto `containers-run`, and Distributable onto
+siblings and RIA stores (see [publishing.md](publishing.md)).
+
+Two companion resources make this checkable rather than aspirational:
+<https://checklist.stamped-principles.org> walks the requirements as a MUST/SHOULD/MAY
+checklist, and <https://examples.stamped-principles.org> collects worked patterns,
+including ones built directly on `datalad run` and `datalad rerun`.
+
+### The YODA layout in practice
+
+Apply the layout at creation time:
 
 ```bash
 datalad create -c yoda "my_analysis"
@@ -197,6 +221,9 @@ not depend on DataLad to read.
 - `datalad run` chapter of the handbook:
   <https://handbook.datalad.org/en/latest/basics/101-108-run.html>
 - YODA principles: <https://handbook.datalad.org/en/latest/basics/101-127-yoda.html>
+- STAMPED principles (operationalized from YODA): <https://stamped-principles.org>
+  - Compliance checklist: <https://checklist.stamped-principles.org>
+  - Worked examples and stencils: <https://examples.stamped-principles.org>
 - datalad-container documentation:
   <https://docs.datalad.org/projects/container/en/stable/>
 - Git worktree workflows with DataLad:
