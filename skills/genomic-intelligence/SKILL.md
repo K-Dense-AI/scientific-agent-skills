@@ -333,15 +333,13 @@ composite:
 unlisted value as a generic failure, not a parse error.
 
 **Branch on `code`, never on `details` or `loc`.** `details` is keyed on the
-sibling `code`, and its shape for `validation_failed` has been in flux — some
-deployments return the `{errors: […]}` object the schema declares, others a bare
-FastAPI error array (`[{loc, msg, type}, …]`). Treat it as display-only and
-accept either shape; `code` is the stable discriminator.
+sibling `code`; for `validation_failed` it is the `{errors: [{loc, msg, type}, …]}`
+object the schema declares. Treat it as display-only — `code` is the stable
+discriminator.
 
-For correlation, prefer the `X-Request-Id` **header**: it is set on every
-response, whereas `error.request_id` is absent on some error paths (`413`
-historically omitted it). Reading the header first is correct on every
-deployment.
+For correlation, `error.request_id` and the `X-Request-Id` **header** are both
+set on every response, and success envelopes carry `meta.request_id`. Reading
+the header first remains a safe default.
 Every response carries `RateLimit-Limit`, `RateLimit-Remaining`,
 `RateLimit-Reset`, `RateLimit-Policy`; a `429` adds `Retry-After`.
 

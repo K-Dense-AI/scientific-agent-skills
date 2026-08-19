@@ -90,10 +90,11 @@ length — under the floor *or* over 500,000 bp; over-length is not a `413`).
   against this to know whether the model scored real sequence or padding.
 - `trained_window_bp` — fixed receptive field; 9,198 for `g0-expression`, `null`
   for sliding-window models.
-- `max_seq_length_bp` — legacy, ambiguous, and being withdrawn. It reads 500,000
-  everywhere **except** `g0-expression`, where it is 9,198 — the trained window,
-  not a request cap, so reading it as one wrongly rejects the 9,198–500,000 bp
-  range expression actually accepts. Never gate on it; use `request_max_bp`.
+- The legacy `max_seq_length_bp` was retired from `bio_spec` in gpu_service
+  `2026.08.19.5` and is absent from the live response. It was ambiguous — it read
+  9,198 for `g0-expression`, the trained window rather than a request cap, so
+  gating on it wrongly rejected the 9,198–500,000 bp range expression accepts.
+  Use `request_max_bp`.
 
 There is no `strand_sensitive` flag. The splice model is strand-specific in
 practice — feed transcript orientation.
