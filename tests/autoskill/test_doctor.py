@@ -75,6 +75,22 @@ def test_check_flags_unknown_backend(tmp_path: Path):
     assert "mystery" in result["config"][1]
 
 
+def test_check_accepts_minimax_backend(tmp_path: Path):
+    config = {
+        "backend": "minimax",
+        "minimax": {"model": "MiniMax-M3"},
+        "screenpipe": {"url": "http://localhost:3030"},
+    }
+    result = check(
+        config,
+        skills_dir=tmp_path,
+        screenpipe_probe=_ok_probe,
+        llm_probe=_ok_probe,
+    )
+
+    assert result["config"] == ("ok", "backend=minimax")
+
+
 def test_cli_all_green_returns_zero(tmp_path: Path, capsys, monkeypatch):
     import yaml as _yaml
     conf_path = tmp_path / "c.yaml"
