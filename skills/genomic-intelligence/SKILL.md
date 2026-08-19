@@ -4,7 +4,7 @@ description: "Predict regulatory features, gene structure, and expression direct
 license: MIT
 compatibility: Python 3.10+ with the `requests` library for the REST path (no dedicated SDK). Network access required. The REST `/v1` API needs a `GI_API_KEY` (a `gi_` bearer); the hosted MCP server at mcp.genomicintelligence.ai/mcp works keyless against a capped public demo quota, key optional.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: Genomic Intelligence
   trigger-keywords: DNA sequence prediction, regulatory genomics, promoter prediction, splice site prediction, enhancer activity, chromatin state, gene expression prediction, sequence to expression, log TPM, gene annotation, transcript prediction, DNA language model, genomic intelligence, hosted inference, Ensembl sequence, FASTA prediction, cis-regulatory, TSS window, DeepSEA, DeepSTARR, BigBird splice, MCP genomics
   openclaw:
@@ -332,23 +332,22 @@ composite:
 `model_loading`, `service_unavailable`, `http_error`, `unknown`); treat an
 unlisted value as a generic failure, not a parse error.
 
-**Branch on `code`, never on `details` or `loc`.** `details` is documented as
-keyed on the sibling `code`, but a validation failure currently arrives as a bare
-FastAPI error *array* (`[{loc, msg, type}, …]`) rather than the `{errors: […]}`
-object the schema declares — read it defensively and keep control flow off it.
+**Branch on `code`, never on `details` or `loc`.** `details` is keyed on the
+sibling `code`, and its shape for `validation_failed` has been in flux — some
+deployments return the `{errors: […]}` object the schema declares, others a bare
+FastAPI error array (`[{loc, msg, type}, …]`). Treat it as display-only and
+accept either shape; `code` is the stable discriminator.
 
-`error.request_id` mirrors the `X-Request-Id` header. The header is set on every
-response; the body field is not — `413 sync_too_large` omits it — so fall back to
-the header.
+For correlation, prefer the `X-Request-Id` **header**: it is set on every
+response, whereas `error.request_id` is absent on some error paths (`413`
+historically omitted it). Reading the header first is correct on every
+deployment.
 Every response carries `RateLimit-Limit`, `RateLimit-Remaining`,
 `RateLimit-Reset`, `RateLimit-Policy`; a `429` adds `Retry-After`.
 
-> Schema-version note: this describes the contract served from `2026.08.19.4`.
-> `api.genomicintelligence.ai` may still be on `2026.08.18.1` until that build is
-> promoted, where the six literal operations, the typed `options`, the per-task
-> floors, the published composite, the `Prefer` parameter, the `code` enum and the
-> new `bio_spec` fields are not yet present. URLs and envelopes are the same
-> either way — check `info.version` in `/v1/openapi.json`.
+> This describes the contract served from `2026.08.19.4`, verified live. The API
+> is pre-GA and still moving; `info.version` in `/v1/openapi.json` reports what a
+> given deployment actually serves, and is the arbiter if anything here disagrees.
 
 ## Reference files
 

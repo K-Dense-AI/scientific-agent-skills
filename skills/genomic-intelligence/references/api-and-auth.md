@@ -41,9 +41,16 @@ task** — the templated `/v1/tasks/{task}/predict` is no longer in the document
 | GET | `/v1/tasks/{task}/models` | List available model IDs for a task |
 | GET | `/health` | Public liveness |
 
+There is no usable templated route to fall back on: the six literal paths are
+matched first, and any other task segment is `404 not_found`
+(`"Unknown task: bogus"`), never a `422`.
+
 `Prefer: respond-async` is a declared header parameter on all six predict
-operations and on the composite. An unrecognised task segment is
-`404 not_found` (`"Unknown task: bogus"`), **not** a `422`.
+operations and on the composite — it is not an annotation-only extra. Omit it
+for a synchronous `200`; send it for a `202` carrying
+`{data: {job_id, status: "accepted", links}, meta}`, with the id also in
+`Content-Location` and `X-Job-Id`, then poll `GET /v1/tasks/jobs/{job_id}`.
+Async is JSON-only: combining it with a text `format` is a `400`.
 
 ## Request / response
 
@@ -60,6 +67,10 @@ at `loc ["body","options","<key>"]`.
 (`ExpressionOptions.required = ["description"]`, the only key it accepts), and
 `tss_index` is required unless `sequence` is exactly 9,198 bp. See
 `tasks.md#expression`.
+
+Hand-built requests are unaffected, but a client **generated** from the OpenAPI
+document must be regenerated: the shared `PredictRequest` model it was built
+from no longer exists.
 
 Success is a `{data, meta}` envelope; `data` is task-specific (see `tasks.md`),
 `meta` carries model + request info. **Exception:** `GET /v1/tasks/{task}/models`
@@ -79,9 +90,10 @@ length — under the floor *or* over 500,000 bp; over-length is not a `413`).
   against this to know whether the model scored real sequence or padding.
 - `trained_window_bp` — fixed receptive field; 9,198 for `g0-expression`, `null`
   for sliding-window models.
-- `max_seq_length_bp` — legacy and ambiguous: 500,000 everywhere **except**
-  `g0-expression`, where it is 9,198 (the trained window, not a cap). Prefer
-  `request_max_bp`.
+- `max_seq_length_bp` — legacy, ambiguous, and being withdrawn. It reads 500,000
+  everywhere **except** `g0-expression`, where it is 9,198 — the trained window,
+  not a request cap, so reading it as one wrongly rejects the 9,198–500,000 bp
+  range expression actually accepts. Never gate on it; use `request_max_bp`.
 
 There is no `strand_sensitive` flag. The splice model is strand-specific in
 practice — feed transcript orientation.

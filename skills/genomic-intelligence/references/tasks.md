@@ -77,6 +77,14 @@ Splice **donor** and **acceptor** sites. `data.sites` lists each with `name`,
 `start`, `end`, `site_type` (donor/acceptor), `score`, `strand`. The default is a
 BigBird long-context model.
 
+**Strand-specific — and the wrong strand fails silently.** Submit transcript
+orientation (reverse-complement minus-strand genes). A reverse-complemented
+sequence does *not* return zeros or an empty result: measured live, it returns
+plausible sites at different positions, often still at high confidence, and site
+counts can hold or collapse depending on the locus. **Neither the score nor the
+count tells you the orientation was wrong**, so there is no post-hoc check —
+get the orientation right on input.
+
 ## enhancer
 Enhancer activity. The default (DeepSTARR) reports **developmental**
 and **housekeeping** scores — `summary.dev_score_max` / `summary.hk_score_max`
@@ -159,4 +167,10 @@ refuses to pad at all. `meta.task_specific_counts` =
 
 Above **50,000 bp** it forces async: a synchronous request over that size is
 `413 sync_too_large` with `error.details = {sequence_length, threshold}`. Retry
-the same body with `Prefer: respond-async`.
+the same body with `Prefer: respond-async`. This is the only endpoint that
+forces a delivery mode.
+
+The equivalent by hand is `annotation` to discover genes, then one `expression`
+call per gene with that gene's window and `tss_index` — useful when you want
+per-gene control, though you then own the TSS-centring the composite does for
+you.
