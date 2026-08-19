@@ -337,7 +337,9 @@ keyed on the sibling `code`, but a validation failure currently arrives as a bar
 FastAPI error *array* (`[{loc, msg, type}, …]`) rather than the `{errors: […]}`
 object the schema declares — read it defensively and keep control flow off it.
 
-`error.request_id` is always populated and mirrors the `X-Request-Id` header.
+`error.request_id` mirrors the `X-Request-Id` header. The header is set on every
+response; the body field is not — `413 sync_too_large` omits it — so fall back to
+the header.
 Every response carries `RateLimit-Limit`, `RateLimit-Remaining`,
 `RateLimit-Reset`, `RateLimit-Policy`; a `429` adds `Retry-After`.
 
