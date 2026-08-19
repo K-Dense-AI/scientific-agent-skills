@@ -20,13 +20,13 @@ with `GET /v1/tasks/{task}/models` (REST) or `list_models(task)` (MCP), and
 Source of truth for bounds: the live OpenAPI at
 <https://api.genomicintelligence.ai/v1/openapi.json>.
 
-| Task | Mode | Accepted length | Model context window | Default architecture |
+| Task | Mode | Accepted length | `context_window_bp` | Default architecture |
 |---|---|---|---|---|
 | promoter | sync | 300–500,000 bp | 2,000 bp | sliding-window; human/mammalian |
 | splice | sync | 100–500,000 bp | 15,000 bp | BigBird (long-context) |
 | enhancer | sync | 50–500,000 bp | 249 bp | DeepSTARR — ***Drosophila*** |
 | chromatin | sync | 200–500,000 bp | 1,000 bp | DeepSEA — hundreds of tracks |
-| expression | sync | **9,198–500,000 bp** (scores one 9,198 bp window) | 9,198 bp (fixed) | log(TPM+1) |
+| expression | sync | **9,198–500,000 bp** (scores one 9,198 bp window) | n/a (`trained_window_bp` 9,198) | log(TPM+1) |
 | annotation | **async** | 1,000–500,000 bp | n/a | de-novo transcripts |
 
 The minimum is published as `minLength` on each task's request schema and enforced
