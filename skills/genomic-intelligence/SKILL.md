@@ -91,14 +91,16 @@ same strings clients already POST to, so no URL construction changes; the shared
 `PredictRequest` schema is gone. Body is `{sequence, sequence_name?, model?,
 options?}`, returning a `{data, meta}` envelope. What differs per task:
 
-| Task | Mode | Accepted length | `context_window_bp` | Notes |
+| Task | Recommended mode | Accepted length | `context_window_bp` | Notes |
 |---|---|---|---|---|
 | `promoter` | sync | 300–500,000 bp | 2,000 bp | sliding-window promoter regions |
 | `splice` | sync | 100–500,000 bp | 15,000 bp | donor/acceptor sites (long-context BigBird); strand-specific — feed transcript orientation |
 | `enhancer` | sync | 50–500,000 bp | 249 bp | dev + housekeeping scores (DeepSTARR, *Drosophila*) |
 | `chromatin` | sync | 200–500,000 bp | 1,000 bp | hundreds of tracks (DeepSEA) |
 | `expression` | sync | **9,198–500,000 bp** | n/a (`trained_window_bp` 9,198) | log(TPM+1); needs `tss_index` unless exactly 9,198 bp, plus a cell-type `description` |
-| `annotation` | **async** | 1,000–500,000 bp | n/a | de-novo transcripts; submit + poll |
+| `annotation` | async | 1,000–500,000 bp | n/a | de-novo transcripts; submit + poll |
+
+`Recommended mode` is guidance, not a constraint — every task accepts both. Omit `Prefer` for a synchronous `200`; send `Prefer: respond-async` for a `202` plus `GET /v1/tasks/jobs/{job_id}`. Only the composite workflow enforces a mode, rejecting sync above 50,000 bp with `413 sync_too_large`.
 
 **The minimum is admission control, not regime.** A request above the floor but
 shorter than the selected model's `bio_spec.context_window_bp` is *accepted and
