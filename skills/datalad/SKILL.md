@@ -1,7 +1,7 @@
 ---
 name: datalad
 description: Retrieve, version, and publish scientific datasets with DataLad and git-annex, and capture computational provenance with datalad run, rerun, and containers-run. Use when cloning or fetching data from OpenNeuro, DANDI, datasets.datalad.org, or any DataLad dataset; when a file in a dataset reads as a broken symlink or a small pointer instead of real data; when an analysis needs a machine-readable record of how each output was produced so it can be re-executed; or when publishing a dataset to siblings such as a GitHub repository plus a storage remote. Also use to decide between DataLad and plain Git for a data-carrying repository.
-compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 8.20200309 or newer. git-annex is not written in Python but installs from PyPI (uv pip install git-annex), a system package manager, or conda-forge. Container-based provenance also needs the datalad-container extension (1.2.x) and Singularity/Apptainer or Docker. clone, get, and push need network access; credentialed remotes read secrets from the system keyring or from DATALAD_CREDENTIAL_<NAME>_<COMPONENT> environment variables.
+compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 10.x. git-annex is not written in Python but installs as a prebuilt wheel from PyPI (`uv pip install git-annex`), from a system package manager, or from conda-forge. Container-based provenance also needs datalad-container (1.2.x) and Singularity/Apptainer or Docker. clone, get, and push need network access; credentialed remotes read secrets from the system keyring or from DATALAD_CREDENTIAL_<NAME>_<COMPONENT> environment variables.
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
@@ -188,6 +188,19 @@ for code and small text files that should stay directly readable. The `yoda` pro
 (`datalad create -c yoda`) sets this up for `code/`, `README.md`, and `CHANGELOG.md`
 automatically.
 
+## Creating a dataset
+
+```bash
+datalad create my_dataset               # plain dataset
+datalad create -c yoda my_analysis      # analysis layout (code/ tracked in Git,
+                                        # README.md and CHANGELOG.md preconfigured)
+datalad create -d . inputs/raw          # register a new subdataset under an existing one
+```
+
+`-c yoda` applies the analysis project layout described in
+[provenance.md](references/provenance.md). `-d .` is what registers a new dataset as a
+subdataset of the parent rather than leaving an unrelated repository inside it.
+
 ## Publishing
 
 A DataLad dataset is usually published to two places at once: a Git hosting service for
@@ -195,10 +208,18 @@ the history, and a storage remote for the annexed content.
 
 ```bash
 datalad create-sibling-github myaccount/mydataset
-datalad siblings add -s store --url s3://my-bucket/mydataset
+git annex initremote store type=S3 bucket=my-bucket encryption=none autoenable=true
 datalad siblings configure -s github --publish-depends store
 datalad push --to github
 ```
+
+The Git sibling and the storage sibling are created by different tools on purpose. A Git
+sibling is a Git remote, and `datalad create-sibling-*` handles the hosting-service ones.
+An S3 bucket (or WebDAV, or an SSH directory) is a *git-annex special remote*, not a Git
+remote, so it is created with `git annex initremote`. `datalad siblings` picks the special
+remote up afterwards and treats it like any other. Using `datalad siblings add --url
+s3://...` here is the mistake this section exists to prevent: `--url` is a Git remote URL,
+S3 is not, and the `push --to github` below then fails on the `--publish-depends` hop.
 
 `--publish-depends` is what stops the common broken publication: a Git repository whose
 history references content that was never uploaded, so collaborators clone successfully
@@ -267,3 +288,12 @@ dataset with DataLad, validates it with the BIDS tooling, then runs a BIDS-App u
 - datalad-container: <https://docs.datalad.org/projects/container/en/stable/>
 - git-annex: <https://git-annex.branchable.com/>
 - Dataset registry: <https://registry.datalad.org>
+
+## Acknowledgment
+
+Topic scope for this skill was informed in part by @bcmcpher's MIT-licensed
+[datalad-cli](https://github.com/bcmcpher/my-skills/tree/main/plugins/datalad-cli)
+plugin (nineteen per-command slash-command skills). The text here is written
+independently and grounded in the upstream DataLad documentation; overlap is unavoidable
+because both cover DataLad, but the structure, style, and specific technical claims are
+different.

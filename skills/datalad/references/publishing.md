@@ -47,13 +47,22 @@ Options that carry real consequences:
 Rather than configuring by hand, use the `create-sibling-*` family, which creates the
 remote side and configures the local side together:
 
-| Command | Target |
-|---|---|
-| `datalad create-sibling-github` | A GitHub repository |
-| `datalad create-sibling-gitlab` | A GitLab project |
-| `datalad create-sibling-gogs` / `-gin` / `-gitea` | GOGS, GIN, and Gitea instances |
-| `datalad create-sibling-ria` | A RIA store |
-| `datalad create-sibling` | A generic sibling over SSH |
+| Command                                           | Target                          |
+| ------------------------------------------------- | ------------------------------- |
+| `datalad create-sibling-github`                   | A GitHub repository             |
+| `datalad create-sibling-gitlab`                   | A GitLab project                |
+| `datalad create-sibling-gogs` / `-gin` / `-gitea` | GOGS, GIN, and Gitea instances  |
+| `datalad create-sibling-ria`                      | A RIA store                     |
+| `datalad create-sibling`                          | A generic sibling over SSH      |
+
+The `create-sibling-*` family covers *Git* siblings (a Git remote plus a hosting-service
+repository or project) and the RIA layout, which packages a Git remote and a matching
+git-annex special remote together. Storage-only targets — S3 buckets, WebDAV, plain SSH
+directories, rclone-reachable services — are git-annex *special remotes* rather than Git
+remotes, and they are created with `git annex initremote` rather than `create-sibling-*`.
+That distinction is what the two-target model turns on: the Git sibling carries history,
+the storage sibling carries content, and only in the RIA and GIN cases does one target
+carry both.
 
 GIN is worth knowing about in a neuroscience context because it hosts annexed content
 directly, which collapses the two-target model back into one target.
@@ -120,10 +129,16 @@ A complete first publication:
 
 ```bash
 datalad create-sibling-github myaccount/mydataset
-datalad siblings add -s store --url s3://my-bucket/mydataset
+git annex initremote store type=S3 bucket=my-bucket encryption=none autoenable=true
 datalad siblings configure -s github --publish-depends store
 datalad push --to github --data anything -r
 ```
+
+The Git sibling is created by `datalad create-sibling-github`, the storage sibling by
+`git annex initremote`; see the note under "Creating siblings" above for why the two
+are not the same tool. `autoenable=true` lets a fresh clone reach the storage sibling
+without a manual `enableremote` step, and `encryption=none` is the right default for a
+public bucket — turn it on when the content is not intended to be world-readable.
 
 Verify from the other side rather than trusting the push output:
 

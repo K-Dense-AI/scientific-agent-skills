@@ -30,7 +30,10 @@ datalad clone [-h] [-d DATASET] [-D DESCRIPTION] [--reckless
 - `--reckless auto` hard-links content between clones on the same filesystem, and
   `--reckless ephemeral` symlinks the annex to the origin's annex. Both trade safety for
   speed and disk, and both are recorded in local config and inherited by subdatasets. Use
-  them for throwaway clones on a cluster, not for anything you will edit and push.
+  them for throwaway clones on a cluster, not for anything you will edit and push. For
+  maintaining multiple concurrent checkouts of the same dataset without re-cloning, see
+  the [git worktree workflow with DataLad](https://blog.datalad.org/posts/git-worktree-workflow/)
+  post.
 - `-D/--description` labels this particular copy. git-annex reports that label in
   `whereis` output, so a meaningful description ("scratch on cluster node") is what makes
   copy tracking readable later.
@@ -121,13 +124,20 @@ datalad drop [-h] [--what {filecontent|allkeys|datasets|all}] [--reckless
 - `--nocheck` and `--if-dirty` are deprecated. `--nocheck` is replaced by
   `--reckless availability`; `--if-dirty` is ignored entirely.
 
-Always confirm a second copy before dropping:
+The real check is `datalad drop`'s own refusal to remove content it cannot verify
+elsewhere; the commands below are a pre-flight look at what `whereis` already believes:
 
 ```bash
-git annex whereis <path> | grep -c 'copies'
-datalad push --to store          # make the second copy, then
+git annex whereis <path>                                # read the copy list yourself
+git annex whereis --json <path> | jq '.whereis | length'  # count known copies
+datalad push --to store   # make a second copy where none was, then
 datalad drop <path>
 ```
+
+`whereis` prints one `N copies` line per file, so a pipe into `grep -c 'copies'` returns
+the file count, not the copy count — for a single file it always prints `1`, whether the
+content exists in five places or nowhere but the local annex. The JSON form is what you
+want when a script has to decide.
 
 Never use `rm` or `git rm` on an annexed file to free space. `rm` leaves the pointer
 pointing at nothing while the annex object survives, and `git rm` removes the pointer
@@ -149,4 +159,5 @@ git annex dropunused all             # remove them
 Run `git annex fsck --from <remote>` after any suspicion that a remote lost data, since it
 is the only thing that replaces recorded belief with a live check. Run
 `datalad wtf --section dependencies` when behaviour is inconsistent with the documentation,
-because a git-annex older than 8.20200309 will not support what current DataLad expects.
+since an old git-annex is behind a large share of confusing errors; DataLad 1.6 was
+released alongside git-annex 10.x and drift from that pairing is the first thing to check.
