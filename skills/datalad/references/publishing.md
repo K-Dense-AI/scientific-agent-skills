@@ -55,6 +55,13 @@ remote side and configures the local side together:
 | `datalad create-sibling-ria` | A RIA store |
 | `datalad create-sibling` | A generic sibling over SSH |
 
+The family covers Git siblings and RIA stores, and nothing else. Every other storage
+target, S3, WebDAV, plain SSH directories, rsync, and the rest of the git-annex special
+remote catalogue, is created with `git annex initremote` and then picked up by
+`datalad siblings` as an existing remote. That split is what the two-target model turns
+on: DataLad makes the target Git can push to, git-annex makes the target that holds
+content.
+
 GIN is worth knowing about in a neuroscience context because it hosts annexed content
 directly, which collapses the two-target model back into one target.
 
@@ -120,7 +127,7 @@ A complete first publication:
 
 ```bash
 datalad create-sibling-github myaccount/mydataset
-datalad siblings add -s store --url s3://my-bucket/mydataset
+git annex initremote store type=S3 bucket=my-bucket encryption=none autoenable=true
 datalad siblings configure -s github --publish-depends store
 datalad push --to github --data anything -r
 ```

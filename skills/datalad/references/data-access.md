@@ -124,10 +124,17 @@ datalad drop [-h] [--what {filecontent|allkeys|datasets|all}] [--reckless
 Always confirm a second copy before dropping:
 
 ```bash
-git annex whereis <path> | grep -c 'copies'
+git annex whereis --json <path> | jq '.whereis | length'   # number of known copies
 datalad push --to store          # make the second copy, then
 datalad drop <path>
 ```
+
+`drop` runs its own availability check and refuses when it cannot see another copy, so
+that refusal is the real safeguard and the count above is a pre-flight look. Read the
+count rather than a line count: plain `git annex whereis` prints one `N copies` line per
+file, so piping it through `grep -c` reports how many files were inspected, not how many
+copies exist, and returns `1` for a single file whether the content sits on five remotes
+or only in the local annex.
 
 Never use `rm` or `git rm` on an annexed file to free space. `rm` leaves the pointer
 pointing at nothing while the annex object survives, and `git rm` removes the pointer

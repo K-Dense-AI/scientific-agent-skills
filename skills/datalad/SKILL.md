@@ -195,10 +195,18 @@ the history, and a storage remote for the annexed content.
 
 ```bash
 datalad create-sibling-github myaccount/mydataset
-datalad siblings add -s store --url s3://my-bucket/mydataset
+git annex initremote store type=S3 bucket=my-bucket encryption=none autoenable=true
 datalad siblings configure -s github --publish-depends store
 datalad push --to github
 ```
+
+The two siblings are created by different tools because they are different kinds of thing.
+The Git sibling holds history and is a Git remote, so DataLad creates it. The storage
+sibling holds annexed content and is a git-annex special remote, which Git cannot talk to
+at all, so `git annex initremote` creates it. `datalad siblings` lists it once it exists,
+which is why the `configure --publish-depends` line below needs no special handling.
+Passing an `s3://` URL to `datalad siblings add --url` instead produces a Git remote
+pointing at a bucket, and the push then fails on the dependency hop.
 
 `--publish-depends` is what stops the common broken publication: a Git repository whose
 history references content that was never uploaded, so collaborators clone successfully
