@@ -169,9 +169,11 @@ or query parameter:
 > (and `meta.sequence_length`).
 >
 > Both `tss_index` violations — "required unless exactly 9,198 bp" and the range
-> check — come from a whole-model validator, so they report at `loc: ["body"]`,
-> **never** `body.tss_index`. Match on `error.code == "validation_failed"`; use
-> the message for display only, and never branch on `loc`.
+> check — come from a whole-model validator, so they surface at the body level
+> rather than under `tss_index`. Match on `error.code == "validation_failed"`
+> and use the message for display only. Any `loc` tuple quoted in this skill is
+> illustrative of that shape, not part of the contract: it is not published in
+> the schema and must not be branched on.
 
 ## Sequence acquisition
 
@@ -343,8 +345,10 @@ the header first remains a safe default.
 Every response carries `RateLimit-Limit`, `RateLimit-Remaining`,
 `RateLimit-Reset`, `RateLimit-Policy`; a `429` adds `Retry-After`.
 
-> The contract moves. `info.version` in `/v1/openapi.json` reports what a given
-> deployment serves, and that document is the arbiter if anything here disagrees.
+> Verified against OpenAPI `info.version` **2026.08.20.7**. The contract moves,
+> and `info.version` in `/v1/openapi.json` reports what a given deployment
+> serves: if it is ahead of the version above, re-check the numbers in this file
+> against that document, which is the arbiter if the two disagree.
 
 ## Reference files
 
