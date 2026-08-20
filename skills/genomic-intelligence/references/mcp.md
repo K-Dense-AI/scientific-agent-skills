@@ -6,8 +6,8 @@ GI hosts a Model Context Protocol server (Streamable HTTP) at:
 https://mcp.genomicintelligence.ai/mcp
 ```
 
-It works **keyless** against a capped public demo quota, with no setup. An
-optional `gi_` bearer key (`GI_API_KEY`) raises the quota. Prefer MCP on agent
+It works **keyless** against a rate- and concurrency-limited public demo tier,
+with no setup. An optional `gi_` bearer key (`GI_API_KEY`) raises those limits. Prefer MCP on agent
 hosts that support it: the tools use agent-friendly, handle-based schemas so large
 sequences never enter the context.
 

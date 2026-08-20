@@ -5,10 +5,9 @@ Six DNA-sequence tasks, each its own published REST operation —
 `/v1/tasks/enhancer/predict`, `/v1/tasks/chromatin/predict`,
 `/v1/tasks/annotation/predict`, `/v1/tasks/expression/predict` — with body
 `{sequence, sequence_name?, model?, options?}`, returning a `{data, meta}`
-envelope. The URLs are the same strings clients already send; what changed is that
-each has its own request schema, its own `minLength`, and its own closed `options`
-object (there is no shared `PredictRequest` any more). On MCP, the equivalent is
-`predict_<task>(sequence_ref, ...)`.
+envelope. Each path is a literal string, and each carries its own request schema,
+its own `minLength`, and its own closed `options` object; there is no shared
+`PredictRequest`. On MCP, the equivalent is `predict_<task>(sequence_ref, ...)`.
 
 **Omit `model` to get the task's default** — the API resolves it server-side
 (`model` is optional: *"If omitted, the task's default model is used."*). Default
@@ -37,10 +36,10 @@ strictest its models need, and every model stays listed and loadable.
 
 **Floor ≠ regime.** A request above the floor but shorter than the selected
 model's `bio_spec.context_window_bp` is accepted and scored — against a window
-padded out to the context window. Enhancer is the sharp case: the bound is 50 bp
-(DeepSTARR's admission gate; `dnabert-deepstarr` tolerates 16) while the context
-window is 249 bp, so 50–248 bp is scored mostly on padding. Compare your length
-against `context_window_bp` to know whether the model saw real sequence.
+padded out to the context window. Enhancer is the sharp case: the floor is 50 bp
+while the context window is 249 bp, so 50–248 bp is scored mostly on padding.
+Compare your length against `context_window_bp` to know whether the model saw
+real sequence.
 Longer-than-context input is fine — the scanner steps a prediction window at a
 time and pads only the final partial window.
 
@@ -127,14 +126,15 @@ wrong `tss_index` scores the wrong window with a `200`. `data.input` echoes
 `tss_index`, `scored_window`, and `submitted_sequence_length`; note
 `data.input.sequence_length` is the **scored** 9,198, not what you submitted.
 
-Both `tss_index` failures come from a `model_validator(mode="after")` and so
-report at `loc: ["body"]`, **never** `body.tss_index`. Match on
+Both `tss_index` failures come from a whole-model validator and so report at
+`loc: ["body"]`, **never** `body.tss_index`. Match on
 `error.code == "validation_failed"` — never on `loc`.
 
 ## annotation
 De-novo gene / transcript structure — transcript intervals and strand, no
 reference annotation. **Run it async** (`Prefer: respond-async` is available on
-every predict operation; annotation is the one that needs it): submit with
+every predict operation; annotation is the one that most often needs it):
+submit with
 `Prefer: respond-async` → `job_id`; poll `GET /v1/tasks/jobs/{job_id}` until it
 returns `200`. `data.transcripts` lists each transcript with `name`, `start`,
 `end`, `strand`, `score`, plus structure fields (`length`, `tss_position`,

@@ -2,7 +2,7 @@
 name: genomic-intelligence
 description: "Predict regulatory features, gene structure, and expression directly from DNA sequence using Genomic Intelligence's hosted transformer DNA language models — no local GPU or model weights. Six tasks over a REST API and a hosted MCP server (keyless public demo): promoter regions, splice donor/acceptor sites, enhancer activity, chromatin state, sequence-to-expression (log TPM), and de-novo gene annotation, plus a composite find-genes-then-predict-expression workflow. Use when the user has a gene symbol, a genomic region, or a DNA/FASTA sequence and wants any of these predictions, mentions Genomic Intelligence, genomicintelligence.ai, api.genomicintelligence.ai, or mcp.genomicintelligence.ai."
 license: MIT
-compatibility: Python 3.10+ with the `requests` library for the REST path (no dedicated SDK). Network access required. The REST `/v1` API needs a `GI_API_KEY` (a `gi_` bearer); the hosted MCP server at mcp.genomicintelligence.ai/mcp works keyless against a capped public demo quota, key optional.
+compatibility: Python 3.10+ with the `requests` library for the REST path (no dedicated SDK). Network access required. The REST `/v1` API needs a `GI_API_KEY` (a `gi_` bearer); the hosted MCP server at mcp.genomicintelligence.ai/mcp works keyless against a rate- and concurrency-limited public demo tier, key optional.
 metadata:
   version: "1.1"
   skill-author: Genomic Intelligence
@@ -12,7 +12,7 @@ metadata:
     envVars:
     - name: GI_API_KEY
       required: false
-      description: Optional gi_ bearer key for the REST /v1 API and a higher MCP quota. The hosted MCP demo runs keyless; request a key at contact@genomicintelligence.ai.
+      description: Optional gi_ bearer key for the REST /v1 API and higher MCP rate and concurrency limits. The hosted MCP demo runs keyless; request a key at contact@genomicintelligence.ai.
 ---
 
 # Genomic Intelligence — DNA Sequence Models
@@ -44,18 +44,18 @@ Use GI when the user has DNA and wants a model prediction:
 Not for local alignment, variant calling, or file I/O — use a local tool
 (BioPython, bcftools) for those. GI is for **model inference from sequence**.
 
-> For research and development use, **not clinical or diagnostic decisions**.
+> Research and development use. Not for clinical or diagnostic decisions.
 
 ## Two ways to call GI
 
-### Hosted MCP server (best for AI agents — keyless)
+### Hosted MCP server (keyless; preferred on MCP hosts)
 
 GI hosts an MCP server at `https://mcp.genomicintelligence.ai/mcp` (Streamable
 HTTP). When your agent host supports MCP, prefer it: it works **keyless** against
-a capped public demo quota (zero setup), and an optional `gi_` bearer key raises
-the quota. It exposes acquisition tools that return a **sequence handle**
-(`sequence_ref`) and `predict_*` tools that take that handle — so large sequences
-never bloat the context. See [MCP workflow](#mcp-workflow-handle-based) below and
+a rate- and concurrency-limited public demo tier, and an optional `gi_` bearer
+key raises those limits. It exposes acquisition tools that return a **sequence handle**
+(`sequence_ref`) and `predict_*` tools that take that handle, so large sequences
+stay out of the context. See [MCP workflow](#mcp-workflow-handle-based) below and
 `references/mcp.md`.
 
 ### REST API (universal)
@@ -86,9 +86,9 @@ Each task is **its own published operation** with its own request schema, its ow
 minimum length, and its own closed `options` object — `POST
 /v1/tasks/promoter/predict`, `/v1/tasks/splice/predict`,
 `/v1/tasks/enhancer/predict`, `/v1/tasks/chromatin/predict`,
-`/v1/tasks/annotation/predict`, `/v1/tasks/expression/predict`. The URLs are the
-same strings clients already POST to, so no URL construction changes; the shared
-`PredictRequest` schema is gone. Body is `{sequence, sequence_name?, model?,
+`/v1/tasks/annotation/predict`, `/v1/tasks/expression/predict`. Each path is a
+literal string, so nothing needs to be constructed, and there is no shared
+`PredictRequest` schema. Body is `{sequence, sequence_name?, model?,
 options?}`, returning a `{data, meta}` envelope. What differs per task:
 
 | Task | Recommended mode | Accepted length | `context_window_bp` | Notes |
@@ -105,8 +105,8 @@ options?}`, returning a `{data, meta}` envelope. What differs per task:
 **The minimum is admission control, not regime.** A request above the floor but
 shorter than the selected model's `bio_spec.context_window_bp` is *accepted and
 scored* — against a window padded out to the context window. Enhancer is the
-sharp case: the bound is 50 bp (DeepSTARR's gate) but the context window is
-249 bp, so 50–248 bp is scored mostly on padding. Compare your length against
+sharp case: the floor is 50 bp but the context window is 249 bp, so 50–248 bp is
+scored mostly on padding. Compare your length against
 `context_window_bp` from `GET /v1/tasks/{task}/models` to know whether the model
 saw real sequence. Longer-than-context input is fine — the scanner steps a
 prediction window at a time and pads only the final partial window.
@@ -130,7 +130,7 @@ never ignored:
 | expression | `description` — **required**, and the only key |
 
 `Prefer: respond-async` is a declared header on **all six** predict operations
-and on the composite, not just `annotation` — see [Async](#async-any-task-annotation-always).
+and on the composite, not just `annotation` — see [Async](#async-any-task-recommended-for-annotation).
 
 **Omit `model` and the API uses the task's default** — that is the recommended
 call. Default model IDs are intentionally **not** documented here: defaults
@@ -159,7 +159,7 @@ or query parameter:
   is required, and is the **only** key `expression` accepts inside `options`.
   Unknown top-level body fields are rejected too.
 
-> Gotcha: the legal `tss_index` range is wide, so an offset that is merely
+> Note: the legal `tss_index` range is wide, so an offset that is merely
 > *wrong* (counted over raw FASTA characters including newlines, or relative to
 > a locus start rather than the submitted slice) does not error — it returns a
 > confident `200` for the wrong window. Assert on
@@ -190,14 +190,14 @@ You rarely start from a raw 9,198 bp string. Acquire sequence first:
   for REST. (`load_local_fasta` exists only in local deployments, not on the
   hosted server.)
 - **A demo sequence** → MCP `load_demo_sequence(name=...)` returns a ready handle
-  (great for a keyless smoke test); `name` is required.
+  for a keyless smoke test; `name` is required.
 
 See `references/sequence-acquisition.md` for the exact Ensembl calls and the
 expression-window math.
 
 ## Core REST workflow
 
-Sync tasks (promoter, splice, enhancer, chromatin, expression) are one call:
+Called synchronously — the default for every task — a prediction is one call:
 
 ```python
 import os, requests
@@ -235,7 +235,7 @@ out = predict("expression", locus_seq, "HBB",
 print(out["meta"]["task_specific_counts"]["scored_window"])   # confirm the window scored
 ```
 
-### Async (any task; annotation always)
+### Async (any task; recommended for annotation)
 
 `Prefer: respond-async` is a declared header parameter on all six predict
 operations and on the composite. A `202` carries the same `{data, meta}` envelope
@@ -269,7 +269,7 @@ the context:
 
 ```
 # 1. Acquire a sequence handle (each returns a sequence_ref):
-load_demo_sequence(name="promoter_tp53")  # keyless smoke test; `name` is REQUIRED
+load_demo_sequence(name="promoter_tp53")  # keyless smoke test; name is required
 fetch_ensembl_sequence(gene="TP53")       # gene symbol or Ensembl ID -> handle
 fetch_region(region="chr11:5,225,000-5,235,000")   # coordinates -> handle
 fetch_gene_for_expression(gene="HBB")     # TSS-centred 9,198 bp handle for expression
@@ -343,9 +343,8 @@ the header first remains a safe default.
 Every response carries `RateLimit-Limit`, `RateLimit-Remaining`,
 `RateLimit-Reset`, `RateLimit-Policy`; a `429` adds `Retry-After`.
 
-> This describes the contract served from `2026.08.19.4`, verified live. The API
-> is pre-GA and still moving; `info.version` in `/v1/openapi.json` reports what a
-> given deployment actually serves, and is the arbiter if anything here disagrees.
+> The contract moves. `info.version` in `/v1/openapi.json` reports what a given
+> deployment serves, and that document is the arbiter if anything here disagrees.
 
 ## Reference files
 
