@@ -18,26 +18,86 @@ key from the environment (or a `.env` via `python-dotenv`); never hardcode or
 commit it.
 
 > The hosted **MCP** server (`mcp.genomicintelligence.ai/mcp`) is different: it
-> runs **keyless** against a capped public demo quota, with the key optional for
-> a higher quota. Only the **REST** path strictly requires a key. See `mcp.md`.
+> runs **keyless** against a rate- and concurrency-limited public demo tier, with
+> the key optional for higher limits. Only the **REST** path strictly requires a
+> key. See `mcp.md`.
 
 ## Endpoints
 
+Eleven operations are published. The six predict paths are **literal, one per
+task**; the published document has no templated `/v1/tasks/{task}/predict`
+operation.
+
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/tasks/{task}/predict` | Run a task (sync, or async for `annotation` with `Prefer: respond-async`) |
+| POST | `/v1/tasks/promoter/predict` | `PromoterPredictRequest` |
+| POST | `/v1/tasks/splice/predict` | `SplicePredictRequest` |
+| POST | `/v1/tasks/enhancer/predict` | `EnhancerPredictRequest` |
+| POST | `/v1/tasks/chromatin/predict` | `ChromatinPredictRequest` |
+| POST | `/v1/tasks/annotation/predict` | `AnnotationPredictRequest` |
+| POST | `/v1/tasks/expression/predict` | `ExpressionPredictRequest` (also requires `options`) |
+| POST | `/v1/workflows/find-genes-and-predict-expression` | Composite: find genes, predict each one's expression |
+| GET | `/v1/tasks/jobs` | List async jobs |
 | GET | `/v1/tasks/jobs/{job_id}` | Poll an async job (202 running → 200 terminal) |
 | GET | `/v1/tasks/{task}/models` | List available model IDs for a task |
+| GET | `/health` | Public liveness |
+
+There is no usable templated route to fall back on: the six literal paths are
+matched first, and any other task segment is `404 not_found`
+(`"Unknown task: bogus"`), never a `422`.
+
+`Prefer: respond-async` is a declared header parameter on all six predict
+operations and on the composite — it is not an annotation-only extra. Omit it
+for a synchronous `200`; send it for a `202` carrying
+`{data: {job_id, status: "accepted", links}, meta}`, with the id also in
+`Content-Location` and `X-Job-Id`, then poll `GET /v1/tasks/jobs/{job_id}`.
+Async is JSON-only: combining it with a text `format` is a `400`.
 
 ## Request / response
 
-Request body: `{sequence, sequence_name, model?, options?}`. `options` is
-task-specific — most notably `options.description` (required for `expression`).
+Request body: `{sequence, sequence_name?, model?, options?}` — but there is no
+longer a shared `PredictRequest`. Each task has its own request model with its own
+`minLength` (promoter 300, splice 100, enhancer 50, chromatin 200, annotation
+1,000, expression 9,198, composite 1,000; `maxLength` 500,000 for all), and every
+one is `additionalProperties: false`. `options` is likewise typed and closed per
+task, so an unknown key is `422 validation_failed` with `type: "extra_forbidden"`
+at `loc ["body","options","<key>"]`.
+
+**`expression` differs further**: its body is
+`{sequence, options, tss_index?, sequence_name?, model?}`, `options` is required
+(`ExpressionOptions.required = ["description"]`, the only key it accepts), and
+`tss_index` is required unless `sequence` is exactly 9,198 bp. See
+`tasks.md#expression`.
+
+Hand-built requests are unaffected. A client **generated** from an older OpenAPI
+document must be regenerated against the current one: the shared `PredictRequest`
+model such clients were built from is not in the published document.
 
 Success is a `{data, meta}` envelope; `data` is task-specific (see `tasks.md`),
-`meta` carries model + request info. Errors use an `{error}` envelope carrying
-`code`, `message`, `status` and `request_id`; the most common is `422`
-`validation_failed` (wrong sequence length).
+`meta` carries model + request info. **Exception:** `GET /v1/tasks/{task}/models`
+is *not* enveloped — it returns a flat
+`{task, default_model, models: [{id, name, description, is_default, bio_spec}]}`.
+
+Errors use an `{error}` envelope carrying `code`, `message`, `request_id` and an
+optional `details`; the most common is `422 validation_failed` (wrong sequence
+length — under the floor *or* over 500,000 bp; over-length is not a `413`).
+
+## `bio_spec` (from `GET /v1/tasks/{task}/models`)
+
+- `request_max_bp` — the enforced ceiling: 500,000 for every model.
+- `context_window_bp` — the model's own sliding window; `null` for annotation and
+  expression. The promoter default reports 2,000 (the 300 bp promoter models
+  report 300), splice 15,000, enhancer 249, chromatin 1,000. Compare your sequence
+  length against this to know whether the model scored real sequence or padding.
+- `trained_window_bp` — fixed receptive field; 9,198 for the expression model,
+  `null` for sliding-window models.
+- The legacy `max_seq_length_bp` is not part of `bio_spec` and is absent from the
+  response. It was ambiguous — it read 9,198 for the expression model, the trained
+  window rather than a request cap, so gating on it wrongly rejected the
+  9,198–500,000 bp range expression accepts. Use `request_max_bp`.
+
+There is no `strand_sensitive` flag. The splice model is strand-specific in
+practice — feed transcript orientation.
 
 ## Partner tiers
 
