@@ -505,7 +505,7 @@ This repository contains **164 scientific and research skills** organized across
 - Virtual spatial transcriptomics: noncommercial DeepSpot-M for transcriptome-wide spatial gene expression from 224x224 H&E tiles
 
 #### 🧠 **Neuroscience & Electrophysiology** (3 skills)
-- Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets; pairs with DataLad for retrieval and for BIDS-App runs under recorded provenance, since OpenNeuro and DANDI publish their datasets as DataLad datasets at github.com/OpenNeuroDatasets and github.com/dandisets, with BEP028 the extension proposal for provenance records in derivatives)
+- Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets; pairs with DataLad for retrieval — OpenNeuro at github.com/OpenNeuroDatasets and DANDI at github.com/dandisets publish their holdings as DataLad datasets — and for BIDS-App runs under recorded provenance, with BEP028 the extension proposal for provenance records in derivatives)
 - Neural recordings: Neuropixels-Analysis (extracellular spikes, silicon probes, spike sorting)
 - Physiological signals: NeuroKit2 0.2.13 for reproducible research workflows—not diagnosis, monitoring decisions, or medical-device validation
 

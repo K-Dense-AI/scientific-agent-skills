@@ -226,5 +226,3 @@ not depend on DataLad to read.
   - Worked examples and stencils: <https://examples.stamped-principles.org>
 - datalad-container documentation:
   <https://docs.datalad.org/projects/container/en/stable/>
-- Git worktree workflows with DataLad:
-  <https://blog.datalad.org/posts/git-worktree-workflow/>
