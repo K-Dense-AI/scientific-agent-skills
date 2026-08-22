@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![Version](https://img.shields.io/badge/Version-2.64.0-blue.svg)](pyproject.toml)
-[![Skills](https://img.shields.io/badge/Skills-163-brightgreen.svg)](#-whats-included)
+[![Skills](https://img.shields.io/badge/Skills-164-brightgreen.svg)](#-whats-included)
 [![Databases](https://img.shields.io/badge/Databases-100%2B-orange.svg)](#-whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io/)
 [![Agent Plugins](https://img.shields.io/badge/Standard-Agent_Plugins-0A7A72.svg)](https://agent-plugins.org/)
@@ -23,7 +23,7 @@
 
 > **Stay up to date:** Follow K-Dense on [X](https://x.com/k_dense_ai), [LinkedIn](https://www.linkedin.com/company/k-dense-inc), [YouTube](https://www.youtube.com/@K-Dense-Inc), and [Reddit](https://www.reddit.com/user/-k-dense-/) for new skills, release announcements, walkthroughs, research workflow demos, and examples you can use with your own AI agent.
 
-A comprehensive collection of **163 ready-to-use scientific and research skills** (covering cancer genomics, individual-level 1000 Genomes queries, hosted regulatory-sequence prediction, live pathogen-variant surveillance, analytical method validation, PK/PD modelling and dose selection, full-text biomedical and regulatory literature retrieval, drug-target binding, bounded biomedical knowledge graph search, molecular dynamics, RNA velocity, microbiome foundation models, geospatial science, time series forecasting, scientific ML resource discovery via Hugging Science, 78+ scientific databases, and more) for any AI agent that supports the open [Agent Skills](https://agentskills.io/) standard, created by [K-Dense](https://k-dense.ai). The repository is also a portable [Agent Plugins](https://agent-plugins.org/) package (`plugin.json` + `skills/`), so plugin-capable clients can load the whole collection as one plugin. Works with **Cursor, Claude Code, Codex, Google Antigravity, and more**. Transform your AI agent into a research assistant capable of executing complex multi-step scientific workflows across biology, chemistry, medicine, and beyond.
+A comprehensive collection of **164 ready-to-use scientific and research skills** (covering cancer genomics, individual-level 1000 Genomes queries, hosted regulatory-sequence prediction, live pathogen-variant surveillance, analytical method validation, PK/PD modelling and dose selection, full-text biomedical and regulatory literature retrieval, drug-target binding, bounded biomedical knowledge graph search, molecular dynamics, RNA velocity, microbiome foundation models, geospatial science, time series forecasting, scientific ML resource discovery via Hugging Science, 78+ scientific databases, and more) for any AI agent that supports the open [Agent Skills](https://agentskills.io/) standard, created by [K-Dense](https://k-dense.ai). The repository is also a portable [Agent Plugins](https://agent-plugins.org/) package (`plugin.json` + `skills/`), so plugin-capable clients can load the whole collection as one plugin. Works with **Cursor, Claude Code, Codex, Google Antigravity, and more**. Transform your AI agent into a research assistant capable of executing complex multi-step scientific workflows across biology, chemistry, medicine, and beyond.
 
 > ⭐ **Help make AI for science easier to discover:** If Scientific Agent Skills saves you time, teaches your agent a workflow, or helps your lab move faster, please [star this repository](https://github.com/K-Dense-AI/scientific-agent-skills). A star is a public signal that these open, reusable research skills are worth maintaining: it helps scientists, engineers, and open-source contributors find the project, shows which agent-skill standards are gaining real adoption, and gives us a clear reason to keep expanding the collection for the community.
 
@@ -70,7 +70,7 @@ Recorded walkthroughs of these skills on real research tasks, from the [K-Dense 
 
 ## 📦 What's Included
 
-This repository provides **163 scientific and research skills** organized into the following categories:
+This repository provides **164 scientific and research skills** organized into the following categories:
 
 - **100+ Scientific & Financial Databases** - A unified database-lookup skill provides deterministic, provenance-rich access to 78 public databases (PubChem, ChEMBL, UniProt, COSMIC, ClinicalTrials.gov, FRED, USPTO, and more), plus dedicated skills for DepMap, Imaging Data Commons, PrimeKG, NCATS ARAX, U.S. Treasury Fiscal Data, Hugging Science, OneKGPd, and Genomic Intelligence. Multi-database packages like BioServices (~40 bioinformatics services), BioPython (39 NCBI sub-databases via Entrez), and gget (20+ genomics databases) add further coverage
 - **70+ Optimized Python Package Skills** - Explicitly defined, version-aware workflows for RDKit, Scanpy, PyTorch Lightning, scikit-learn, PyTDC, PathML, pydicom, NeuroKit2, PufferLib, QuTiP, GeoPandas, pymatgen, BioPython, Qiskit, Molecular Dynamics (OpenMM/MDAnalysis), and others. The agent can still use *any* Python package; these skills provide stronger, safer guidance for the packages listed
@@ -463,7 +463,7 @@ networks, and search GEO for similar patterns.
 
 ## 📚 Available Skills
 
-This repository contains **163 scientific and research skills** organized across multiple domains. Each skill provides comprehensive documentation, code examples, and best practices for working with scientific libraries, databases, and tools.
+This repository contains **164 scientific and research skills** organized across multiple domains. Each skill provides comprehensive documentation, code examples, and best practices for working with scientific libraries, databases, and tools.
 
 ### Skill Categories
 
@@ -508,7 +508,7 @@ This repository contains **163 scientific and research skills** organized across
 - Virtual spatial transcriptomics: noncommercial DeepSpot-M for transcriptome-wide spatial gene expression from 224x224 H&E tiles
 
 #### 🧠 **Neuroscience & Electrophysiology** (3 skills)
-- Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets)
+- Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets; pairs with DataLad for retrieval — OpenNeuro at github.com/OpenNeuroDatasets and DANDI at github.com/dandisets publish their holdings as DataLad datasets — and for BIDS-App runs under recorded provenance, with BEP028 the extension proposal for provenance records in derivatives)
 - Neural recordings: Neuropixels-Analysis (extracellular spikes, silicon probes, spike sorting)
 - Physiological signals: NeuroKit2 0.2.13 for reproducible research workflows—not diagnosis, monitoring decisions, or medical-device validation
 
@@ -595,8 +595,9 @@ This repository contains **163 scientific and research skills** organized across
 - Ontology identifiers: Ontology Term Resolution (resolve free-text tissue, cell-type, disease, phenotype, assay, chemical, organism, and developmental-stage labels to term IDs and validate CURIEs against EBI OLS4, for GEO/ENA/BioSamples/CELLxGENE/HCA/ISA-Tab metadata)
 - Live pathogen surveillance: Pathogen Variant Surveillance (which viral lineages are circulating now, how fast they are growing, and what mutations they carry — SARS-CoV-2, influenza including H5N1, RSV, mpox, measles, dengue and more through the GenSpectrum LAPIS API, with lineage names resolved against the live pango-designation nomenclature and reporting lag measured rather than assumed)
 
-#### 🔧 **Infrastructure & Platforms** (11 skills)
+#### 🔧 **Infrastructure & Platforms** (12 skills)
 - Cloud compute: Modal
+- Data distribution and provenance: DataLad (clone and fetch OpenNeuro, DANDI and registry.datalad.org datasets over git-annex, capture re-executable provenance with datalad run/rerun and containers-run, publish to siblings)
 - GPU acceleration: Optimize for GPU (CuPy, Numba CUDA, Warp, cuDF, cuML, cuGraph, KvikIO, cuCIM, cuxfilter, cuVS, cuSpatial, RAFT)
 - Genomics platforms: DNAnexus, LatchBio
 - Workflow engines: Nextflow (build/run/debug Nextflow & nf-core pipelines — DSL2 modules, executors/containers, HPC/cloud scaling) and pacsomatic (operator toolkit for the nf-core/pacsomatic tumor-normal somatic variant-calling workflow)
