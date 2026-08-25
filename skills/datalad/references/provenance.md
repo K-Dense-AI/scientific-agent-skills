@@ -43,6 +43,124 @@ Two companion resources make this checkable rather than aspirational:
 checklist, and <https://examples.stamped-principles.org> collects worked patterns,
 including ones built directly on `datalad run` and `datalad rerun`.
 
+### The normative requirements
+
+Each property is a spectrum rather than a pass/fail gate, and its requirements carry RFC 2119
+weights: MUST is the practical minimum a careful project usually already meets, SHOULD and MAY are
+progressively more tool-assisted. Grade an object requirement by requirement, citing the evidence
+behind each grade rather than the impression.
+
+| Item | Weight | Requirement |
+|---|---|---|
+| S.1 | MUST | Every module essential to replicating the execution is reachable within one top-level research object, either literally or by explicit reference |
+| S.2 | MUST | License declarations are retrievable alongside what they govern |
+| T.1 | MUST | Persistent content identification is recorded for all components |
+| T.2 | SHOULD | All components use the same content-addressed version control system |
+| T.3 | MUST | The provenance of all modifications is recorded |
+| T.4 | SHOULD, MUST | Code-driven provenance is captured programmatically (SHOULD), and it MUST include the versions of the components involved |
+| A.1 | MUST | Instructions sufficient to reproduce all results are present |
+| A.2 | SHOULD | Those procedures are executable specifications rather than prose |
+| M.1 | SHOULD | Components are organised modularly |
+| M.2 | MAY | Modules are included directly or linked as subdatasets |
+| M.3 | SHOULD | Each module declares its own license, checked for compatibility where modules combine |
+| P.1 | MUST NOT | Procedures depend on undocumented host state |
+| P.2 | MUST | Computational environments are explicitly specified |
+| P.3 | MUST | Environment definitions are version controlled |
+| E.1 | SHOULD | Results are produced in ephemeral environments rebuilt from those specifications |
+| D.1 | MUST | All referenced modules are persistently retrievable by others |
+| D.2 | SHOULD | Environment specifications support reproducible builds |
+| D.3 | SHOULD | Each module carries an explicit license with a resolvable identifier |
+
+The `S.1`-style labels are shorthand for walking the list in order, not identifiers taken from the
+specification; <https://checklist.stamped-principles.org> is the authority for the wording and the
+weights.
+
+### Where the evidence lives
+
+Every requirement above is checkable against a DataLad dataset with read-only commands. Nothing in
+this table writes to the dataset.
+
+| Property | What satisfies it | How to look |
+|---|---|---|
+| **S** | inputs registered as subdatasets rather than copied in, a top-level `README`, and a `LICENSE` beside the content it covers | `datalad subdatasets -r`, `cat .gitmodules`, `git annex whereis <path>` for content that lives elsewhere |
+| **T** | git history for structure, annex keys for content, run records for modifications | `git log --oneline`, `git log --oneline --grep '\[DATALAD RUNCMD\]'` to count run records, `git annex whereis --json <path>` for recorded locations |
+| **A** | replayable run records, not a prose README | `datalad rerun --report <rev>` on the commits that produced results; if that finds nothing, A.2 is unmet however good the README is |
+| **M** | `code/`, `inputs/`, `outputs/` separated, each linked module keeping its own history and license | `datalad subdatasets -r`, `git ls-files` for the layout, per-module `LICENSE` |
+| **P** | an environment specification tracked in Git, and commands that name no host-specific path | `git ls-files \| grep -Ei 'dockerfile\|environment.ya?ml\|requirements.txt\|pyproject.toml'`, `datalad containers-list`, and a read of the recorded commands for absolute paths outside the dataset |
+| **E** | results produced by `containers-run` against a registered image rather than by ambient tools | `datalad containers-list`, and whether the run records are `containers-run` invocations |
+| **D** | a sibling that others can actually reach, and content that is really there | `datalad siblings`, `git remote -v`, `git annex whereis --json <path> \| jq '.whereis \| length'` |
+
+Grep the commit subject rather than the run record markers. With `--sidecar yes`, or with
+`datalad.run.record-sidecar` set, the record itself is written to the dataset's `.datalad/runinfo`
+directory instead of into the commit message, but the `[DATALAD RUNCMD]` subject is there either
+way.
+
+`datalad containers-list` needs the `datalad-container` extension; without it installed the command
+does not exist, which is itself evidence about P and E. Where `datalad` is unavailable altogether,
+every probe above except `subdatasets`, `containers-list`, and `rerun --report` has a plain Git or
+git-annex equivalent, so a git-only assessment is still possible at reduced confidence — say so in
+the readout rather than reporting a gap you could not probe for.
+
+### Ephemeral and Distributable in practice
+
+These are the two properties a DataLad dataset is least likely to satisfy by accident, because
+neither follows from committing carefully.
+
+**Ephemeral (E.1)** asks that results come out of an environment rebuilt from specification, not
+out of whatever was installed on the machine that ran the analysis. `containers-run` is the
+mechanism: the documentation states that "the container image itself will be recorded as an input
+dependency of the command execution in the RUN record in the git history", so the record pins the
+image as annexed content addressed by key rather than as a tag someone can re-push under. A
+`Dockerfile` or `environment.yml` tracked in the dataset that *builds* that image is stronger still,
+because it satisfies P.2 and P.3 as well and gives D.2 something to reproduce from.
+
+One name collision worth heading off: `datalad clone --reckless ephemeral` has nothing to do with
+this property. It symlinks the clone's annex to the origin's and marks the clone dead to git-annex,
+which is a disk and inode optimisation for throwaway compute; it says nothing about how the
+environment was built.
+
+**Distributable (D.1)** fails most often in a way that looks like success. `datalad push --data`
+defaults to `auto-if-wanted`, so a push that reports success can move the history and none of the
+content, leaving a sibling that clones cleanly and then cannot deliver a single byte. Check the
+result rather than the exit status:
+
+```bash
+datalad push --to store --data anything
+git annex whereis --json <path> | jq '.whereis | length'   # more than the local annex?
+```
+
+Persistence is the other half, and a sibling on a lab server is not persistence. A RIA store keeps
+the full history and annex in one addressable place (see [publishing.md](publishing.md)); for an
+archived snapshot with an identifier, `datalad export-archive` writes a TAR or ZIP of the dataset
+content and `datalad export-to-figshare` pushes one to figshare, which is where a DOI enters. D.3
+then asks that the license carry a resolvable identifier: an SPDX identifier from
+<https://spdx.org/licenses/>, or the REUSE conventions at <https://reuse.software> when modules are
+licensed individually, which is also what makes M.3 checkable.
+
+### Assessing an existing dataset
+
+Assessment is read-only. Never `save`, `run`, `push`, or edit while grading: a report that mutates
+the object it grades invalidates itself.
+
+1. Confirm the target is a dataset at all (`.datalad/` present, or at least a Git repository), and
+   report the resolved path.
+2. Run the probes in the evidence table, collecting what each one shows and what it fails to show.
+3. Walk S.1 through D.3, marking each item satisfied, partial, or unmet against that evidence. An
+   unmet MUST outranks any number of unmet SHOULDs when ordering the result.
+4. Report per property, with the evidence attached, and lead with the shape of it — "strong on S, T,
+   and M, weak on P, E, and D" is the sentence a reader acts on:
+
+   | Property | Grade | Evidence | Gap |
+   |---|---|---|---|
+   | S Self-contained | partial | inputs are subdatasets (`.gitmodules`) | no top-level README |
+   | T Tracked | satisfied | 14 run records in history | — |
+
+5. If a remediation plan is wanted, order it by weight and make every step a command:
+   results with no run record → re-run under `datalad run` or `containers-run`; no environment
+   specification → add one and `containers-add` the image; inputs copied in → `datalad clone -d .`
+   into `inputs/`; no license → add one with an SPDX identifier; nothing published → `datalad push`
+   to a sibling or RIA store, then archive for a DOI.
+
 ### The YODA layout in practice
 
 Apply the layout at creation time:

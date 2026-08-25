@@ -5,7 +5,7 @@ compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 10.x.
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: Dylan Pulver
 ---
 
@@ -296,4 +296,7 @@ Topic scope for this skill was informed in part by @bcmcpher's MIT-licensed
 plugin (nineteen per-command slash-command skills). The text here is written
 independently and grounded in the upstream DataLad documentation; overlap is unavoidable
 because both cover DataLad, but the structure, style, and specific technical claims are
-different.
+different. The STAMPED requirement list, evidence map, and assessment procedure in
+[provenance.md](references/provenance.md) are the exception: they are adapted from that
+plugin's `stamped-principles.md` and `datalad-stamped-assess` skill, contributed by their
+author.
