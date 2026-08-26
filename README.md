@@ -588,10 +588,11 @@ This repository contains **164 scientific and research skills** organized across
 - Citations: Citation Management, pyzotero
 - Illustration: Generate Image (AI image generation with FLUX.2 Pro and Gemini 3.1 Flash Image / Nano Banana 2)
 
-#### 🔬 **Scientific Databases & Data Access** (11 skills → 100+ databases total)
+#### 🔬 **Scientific Databases & Data Access** (12 skills → 100+ databases total)
 > A unified database-lookup skill provides deterministic REST API access to 78 public databases across all domains, with retrieval contracts, pagination/count reconciliation, and endpoint provenance. Dedicated skills cover specialized data platforms. Multi-database packages like BioServices (~40 bioinformatics services), BioPython (39 NCBI sub-databases via Entrez), and gget (20+ genomics databases) add further coverage.
 - Unified access: Database Lookup (78 databases spanning chemistry, genomics, clinical, pathways, patents, economics, and more — PubChem, ChEMBL, UniProt, PDB, AlphaFold, KEGG, Reactome, STRING, ClinVar, COSMIC, ClinicalTrials.gov, FDA, FRED, USPTO, SEC EDGAR, and dozens more — with auditable filters and provenance)
 - Cancer genomics: DepMap (cancer cell line dependencies, drug sensitivity, gene effect profiles)
+- Public germline variant evidence: Folklore Variant Evidence (one supported GRCh38 variant to structured source-linked evidence, automated variant-level ACMG/AMP decision support, explicit ambiguity handling, and related literature for qualified professional review)
 - Cancer imaging: Imaging Data Commons (NCI radiology & pathology datasets via idc-index)
 - Knowledge graph: PrimeKG (precision medicine knowledge graph — genes, drugs, diseases, phenotypes)
 - Biomedical knowledge graph search: [NCATS ARAX](skills/ncats-arax/) (bounded, Biolink-constrained one-hop and endpoint-pinned two-hop queries over knowledge graphs with up to five explicitly selected NCATS Translator providers, with provenance preservation)
