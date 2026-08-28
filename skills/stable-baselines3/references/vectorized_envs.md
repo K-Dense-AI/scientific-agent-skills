@@ -576,5 +576,5 @@ model = PPO.load("model", env=eval_env)
 ## Additional Resources
 
 - Official SB3 VecEnv Guide: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html
-- VecEnv API Reference: https://stable-baselines3.readthedocs.io/en/master/common/vec_env.html
+- VecEnv API Reference: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html#module-stable_baselines3.common.vec_env
 - Multiprocessing Best Practices: https://docs.python.org/3/library/multiprocessing.html
