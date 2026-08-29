@@ -25,13 +25,13 @@
 
 > **保持关注：** 在 [X](https://x.com/k_dense_ai)、[LinkedIn](https://www.linkedin.com/company/k-dense-inc)、[YouTube](https://www.youtube.com/@K-Dense-Inc) 和 [Reddit](https://www.reddit.com/user/-k-dense-/) 上关注 K-Dense，获取新 skill、版本发布公告、实操演示、科研 workflow 示例，以及可与你自己的 AI 智能体配合使用的范例。
 
-这是一套全面的 **163 个即用型科研与学术 skill**（涵盖癌症基因组学、个体级千人基因组查询、托管调控序列预测、实时病原体变异监测、分析方法验证、PK/PD 建模与剂量选择、生物医学与法规文献全文检索、药物-靶点结合、受限的生物医学知识图谱搜索、分子动力学、RNA 速率、微生物组基础模型、地理空间科学、时间序列预测、通过 Hugging Science 进行的科研机器学习资源发现、78+ 科学数据库等），适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，由 [K-Dense](https://k-dense.ai) 创建。该仓库同时也是一个可移植的 [Agent Plugins](https://agent-plugins.org/) 包（`plugin.json` + `skills/`），因此支持插件的客户端可以将整个合集作为单个插件加载。适用于 **Cursor、Claude Code、Codex、Google Antigravity** 等。将你的 AI 智能体转变为能够在生物学、化学、医学等领域执行复杂多步骤科研 workflow 的研究助理。
+这是一套全面的 **163 个即用型科研与学术 skill**（涵盖癌症基因组学、个体级千人基因组查询、托管调控序列预测、实时病原体变异监测、分析方法验证、PK/PD 建模与剂量选择、生物医学与法规文献全文检索、药物-靶点结合、受限的生物医学知识图谱搜索、分子动力学、RNA 速率、微生物组基础模型、地理空间科学、时间序列预测、借助 Hugging Science 发现科研机器学习资源、78+ 科学数据库等），适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，由 [K-Dense](https://k-dense.ai) 创建。该仓库同时也是一个可移植的 [Agent Plugins](https://agent-plugins.org/) 包（`plugin.json` + `skills/`），因此支持插件的客户端可以将整个合集作为单个插件加载。适用于 **Cursor、Claude Code、Codex、Google Antigravity** 等。将你的 AI 智能体转变为能够在生物学、化学、医学等领域执行复杂多步骤科研 workflow 的研究助理。
 
-> ⭐ **让 AI 助力科学更容易被发现：** 如果 Scientific Agent Skills 为你节省了时间、教会了你的智能体某个 workflow，或帮助你的实验室更快推进，请为[本仓库点 Star](https://github.com/K-Dense-AI/scientific-agent-skills)。一个 Star 就是一份公开的认可，表明这些开放、可复用的科研 skill 值得继续维护：它帮助科学家、工程师和开源贡献者找到这个项目，展示哪些智能体 skill 标准正获得实际采用，也给了我们一个明确的理由去持续扩展这个合集，造福社区。
+> ⭐ **让 AI 助力科学更容易被发现：** 如果 Scientific Agent Skills 为你节省了时间、教会了你的智能体某个 workflow，或帮助你的实验室更快推进，请为 [本仓库点 Star](https://github.com/K-Dense-AI/scientific-agent-skills)。一个 Star 就是一份公开的认可，表明这些开放、可复用的科研 skill 值得继续维护：它帮助科学家、工程师和开源贡献者找到这个项目，展示哪些智能体 skill 标准正获得实际采用，也给了我们一个明确的理由去持续扩展这个合集，造福社区。
 
 ---
 
-这些 skill 让你的 AI 智能体能够跨多个科研领域无缝使用专门的科学库、数据库和工具。虽然智能体本身就可以使用任何 Python 包或 API，但这些显式定义的 skill 提供了精选的文档和示例，使其在以下 workflow 中显著更强大、更可靠：
+这些 skill 让你的 AI 智能体能够跨多个科研领域无缝使用专门的科学库、数据库和工具。虽然智能体本身就可以使用任何 Python 包或 API，但这些显式定义的 skill 提供了精选的文档和示例，让它在以下 workflow 中显著更强大、更可靠：
 - 🧬 生物信息学与基因组学 - 序列分析、单细胞 RNA-seq、基因调控网络、变异注释、系统发育分析
 - 🧪 化学信息学与药物发现 - 分子性质预测、虚拟筛选、ADMET 分析、分子对接、先导化合物优化
 - 🔬 蛋白质组学与质谱 - LC-MS/MS 处理、肽段鉴定、谱图匹配、蛋白质定量
@@ -230,7 +230,7 @@ hermes skills tap add K-Dense-AI/scientific-agent-skills
 
 > **NemoClaw 注意：** NemoClaw 在 NVIDIA OpenShell 中运行智能体，出站网络默认为拒绝。skill 可以正常发现和加载，但任何需要网络的 skill——通过 `uv` 安装包，或 API 调用（Exa、Parallel、Benchling、NCBI、Materials Project 等）——只有操作员在 OpenShell TUI 中预先批准相关域名后才能工作。
 
-**就这么简单！** 兼容的 host 可以从其配置的路径中发现这些 skill 并在相关时使用。你也可以通过在提示词中提及 skill 名称来手动调用任何 skill。
+**就这么简单！** 兼容的 host 可以从其配置的路径中发现这些 skill 并在适用时使用。你也可以通过在提示词中提及 skill 名称来手动调用任何 skill。
 
 ---
 
@@ -240,7 +240,7 @@ hermes skills tap add K-Dense-AI/scientific-agent-skills
 
 Agent Skills 功能强大——它们可以指示你的 AI 智能体运行任意代码、安装包、发起网络请求以及修改你系统上的文件。恶意或编写不当的 skill 有可能引导你的编码智能体做出有害行为。
 
-我们非常重视安全。所有贡献都会经过审查流程，我们会对本仓库中的每个 skill 运行基于 LLM 的安全扫描（通过 [Cisco AI Defense Skill Scanner](https://github.com/cisco-ai-defense/skill-scanner)）。然而，作为一个团队规模小、社区贡献不断增长的仓库，我们无法保证每个 skill 都已对所有可能的风险进行了详尽审查。
+我们非常重视安全。所有贡献都会经过审查流程，我们会对本仓库中的每个 skill 运行基于 LLM 的安全扫描（通过 [Cisco AI Defense Skill Scanner](https://github.com/cisco-ai-defense/skill-scanner)）。然而，作为一个团队规模小、社区贡献不断增长的仓库，我们无法保证每个 skill 都经过了对所有风险的详尽审查。
 
 **最终责任在于你：审查你要安装的 skill，并决定信任哪些。**
 
@@ -254,7 +254,7 @@ Agent Skills 功能强大——它们可以指示你的 AI 智能体运行任意
   uv pip install cisco-ai-skill-scanner
   skill-scanner scan /path/to/skill --use-behavioral
   ```
-- **报告任何可疑内容。** 如果你发现某个 skill 看起来有恶意或行为异常，请立即[提交 issue](https://github.com/K-Dense-AI/scientific-agent-skills/issues)，以便我们调查。
+- **报告任何可疑内容。** 如果你发现某个 skill 看起来有恶意或行为异常，请立即 [提交 issue](https://github.com/K-Dense-AI/scientific-agent-skills/issues)，以便我们调查。
 
 skill 每周扫描一次——增量进行，未变化的 skill 沿用之前的扫描结果，全部内容至少每 30 天以及扫描器或模型变更时全量重扫——结果发布到 [docs/security-report.md](docs/security-report.md)。有关安全政策、范围内内容、如何私下报告漏洞以及如何对扫描发现提出异议，请参阅 [SECURITY.md](SECURITY.md)。我们尽力及时处理安全缺口。
 
@@ -313,7 +313,7 @@ pip install uv
 uv --version
 ```
 
-更多安装选项和详情，请访问[官方 uv 文档](https://docs.astral.sh/uv/)。
+更多安装选项和详情，请访问 [官方 uv 文档](https://docs.astral.sh/uv/)。
 
 ---
 
@@ -507,7 +507,7 @@ networks, and search GEO for similar patterns.
 #### 🖼️ **医学影像与数字病理**（4 个 skill）
 - DICOM 处理：pydicom 3.0.2，隐私优先的本地预检，不做诊断或去标识化合规声明
 - 全切片成像：histolab 和仅限研究的 PathML 3.0.5
-- 虚拟空间转录组学：非商业 DeepSpot-M，从 224x224 H&E 切片进行转录组范围的空间基因表达
+- 虚拟空间转录组学：非商业 DeepSpot-M，从 224x224 H&E 切片推断转录组范围的空间基因表达
 
 #### 🧠 **神经科学与电生理学**（3 个 skill）
 - 数据标准：BIDS（用于神经科学和生物医学数据集的大脑成像数据结构）
@@ -664,8 +664,8 @@ networks, and search GEO for similar patterns.
 
 ### 安全与安全部署
 
-- **[科学智能体时代的安全：每个实验室在安装 skill 前需要知道的事](https://www.k-dense.ai/blog/skill-security-before-you-install)** — 本仓库[安全声明](#%EF%B8%8F-安全声明)背后的实用审查清单：安装前通读完整的 `SKILL.md` 和 `scripts/`，先扫描再安装，并固定版本而非跟踪分支。
-- **[沙盒化的 AI 科学家：将 NVIDIA OpenShell 与 Scientific Agent Skills 结合](https://www.k-dense.ai/blog/sandboxed-ai-scientist-openshell-skills)** — 在策略治理的沙盒中运行这些 skill；另请参见[快速开始](#-快速开始)中的 NemoClaw 注意事项。
+- **[科学智能体时代的安全：每个实验室在安装 skill 前需要知道的事](https://www.k-dense.ai/blog/skill-security-before-you-install)** — 本仓库 [安全声明](#%EF%B8%8F-安全声明)背后的实用审查清单：安装前通读完整的 `SKILL.md` 和 `scripts/`，先扫描再安装，并固定版本而非跟踪分支。
+- **[沙盒化的 AI 科学家：将 NVIDIA OpenShell 与 Scientific Agent Skills 结合](https://www.k-dense.ai/blog/sandboxed-ai-scientist-openshell-skills)** — 在策略治理的沙盒中运行这些 skill；另请参见 [快速开始](#-快速开始)中的 NemoClaw 注意事项。
 
 ### 互补的开源项目
 
@@ -763,7 +763,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 
 ### 支持开源
 
-本项目建立在 50+ 个优秀的开源项目之上。如果你认为这些 skill 有价值，请考虑[支持我们所依赖的项目](docs/open-source-sponsors.md)。
+本项目建立在 50+ 个优秀的开源项目之上。如果你认为这些 skill 有价值，请考虑 [支持我们所依赖的项目](docs/open-source-sponsors.md)。
 
 ---
 
@@ -772,7 +772,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 ### 常见问题
 
 **问题：skill 无法加载**
-- 验证 skill 文件夹位于正确的目录（参见[快速开始](#-快速开始)）
+- 验证 skill 文件夹位于正确的目录（参见 [快速开始](#-快速开始)）
 - 每个 skill 文件夹必须包含一个 `SKILL.md` 文件
 - 复制 skill 后重启你的智能体/IDE
 - 在 Cursor 中，检查设置 → 规则，以确认 skill 被发现
@@ -808,7 +808,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 答：是的！本仓库采用 MIT 许可。不过，每个 skill 在 `SKILL.md` 文件的 `license` 元数据字段中有自己的许可证——请务必查看并遵守这些条款。
 
 **问：为什么所有 skill 都合在一起，而不是分成单独的包？**
-答：我们相信，AI 时代的好科学本质上是跨学科的。把所有 skill 捆绑在一起，让你（和你的智能体）能够轻松跨领域衔接——例如在一个 workflow 中结合基因组学、化学信息学、临床数据和机器学习——而不必担心该安装或对接哪些 skill。
+答：我们相信，AI 时代的优质科研天然是跨学科的。把所有 skill 捆绑在一起，让你（和你的智能体）能够轻松跨领域衔接——例如在一个 workflow 中结合基因组学、化学信息学、临床数据和机器学习——而不必担心该安装或对接哪些 skill。
 
 **问：我可以将其用于商业项目吗？**
 答：仓库本身采用 MIT 许可，允许商业使用。但单个 skill 可能有不同的许可证——请检查每个 skill `SKILL.md` 文件中的 `license` 字段，以确保符合你预期的用途。
@@ -828,7 +828,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 答：不需要！只安装你需要的包。每个 skill 在 `SKILL.md` 文件中指定其要求。
 
 **问：如果某个 skill 不起作用怎么办？**
-答：先查看[故障排除](#-故障排除)一节。如果问题仍然存在，请在 GitHub 上提交带详细复现步骤的 issue。
+答：先查看 [故障排除](#-故障排除)一节。如果问题仍然存在，请在 GitHub 上提交带详细复现步骤的 issue。
 
 **问：这些 skill 可以离线使用吗？**
 答：数据库 skill 需要联网以查询 API。包 skill 在安装好 Python 依赖后可以离线工作。
@@ -836,7 +836,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 ### 贡献
 
 **问：我可以贡献自己的 skill 吗？**
-答：当然！我们欢迎贡献。参见[贡献](#-贡献)一节了解指南和最佳实践。
+答：当然！我们欢迎贡献。参见 [贡献](#-贡献)一节了解指南和最佳实践。
 
 **问：如何报告错误或建议功能？**
 答：在 GitHub 上提交带清晰描述的 issue。对于错误，请包含复现步骤以及预期与实际行为。
@@ -857,7 +857,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 
 ## 📖 引用
 
-如果你在研究或项目中使用 Scientific Agent Skills，请引用整个合集，并在相关时引用实质支持了你工作的单个 skill。
+如果你在研究或项目中使用 Scientific Agent Skills，请引用整个合集，如适用，请同时引用实质支持你工作的单个 skill。
 
 合集引用有助于他人找到仓库、理解你 workflow 中使用的更广泛 skill 生态，并认可 Scientific Agent Skills 背后的维护工作。单个 skill 引用则更精确地归功于你的智能体使用的特定包、数据库或 workflow 指引。
 
