@@ -125,7 +125,7 @@
 
 ### 🔧 **易于集成**
 - **简单设置** - 将技能复制到你的技能目录即可开始使用
-- **配置后自动发现** - 兼容的宿主会从其配置的技能路径中自动发现并使用相关技能
+- **配置后自动发现** - 兼容的 host 会从其配置的技能路径中自动发现并使用相关技能
 - **文档完善** - 每项技能都包含示例、使用场景和最佳实践
 
 ### 🌟 **持续维护与支持**
@@ -138,7 +138,7 @@
 
 ## 🎯 快速开始
 
-### 方式一：npx（支持的宿主）
+### 方式一：npx（支持的 host）
 
 用一条命令安装 Scientific Agent Skills：
 
@@ -146,7 +146,7 @@
 npx skills add K-Dense-AI/scientific-agent-skills
 ```
 
-这是一个基于标准的通用安装器，适用于支持 Agent Skills 标准的宿主（host），包括当前版本的 **Claude Code**、**Claude Cowork**、**Codex**、**Gemini CLI**、**Google Antigravity** 和 **Cursor**。请查阅你所用宿主的最新文档，确认安装路径和可选的元数据行为。
+这是一个基于标准的通用安装器，适用于支持 Agent Skills 标准的 host，包括当前版本的 **Claude Code**、**Claude Cowork**、**Codex**、**Gemini CLI**、**Google Antigravity** 和 **Cursor**。请查阅你所用 host 的最新文档，确认安装路径和可选的元数据行为。
 
 ### 方式二：GitHub CLI（`gh skill`）
 
@@ -159,14 +159,14 @@ gh skill install K-Dense-AI/scientific-agent-skills
 # 直接安装特定技能
 gh skill install K-Dense-AI/scientific-agent-skills scanpy
 
-# 指定特定智能体宿主
+# 指定特定智能体 host
 gh skill install K-Dense-AI/scientific-agent-skills --agent cursor
 gh skill install K-Dense-AI/scientific-agent-skills --agent claude-code
 gh skill install K-Dense-AI/scientific-agent-skills --agent codex
 gh skill install K-Dense-AI/scientific-agent-skills --agent gemini
 ```
 
-`gh skill` 会自动安装到你的智能体宿主的正确目录，并记录溯源元数据以保证供应链完整性。
+`gh skill` 会自动安装到你的智能体 host 的正确目录，并记录溯源元数据以保证供应链完整性。
 
 #### 版本固定
 
@@ -211,9 +211,9 @@ codex plugins install .
 
 兼容的客户端（Cursor、Codex、GitHub Copilot、VS Code、Kiro 及 [agent-plugins.org](https://agent-plugins.org/compatible-clients) 列出的其他客户端）共享相同的包布局；安装体验仍因客户端而异。
 
-### 其他 Agent Skills 宿主（OpenClaw、NemoClaw、Pi、Hermes 等）
+### 其他 Agent Skills host（OpenClaw、NemoClaw、Pi、Hermes 等）
 
-不同智能体宿主的安装路径、发现设置以及对可选 frontmatter 字段的支持各不相同。`npx skills add`（方式一）通常安装到 `~/.agents/skills/` 约定目录，项目级安装位于 `.agents/skills/` 下；请对照你所在宿主的最新文档确认这两个路径。要在配置为扫描这些位置的宿手上手动安装：
+不同智能体 host 的安装路径、发现设置以及对可选 frontmatter 字段的支持各不相同。`npx skills add`（方式一）通常安装到 `~/.agents/skills/` 约定目录，项目级安装位于 `.agents/skills/` 下；请对照你所在 host 的最新文档确认这两个路径。要在配置为扫描这些位置的 host 上手动安装：
 
 ```bash
 git clone https://github.com/K-Dense-AI/scientific-agent-skills.git ~/.agents/skills/scientific-agent-skills   # 用户级
@@ -226,11 +226,11 @@ git clone https://github.com/K-Dense-AI/scientific-agent-skills.git .agents/skil
 hermes skills tap add K-Dense-AI/scientific-agent-skills
 ```
 
-每份 `SKILL.md` 都有 YAML frontmatter，但遗留技能和社区技能在 `metadata` 格式（块式或流式）以及可选扩展字段上各不相同。仓库更新必须保持 `metadata.version` 为带引号的数字字符串，并通过规范的 `skills-ref validate ./skills/<skill-name>` 检查。各宿主对可选元数据和凭据提示的解释可能不同，因此请在目标宿手上验证行为。由于 161 项技能会占用大量常驻上下文，建议安装主题子集而不是整个合集。
+每份 `SKILL.md` 都有 YAML frontmatter，但遗留技能和社区技能在 `metadata` 格式（块式或流式）以及可选扩展字段上各不相同。仓库更新必须保持 `metadata.version` 为带引号的数字字符串，并通过规范的 `skills-ref validate ./skills/<skill-name>` 检查。各 host 对可选元数据和凭据提示的解释可能不同，因此请在目标 host 上验证行为。由于 161 项技能会占用大量常驻上下文，建议安装主题子集而不是整个合集。
 
 > **NemoClaw 注意：** NemoClaw 在 NVIDIA OpenShell 中运行智能体，出站网络默认为拒绝。技能可以正常发现和加载，但任何需要网络的技能——通过 `uv` 安装包，或 API 调用（Exa、Parallel、Benchling、NCBI、Materials Project 等）——只有操作员在 OpenShell TUI 中预先批准相关域名后才能工作。
 
-**就这么简单！** 兼容的宿主可以从其配置的路径中发现这些技能并在相关时使用。你也可以通过在提示词中提及技能名称来手动调用任何技能。
+**就这么简单！** 兼容的 host 可以从其配置的路径中发现这些技能并在相关时使用。你也可以通过在提示词中提及技能名称来手动调用任何技能。
 
 ---
 
@@ -820,7 +820,7 @@ skill-scanner scan /path/to/your/skill --use-behavioral
 答：我们会定期更新技能，以反映包和 API 的最新版本。主要更新会在发布说明中宣布。
 
 **问：我可以与其他 AI 模型一起使用吗？**
-答：核心 `SKILL.md` 格式遵循开放 [Agent Skills](https://agentskills.io/) 标准。安装路径、发现和可选元数据支持因宿主和版本而异，因此请确认你目标宿主的当前文档。
+答：核心 `SKILL.md` 格式遵循开放 [Agent Skills](https://agentskills.io/) 标准。安装路径、发现和可选元数据支持因 host 和版本而异，因此请确认你目标 host 的当前文档。
 
 ### 安装与设置
 
