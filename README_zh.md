@@ -18,16 +18,16 @@
 
 > **🔔 Claude Scientific Skills 现已更名为 Scientific Agent Skills。** 技能不变，但兼容性更广——现在适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，而不仅仅是 Claude。
 
-> **新增：K-Dense BYOK** — 一款免费、开源的桌面端 AI 科研伙伴（co-scientist），由 Scientific Agent Skills 驱动。自带 API 密钥，可从 40+ 模型中选择，并拥有完整的科研工作区，支持网页搜索、文件处理、100+ 科学数据库，以及本仓库的全部 161 项技能。你的数据始终保留在自己的电脑上，还可以通过 [Modal](https://modal.com/) 选择性地扩展至云端算力以应对繁重负载。[从这里开始。](https://github.com/K-Dense-AI/k-dense-byok)
+> **新增：[K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)** — 一款免费、开源的桌面端 AI 科研伙伴（co-scientist），由 Scientific Agent Skills 驱动。自带 API 密钥，可从 40+ 模型中选择，并拥有完整的科研工作区，支持网页搜索、文件处理、100+ 科学数据库，以及本仓库的全部 161 项技能。你的数据始终保留在自己的电脑上，还可以通过 [Modal](https://modal.com/) 选择性地扩展至云端算力以应对繁重负载。[从这里开始。](https://github.com/K-Dense-AI/k-dense-byok)
 
 > **🎥 网络研讨会回放 — [K-Dense BYOK 快速入门](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)**
 > 手把手上手演示 [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)，这是一款免费、开源的桌面端 AI 科研伙伴，运行在你自己的机器上，由 Scientific Agent Skills 驱动。我们将介绍如何安装、自带 API 密钥，以及如何使用这些技能运行真实的科研工作流。无需任何技术经验。[观看回放 →](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)
 
 > **保持关注：** 在 [X](https://x.com/k_dense_ai)、[LinkedIn](https://www.linkedin.com/company/k-dense-inc)、[YouTube](https://www.youtube.com/@K-Dense-Inc) 和 [Reddit](https://www.reddit.com/user/-k-dense-/) 上关注 K-Dense，获取新技能、版本发布公告、实操演示、科研工作流示例，以及可与你自己的 AI 智能体配合使用的范例。
 
-这是一套全面的 **163 项即用型科研与学术技能**（涵盖癌症基因组学、个体级千人基因组查询、托管调控序列预测、实时病原体变异监测、分析方法验证、PK/PD 建模与剂量选择、生物医学与法规文献全文检索、药物-靶点结合、有边界的生物医学知识图谱搜索、分子动力学、RNA 速率、微生物组基础模型、地理空间科学、时间序列预测、通过 Hugging Science 进行的科研机器学习资源发现、78+ 科学数据库等），适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，由 [K-Dense](https://k-dense.ai) 创建。该仓库同时也是一个可移植的 [Agent Plugins](https://agent-plugins.org/) 包（`plugin.json` + `skills/`），因此支持插件的客户端可以将整个合集作为单个插件加载。适用于 **Cursor、Claude Code、Codex、Google Antigravity** 等。将你的 AI 智能体转变为能够在生物学、化学、医学等领域执行复杂多步骤科研工作流的研究助理。
+这是一套全面的 **163 项即用型科研与学术技能**（涵盖癌症基因组学、个体级千人基因组查询、托管调控序列预测、实时病原体变异监测、分析方法验证、PK/PD 建模与剂量选择、生物医学与法规文献全文检索、药物-靶点结合、受限的生物医学知识图谱搜索、分子动力学、RNA 速率、微生物组基础模型、地理空间科学、时间序列预测、通过 Hugging Science 进行的科研机器学习资源发现、78+ 科学数据库等），适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，由 [K-Dense](https://k-dense.ai) 创建。该仓库同时也是一个可移植的 [Agent Plugins](https://agent-plugins.org/) 包（`plugin.json` + `skills/`），因此支持插件的客户端可以将整个合集作为单个插件加载。适用于 **Cursor、Claude Code、Codex、Google Antigravity** 等。将你的 AI 智能体转变为能够在生物学、化学、医学等领域执行复杂多步骤科研工作流的研究助理。
 
-> ⭐ **让 AI 助力科学更容易被发现：** 如果 Scientific Agent Skills 为你节省了时间、教会了你的智能体某个工作流，或帮助你的实验室更快推进，请为[本仓库点星](https://github.com/K-Dense-AI/scientific-agent-skills)。一个 Star 就是一份公开的认可，表明这些开放、可复用的科研技能值得继续维护：它帮助科学家、工程师和开源贡献者找到这个项目，展示哪些智能体技能标准正获得实际采用，也给了我们一个明确的理由去持续扩展这个合集，造福社区。
+> ⭐ **让 AI 助力科学更容易被发现：** 如果 Scientific Agent Skills 为你节省了时间、教会了你的智能体某个工作流，或帮助你的实验室更快推进，请为[本仓库点 Star](https://github.com/K-Dense-AI/scientific-agent-skills)。一个 Star 就是一份公开的认可，表明这些开放、可复用的科研技能值得继续维护：它帮助科学家、工程师和开源贡献者找到这个项目，展示哪些智能体技能标准正获得实际采用，也给了我们一个明确的理由去持续扩展这个合集，造福社区。
 
 ---
 
@@ -35,7 +35,7 @@
 - 🧬 生物信息学与基因组学 - 序列分析、单细胞 RNA-seq、基因调控网络、变异注释、系统发育分析
 - 🧪 化学信息学与药物发现 - 分子性质预测、虚拟筛选、ADMET 分析、分子对接、先导化合物优化
 - 🔬 蛋白质组学与质谱 - LC-MS/MS 处理、肽段鉴定、谱图匹配、蛋白质定量
-- 🏥 临床研究与证据工作流 - 临床试验、药物基因组学、变异证据审查、药代动力学/药效动力学（PK/PD）建模与给药方案评估、聚合决策支持评估、绑定来源的报告结构草稿，以及临床医生撰写的治疗决策格式化
+- 🏥 临床研究与证据工作流 - 临床试验、药物基因组学、变异证据审查、药代动力学/药效动力学（PK/PD）建模与给药方案评估、聚合决策支持评估、来源限定的报告结构草稿，以及临床医生撰写的治疗决策格式化
 - 🧠 医疗 AI 与生物信号研究 - 电子健康记录（EHR）与模型研究、生理信号分析、回顾性验证——不用于针对患者的诊断、治疗、报警或部署决策
 - 🖼️ 医学影像与数字病理 - 隐私感知的 DICOM 处理和仅限研究的全切片图像分析、计算病理学、放射数据工作流
 - 🤖 机器学习与 AI - 深度学习、强化学习、时间序列分析、模型可解释性、贝叶斯方法
@@ -45,11 +45,11 @@
 - 📊 数据分析与可视化 - 统计分析、网络分析、时间序列、可发表级别的图表、大规模数据处理、EDA
 - 🌍 地理空间科学与遥感 - 卫星影像处理、GIS 分析、空间统计、地形分析、地球观测机器学习
 - 🧪 实验室自动化 - 液体处理协议、实验室设备控制、工作流自动化、LIMS 集成
-- 📚 科学沟通 - 证据可追溯的写作、保密授权同行评审、文献综述、文档处理、无宏 PPTX 海报、幻灯片、示意图、引文管理
+- 📚 科学沟通 - 可溯源写作、保密授权同行评审、文献综述、文档处理、无宏 PPTX 海报、幻灯片、示意图、引文管理
 - 🔬 多组学与系统生物学 - 多模态数据整合、通路分析、网络生物学、系统层面洞察
 - 🧬 蛋白质工程与设计 - 蛋白质语言模型、结构预测、序列设计、功能注释
 - 🧰 智能体平台与基础设施 - 基于 Pi 的 SDK、RPC、扩展、自定义提供方/模型、包、TUI 组件和会话工具开发
-- 🎓 研究方法论 - 证据有界候选假设、科学头脑风暴、批判性思维、基金申请写作，以及对学术作品的定性低风险评估
+- 🎓 研究方法论 - 受证据约束的候选假设、科学头脑风暴、批判性思维、基金申请书撰写，以及对学术作品的定性低利害评估
 - ⚖️ 法规与标准 - 为 ISO 管理体系与实验室标准，以及 ICH/USP/CLSI 框架下的分析方法验证、确认与转移，起草证据准备材料——仅用于合格审查，绝不用于认证、认可或方法放行决策
 
 **将你的 AI 编码智能体变成桌面上的"AI 科学家"！**
@@ -76,9 +76,9 @@
 
 - **100+ 科学与金融数据库** - 一个统一的数据库查询技能可确定性、带完整溯源地访问 78 个公共数据库（PubChem、ChEMBL、UniProt、COSMIC、ClinicalTrials.gov、FRED、USPTO 等），另有针对 DepMap、Imaging Data Commons、PrimeKG、NCATS ARAX、美国财政部财政数据、Hugging Science、OneKGPd 和 Genomic Intelligence 的专项技能。BioServices（约 40 个生物信息学服务）、BioPython（通过 Entrez 访问 39 个 NCBI 子数据库）和 gget（20+ 基因组学数据库）等多数据库包进一步扩展了覆盖范围
 - **70+ 优化过的 Python 包技能** - 针对 RDKit、Scanpy、PyTorch Lightning、scikit-learn、PyTDC、PathML、pydicom、NeuroKit2、PufferLib、QuTiP、GeoPandas、pymatgen、BioPython、Qiskit、分子动力学（OpenMM/MDAnalysis）等提供显式定义、感知版本的工作流。智能体仍然可以使用*任何* Python 包；这些技能只是为所列包提供更强、更安全的指引
-- **9 项科学集成技能** - 针对 Benchling、DNAnexus、LatchBio、OMERO、Protocols.io、Open Notebook、Ginkgo Cloud Lab、LabArchives 和 Opentrons 的显式定义技能。同样，智能体并不局限于这些——任何可从 Python 访问的 API 或平台都可使用；这些技能是经过优化的、预先文档化的路径
-- **30+ 分析与沟通工具** - 文献综述、证据可追溯的科学写作、保密同行评审、文档处理、Paperclip（全文论文、FDA/PMDA/EMA 申报文件、带行号固定引用的试验注册库）、Paperzilla、Exa Search、无宏 PPTX 海报、幻灯片、示意图、信息图、Mermaid 图表等
-- **10+ 研究与临床工具** - 证据有界假设生成、基金申请写作、聚合临床决策支持研究、临床医生撰写的治疗计划格式化、PK/PD 建模与仿真（NCA、群体 PK、暴露-反应、生物等效性、首次人体剂量）、BIDS、ISO 标准就绪证据准备（ISO 13485、ISO 14971、ISO/IEC 17025、ISO 15189）、分析方法验证与转移（ICH Q2(R2)/Q14、ICH M10、USP、CLSI EP）、情景分析，以及通过 Autoskill 从工作流推导技能
+- **9 项科学集成技能** - 针对 Benchling、DNAnexus、LatchBio、OMERO、Protocols.io、Open Notebook、Ginkgo Cloud Lab、LabArchives 和 Opentrons 的显式定义技能。同样，智能体并不局限于这些——任何可从 Python 访问的 API 或平台都可使用；这些技能是经过优化的、已整理好文档的路径
+- **30+ 分析与沟通工具** - 文献综述、可溯源的科学写作、保密同行评审、文档处理、Paperclip（全文论文、FDA/PMDA/EMA 申报文件、带行号固定引用的试验注册库）、Paperzilla、Exa Search、无宏 PPTX 海报、幻灯片、示意图、信息图、Mermaid 图表等
+- **10+ 研究与临床工具** - 受证据约束的假设生成、基金申请书撰写、聚合临床决策支持研究、临床医生撰写的治疗计划格式化、PK/PD 建模与仿真（NCA、群体 PK、暴露-反应、生物等效性、首次人体剂量）、BIDS、ISO 标准就绪证据准备（ISO 13485、ISO 14971、ISO/IEC 17025、ISO 15189）、分析方法验证与转移（ICH Q2(R2)/Q14、ICH M10、USP、CLSI EP）、情景分析，以及通过 Autoskill 从工作流推导技能
 
 每项技能都包含：
 - ✅ 全面的文档（`SKILL.md`）
@@ -121,7 +121,7 @@
 ### 🎯 **全面覆盖**
 - **161 项技能** - 覆盖所有主要科研领域
 - **100+ 数据库** - 通过 database-lookup 统一访问 78+ 数据库，另有专项数据访问技能以及 BioServices、BioPython、gget 等多数据库包
-- **70+ 优化过的 Python 包技能** - 对 RDKit、Scanpy、PyTorch Lightning、scikit-learn、PyTDC、pydicom、PufferLib、QuTiP、GeoPandas、pymatgen、Qiskit、分子动力学（OpenMM/MDAnalysis）、scVelo、TimesFM 等包提供当前、按版本限定的指引（智能体可以使用任何 Python 包；这些是预先文档化的路径）
+- **70+ 优化过的 Python 包技能** - 对 RDKit、Scanpy、PyTorch Lightning、scikit-learn、PyTDC、pydicom、PufferLib、QuTiP、GeoPandas、pymatgen、Qiskit、分子动力学（OpenMM/MDAnalysis）、scVelo、TimesFM 等包提供当前、按版本限定的指引（智能体可以使用任何 Python 包；这些是已整理好文档的路径）
 
 ### 🔧 **易于集成**
 - **简单设置** - 将技能复制到你的技能目录即可开始使用
@@ -226,7 +226,7 @@ git clone https://github.com/K-Dense-AI/scientific-agent-skills.git .agents/skil
 hermes skills tap add K-Dense-AI/scientific-agent-skills
 ```
 
-每份 `SKILL.md` 都有 YAML frontmatter，但遗留技能和社区技能在 `metadata` 格式（块式或流式）以及可选扩展字段上各不相同。仓库更新必须保持 `metadata.version` 为带引号的数字字符串，并通过规范的 `skills-ref validate ./skills/<skill-name>` 检查。各 host 对可选元数据和凭据提示的解释可能不同，因此请在目标 host 上验证行为。由于 161 项技能会占用大量常驻上下文，建议安装主题子集而不是整个合集。
+每份 `SKILL.md` 都有 YAML frontmatter，但遗留技能和社区技能在 `metadata` 格式（块式或流式）以及可选扩展字段上各不相同。仓库更新必须保持 `metadata.version` 为带引号的数字字符串，并通过规范的 `skills-ref validate ./skills/<skill-name>` 检查。各 host 对可选元数据和凭据提示的处理可能不同，请在你实际使用的 host 上验证确认。由于 161 项技能会占用大量常驻上下文，建议安装主题子集而不是整个合集。
 
 > **NemoClaw 注意：** NemoClaw 在 NVIDIA OpenShell 中运行智能体，出站网络默认为拒绝。技能可以正常发现和加载，但任何需要网络的技能——通过 `uv` 安装包，或 API 调用（Exa、Parallel、Benchling、NCBI、Materials Project 等）——只有操作员在 OpenShell TUI 中预先批准相关域名后才能工作。
 
@@ -264,9 +264,9 @@ Agent Skills 功能强大——它们可以指示你的 AI 智能体运行任意
 
 Scientific Agent Skills 由全球致力于此的开发者与研究社区维护的 **50+ 优秀开源项目**驱动。Biopython、Scanpy、RDKit、scikit-learn、PyTorch Lightning 等项目构成了这些技能的基础。
 
-**如果你认为本仓库有价值，请考虑支持使它成为可能的项目：**
+**如果你认为本仓库有价值，请考虑支持那些支撑它的开源项目：**
 
-- ⭐ 在 GitHub 上为它们的仓库**点星**
+- ⭐ 在 GitHub 上为它们**点 Star**
 - 💰 通过 GitHub Sponsors 或 NumFOCUS **赞助维护者**
 - 📝 在你的出版物中**引用这些项目**
 - 💻 **贡献**代码、文档或错误报告
@@ -454,7 +454,7 @@ networks, and search GEO for similar patterns.
 - **统计分析**：执行假设检验、功效分析和实验设计
 - **论文图表**：用 matplotlib 和 seaborn 创建可发表级别的可视化
 - **网络可视化**：用 NetworkX 可视化生物网络
-- **报告生成**：用科学写作和文档工具生成证据可追溯的研究报告；临床报告输出仍为明显标注的草稿，且仅基于经过验证的合成、去标识化或聚合来源事实
+- **报告生成**：用科学写作和文档工具生成可溯源的研究报告；临床报告输出仍为明显标注的草稿，且仅基于经过验证的合成、去标识化或聚合来源事实
 
 ### 🧪 实验室自动化
 - **方案设计**：在经培训操作员审查前，编写并仿真 Opentrons 或 PyLabRobot 方案
@@ -501,8 +501,8 @@ networks, and search GEO for similar patterns.
 - 癌症基因组学：DepMap（癌症依赖性评分、药物敏感性）
 - 癌症影像：Imaging Data Commons（通过 idc-index 获取 NCI 放射与病理数据集）
 - 医疗 AI 研究：PyHealth
-- 决策支持研究：仅限本地、聚合或合成临床决策支持评估和治理材料
-- 临床文档：绑定来源的 Clinical Reports 草稿，以及经验证的临床医生决策与治疗计划格式化；两项技能均不做诊断或治疗建议
+- 决策支持研究：仅限本地的、聚合的或合成的临床决策支持评估与治理材料
+- 临床文档：来源限定的 Clinical Reports 草稿，以及对经验证的临床医生决策与治疗计划进行格式化；两项技能均不做诊断或治疗建议
 
 #### 🖼️ **医学影像与数字病理**（4 项技能）
 - DICOM 处理：pydicom 3.0.2，隐私优先的本地预检，不做诊断或去标识化合规声明
@@ -533,7 +533,7 @@ networks, and search GEO for similar patterns.
 #### ⚙️ **工程与仿真**（6 项技能）
 - 实验室硬件 CAD：参数化 build123d 0.11.1 微流控芯片与模具、光机安装座、微孔板和比色皿适配器、行为实验台模型，对照 ANSI/SLAS 和光学平台尺寸标准检查，并以强制多视图渲染进行审查
 - 数值计算：专有 MATLAB R2026a 和独立的 GNU Octave 11.3 规划/审查工作流
-- 计算流体力学：有边界的 FluidSim 0.9 仿真，带数值有效性和 HPC 检查
+- 计算流体力学：受限的 FluidSim 0.9 仿真，带数值有效性和 HPC 检查
 - 实验流场测量：OpenPIV（从 PIV 图像对获取速度场、查询窗口互相关、伪矢量验证、涡量/应变率/湍流统计）
 - 离散事件仿真：SimPy 4.1.2，带重复、预热和输出分析指引
 - 符号数学：SymPy
@@ -550,12 +550,12 @@ networks, and search GEO for similar patterns.
 - 统计分析：统计分析工作流
 - 单位与测量不确定度：不确定度与单位（pint 量纲检查、GUM 不确定度预算、A/B 类评定、包含因子和扩展不确定度、蒙特卡洛传播、CODATA 常数）
 - 实验设计：实验设计（随机化、区组、因子/部分因子 DOE、交叉、聚类、序贯设计；pyDOE3）
-- 统计功效：统计功效（t 检验、ANOVA、比例、相关、回归的样本量与功效——闭式解加针对 GLM、混合模型和聚类设计的基于仿真的方法）
+- 统计功效：t 检验、ANOVA、比例、相关、回归的样本量与功效计算——涵盖闭式解，以及针对 GLM、混合模型和聚类设计的基于仿真的方法
 
 #### 🧪 **实验室自动化**（6 项技能）
 - 液体处理：离线优先的 PyLabRobot 规划/仿真和 Opentrons 编写，实际执行位于显式操作员安全门之后
-- 云端实验室：Ginkgo Cloud Lab（跨无细胞/E. coli/巴斯德毕赤酵母的蛋白表达与纯化、IVT RNA 合成、热位移和 Echo-MS 分析、SPR 入门、通过自主 RAC 基础设施实现的荧光像素艺术）
-- 协议管理：有边界的 protocols.io 读取，覆盖文档化的 v3/v4 端点，以及不执行写入的计划
+- 云端实验室：Ginkgo Cloud Lab（无细胞体系、大肠杆菌与毕赤酵母中的蛋白表达与纯化，体外转录（IVT）RNA 合成，热位移与 Echo-MS 检测，SPR 靶点接入，以及借助自主 RAC（可重构自动化小车）基础设施生成的荧光像素画）
+- 协议管理：受限的 protocols.io 读取，覆盖文档化的 v3/v4 端点，以及不执行写入的计划
 - LIMS/ELN 集成：Benchling 和独立的 LabArchives 遗留 ELN 与 Inventory v1 API
 
 #### 🔬 **多组学与系统生物学**（3 项技能）
@@ -574,7 +574,7 @@ networks, and search GEO for similar patterns.
 - 高级论文搜索：BGPT 论文搜索（每篇论文 25+ 个结构化字段——方法、结果、样本量、质量评分——来自全文而非仅摘要）
 - 网络情报：并行网络（网页搜索、URL/PDF 提取、深度研究、结构化富集、实体发现和周期性监控）、Exa Search 和 Research Lookup
 - 研究笔记本：Open Notebook（自托管 NotebookLM 替代品——PDF、视频、音频、网页；16+ 个 AI 提供方；多说话人播客生成）
-- 写作：证据可追溯的科学写作，以及本地、保密、授权的同行评审
+- 写作：可溯源的科学写作，以及本地、保密、授权的同行评审
 - 文档处理：LiteParse、PDF、DOCX、PPTX、XLSX 和 MarkItDown
 - 出版与论文工作流：会议模板（Venue Templates）
 - 演示：科学幻灯片、LaTeX 海报，以及从作者批准的本地清单生成的无宏 PPTX 海报
@@ -589,7 +589,7 @@ networks, and search GEO for similar patterns.
 - 癌症基因组学：DepMap（癌细胞系依赖性、药物敏感性、基因效应谱）
 - 癌症影像：Imaging Data Commons（通过 idc-index 获取 NCI 放射与病理数据集）
 - 知识图谱：PrimeKG（精准医学知识图谱——基因、药物、疾病、表型）
-- 生物医学知识图谱搜索：[NCATS ARAX](skills/ncats-arax/)（在最多五个显式选择的 NCATS Translator 提供方上，对知识图谱进行有边界的、Biolink 约束的单跳和端点固定双跳查询，保留溯源）
+- 生物医学知识图谱搜索：[NCATS ARAX](skills/ncats-arax/)（在最多五个明确指定的 NCATS Translator 提供方上，对知识图谱进行受限的、受 Biolink 约束的单跳查询和固定端点两跳查询，并保留溯源）
 - 财政数据：美国财政部财政数据（国债、财政部报表、拍卖、汇率）
 - 科研机器学习资源目录：Hugging Science（跨 17 个科学领域的精选数据集、模型、博客文章和交互式 Spaces 索引——天文学、生物学、化学、气候、基因组学、材料科学、医学、物理学、科学推理等——带 `datasets`、`transformers` 和 `gradio_client` 的使用模式）
 - 个体级群体基因组学：OneKGPd（3,202 人高覆盖度千人基因组队列查询）
@@ -609,16 +609,16 @@ networks, and search GEO for similar patterns.
 - 智能体平台开发：Pi Agent（将 Pi 用作终端编码工具，并基于 SDK、RPC/JSONL、扩展、自定义提供方/模型、包、TUI 组件和会话工具进行开发）
 
 #### 🎓 **研究方法论与规划**（13 项技能）
-- 构思：证据感知的科学头脑风暴和不评分的假设生成，将假设始终标注为候选
+- 构思：有证据意识的科学头脑风暴和不评分的假设生成，将假设始终标注为候选
 - 文本数据集假设软件：HypoGeniC/HypoRefine 生成候选文本模式和任务预测统计，而非经过验证的科学假设
 - 自主优化：Arbor（假设树优化——针对开发评估器迭代改进代码/模型/智能体工具/数据产物，同时用留出的测试门防止过拟合）
-- 批判性分析：科学批判性思维，以及对作品的定性低风险学者评估——绝不给人排名或支持重大决策
+- 批判性分析：科学批判性思维，以及对作品的定性低利害学者评估——绝不给人排名或支持重大决策
 - 情景分析：What-If Oracle（4–6 分支可能性探索、应急规划、决策压力测试）
 - 多视角审议：Consciousness Council（多元专家视角、魔鬼代言人分析）
 - 认知画像：DHDNA Profiler（从任何文本中提取思维模式与认知特征）
 - 资助：研究基金
 - 发现：Research Lookup、论文查找（10 个学术数据库）
-- 市场分析：证据可追溯的市场研究报告，带假设驱动的规模估算和预测敏感性
+- 市场分析：可溯源的市场研究报告，带假设驱动的规模估算和预测敏感性
 
 #### ⚖️ **法规与标准**（2 项技能）
 - 标准就绪：为 ISO 13485（医疗器械质量管理体系）、ISO 14971（器械风险管理）、ISO/IEC 17025（检测和校准实验室）和 ISO 15189（医学实验室）起草证据准备材料，各标准的过程域由 `--standard` 配置文件选择
