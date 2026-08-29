@@ -14,18 +14,17 @@ import rowan
 secret = rowan.get_webhook_secret()
 if secret is None:
     secret = rowan.create_webhook_secret()
-print(f"Secret key: {secret.secret}")
+# These functions return the secret as a plain string.
 
 # Rotate your secret (invalidates old, creates new)
-# Use this periodically for security
-new_secret = rowan.rotate_webhook_secret()
-print(f"New secret created (old secret disabled): {new_secret.secret}")
+# Use this periodically for security.
+secret = rowan.rotate_webhook_secret()
 
-# Verify incoming webhook signatures
+# Verify incoming webhook signatures.
 is_valid = rowan.verify_webhook_secret(
-    request_body=b"...",           # Raw request body (bytes)
-    signature="X-Rowan-Signature", # From request header
-    secret=secret.secret
+    raw_body=b"...",                  # Raw request body (bytes)
+    signature_header="sha256=...",    # Value from X-Rowan-Signature
+    secret=secret,
 )
 ```
 
@@ -40,7 +39,7 @@ smileses = ["CCO", "CC(=O)O", "c1ccccc1O"]
 names = ["ethanol", "acetic acid", "phenol"]
 
 workflows = [
-    rowan.submit_descriptors_workflow(smi, name=name)
+    rowan.submit_descriptors_workflow(rowan.Molecule.from_smiles(smi), name=name)
     for smi, name in zip(smileses, names)
 ]
 
@@ -89,7 +88,9 @@ rowan.api_key = "..."
 smileses = ["CCO", "CC(=O)O", "c1ccccc1O"]
 
 workflows = [
-    rowan.submit_descriptors_workflow(smi, name=f"compound_{i}")
+    rowan.submit_descriptors_workflow(
+        rowan.Molecule.from_smiles(smi), name=f"compound_{i}"
+    )
     for i, smi in enumerate(smileses)
 ]
 
@@ -118,7 +119,7 @@ for uuid in uuids:
         result = wf.result(wait=False)
         results.append({"uuid": uuid, "data": result.data})
     else:
-        print(f"{uuid}: still running ({wf.status})")
+        print(f"{uuid}: still running ({wf.get_status()})")
 
 print(f"Collected {len(results)} completed results")
 ```
@@ -135,7 +136,7 @@ Every workflow submission function accepts a `webhook_url` parameter:
 wf = rowan.submit_docking_workflow(
     protein=protein,
     pocket=pocket,
-    initial_molecule="CCO",
+    initial_molecule=rowan.Molecule.from_smiles("CCO"),
     webhook_url="https://myserver.com/rowan_callback",
     name="docking with webhook",
 )
@@ -155,8 +156,8 @@ Rowan supports webhook signature verification to ensure requests are authentic. 
 import rowan
 
 # Create a new webhook secret
-secret = rowan.create_webhook_secret()
-print(f"Your webhook secret: {secret.secret}")
+secret = rowan.create_webhook_secret()  # returns a string
+# Store it securely; do not log it.
 
 # Or retrieve an existing secret
 secret = rowan.get_webhook_secret()
@@ -211,8 +212,7 @@ import rowan
 import json
 
 app = FastAPI()
-_ws = rowan.get_webhook_secret() or rowan.create_webhook_secret()
-webhook_secret = _ws.secret
+webhook_secret = rowan.get_webhook_secret() or rowan.create_webhook_secret()
 
 @app.post("/rowan_callback")
 async def handle_rowan_webhook(request: Request):
