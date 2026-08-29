@@ -209,6 +209,60 @@ codex plugins install .
 
 Compatible clients (Cursor, Codex, GitHub Copilot, VS Code, Kiro, and others listed at [agent-plugins.org](https://agent-plugins.org/compatible-clients)) share the same package layout; installation UX stays client-specific.
 
+### Option 4: SkillHub / Astron registry (governed team distribution)
+
+[SkillHub](https://github.com/iflytek/skillhub), part of the
+[iFLYTEK Astron ecosystem](https://github.com/topics/iflytek-astron), can validate and publish each
+immediate child of this repository's `skills/` directory as a separate, versioned registry
+package. This is useful when a team needs namespace ownership, review, security scanning, audit,
+and controlled installation rather than copying an entire collection directly into every agent.
+
+Pin the source checkout first, stage a reviewed topical subset, then validate that import plan
+without uploading anything:
+
+```bash
+git clone https://github.com/K-Dense-AI/scientific-agent-skills.git
+cd scientific-agent-skills
+git checkout v2.64.0  # or another reviewed release tag / commit SHA
+
+mkdir ../scientific-agent-skills-import
+cp -R skills/scanpy skills/rdkit skills/literature-review ../scientific-agent-skills-import/
+
+export SKILLHUB_REGISTRY=https://skillhub.example.com
+export SKILLHUB_TOKEN=sk_replace_with_your_api_token
+export SKILLHUB_NAMESPACE=research-team
+
+npx @astron-team/skillhub@0.1.9 whoami
+for skill_dir in ../scientific-agent-skills-import/*; do
+  [ -d "$skill_dir" ] || continue
+  npx @astron-team/skillhub@0.1.9 publish "$skill_dir" \
+    --namespace "$SKILLHUB_NAMESPACE" \
+    --visibility namespace-only \
+    --dry-run
+done
+```
+
+Review the dry-run result and each selected skill's license and dependencies. To upload valid
+packages through the normal SkillHub publication and review policy, repeat the same loop without
+`--dry-run`:
+
+```bash
+for skill_dir in ../scientific-agent-skills-import/*; do
+  [ -d "$skill_dir" ] || continue
+  npx @astron-team/skillhub@0.1.9 publish "$skill_dir" \
+    --namespace "$SKILLHUB_NAMESPACE" \
+    --visibility namespace-only
+done
+```
+
+The published SkillHub CLI handles one skill per `publish` command, so the loop publishes the
+individual skill directories. It does **not** import the root
+`plugin.json`, preserve repository-level collection semantics, or schedule future synchronization;
+those broader external-repository features are tracked in
+[SkillHub #516](https://github.com/iflytek/skillhub/issues/516). Process a larger selection only
+after reviewing the complete collection and confirming that the target registry's request limits
+and review capacity can handle the batch.
+
 ### Other Agent Skills hosts (OpenClaw, NemoClaw, Pi, Hermes, …)
 
 Agent hosts differ in install paths, discovery settings, and support for optional frontmatter fields. `npx skills add` (Option 1) commonly installs into the `~/.agents/skills/` convention, with project-scoped installs under `.agents/skills/`; confirm both paths against your host's current documentation. To install manually on a host configured to scan one of those locations:
