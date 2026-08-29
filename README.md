@@ -1,5 +1,7 @@
 # Scientific Agent Skills
 
+> **🌐 Languages:** [English](README.md) | [简体中文](README_zh.md) — The Chinese translation may lag behind the English original; refer to the [English README](README.md) as the source of truth.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![Version](https://img.shields.io/badge/Version-2.64.0-blue.svg)](pyproject.toml)
 [![Skills](https://img.shields.io/badge/Skills-163-brightgreen.svg)](#-whats-included)
