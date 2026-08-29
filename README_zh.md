@@ -25,7 +25,7 @@
 
 > **保持关注：** 在 [X](https://x.com/k_dense_ai)、[LinkedIn](https://www.linkedin.com/company/k-dense-inc)、[YouTube](https://www.youtube.com/@K-Dense-Inc) 和 [Reddit](https://www.reddit.com/user/-k-dense-/) 上关注 K-Dense，获取新 skill、版本发布公告、实操演示、科研 workflow 示例，以及可与你自己的 AI 智能体配合使用的范例。
 
-这是一套全面的 **163 项即用型科研与学术 skill**（涵盖癌症基因组学、个体级千人基因组查询、托管调控序列预测、实时病原体变异监测、分析方法验证、PK/PD 建模与剂量选择、生物医学与法规文献全文检索、药物-靶点结合、受限的生物医学知识图谱搜索、分子动力学、RNA 速率、微生物组基础模型、地理空间科学、时间序列预测、通过 Hugging Science 进行的科研机器学习资源发现、78+ 科学数据库等），适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，由 [K-Dense](https://k-dense.ai) 创建。该仓库同时也是一个可移植的 [Agent Plugins](https://agent-plugins.org/) 包（`plugin.json` + `skills/`），因此支持插件的客户端可以将整个合集作为单个插件加载。适用于 **Cursor、Claude Code、Codex、Google Antigravity** 等。将你的 AI 智能体转变为能够在生物学、化学、医学等领域执行复杂多步骤科研 workflow 的研究助理。
+这是一套全面的 **163 个即用型科研与学术 skill**（涵盖癌症基因组学、个体级千人基因组查询、托管调控序列预测、实时病原体变异监测、分析方法验证、PK/PD 建模与剂量选择、生物医学与法规文献全文检索、药物-靶点结合、受限的生物医学知识图谱搜索、分子动力学、RNA 速率、微生物组基础模型、地理空间科学、时间序列预测、通过 Hugging Science 进行的科研机器学习资源发现、78+ 科学数据库等），适用于任何支持开放 [Agent Skills](https://agentskills.io/) 标准的 AI 智能体，由 [K-Dense](https://k-dense.ai) 创建。该仓库同时也是一个可移植的 [Agent Plugins](https://agent-plugins.org/) 包（`plugin.json` + `skills/`），因此支持插件的客户端可以将整个合集作为单个插件加载。适用于 **Cursor、Claude Code、Codex、Google Antigravity** 等。将你的 AI 智能体转变为能够在生物学、化学、医学等领域执行复杂多步骤科研 workflow 的研究助理。
 
 > ⭐ **让 AI 助力科学更容易被发现：** 如果 Scientific Agent Skills 为你节省了时间、教会了你的智能体某个 workflow，或帮助你的实验室更快推进，请为[本仓库点 Star](https://github.com/K-Dense-AI/scientific-agent-skills)。一个 Star 就是一份公开的认可，表明这些开放、可复用的科研 skill 值得继续维护：它帮助科学家、工程师和开源贡献者找到这个项目，展示哪些智能体 skill 标准正获得实际采用，也给了我们一个明确的理由去持续扩展这个合集，造福社区。
 
@@ -72,11 +72,11 @@
 
 ## 📦 包含什么
 
-本仓库提供 **163 项科研与学术 skill**，按以下类别组织：
+本仓库提供 **163 个科研与学术 skill**，按以下类别组织：
 
 - **100+ 科学与金融数据库** - 一个统一的数据库查询 skill 可确定性、带完整溯源地访问 78 个公共数据库（PubChem、ChEMBL、UniProt、COSMIC、ClinicalTrials.gov、FRED、USPTO 等），另有针对 DepMap、Imaging Data Commons、PrimeKG、NCATS ARAX、美国财政部财政数据、Hugging Science、OneKGPd 和 Genomic Intelligence 的专个 skill。BioServices（约 40 个生物信息学服务）、BioPython（通过 Entrez 访问 39 个 NCBI 子数据库）和 gget（20+ 基因组学数据库）等多数据库包进一步扩展了覆盖范围
 - **70+ 优化过的 Python 包 skill** - 针对 RDKit、Scanpy、PyTorch Lightning、scikit-learn、PyTDC、PathML、pydicom、NeuroKit2、PufferLib、QuTiP、GeoPandas、pymatgen、BioPython、Qiskit、分子动力学（OpenMM/MDAnalysis）等提供显式定义、感知版本的 workflow。智能体仍然可以使用*任何* Python 包；这些 skill 只是为所列包提供更强、更安全的指引
-- **9 项科学集成 skill** - 针对 Benchling、DNAnexus、LatchBio、OMERO、Protocols.io、Open Notebook、Ginkgo Cloud Lab、LabArchives 和 Opentrons 的显式定义 skill。同样，智能体并不局限于这些——任何可从 Python 访问的 API 或平台都可使用；这些 skill 是经过优化的、已整理好文档的路径
+- **9 个科学集成 skill** - 针对 Benchling、DNAnexus、LatchBio、OMERO、Protocols.io、Open Notebook、Ginkgo Cloud Lab、LabArchives 和 Opentrons 的显式定义 skill。同样，智能体并不局限于这些——任何可从 Python 访问的 API 或平台都可使用；这些 skill 是经过优化的、已整理好文档的路径
 - **30+ 分析与沟通工具** - 文献综述、可溯源的科学写作、保密同行评审、文档处理、Paperclip（全文论文、FDA/PMDA/EMA 申报文件、带行号固定引用的试验注册库）、Paperzilla、Exa Search、无宏 PPTX 海报、幻灯片、示意图、信息图、Mermaid 图表等
 - **10+ 研究与临床工具** - 受证据约束的假设生成、基金申请书撰写、聚合临床决策支持研究、临床医生撰写的治疗计划格式化、PK/PD 建模与仿真（NCA、群体 PK、暴露-反应、生物等效性、首次人体剂量）、BIDS、ISO 标准就绪证据准备（ISO 13485、ISO 14971、ISO/IEC 17025、ISO 15189）、分析方法验证与转移（ICH Q2(R2)/Q14、ICH M10、USP、CLSI EP）、情景分析，以及通过 Autoskill 从 workflow 推导 skill
 
@@ -465,7 +465,7 @@ networks, and search GEO for similar patterns.
 
 ## 📚 可用 skill
 
-本仓库包含 **163 项科研与学术 skill**，按多个领域组织。每个 skill 都提供了全面的文档、代码示例，以及使用科学库、数据库和工具的最佳实践。
+本仓库包含 **163 个科研与学术 skill**，按多个领域组织。每个 skill 都提供了全面的文档、代码示例，以及使用科学库、数据库和工具的最佳实践。
 
 ### skill 分类
 
