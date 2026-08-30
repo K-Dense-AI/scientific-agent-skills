@@ -11,25 +11,25 @@ A lightweight entry point for batch triage, SAR, or exploratory scripts.
 
 ```python
 wf = rowan.submit_descriptors_workflow(
-    "CC(=O)Oc1ccccc1C(=O)O",  # positional arg, accepts SMILES string
+    rowan.Molecule.from_smiles("CC(=O)Oc1ccccc1C(=O)O"),
     name="aspirin descriptors",
 )
 
 result = wf.result()
-print(result.descriptors['MW'])    # 180.16
-print(result.descriptors['SLogP']) # 1.19
-print(result.descriptors['TPSA'])  # 59.44
-print(result.data['descriptors'])
-# {'MW': 180.16, 'SLogP': 1.19, 'TPSA': 59.44, 'nHBDon': 1.0, 'nHBAcc': 4.0, ...}
+print(result.descriptors["MW"])       # 180.042 — exact mass
+print(result.descriptors["SLogP"])    # 1.31
+print(result.descriptors["TopoPSA"])  # 63.6 — topological PSA
+print(result.descriptors["nHBAcc"])   # 3.0
 ```
 
 **Common descriptor keys:**
 
 | Key | Description | Typical drug range |
 |-----|-------------|-------------------|
-| `MW` | Molecular weight (Da) | <500 (Lipinski) |
+| `MW` | Exact/monoisotopic mass (Da), not average MW | <500 (Lipinski) |
 | `SLogP` | Calculated LogP (lipophilicity) | -2 to +5 |
-| `TPSA` | Topological polar surface area (Å²) | <140 for oral bioavailability |
+| `TopoPSA` | Topological polar surface area (Å²) | <140 for oral bioavailability |
+| `TPSA` | 3D charged surface area, not topological PSA | — |
 | `nHBDon` | H-bond donor count | ≤5 (Lipinski) |
 | `nHBAcc` | H-bond acceptor count | ≤10 (Lipinski) |
 | `nRot` | Rotatable bond count | <10 for oral drugs |
@@ -38,19 +38,22 @@ print(result.data['descriptors'])
 | `FilterItLogS` | Estimated aqueous solubility (LogS) | >-4 preferred |
 | `Lipinski` | Lipinski Ro5 pass (1.0) or fail (0.0) | — |
 
-The result contains hundreds of additional molecular descriptors (BCUT, GETAWAY, WHIM, etc.); access any via `result.descriptors['key']`.
+The result contains about 1,679 molecular descriptors in SDK 3.1.13 (BCUT,
+GETAWAY, WHIM, etc.); access any via `result.descriptors["key"]`. For average
+molecular weight, calculate it separately (for example, RDKit `MolWt`).
 
 ### 2. Microscopic pKa
 
 For protonation-state energetics and acid/base behavior of a specific structure.
 
-Two methods are available:
+Four methods are available:
 
 | Method | Input | Speed | Covers | Use when |
 |--------|-------|-------|--------|----------|
-| `chemprop_nevolianis2025` | SMILES string | Fast | Deprotonation only (anionic conjugate bases) | Acidic groups only; quick screening |
-| `starling` | SMILES string | Fast | Acid + base (full protonation/deprotonation) | Most drug-like molecules; preferred SMILES method |
-| `aimnet2_wagen2024` (default) | 3D molecule object | Slower, higher accuracy | Acid + base | You already have a 3D structure (e.g. from conformer search) |
+| `chemprop_nevolianis2025` | SMILES string | Fast | Deprotonation only | Acidic groups only; quick screening |
+| `starling` | SMILES string | Fast | Acid + base | Most drug-like molecules; preferred SMILES method |
+| `aimnet2_wagen2024` | 3D molecule object | Slower | Acid + base | You already have a 3D structure |
+| `gxtb_wagen2026` (**default**) | 3D molecule object | Slower | Acid + base | Current SDK default; set `method=` explicitly for reproducibility |
 
 ```python
 # Fast path: SMILES input with full acid+base coverage (use starling method when available)
@@ -61,8 +64,10 @@ wf = rowan.submit_pka_workflow(
 )
 
 result = wf.result()
-print(result.strongest_acid)    # 9.81 (pKa of the most acidic site)
-print(result.conjugate_bases)   # list of {pka, smiles, atom_index, ...} per deprotonatable site
+print(result.strongest_acid)    # 9.995 for phenol (verified; literature ~9.95)
+print(result.strongest_base)    # None when no basic site is found
+print(result.conjugate_bases)   # list of pKaMicrostate objects
+# Access each microstate with .pka, .smiles, .atom_index, .delta_g, .uncertainty
 ```
 
 ### 3. MacropKa
@@ -96,14 +101,17 @@ For 3D ensemble generation when ensemble quality matters.
 ```python
 wf = rowan.submit_conformer_search_workflow(
     initial_molecule="CCOC(=O)N1CCC(CC1)Oc1ncnc2ccccc12",
-    num_conformers=50,  # Optional: override default
     name="conformer search",
 )
 
 result = wf.result()
-print(result.conformer_energies)  # [0.0, 1.2, 2.5, ...]
-print(result.conformer_molecules)  # List of 3D molecules
-print(result.best_conformer)  # Lowest-energy conformer
+print(result.num_conformers)
+print(result.get_energies())    # [0.0, 1.2, 2.5, ...]
+print(result.get_conformers())  # list of 3D molecules
+print(result.get_conformer(0))  # lowest-energy conformer
+
+# There is no num_conformers submit parameter. Configure the generator and
+# ensemble through conf_gen_settings.
 ```
 
 ### 5. Tautomer search
@@ -112,7 +120,7 @@ For heterocycles and systems where tautomer state affects downstream modeling.
 
 ```python
 wf = rowan.submit_tautomer_search_workflow(
-    initial_molecule="O=c1[nH]ccnc1",  # or keto tautomer
+    initial_molecule=rowan.Molecule.from_smiles("O=c1[nH]ccnc1"),
     name="imidazolone tautomers",
 )
 
@@ -133,19 +141,18 @@ protein = rowan.upload_protein(
     file_path="cdk2.pdb",
 )
 
-# Define binding pocket
-pocket = {
-    "center": [10.5, 24.2, 31.8],
-    "size": [18.0, 18.0, 18.0],
-}
+# Binding pocket: [[center_x, center_y, center_z], [size_x, size_y, size_z]] in Å
+pocket = [[10.5, 24.2, 31.8], [18.0, 18.0, 18.0]]
 
 # Submit docking
 wf = rowan.submit_docking_workflow(
     protein=protein,
     pocket=pocket,
-    initial_molecule="CCNc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1",
+    initial_molecule=rowan.Molecule.from_smiles(
+        "CCNc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1"
+    ),
     do_pose_refinement=True,
-    do_conformer_search=True,
+    do_csearch=True,
     name="lead docking",
 )
 
@@ -176,11 +183,11 @@ analogues = [
 
 wf = rowan.submit_analogue_docking_workflow(
     analogues=analogues,
-    initial_molecule=analogues[0],  # Reference ligand
+    initial_molecule=rowan.Molecule.from_smiles(analogues[0]),  # reference ligand
     protein=protein,
-    pocket=pocket,
     name="SAR series docking",
 )
+# Analogue docking does not accept a pocket parameter in SDK 3.1.13.
 
 result = wf.result()
 print(result.analogue_scores)  # List of scores for each analogue
@@ -267,7 +274,7 @@ All workflows follow the same submit → wait → retrieve pattern and support w
 | Spin States | `submit_spin_states_workflow` | Spin-state energy ordering for organometallics/radicals |
 | Strain | `submit_strain_workflow` | Conformational strain relative to global minimum |
 | Scan | `submit_scan_workflow` | PES scans; torsion profiles |
-| Multistage Optimization | `submit_multistage_opt_workflow` | Progressive optimization across levels of theory |
+| Multistage Optimization | `submit_multistage_optimization_workflow` | Progressive optimization across levels of theory |
 
 ### Reaction chemistry
 
@@ -291,7 +298,7 @@ All workflows follow the same submit → wait → retrieve pattern and support w
 | Workflow | Function | When to use |
 |----------|----------|-------------|
 | RBFE/FEP | `submit_relative_binding_free_energy_perturbation_workflow` | Relative ΔΔG for congeneric series |
-| RBFE Graph | `submit_rbfe_graph_workflow` | Build and optimize an RBFE perturbation network |
+| RBFE Graph | `submit_relative_binding_free_energy_graph_workflow` | Build and optimize an RBFE perturbation network |
 
 ### Sequence and structural biology
 

@@ -52,9 +52,9 @@ tests/<skill-name>/          # same name as the skill directory
 └── fixtures/                # optional test data
 ```
 
-**Diagrams never live under `skills/` either.** Every skill has one generated workflow diagram at
-`docs/images/<skill-name>.png`, produced by `scripts/generate_skill_image.py` and kept in step with
-the skill's documentation — see [Skill diagrams](#skill-diagrams).
+**Diagrams never live under `skills/` either.** A skill may have a generated workflow diagram at
+`docs/images/<skill-name>.png`, produced by `scripts/generate_skill_image.py`. Diagrams are optional
+— see [Skill diagrams](#skill-diagrams).
 
 Tests reach their skill through an explicit anchor, never a relative walk:
 
@@ -73,11 +73,6 @@ SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "<skill-name>"
 5. If the skill ships `scripts/`, put their tests in **`tests/<name>/`** — never in the skill
    directory. Fixtures go in `tests/<name>/fixtures/`.
 6. Validate and scan (below).
-7. Generate the skill's diagram — a new skill without `docs/images/<name>.png` is incomplete:
-
-   ```bash
-   uv run python scripts/generate_skill_image.py --skill <name>
-   ```
 
 ```markdown
 ---
@@ -115,16 +110,6 @@ Use this skill when...
 5. Re-run any example, command, or script you touched, plus `tests/<name>/` if that suite exists.
    Suites check that `metadata.version` is present and quoted, not what it equals, so a version bump
    never needs a matching test edit.
-6. **Regenerate the diagram in the same change** whenever the edit changes what the skill does or
-   how its workflow runs — the picture is generated from `SKILL.md` and `references/`, so it goes
-   stale silently. The command overwrites `docs/images/<name>.png` in place:
-
-   ```bash
-   uv run python scripts/generate_skill_image.py --skill <name>
-   ```
-
-   A typo fix, a link repair, or a version bump alone does not need a new image.
-
 ## Frontmatter
 
 `SKILL.md` starts with YAML frontmatter. **Only these six fields are allowed** — the spec defines a
@@ -331,10 +316,11 @@ touch the shared contract.
 
 ## Skill diagrams
 
-Every skill carries one generated workflow diagram at `docs/images/<skill-name>.png`. Creating a
-skill means creating its image; changing what a skill does means regenerating it. The image is not
-optional decoration — it is derived from the documentation, so an out-of-date one misrepresents the
-skill.
+A skill may carry a generated workflow diagram at `docs/images/<skill-name>.png`. Diagrams are
+optional: neither a new skill nor a change to an existing one is blocked on having or refreshing an
+image, and no CI check enforces them. If you do ship one, note that it is derived from the
+documentation, so regenerate it when the skill's workflow changes rather than leaving a picture that
+misrepresents the skill.
 
 `scripts/generate_skill_image.py` is local repository tooling, standard library only, and runs in
 two stages on one `OPENROUTER_API_KEY` (environment variable, repository `.env`, or `--api-key`):
@@ -380,7 +366,7 @@ hand-tuning one skill's prompt, so the set stays visually consistent.
   leaked local path, and a drifted Agent Plugins manifest.
 - If the skill ships `scripts/`: a suite exists at `tests/<name>/`, a `[skills.<name>]` entry exists
   in `tests/skill-requirements.toml`, and `python tests/run_all.py --isolated <name>` passes.
-- `docs/images/<name>.png` exists, and was regenerated if the change altered what the skill does.
-  Its labels are spelled correctly and its arrows point where they should.
+- If the skill ships `docs/images/<name>.png`, its labels are spelled correctly and its arrows point
+  where they should. The image itself is optional.
 - Examples and scripts are tested, or clearly marked illustrative.
 - No secrets or private data; scan results clean or explained in the PR.

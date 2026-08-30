@@ -29,7 +29,7 @@ analogues = [
 print("Searching tautomeric forms...")
 taut_workflows = [
     rowan.submit_tautomer_search_workflow(
-        smi, name=f"analog_{i}", folder=folder,
+        rowan.Molecule.from_smiles(smi), name=f"analog_{i}", folder=folder,
     )
     for i, smi in enumerate(analogues)
 ]
@@ -43,13 +43,15 @@ for wf in taut_workflows:
 print("Predicting pKa and properties...")
 pka_workflows = [
     rowan.submit_pka_workflow(
-        smi, method="chemprop_nevolianis2025", name=f"pka_{i}", folder=folder,
+        smi, method="chemprop_nevolianis2025", name=f"compound_{i}", folder=folder,
     )
     for i, smi in enumerate(best_tautomers)
 ]
 
 descriptor_workflows = [
-    rowan.submit_descriptors_workflow(smi, name=f"desc_{i}", folder=folder)
+    rowan.submit_descriptors_workflow(
+        rowan.Molecule.from_smiles(smi), name=f"compound_{i}", folder=folder
+    )
     for i, smi in enumerate(best_tautomers)
 ]
 
@@ -73,7 +75,8 @@ for wf in descriptor_workflows:
         desc = result.descriptors
         descriptor_results.append({
             "compound": wf.name,
-            "mw": desc.get("MW"),
+            "exact_mass": desc.get("MW"),
+            "topological_psa": desc.get("TopoPSA"),
             "logp": desc.get("SLogP"),
             "hba": desc.get("nHBAcc"),
             "hbd": desc.get("nHBDon"),
@@ -91,22 +94,22 @@ print("\n=== Preliminary SAR ===")
 print(df.to_string())
 
 # 7. Select promising compound for docking
-# compound names are "pka_0", "pka_1", etc. — extract index to look up SMILES
+# compound names are "compound_0", "compound_1", etc. — extract the index
 top_idx = int(df.loc[df["pka"].idxmin(), "compound"].split("_")[1])
 top_smiles = best_tautomers[top_idx]
 
 print(f"\nProceeding with docking: {top_smiles}")
 
 # 8. Docking campaign
-protein = rowan.create_protein_from_pdb_id(name="CDK2_1CKP", code="1CKP")
-pocket = {"center": [10.5, 24.2, 31.8], "size": [18.0, 18.0, 18.0]}
+protein = rowan.create_protein_from_pdb_id(code="1CKP", name="CDK2_1CKP")
+pocket = [[10.5, 24.2, 31.8], [18.0, 18.0, 18.0]]
 
 docking_wf = rowan.submit_docking_workflow(
     protein=protein,
     pocket=pocket,
-    initial_molecule=top_smiles,
+    initial_molecule=rowan.Molecule.from_smiles(top_smiles),
     do_pose_refinement=True,
-    name=f"docking_{top_compound}",
+    name=f"docking_{top_idx}",
 )
 
 dock_result = docking_wf.result()

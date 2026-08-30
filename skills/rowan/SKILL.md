@@ -4,7 +4,7 @@ description: Rowan is a cloud-native molecular modeling and medicinal-chemistry 
 license: Proprietary (API key required)
 compatibility: Python 3.12+, API key required
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: Rowan Science
   trigger-keywords: pKa prediction, molecular docking, conformer search, chemistry workflow, drug discovery, SMILES, protein structure, batch molecular modeling, cloud chemistry
   openclaw:
@@ -49,16 +49,18 @@ uv pip install rowan-python
 import rowan
 rowan.api_key = "your_api_key_here"  # or set ROWAN_API_KEY env var
 
-# Submit a descriptors workflow — completes in under a minute
-wf = rowan.submit_descriptors_workflow("CC(=O)Oc1ccccc1C(=O)O", name="aspirin")
+# Descriptors require a 3D Molecule, not a bare SMILES string.
+mol = rowan.Molecule.from_smiles("CC(=O)Oc1ccccc1C(=O)O")
+wf = rowan.submit_descriptors_workflow(mol, name="aspirin")
 result = wf.result()
 
-print(result.descriptors['MW'])    # 180.16
-print(result.descriptors['SLogP']) # 1.19
-print(result.descriptors['TPSA'])  # 59.44
+print(result.descriptors["MW"])       # 180.042 — exact mass
+print(result.descriptors["SLogP"])    # 1.31
+print(result.descriptors["TopoPSA"])  # 63.6 — topological PSA
 ```
 
-If that prints without error, you're set up correctly.
+If that prints without error, you're set up correctly. These values and examples
+were verified against `rowan-python` 3.1.13.
 
 ## Installation
 
@@ -90,7 +92,7 @@ Verify authentication:
 import rowan
 user = rowan.whoami()  # Returns user info if authenticated
 print(f"User: {user.email}")
-print(f"Credits available: {user.credits_available_string}")
+print(f"Credits available: {user.credits_available_string()}")
 ```
 
 ## Molecule input formats
@@ -101,7 +103,18 @@ Rowan accepts molecules in the following formats:
 - **SMARTS patterns** (for some workflows): subset of SMARTS for substructure matching
 - **InChI** (if supported in your API version): `"InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3"`
 
-The API will validate input and raise a `rowan.ValidationError` if a molecule cannot be parsed. Always use canonicalized SMILES for reproducibility.
+The API validates molecule inputs and raises `ValueError` for an unparseable
+SMILES or a workflow-incompatible input type. Always use canonicalized SMILES
+for reproducibility.
+
+### SMILES strings versus molecule objects
+
+Accepted input types vary by workflow in `rowan-python` 3.1.13. Only these
+common workflows accept a bare string: pKa, conformer search, membrane
+permeability, ADMET, LogP, macropKa, solubility, and pose-analysis MD. Most
+others — including descriptors, tautomer search, docking, analogue docking,
+BDE, NMR, and Fukui — require `rowan.Molecule.from_smiles(smiles)` or an RDKit
+`Mol`/`RWMol`. A wrong type raises `ValueError` before submission.
 
 **Tip:** Use RDKit to validate SMILES before submission:
 
@@ -126,21 +139,21 @@ import rowan
 
 # 1. Submit — use the specific workflow function (not the generic submit_workflow)
 workflow = rowan.submit_descriptors_workflow(
-    "CC(=O)Oc1ccccc1C(=O)O",
+    rowan.Molecule.from_smiles("CC(=O)Oc1ccccc1C(=O)O"),
     name="aspirin descriptors",
 )
 
 # 2. & 3. Wait and retrieve
 result = workflow.result()  # Blocks until done (default: wait=True, poll_interval=5)
 print(result.data)              # Raw dict
-print(result.descriptors['MW']) # 180.16 — use result.descriptors dict, not result.molecular_weight
+print(result.descriptors["MW"]) # 180.042 exact mass; no result.molecular_weight property
 ```
 
 For long-running workflows, use streaming:
 
 ```python
 for partial in workflow.stream_result(poll_interval=5):
-    print(f"Progress: {partial.complete}%")
+    print(f"Complete: {partial.complete}")  # bool, not a percentage
     print(partial.data)
 ```
 
@@ -161,28 +174,30 @@ Rowan's API includes **typed workflow result objects** with convenience properti
 
 Results have two access patterns:
 
-1. **Convenience properties** (recommended first): `result.descriptors`, `result.best_pose`, `result.conformer_energies`
+1. **Convenience properties** (recommended first): `result.descriptors`, `result.best_pose`, `result.scores`. Result classes differ: conformer search uses `get_energies()` and `get_conformers()` methods.
 2. **Raw fallback**: `result.data` — raw dictionary from the API
 
 Example:
 
 ```python
 result = rowan.submit_descriptors_workflow(
-    "CCO",
+    rowan.Molecule.from_smiles("CCO"),
     name="ethanol",
 ).result()
 
-# Convenience property (returns dict of all descriptors):
-print(result.descriptors['MW'])   # 46.042
-print(result.descriptors['SLogP'])  # -0.001
-print(result.descriptors['TPSA'])   # 57.96
+# Convenience property (returns all descriptors):
+print(result.descriptors["MW"])       # exact/monoisotopic mass
+print(result.descriptors["SLogP"])
+print(result.descriptors["TopoPSA"])  # usual topological PSA
 
-# Raw data fallback (descriptors are nested under 'descriptors' key):
-print(result.data['descriptors'])
-# {'MW': 46.042, 'SLogP': -0.001, 'TPSA': 57.96, 'nHBDon': 1.0, 'nHBAcc': 1.0, ...}
+# Raw data fallback:
+print(result.data["descriptors"])
 ```
 
-**Note:** `DescriptorsResult` does **not** have a `molecular_weight` property. Descriptor keys use short names (`MW`, `SLogP`, `nHBDon`) not verbose names.
+**Note:** `DescriptorsResult` does **not** have a `molecular_weight` property.
+`MW` is exact/monoisotopic mass, not average molecular weight. `TPSA` is a 3D
+charged-surface descriptor; use `TopoPSA` for the usual topological polar
+surface area used in drug-likeness rules.
 
 ### Cache invalidation
 
@@ -190,7 +205,7 @@ Some result properties are lazily loaded (e.g., conformer geometries, protein st
 
 ```python
 result.clear_cache()
-new_structures = result.conformer_molecules  # Refetched
+new_structures = result.get_conformers()  # Refetched for ConformerSearchResult
 ```
 
 ## Projects, folders, and organization
@@ -207,11 +222,13 @@ project = rowan.create_project(name="CDK2 lead optimization")
 rowan.set_project("CDK2 lead optimization")
 
 # All subsequent workflows go into this project
-wf = rowan.submit_descriptors_workflow("CCO", name="test compound")
+wf = rowan.submit_descriptors_workflow(
+    rowan.Molecule.from_smiles("CCO"), name="test compound"
+)
 
-# Retrieve later
-project = rowan.retrieve_project("CDK2 lead optimization")
-workflows = rowan.list_workflows(project=project, size=50)
+# retrieve_project takes a UUID; list_workflows scopes with parent_uuid.
+project = rowan.retrieve_project(project.uuid)
+workflows = rowan.list_workflows(parent_uuid=project.uuid, size=50)
 ```
 
 ### Folders
@@ -227,7 +244,7 @@ wf = rowan.submit_docking_workflow(
 )
 
 # List workflows in a folder
-results = rowan.list_workflows(folder=folder)
+results = rowan.list_workflows(parent_uuid=folder.uuid)
 ```
 
 ## Workflow decision trees
@@ -276,7 +293,7 @@ ADME assessment across GI pH: Use macropKa
 ```python
 # Step 1: Find best tautomer
 taut_wf = rowan.submit_tautomer_search_workflow(
-    initial_molecule="O=c1[nH]ccnc1",
+    initial_molecule=rowan.Molecule.from_smiles("O=c1[nH]ccnc1"),
     name="imidazole tautomers",
 )
 best_taut = taut_wf.result().best_tautomer

@@ -567,5 +567,5 @@ class DebugCallback(BaseCallback):
 ## Additional Resources
 
 - Official SB3 Callbacks Guide: https://stable-baselines3.readthedocs.io/en/master/guide/callbacks.html
-- Callback API Reference: https://stable-baselines3.readthedocs.io/en/master/common/callbacks.html
+- Callback API Reference: https://stable-baselines3.readthedocs.io/en/master/guide/callbacks.html#module-stable_baselines3.common.callbacks
 - TensorBoard Documentation: https://www.tensorflow.org/tensorboard

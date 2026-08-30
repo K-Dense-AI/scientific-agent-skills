@@ -1,12 +1,12 @@
 # Security Scan Report
 
-**Generated:** 2026-08-17 09:21 UTC  
-**Skills scanned:** 162  
-**Total findings:** 982  
-**Critical:** 34 | **High:** 8 | **Safe skills:** 147/162
+**Generated:** 2026-08-24 09:22 UTC  
+**Skills scanned:** 163  
+**Total findings:** 988  
+**Critical:** 34 | **High:** 9 | **Safe skills:** 147/163
 
 **Scanner:** cisco-ai-skill-scanner 2.0.13 · **Model:** claude-opus-5  
-**This run:** 8 skill(s) rescanned; 154 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
+**This run:** 1 skill(s) rescanned; 162 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
 
 ## Summary
 
@@ -15,18 +15,19 @@
 | autoskill | 🔴 CRITICAL | 13 | ❌ | 57.4s |
 | citation-management | 🔴 CRITICAL | 11 | ❌ | 44.6s |
 | consciousness-council | 🔴 CRITICAL | 5 | ❌ | 37.0s |
+| infographics | 🔴 CRITICAL | 9 | ❌ | 45.9s |
+| latex-posters | 🔴 CRITICAL | 9 | ❌ | 42.8s |
+| literature-review | 🔴 CRITICAL | 10 | ❌ | 36.7s |
 | pacsomatic | 🔴 CRITICAL | 5 | ❌ | 44.2s |
 | research-lookup | 🔴 CRITICAL | 8 | ❌ | 29.4s |
-| xlsx | 🔴 CRITICAL | 3 | ❌ | 30.1s |
 | scientific-schematics | 🔴 CRITICAL | 9 | ❌ | 35.7s |
-| literature-review | 🔴 CRITICAL | 10 | ❌ | 36.7s |
-| latex-posters | 🔴 CRITICAL | 9 | ❌ | 42.8s |
-| infographics | 🔴 CRITICAL | 9 | ❌ | 45.9s |
 | scientific-slides | 🔴 CRITICAL | 15 | ❌ | 72.2s |
+| xlsx | 🔴 CRITICAL | 3 | ❌ | 30.1s |
 | geomaster | 🟠 HIGH | 7 | ❌ | 41.9s |
 | ginkgo-cloud-lab | 🟠 HIGH | 3 | ❌ | 31.8s |
 | histolab | 🟠 HIGH | 4 | ❌ | 28.7s |
 | modal | 🟠 HIGH | 7 | ❌ | 22.7s |
+| waypoint-bio | 🟠 HIGH | 5 | ❌ | 30.7s |
 | adaptyv | 🟡 MEDIUM | 5 | ✅ | 38.5s |
 | arbor | 🟡 MEDIUM | 6 | ✅ | 53.5s |
 | bgpt-paper-search | 🟡 MEDIUM | 4 | ✅ | 29.3s |
@@ -36,6 +37,7 @@
 | exa-search | 🟡 MEDIUM | 7 | ✅ | 31.2s |
 | generate-image | 🟡 MEDIUM | 4 | ✅ | 29.7s |
 | genomic-intelligence | 🟡 MEDIUM | 6 | ✅ | 32.3s |
+| lab-hardware-cad | 🟡 MEDIUM | 2 | ✅ | 30.6s |
 | liteparse | 🟡 MEDIUM | 4 | ✅ | 42.6s |
 | neuropixels-analysis | 🟡 MEDIUM | 5 | ✅ | 38.9s |
 | nextflow | 🟡 MEDIUM | 3 | ✅ | 29.0s |
@@ -51,7 +53,6 @@
 | scikit-bio | 🟡 MEDIUM | 2 | ✅ | 28.4s |
 | tamarind | 🟡 MEDIUM | 13 | ✅ | 34.7s |
 | umap-learn | 🟡 MEDIUM | 4 | ✅ | 33.7s |
-| lab-hardware-cad | 🟡 MEDIUM | 2 | ✅ | 30.6s |
 | aeon | 🔵 LOW | 2 | ✅ | 26.4s |
 | anndata | 🔵 LOW | 2 | ✅ | 29.0s |
 | arboreto | 🔵 LOW | 3 | ✅ | 27.9s |
@@ -87,6 +88,7 @@
 | hugging-science | 🔵 LOW | 5 | ✅ | 46.7s |
 | hypogenic | 🔵 LOW | 1 | ✅ | 23.3s |
 | hypothesis-generation | 🔵 LOW | 2 | ✅ | 23.5s |
+| imaging-data-commons | 🔵 LOW | 5 | ✅ | 48.4s |
 | iso-standards-readiness | 🔵 LOW | 1 | ✅ | 28.2s |
 | labarchive-integration | 🔵 LOW | 2 | ✅ | 25.6s |
 | lamindb | 🔵 LOW | 2 | ✅ | 21.9s |
@@ -114,6 +116,7 @@
 | pdf | 🔵 LOW | 3 | ✅ | 23.1s |
 | peer-review | 🔵 LOW | 3 | ✅ | 27.5s |
 | pennylane | 🔵 LOW | 2 | ✅ | 18.8s |
+| pi-agent | 🔵 LOW | 3 | ✅ | 32.6s |
 | pkpd-modeling | 🔵 LOW | 2 | ✅ | 33.0s |
 | polars | 🔵 LOW | 3 | ✅ | 30.7s |
 | polars-bio | 🔵 LOW | 3 | ✅ | 30.1s |
@@ -163,8 +166,6 @@
 | venue-templates | 🔵 LOW | 3 | ✅ | 29.7s |
 | what-if-oracle | 🔵 LOW | 2 | ✅ | 17.7s |
 | zarr-python | 🔵 LOW | 3 | ✅ | 31.9s |
-| pi-agent | 🔵 LOW | 3 | ✅ | 32.6s |
-| imaging-data-commons | 🔵 LOW | 5 | ✅ | 48.4s |
 | analytical-method-validation | 🟢 SAFE | 0 | ✅ | 18.9s |
 | deepspot-m | 🟢 SAFE | 0 | ✅ | 13.7s |
 | genomic-coordinates | 🟢 SAFE | 0 | ✅ | 11.6s |
@@ -321,6 +322,146 @@
   > File: `SKILL.md`
   > **Remediation:** Require the skill author to document every bundled file and its purpose. Remove any executable code not required by the stated functionality, or reject the package.
 
+### infographics — 🔴 CRITICAL
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 2 files
+  > Environment variable access with network calls in scripts/generate_infographic.py, scripts/generate_infographic_ai.py
+  > **Remediation:** Review data flow across files: scripts/generate_infographic.py, scripts/generate_infographic_ai.py
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 2 files
+  > Multi-file exfiltration chain detected: scripts/generate_infographic.py, scripts/generate_infographic_ai.py collect data → scripts/generate_infographic_ai.py → scripts/generate_infographic_ai.py transmit to network
+  > **Remediation:** Review data flow across files: scripts/generate_infographic.py, scripts/generate_infographic_ai.py
+
+- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Documentation/metadata inconsistencies with actual model slugs and thresholds
+  > The SKILL.md description and body repeatedly claim quality review by 'Gemini 3.6 Flash' and a marketing threshold of 8.5/10, while the code uses the model slug `google/gemini-3.7-flash` for review, `google/gemini-3.1-flash-image` for generation, and sets the marketing threshold to 8.0. The reference file also documents an 8.5 marketing threshold. These are cosmetic accuracy issues rather than security threats, but they cause the manifest description to not fully match implemented behavior (users may believe a stricter quality gate is applied than actually is). No license or compatibility metadata is declared.
+  > File: `SKILL.md`
+  > **Remediation:** Align documented model names and quality thresholds with the code, and add explicit license/compatibility metadata to the manifest.
+
+- **🟡 MEDIUM** `LLM_DATA_EXFILTRATION` — Credential discovery walks every parent directory searching for .env files
+  > Both scripts implement `resolve_api_key`/`_resolve_api_key`, which iterates over the current working directory and ALL of its parents (up to the filesystem root) looking for `.env` files, reads each one fully into memory, and parses every KEY=VALUE line. Although only the value of OPENROUTER_API_KEY is ultimately retained and sent (as an Authorization header) to openrouter.ai, this pattern reads secret files that belong to unrelated projects or to the user's home/root directories, well outside the skill's working scope. If the agent is executed from an unexpected directory, credentials from arbitrary unrelated projects may be picked up and transmitted to a third-party API endpoint. This is the behavior flagged by the static analyzer as an env-var/exfiltration chain.
+  > File: `scripts/generate_infographic.py`
+  > **Remediation:** Limit the .env search to the project root or the skill directory only (or require the environment variable / --api-key explicitly). Do not traverse to the filesystem root, and avoid reading files outside the invocation directory.
+
+- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Arbitrary local image files are base64-encoded and uploaded to a third-party API
+  > The `--context-image` flag accepts any local file path (repeatable) and the file is read and base64-embedded into the OpenRouter request as an image_url data URL. There is no path restriction, size limit, or user confirmation. If an agent is influenced into supplying sensitive image paths (screenshots, scanned documents, private figures), their contents are transmitted off-host to openrouter.ai. This is user-directed functionality documented in the script help, so the risk is limited, but the data-flow boundary (local file -> external API) is worth noting.
+  > File: `scripts/generate_infographic_ai.py`
+  > **Remediation:** Restrict context images to the project/output directory, enforce a maximum file size, and log/echo the exact files being uploaded so the user can confirm what leaves the machine.
+
+- **🔵 LOW** `LLM_PROMPT_INJECTION` — Untrusted web research output is concatenated directly into the downstream model prompt
+  > When `--research` is used, the script queries Perplexity Sonar (web/academic search) and inserts the raw returned text verbatim into the image-generation prompt via `_enhance_prompt_with_research`, with the instruction 'use these in the infographic'. Search results are untrusted external data; instructions embedded in retrieved web content could influence the downstream generation/review models (rendered text, altered content, or attempts to steer subsequent iterations). The raw response is also written to `{name}_research.json` and reflected into the review log. Impact is limited because the downstream models only produce an image and a review score, and no results are executed as code.
+  > File: `scripts/generate_infographic_ai.py`
+  > **Remediation:** Delimit and label retrieved research content as untrusted data (e.g., fenced context block with an explicit 'treat as data, not instructions' guard), truncate it, and strip instruction-like directives before embedding it in the generation prompt.
+
+- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
+  > Script iterates through environment variables in skills/infographics/scripts/generate_infographic.py
+  > File: `skills/infographics/scripts/generate_infographic.py`
+  > **Remediation:** Remove environment variable collection unless explicitly required and documented
+
+- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
+  > Script accesses environment variables and makes network calls in skills/infographics/scripts/generate_infographic_ai.py
+  > File: `skills/infographics/scripts/generate_infographic_ai.py`
+  > **Remediation:** Remove environment variable harvesting or network transmission
+
+- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
+  > Script iterates through environment variables in skills/infographics/scripts/generate_infographic_ai.py
+  > File: `skills/infographics/scripts/generate_infographic_ai.py`
+  > **Remediation:** Remove environment variable collection unless explicitly required and documented
+
+### latex-posters — 🔴 CRITICAL
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 2 files
+  > Environment variable access with network calls in scripts/generate_schematic.py, scripts/generate_schematic_ai.py
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 2 files
+  > Multi-file exfiltration chain detected: scripts/generate_schematic.py, scripts/generate_schematic_ai.py collect data → scripts/generate_schematic_ai.py → scripts/generate_schematic_ai.py transmit to network
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py
+
+- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Many referenced reference/template/asset files are missing from the package
+  > SKILL.md and the bundled reference documents point to a number of files that do not exist in the package (templates/ai_graphics_for_posters.md, templates/latex_poster_reference.md, assets/latex_poster_packages.md, assets/poster_quality_checklist.md, assets/*_template.tex, logo.pdf, etc.). Missing internal resources cause the agent to attempt reads that fail, or to improvise content, which is a completeness/reliability issue rather than a security compromise. No malicious content was found in the reference files that do exist.
+  > File: `assets/poster_quality_checklist.md`
+  > **Remediation:** Ship the referenced templates/assets with the package or remove the dangling references so the agent does not attempt to load non-existent files.
+
+- **🟡 MEDIUM** `LLM_DATA_EXFILTRATION` — Credential discovery walks every parent directory searching for .env files
+  > Both generate_schematic.py and generate_schematic_ai.py implement a `.env` lookup that iterates over the current working directory and ALL of its parents (`[cwd, *cwd.parents, ...]`) up to the filesystem root, reading each `.env` file it finds and parsing key=value pairs. This means the skill will open and read arbitrary `.env` files far outside the skill or project scope (e.g. /home/user/.env, /.env) that may belong to unrelated projects. Only OPENROUTER_API_KEY is extracted and used, and the value is only sent to openrouter.ai as an Authorization header, so this is not outright exfiltration — but the file-read scope is disproportionate to the stated purpose and could surface credentials from unrelated contexts.
+  > File: `scripts/generate_schematic.py`
+  > **Remediation:** Limit the .env search to the current working directory and the skill directory (or a project root detected by a marker such as .git), rather than traversing to the filesystem root. Log which .env file was used so the user can see what was read.
+
+- **🔵 LOW** `LLM_DATA_EXFILTRATION` — User-supplied prompt text and generated images transmitted to third-party API (OpenRouter)
+  > generate_schematic_ai.py posts the user's diagram description to https://openrouter.ai/api/v1/chat/completions and then base64-encodes the generated image file and posts it back for a vision-based quality review. This outbound data flow is legitimate and clearly documented in SKILL.md and the script docstrings, and only files the script itself just created are uploaded. It is noted for transparency: any research content placed in a prompt (e.g. unpublished results, metrics, company names) leaves the machine to a third-party inference provider. The manifest does not declare a `compatibility`/network disclosure field.
+  > File: `scripts/generate_schematic_ai.py`
+  > **Remediation:** Document the network egress explicitly in the manifest (compatibility/description) and warn users not to include confidential or unpublished data in prompts. Consider an opt-in confirmation before the first outbound request.
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned package installation instructions
+  > SKILL.md instructs the agent to run `tlmgr install beamerposter tikzposter baposter ...` and generate_schematic_ai.py suggests `uv pip install requests` on ImportError. These installs are unpinned and executed with Bash, so the resolved versions are non-deterministic. The packages named are well-known and correctly spelled (no typosquatting indicators), so the practical risk is low.
+  > File: `scripts/generate_schematic_ai.py:22`
+  > **Remediation:** Pin versions where feasible (e.g. requests==2.32.x) and prefer instructing the user to install dependencies themselves rather than having the agent run installers automatically.
+
+- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
+  > Script iterates through environment variables in skills/latex-posters/scripts/generate_schematic.py
+  > File: `skills/latex-posters/scripts/generate_schematic.py`
+  > **Remediation:** Remove environment variable collection unless explicitly required and documented
+
+- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
+  > Script accesses environment variables and makes network calls in skills/latex-posters/scripts/generate_schematic_ai.py
+  > File: `skills/latex-posters/scripts/generate_schematic_ai.py`
+  > **Remediation:** Remove environment variable harvesting or network transmission
+
+- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
+  > Script iterates through environment variables in skills/latex-posters/scripts/generate_schematic_ai.py
+  > File: `skills/latex-posters/scripts/generate_schematic_ai.py`
+  > **Remediation:** Remove environment variable collection unless explicitly required and documented
+
+### literature-review — 🔴 CRITICAL
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 3 files
+  > Environment variable access with network calls in scripts/generate_schematic.py, scripts/generate_schematic_ai.py
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/verify_citations.py, scripts/generate_schematic_ai.py
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 3 files
+  > Multi-file exfiltration chain detected: scripts/generate_schematic.py, scripts/generate_schematic_ai.py collect data → scripts/generate_schematic_ai.py → scripts/verify_citations.py, scripts/generate_schematic_ai.py transmit to network
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/verify_citations.py, scripts/generate_schematic_ai.py
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned dependency installs and remote install script piped to shell
+  > SKILL.md documents installation of tooling via `curl -fsSL https://parallel.ai/install.sh | bash`, `uv tool install "parallel-web-tools[cli]"`, `uv pip install requests`, and system package installs, all without version pinning or checksum verification. Piping a remote script directly to bash is a supply-chain risk if the host or CDN is compromised. These are documentation-level instructions rather than automated execution inside the scripts, which limits severity.
+  > File: `SKILL.md`
+  > **Remediation:** Pin package versions (e.g., requests==2.32.3), prefer package-manager installation over curl|bash, and provide a checksum or signature for any remote install script.
+
+- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Several referenced files are missing from the package
+  > Instructions reference paths such as templates/core_workflow.md, assets/citation_styles.md, references/review_template.md and others that are not present in the package (only references/*.md and assets/review_template.md exist). Missing referenced files are a documentation/integrity issue that can cause the agent to fabricate content or attempt to fetch resources elsewhere, but there is no evidence of malicious intent.
+  > File: `assets/review_template.md`
+  > **Remediation:** Correct the referenced paths to match the actual bundled files, or bundle the missing files.
+
+- **🟡 MEDIUM** `LLM_DATA_EXFILTRATION` — Recursive .env file scanning may harvest credentials from unrelated project directories
+  > Both generate_schematic.py and generate_schematic_ai.py implement a credential resolver that walks the current working directory and ALL parent directories (up to filesystem root), plus the script's own directory, reading any `.env` file found and parsing it for OPENROUTER_API_KEY. Reading arbitrary `.env` files up the directory tree (potentially including /home/user/.env or other projects' env files) is broader than necessary and constitutes credential discovery outside the intended project scope. The resolved key is then transmitted to an external endpoint (openrouter.ai) in the Authorization header. While the target is a legitimate, documented API and only the OPENROUTER_API_KEY value is used, the unbounded upward traversal of .env files is an over-collection pattern worth flagging.
+  > File: `scripts/generate_schematic.py`
+  > **Remediation:** Limit the .env search to the current working directory and the skill directory (or a single explicit project root), and avoid walking to the filesystem root. Document the credential-resolution behavior in SKILL.md.
+
+- **🔵 LOW** `LLM_DATA_EXFILTRATION` — API key forwarded to child process environment (documented, low risk)
+  > generate_schematic.py constructs a minimal environment for the subprocess and injects OPENROUTER_API_KEY. This is a deliberately hardened pattern (allow-list of env vars rather than copying the full parent environment, key passed via env rather than argv) and is a security improvement, not a vulnerability. Noted only for completeness: any credential passed to a subprocess and then to a remote API is an outbound secret flow. The destination (openrouter.ai) matches the declared skill metadata (`openclaw.primaryEnv: OPENROUTER_API_KEY`), so behavior is consistent with the manifest.
+  > File: `scripts/generate_schematic.py`
+  > **Remediation:** No action strictly required. Optionally note in SKILL.md that image/diagram prompts and generated images are transmitted to OpenRouter (third party).
+
+- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — Mandatory activation of a separate figure-generation skill and unmentioned outbound LLM calls
+  > SKILL.md states in bold that 'Every literature review MUST include at least 1-2 AI-generated figures' and directs the agent to run scripts/generate_schematic.py, which makes paid third-party API calls to OpenRouter. The top-level skill description advertises literature search, citation verification and PDF generation, but does not mention that the skill will invoke an external generative-image/LLM service or consume API credits. This is a mild description/behavior mismatch and a coercive cross-skill activation pattern rather than a malicious one.
+  > File: `scripts/generate_schematic.py`
+  > **Remediation:** Soften the mandate to a recommendation, and disclose in the skill description/manifest that figure generation performs outbound calls to OpenRouter and requires an API key with associated cost.
+
+- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
+  > Script iterates through environment variables in skills/literature-review/scripts/generate_schematic.py
+  > File: `skills/literature-review/scripts/generate_schematic.py`
+  > **Remediation:** Remove environment variable collection unless explicitly required and documented
+
+- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
+  > Script accesses environment variables and makes network calls in skills/literature-review/scripts/generate_schematic_ai.py
+  > File: `skills/literature-review/scripts/generate_schematic_ai.py`
+  > **Remediation:** Remove environment variable harvesting or network transmission
+
+- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
+  > Script iterates through environment variables in skills/literature-review/scripts/generate_schematic_ai.py
+  > File: `skills/literature-review/scripts/generate_schematic_ai.py`
+  > **Remediation:** Remove environment variable collection unless explicitly required and documented
+
 ### pacsomatic — 🔴 CRITICAL
 
 - **🟡 MEDIUM** `LLM_COMMAND_INJECTION` — Unvalidated `--extra-args` passthrough into generated launch script
@@ -384,23 +525,6 @@
   > File: `skills/research-lookup/scripts/research_lookup.py`
   > **Remediation:** Remove environment variable collection unless explicitly required and documented
 
-### xlsx — 🔴 CRITICAL
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Conditional unpinned package installation instruction
-  > SKILL.md instructs the agent to run `uv pip install` for openpyxl/pandas/markitdown if an import fails, without version pins or integrity verification. This is a conditional fallback for already-preinstalled packages (low practical risk, no typosquatting or third-party GitHub sources), but unpinned installs are a minor supply-chain exposure.
-  > File: `SKILL.md`
-  > **Remediation:** Pin exact versions (e.g., openpyxl==3.1.5) in the install guidance, or document the expected preinstalled versions and fail loudly rather than installing at runtime.
-
-- **🔵 LOW** `LLM_COMMAND_INJECTION` — Runtime C compilation and LD_PRELOAD injection into soffice subprocess
-  > scripts/office/soffice.py writes an embedded C source file to a temporary directory, compiles it with gcc at runtime, and injects the resulting shared object into every LibreOffice subprocess via LD_PRELOAD. This is a legitimate sandbox workaround (AF_UNIX socket interception) and the code is defensively written — it uses tempfile.mkdtemp (0700, unpredictable path, explicitly documented as a fix for a previous fixed-path hijack), passes no user-controlled data into the compiler invocation, and uses subprocess without shell=True. Still, dynamic native code compilation plus library preloading into a child process is an unusual, high-privilege execution pattern that expands the attack surface and triggers static 'eval/exec + subprocess' heuristics.
-  > File: `scripts/office/soffice.py`
-  > **Remediation:** No change strictly required; the shim path is already created 0700 in an unpredictable directory. Optionally ship a prebuilt, checksum-verified shim or gate compilation behind an explicit opt-in flag so gcc is not invoked implicitly during document processing.
-
-- **🔴 CRITICAL** `BEHAVIOR_EVAL_SUBPROCESS` — eval/exec combined with subprocess detected
-  > Dangerous combination of code execution and system commands in skills/xlsx/scripts/recalc.py
-  > File: `skills/xlsx/scripts/recalc.py`
-  > **Remediation:** Remove eval/exec or use safer alternatives
-
 ### scientific-schematics — 🔴 CRITICAL
 
 - **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 2 files
@@ -443,146 +567,6 @@
 - **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
   > Script iterates through environment variables in skills/scientific-schematics/scripts/generate_schematic_ai.py
   > File: `skills/scientific-schematics/scripts/generate_schematic_ai.py`
-  > **Remediation:** Remove environment variable collection unless explicitly required and documented
-
-### literature-review — 🔴 CRITICAL
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 3 files
-  > Environment variable access with network calls in scripts/generate_schematic.py, scripts/generate_schematic_ai.py
-  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/verify_citations.py, scripts/generate_schematic_ai.py
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 3 files
-  > Multi-file exfiltration chain detected: scripts/generate_schematic.py, scripts/generate_schematic_ai.py collect data → scripts/generate_schematic_ai.py → scripts/verify_citations.py, scripts/generate_schematic_ai.py transmit to network
-  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/verify_citations.py, scripts/generate_schematic_ai.py
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned dependency installs and remote install script piped to shell
-  > SKILL.md documents installation of tooling via `curl -fsSL https://parallel.ai/install.sh | bash`, `uv tool install "parallel-web-tools[cli]"`, `uv pip install requests`, and system package installs, all without version pinning or checksum verification. Piping a remote script directly to bash is a supply-chain risk if the host or CDN is compromised. These are documentation-level instructions rather than automated execution inside the scripts, which limits severity.
-  > File: `SKILL.md`
-  > **Remediation:** Pin package versions (e.g., requests==2.32.3), prefer package-manager installation over curl|bash, and provide a checksum or signature for any remote install script.
-
-- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Several referenced files are missing from the package
-  > Instructions reference paths such as templates/core_workflow.md, assets/citation_styles.md, references/review_template.md and others that are not present in the package (only references/*.md and assets/review_template.md exist). Missing referenced files are a documentation/integrity issue that can cause the agent to fabricate content or attempt to fetch resources elsewhere, but there is no evidence of malicious intent.
-  > File: `assets/review_template.md`
-  > **Remediation:** Correct the referenced paths to match the actual bundled files, or bundle the missing files.
-
-- **🟡 MEDIUM** `LLM_DATA_EXFILTRATION` — Recursive .env file scanning may harvest credentials from unrelated project directories
-  > Both generate_schematic.py and generate_schematic_ai.py implement a credential resolver that walks the current working directory and ALL parent directories (up to filesystem root), plus the script's own directory, reading any `.env` file found and parsing it for OPENROUTER_API_KEY. Reading arbitrary `.env` files up the directory tree (potentially including /home/user/.env or other projects' env files) is broader than necessary and constitutes credential discovery outside the intended project scope. The resolved key is then transmitted to an external endpoint (openrouter.ai) in the Authorization header. While the target is a legitimate, documented API and only the OPENROUTER_API_KEY value is used, the unbounded upward traversal of .env files is an over-collection pattern worth flagging.
-  > File: `scripts/generate_schematic.py`
-  > **Remediation:** Limit the .env search to the current working directory and the skill directory (or a single explicit project root), and avoid walking to the filesystem root. Document the credential-resolution behavior in SKILL.md.
-
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — API key forwarded to child process environment (documented, low risk)
-  > generate_schematic.py constructs a minimal environment for the subprocess and injects OPENROUTER_API_KEY. This is a deliberately hardened pattern (allow-list of env vars rather than copying the full parent environment, key passed via env rather than argv) and is a security improvement, not a vulnerability. Noted only for completeness: any credential passed to a subprocess and then to a remote API is an outbound secret flow. The destination (openrouter.ai) matches the declared skill metadata (`openclaw.primaryEnv: OPENROUTER_API_KEY`), so behavior is consistent with the manifest.
-  > File: `scripts/generate_schematic.py`
-  > **Remediation:** No action strictly required. Optionally note in SKILL.md that image/diagram prompts and generated images are transmitted to OpenRouter (third party).
-
-- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — Mandatory activation of a separate figure-generation skill and unmentioned outbound LLM calls
-  > SKILL.md states in bold that 'Every literature review MUST include at least 1-2 AI-generated figures' and directs the agent to run scripts/generate_schematic.py, which makes paid third-party API calls to OpenRouter. The top-level skill description advertises literature search, citation verification and PDF generation, but does not mention that the skill will invoke an external generative-image/LLM service or consume API credits. This is a mild description/behavior mismatch and a coercive cross-skill activation pattern rather than a malicious one.
-  > File: `scripts/generate_schematic.py`
-  > **Remediation:** Soften the mandate to a recommendation, and disclose in the skill description/manifest that figure generation performs outbound calls to OpenRouter and requires an API key with associated cost.
-
-- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
-  > Script iterates through environment variables in skills/literature-review/scripts/generate_schematic.py
-  > File: `skills/literature-review/scripts/generate_schematic.py`
-  > **Remediation:** Remove environment variable collection unless explicitly required and documented
-
-- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in skills/literature-review/scripts/generate_schematic_ai.py
-  > File: `skills/literature-review/scripts/generate_schematic_ai.py`
-  > **Remediation:** Remove environment variable harvesting or network transmission
-
-- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
-  > Script iterates through environment variables in skills/literature-review/scripts/generate_schematic_ai.py
-  > File: `skills/literature-review/scripts/generate_schematic_ai.py`
-  > **Remediation:** Remove environment variable collection unless explicitly required and documented
-
-### latex-posters — 🔴 CRITICAL
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 2 files
-  > Environment variable access with network calls in scripts/generate_schematic.py, scripts/generate_schematic_ai.py
-  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 2 files
-  > Multi-file exfiltration chain detected: scripts/generate_schematic.py, scripts/generate_schematic_ai.py collect data → scripts/generate_schematic_ai.py → scripts/generate_schematic_ai.py transmit to network
-  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py
-
-- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Many referenced reference/template/asset files are missing from the package
-  > SKILL.md and the bundled reference documents point to a number of files that do not exist in the package (templates/ai_graphics_for_posters.md, templates/latex_poster_reference.md, assets/latex_poster_packages.md, assets/poster_quality_checklist.md, assets/*_template.tex, logo.pdf, etc.). Missing internal resources cause the agent to attempt reads that fail, or to improvise content, which is a completeness/reliability issue rather than a security compromise. No malicious content was found in the reference files that do exist.
-  > File: `assets/poster_quality_checklist.md`
-  > **Remediation:** Ship the referenced templates/assets with the package or remove the dangling references so the agent does not attempt to load non-existent files.
-
-- **🟡 MEDIUM** `LLM_DATA_EXFILTRATION` — Credential discovery walks every parent directory searching for .env files
-  > Both generate_schematic.py and generate_schematic_ai.py implement a `.env` lookup that iterates over the current working directory and ALL of its parents (`[cwd, *cwd.parents, ...]`) up to the filesystem root, reading each `.env` file it finds and parsing key=value pairs. This means the skill will open and read arbitrary `.env` files far outside the skill or project scope (e.g. /home/user/.env, /.env) that may belong to unrelated projects. Only OPENROUTER_API_KEY is extracted and used, and the value is only sent to openrouter.ai as an Authorization header, so this is not outright exfiltration — but the file-read scope is disproportionate to the stated purpose and could surface credentials from unrelated contexts.
-  > File: `scripts/generate_schematic.py`
-  > **Remediation:** Limit the .env search to the current working directory and the skill directory (or a project root detected by a marker such as .git), rather than traversing to the filesystem root. Log which .env file was used so the user can see what was read.
-
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — User-supplied prompt text and generated images transmitted to third-party API (OpenRouter)
-  > generate_schematic_ai.py posts the user's diagram description to https://openrouter.ai/api/v1/chat/completions and then base64-encodes the generated image file and posts it back for a vision-based quality review. This outbound data flow is legitimate and clearly documented in SKILL.md and the script docstrings, and only files the script itself just created are uploaded. It is noted for transparency: any research content placed in a prompt (e.g. unpublished results, metrics, company names) leaves the machine to a third-party inference provider. The manifest does not declare a `compatibility`/network disclosure field.
-  > File: `scripts/generate_schematic_ai.py`
-  > **Remediation:** Document the network egress explicitly in the manifest (compatibility/description) and warn users not to include confidential or unpublished data in prompts. Consider an opt-in confirmation before the first outbound request.
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned package installation instructions
-  > SKILL.md instructs the agent to run `tlmgr install beamerposter tikzposter baposter ...` and generate_schematic_ai.py suggests `uv pip install requests` on ImportError. These installs are unpinned and executed with Bash, so the resolved versions are non-deterministic. The packages named are well-known and correctly spelled (no typosquatting indicators), so the practical risk is low.
-  > File: `scripts/generate_schematic_ai.py:22`
-  > **Remediation:** Pin versions where feasible (e.g. requests==2.32.x) and prefer instructing the user to install dependencies themselves rather than having the agent run installers automatically.
-
-- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
-  > Script iterates through environment variables in skills/latex-posters/scripts/generate_schematic.py
-  > File: `skills/latex-posters/scripts/generate_schematic.py`
-  > **Remediation:** Remove environment variable collection unless explicitly required and documented
-
-- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in skills/latex-posters/scripts/generate_schematic_ai.py
-  > File: `skills/latex-posters/scripts/generate_schematic_ai.py`
-  > **Remediation:** Remove environment variable harvesting or network transmission
-
-- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
-  > Script iterates through environment variables in skills/latex-posters/scripts/generate_schematic_ai.py
-  > File: `skills/latex-posters/scripts/generate_schematic_ai.py`
-  > **Remediation:** Remove environment variable collection unless explicitly required and documented
-
-### infographics — 🔴 CRITICAL
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 2 files
-  > Environment variable access with network calls in scripts/generate_infographic.py, scripts/generate_infographic_ai.py
-  > **Remediation:** Review data flow across files: scripts/generate_infographic.py, scripts/generate_infographic_ai.py
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 2 files
-  > Multi-file exfiltration chain detected: scripts/generate_infographic.py, scripts/generate_infographic_ai.py collect data → scripts/generate_infographic_ai.py → scripts/generate_infographic_ai.py transmit to network
-  > **Remediation:** Review data flow across files: scripts/generate_infographic.py, scripts/generate_infographic_ai.py
-
-- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Documentation/metadata inconsistencies with actual model slugs and thresholds
-  > The SKILL.md description and body repeatedly claim quality review by 'Gemini 3.6 Flash' and a marketing threshold of 8.5/10, while the code uses the model slug `google/gemini-3.7-flash` for review, `google/gemini-3.1-flash-image` for generation, and sets the marketing threshold to 8.0. The reference file also documents an 8.5 marketing threshold. These are cosmetic accuracy issues rather than security threats, but they cause the manifest description to not fully match implemented behavior (users may believe a stricter quality gate is applied than actually is). No license or compatibility metadata is declared.
-  > File: `SKILL.md`
-  > **Remediation:** Align documented model names and quality thresholds with the code, and add explicit license/compatibility metadata to the manifest.
-
-- **🟡 MEDIUM** `LLM_DATA_EXFILTRATION` — Credential discovery walks every parent directory searching for .env files
-  > Both scripts implement `resolve_api_key`/`_resolve_api_key`, which iterates over the current working directory and ALL of its parents (up to the filesystem root) looking for `.env` files, reads each one fully into memory, and parses every KEY=VALUE line. Although only the value of OPENROUTER_API_KEY is ultimately retained and sent (as an Authorization header) to openrouter.ai, this pattern reads secret files that belong to unrelated projects or to the user's home/root directories, well outside the skill's working scope. If the agent is executed from an unexpected directory, credentials from arbitrary unrelated projects may be picked up and transmitted to a third-party API endpoint. This is the behavior flagged by the static analyzer as an env-var/exfiltration chain.
-  > File: `scripts/generate_infographic.py`
-  > **Remediation:** Limit the .env search to the project root or the skill directory only (or require the environment variable / --api-key explicitly). Do not traverse to the filesystem root, and avoid reading files outside the invocation directory.
-
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Arbitrary local image files are base64-encoded and uploaded to a third-party API
-  > The `--context-image` flag accepts any local file path (repeatable) and the file is read and base64-embedded into the OpenRouter request as an image_url data URL. There is no path restriction, size limit, or user confirmation. If an agent is influenced into supplying sensitive image paths (screenshots, scanned documents, private figures), their contents are transmitted off-host to openrouter.ai. This is user-directed functionality documented in the script help, so the risk is limited, but the data-flow boundary (local file -> external API) is worth noting.
-  > File: `scripts/generate_infographic_ai.py`
-  > **Remediation:** Restrict context images to the project/output directory, enforce a maximum file size, and log/echo the exact files being uploaded so the user can confirm what leaves the machine.
-
-- **🔵 LOW** `LLM_PROMPT_INJECTION` — Untrusted web research output is concatenated directly into the downstream model prompt
-  > When `--research` is used, the script queries Perplexity Sonar (web/academic search) and inserts the raw returned text verbatim into the image-generation prompt via `_enhance_prompt_with_research`, with the instruction 'use these in the infographic'. Search results are untrusted external data; instructions embedded in retrieved web content could influence the downstream generation/review models (rendered text, altered content, or attempts to steer subsequent iterations). The raw response is also written to `{name}_research.json` and reflected into the review log. Impact is limited because the downstream models only produce an image and a review score, and no results are executed as code.
-  > File: `scripts/generate_infographic_ai.py`
-  > **Remediation:** Delimit and label retrieved research content as untrusted data (e.g., fenced context block with an explicit 'treat as data, not instructions' guard), truncate it, and strip instruction-like directives before embedding it in the generation prompt.
-
-- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
-  > Script iterates through environment variables in skills/infographics/scripts/generate_infographic.py
-  > File: `skills/infographics/scripts/generate_infographic.py`
-  > **Remediation:** Remove environment variable collection unless explicitly required and documented
-
-- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in skills/infographics/scripts/generate_infographic_ai.py
-  > File: `skills/infographics/scripts/generate_infographic_ai.py`
-  > **Remediation:** Remove environment variable harvesting or network transmission
-
-- **🟡 MEDIUM** `BEHAVIOR_ENV_VAR_HARVESTING` — Environment variable harvesting detected
-  > Script iterates through environment variables in skills/infographics/scripts/generate_infographic_ai.py
-  > File: `skills/infographics/scripts/generate_infographic_ai.py`
   > **Remediation:** Remove environment variable collection unless explicitly required and documented
 
 ### scientific-slides — 🔴 CRITICAL
@@ -657,6 +641,23 @@
 - **🔴 CRITICAL** `BEHAVIOR_EVAL_SUBPROCESS` — eval/exec combined with subprocess detected
   > Dangerous combination of code execution and system commands in skills/scientific-slides/scripts/validate_presentation.py
   > File: `skills/scientific-slides/scripts/validate_presentation.py`
+  > **Remediation:** Remove eval/exec or use safer alternatives
+
+### xlsx — 🔴 CRITICAL
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Conditional unpinned package installation instruction
+  > SKILL.md instructs the agent to run `uv pip install` for openpyxl/pandas/markitdown if an import fails, without version pins or integrity verification. This is a conditional fallback for already-preinstalled packages (low practical risk, no typosquatting or third-party GitHub sources), but unpinned installs are a minor supply-chain exposure.
+  > File: `SKILL.md`
+  > **Remediation:** Pin exact versions (e.g., openpyxl==3.1.5) in the install guidance, or document the expected preinstalled versions and fail loudly rather than installing at runtime.
+
+- **🔵 LOW** `LLM_COMMAND_INJECTION` — Runtime C compilation and LD_PRELOAD injection into soffice subprocess
+  > scripts/office/soffice.py writes an embedded C source file to a temporary directory, compiles it with gcc at runtime, and injects the resulting shared object into every LibreOffice subprocess via LD_PRELOAD. This is a legitimate sandbox workaround (AF_UNIX socket interception) and the code is defensively written — it uses tempfile.mkdtemp (0700, unpredictable path, explicitly documented as a fix for a previous fixed-path hijack), passes no user-controlled data into the compiler invocation, and uses subprocess without shell=True. Still, dynamic native code compilation plus library preloading into a child process is an unusual, high-privilege execution pattern that expands the attack surface and triggers static 'eval/exec + subprocess' heuristics.
+  > File: `scripts/office/soffice.py`
+  > **Remediation:** No change strictly required; the shim path is already created 0700 in an unpredictable directory. Optionally ship a prebuilt, checksum-verified shim or gate compilation behind an explicit opt-in flag so gcc is not invoked implicitly during document processing.
+
+- **🔴 CRITICAL** `BEHAVIOR_EVAL_SUBPROCESS` — eval/exec combined with subprocess detected
+  > Dangerous combination of code execution and system commands in skills/xlsx/scripts/recalc.py
+  > File: `skills/xlsx/scripts/recalc.py`
   > **Remediation:** Remove eval/exec or use safer alternatives
 
 ### geomaster — 🟠 HIGH
@@ -764,6 +765,33 @@
   > Code block in references/web-endpoints.md at line 149 contains potentially dangerous Python code.
   > File: `references/web-endpoints.md:149`
   > **Remediation:** Review the code block for security implications.
+
+### waypoint-bio — 🟠 HIGH
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned dependency installation instructions
+  > The setup section instructs `pip install waypoint-bio` without a version pin, while the manifest claims compatibility with a specific upstream version (1.0.2 PyPI / 1.0.4 GitHub). Unpinned installs pull whatever version (and transitive torch/transformers/datasets/peft chain) is current, which weakens supply-chain reproducibility and exposes the user to a compromised or typosquatted future release.
+  > File: `SKILL.md`
+  > **Remediation:** Pin the version explicitly (e.g. `pip install waypoint-bio==1.0.2`) and, ideally, verify hashes.
+
+- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — `allowed-tools` not declared while skill performs network, file-write, and subprocess operations
+  > The manifest omits the optional `allowed-tools` field even though the skill's documented workflows involve Bash/Python execution, writing files to arbitrary output paths, downloading multi-gigabyte datasets over the network, and (in references/python-api.md) invoking `subprocess.run` on the `waypoint` CLI. This is informational only — no declared restriction is violated — but the absence of a declared tool scope means the agent gets an unconstrained capability surface.
+  > File: `references/python-api.md`
+  > **Remediation:** Declare an explicit `allowed-tools` list (e.g. [Read, Write, Bash, Python]) that reflects the minimum capabilities the workflows actually require.
+
+- **🟠 HIGH** `MDBLOCK_PYTHON_EVAL_EXEC` — Python code block uses eval/exec
+  > Code block in references/python-api.md at line 117 contains potentially dangerous Python code.
+  > File: `references/python-api.md:117`
+  > **Remediation:** Review the code block for security implications.
+
+- **🟡 MEDIUM** `MDBLOCK_PYTHON_SUBPROCESS` — Python code block executes shell commands
+  > Code block in references/python-api.md at line 203 contains potentially dangerous Python code.
+  > File: `references/python-api.md:203`
+  > **Remediation:** Review the code block for security implications.
+
+- **🟡 MEDIUM** `LLM_SUPPLY_CHAIN_ATTACK` — Documented use of `trust_remote_code=True` executes arbitrary remote code from Hugging Face repos
+  > Both SKILL.md and the bundled scripts instruct/perform loading of a tokenizer with `trust_remote_code=True` (`AutoTokenizer.from_pretrained(model, trust_remote_code=True)`). This causes Python code hosted in the remote `outpost-bio/Waypoint-*` Hub repository (or any model id the user supplies) to be downloaded and executed locally with the user's privileges. If the upstream repo is compromised, renamed, or the user passes an attacker-controlled model id, this yields arbitrary code execution. The skill does note the risk and recommends pinning a `revision`, but the default code path in `scripts/vocab_coverage.py` does not pin one.
+  > File: `scripts/vocab_coverage.py`
+  > **Remediation:** Pin an explicit `revision` (commit SHA) when calling `from_pretrained(..., trust_remote_code=True)`, restrict the accepted `--model` values to a known allowlist, and warn the user before executing remote tokenizer code.
 
 ### adaptyv — 🟡 MEDIUM
 
@@ -991,6 +1019,17 @@
   > Code block in SKILL.md at line 152 contains potentially dangerous Python code.
   > File: `SKILL.md:152`
   > **Remediation:** Review the code block for security implications.
+
+### lab-hardware-cad — 🟡 MEDIUM
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Partially unpinned dependency in setup instructions
+  > The documented setup installs `matplotlib>=3.8` without an upper bound or exact pin, while build123d is correctly pinned to 0.11.1. An unpinned transitive install surface is a minor supply-chain consideration (non-reproducible environments, exposure to a future compromised release). No installs from GitHub or unknown indexes, and no typosquat-looking package names are present.
+  > **Remediation:** Pin matplotlib to a tested exact version (e.g. matplotlib==3.9.x) or add an upper bound, and install into the dedicated project virtual environment as already documented.
+
+- **🟡 MEDIUM** `LLM_COMMAND_INJECTION` — Arbitrary Python execution via dynamic import of model files
+  > The bundled scripts import and execute arbitrary Python files supplied as the `<part>_model.py` argument. `_common.import_model()` uses `importlib.util.spec_from_file_location` + `spec.loader.exec_module()`, and inserts the model file's parent directory into `sys.path`, so any module-level code (and sibling imports) in the target file runs with the agent's privileges. `gen.py`, `check.py facts/interfaces/geometry/probe/bores/fit/clearance`, and `snapshot.py` all reach this path (`load_shape` also builds `.py` targets). This is inherent to parametric CAD and the SKILL.md explicitly documents it ("Model files are executed, not parsed... Only run model files authored in this session or supplied by the user from a trusted location"), so it is a disclosed design property rather than hidden malicious behavior. Residual risk: if the agent is pointed at a model file obtained from an untrusted source (download, shared drive, repo), that file becomes an arbitrary code execution vector.
+  > File: `scripts/snapshot.py`
+  > **Remediation:** Keep the existing provenance warning prominent, and require explicit user confirmation before importing any model file not authored in the current session. Consider validating that the target path is inside the working directory, and avoid inserting the model's parent directory onto sys.path (or restore sys.path state) to reduce sibling-module hijacking risk.
 
 ### liteparse — 🟡 MEDIUM
 
@@ -1414,17 +1453,6 @@
 - **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — Missing allowed-tools and compatibility declarations
   > The manifest does not declare `allowed-tools` or `compatibility`. This field is optional per spec, so this is informational only; however, because the skill bundles executable Python/bash files and the documentation instructs running pip installs and Python code, an explicit tool allow-list would reduce blast radius and make privilege expectations auditable.
   > **Remediation:** Declare an explicit minimal `allowed-tools` list (e.g., [Read, Python] and Bash only if installation is genuinely required) and state compatibility targets.
-
-### lab-hardware-cad — 🟡 MEDIUM
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Partially unpinned dependency in setup instructions
-  > The documented setup installs `matplotlib>=3.8` without an upper bound or exact pin, while build123d is correctly pinned to 0.11.1. An unpinned transitive install surface is a minor supply-chain consideration (non-reproducible environments, exposure to a future compromised release). No installs from GitHub or unknown indexes, and no typosquat-looking package names are present.
-  > **Remediation:** Pin matplotlib to a tested exact version (e.g. matplotlib==3.9.x) or add an upper bound, and install into the dedicated project virtual environment as already documented.
-
-- **🟡 MEDIUM** `LLM_COMMAND_INJECTION` — Arbitrary Python execution via dynamic import of model files
-  > The bundled scripts import and execute arbitrary Python files supplied as the `<part>_model.py` argument. `_common.import_model()` uses `importlib.util.spec_from_file_location` + `spec.loader.exec_module()`, and inserts the model file's parent directory into `sys.path`, so any module-level code (and sibling imports) in the target file runs with the agent's privileges. `gen.py`, `check.py facts/interfaces/geometry/probe/bores/fit/clearance`, and `snapshot.py` all reach this path (`load_shape` also builds `.py` targets). This is inherent to parametric CAD and the SKILL.md explicitly documents it ("Model files are executed, not parsed... Only run model files authored in this session or supplied by the user from a trusted location"), so it is a disclosed design property rather than hidden malicious behavior. Residual risk: if the agent is pointed at a model file obtained from an untrusted source (download, shared drive, repo), that file becomes an arbitrary code execution vector.
-  > File: `scripts/snapshot.py`
-  > **Remediation:** Keep the existing provenance warning prominent, and require explicit user confirmation before importing any model file not authored in the current session. Consider validating that the target path is inside the working directory, and avoid inserting the model's parent directory onto sys.path (or restore sys.path state) to reduce sibling-module hijacking risk.
 
 ### aeon — 🔵 LOW
 
@@ -1869,6 +1897,31 @@
   > File: `assets/hypothesis_record_template.json`
   > **Remediation:** Verify that every documented bundled asset/reference path exists in the shipped package and remove or correct any stale path references.
 
+### imaging-data-commons — 🔵 LOW
+
+- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Broad activation clause in skill description
+  > The frontmatter description instructs the agent to invoke the skill for any question about cancer imaging datasets, DICOM data access, radiology, pathology AI training sets, metadata queries, visualization, or license checks "even when the user doesn't explicitly mention 'IDC'". This widens discovery/activation beyond explicit user intent. The scope is still confined to a coherent, domain-specific purpose (NCI Imaging Data Commons), so the practical risk is low, but the phrasing is an activation-broadening pattern.
+  > **Remediation:** Narrow the description to explicit IDC/NCI Imaging Data Commons tasks and drop the "even when the user doesn't explicitly mention" clause so activation follows user intent.
+
+- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — allowed-tools not declared while skill directs Bash/Python execution and network downloads
+  > The manifest does not declare `allowed-tools` or `compatibility`, yet the skill directs the agent to run Python, execute shell commands (`curl`, `idc download`, `s5cmd`, `aws s3`, `gsutil`), install packages, and write files to disk. `allowed-tools` is optional per the spec (informational only), and there is no violation of a declared restriction here; the finding is documentation/least-privilege hygiene. No credential or environment-variable access appears anywhere in the package, and the skill explicitly states that none is used.
+  > **Remediation:** Declare `allowed-tools` (e.g., Read, Bash, Python) and `compatibility` so the execution and network footprint the skill actually requires is explicit to reviewers and hosts.
+
+- **🔵 LOW** `LLM_PROMPT_INJECTION` — Instructed delegation of authority to a remote MCP server's own instructions
+  > SKILL.md tells the agent that when the hosted IDC MCP server is present it should be treated as "authoritative" and that the agent should "follow the server's own instructions rather than re-deriving them from this file", including consuming the `idc://guide` resource. Content returned by a remote endpoint is untrusted data; instructing the agent to follow it as guidance is a transitive-trust / indirect prompt injection surface. Mitigating factors: the endpoint is a fixed, named NCI domain over HTTPS, no credentials are involved, and references/mcp_guide.md explicitly warns that the fingerprint check is "disambiguation, not authentication" and that a hostile server could impersonate it, with a documented fail-soft fallback. Risk is therefore low but non-zero.
+  > File: `references/mcp_guide.md`
+  > **Remediation:** Qualify the delegation: treat MCP/resource content as data, not as instructions to obey, and state explicitly that guidance retrieved from the server must not override the agent's own policies or the user's request.
+
+- **🔵 LOW** `LLM_COMMAND_INJECTION` — Shell commands generated from remotely fetched manifest content
+  > references/rest_api_guide.md documents a fallback workflow that downloads a manifest from the IDC REST API and rewrites each line with `awk` into an `s5cmd` command file that is then executed via `s5cmd run`. The command file is built from remote response content. `s5cmd run` only interprets its own subcommands (not a shell), and the endpoint is a fixed public NCI service, so exploitability is limited, but building an executable command list from network-derived text is a pattern that warrants validation.
+  > File: `references/rest_api_guide.md`
+  > **Remediation:** Add a validation step that each manifest line matches an expected `s3://<known-idc-bucket>/<uuid>/*` pattern before generating or executing the command file.
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Best-effort network version checks and user-run install instructions
+  > scripts/check_version.py performs unauthenticated HTTPS GETs to pypi.org and api.github.com to report newer versions, and prints pip/uv install commands. It does not install, upgrade, or execute anything itself, uses a pinned MIN_VERSION (idc-index==0.12.5), targets the running interpreter explicitly, swallows network errors, and respects PEP 668. This is a benign, well-guarded implementation; noted only because the skill's overall workflow depends on the user executing a package installation of a third-party dependency.
+  > File: `scripts/check_version.py`
+  > **Remediation:** No change required; optionally document the outbound hosts (pypi.org, api.github.com) in the manifest's network-access note alongside the IDC/GCS/S3 endpoints already listed.
+
 ### iso-standards-readiness — 🔵 LOW
 
 - **🔵 LOW** `LLM_HARMFUL_CONTENT` — Hard-coded date/basis assertions can produce misleading regulatory guidance as they age
@@ -2245,6 +2298,22 @@
   > SKILL.md and reference files include multiple `uv pip install` commands for PennyLane and hardware plugins. All versions are explicitly pinned (e.g., pennylane==0.45.0, pennylane-qiskit==0.45.0), which is good practice. The packages are legitimate, well-known quantum computing packages from official sources, and no direct GitHub/VCS installs or unknown repositories are referenced. Residual risk is limited to the agent executing installation commands into the user's environment, which is inherent to the skill's stated purpose.
   > File: `SKILL.md`
   > **Remediation:** No change strictly required. Optionally note that the agent should confirm with the user before modifying the Python environment, and consider recommending a virtual environment for installs.
+
+### pi-agent — 🔵 LOW
+
+- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — allowed-tools not declared for a skill whose guidance drives shell, network and filesystem actions
+  > The manifest omits the optional `allowed-tools` field while the instruction body and references guide the agent toward installing packages, running `pi`/`npm`/`llama-server` commands, editing configuration under `~/.pi/agent/`, and enabling network-capable ecosystem packages. This is informational only (the field is optional per the Agent Skills spec) and no code in the package performs these actions itself, but declaring the field would make the capability envelope explicit.
+  > **Remediation:** Declare `allowed-tools` (e.g. Read, Grep, Glob and, if genuinely needed, Bash) so the skill's intended tool surface is auditable and enforceable.
+
+- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Large number of referenced files do not exist in the package (assets/ and templates/ paths)
+  > Roughly two thirds of the files listed as referenced (all `assets/*.md` and `templates/*.md` paths) are not present in the package; only the `references/*.md` set exists. This is a packaging/documentation-hygiene issue rather than a security threat: dangling references can cause the agent to attempt reads that fail, and could later be satisfied by attacker-supplied files placed at those relative paths inside a shared skill directory.
+  > File: `references/overview.md`
+  > **Remediation:** Remove references to non-existent assets/ and templates/ paths, or ship the files with the package so the resolved reference set is fully self-contained and verifiable.
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Documentation recommends unpinned global npm installs and remote curl|sh installer
+  > The SKILL.md body and several reference files instruct the agent to run `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` (no version pin) and `pi install npm:pi-subagents`, `pi install npm:pi-web-access`, etc. references/overview.md additionally documents `curl -fsSL https://pi.dev/install.sh | sh`. These are legitimate, vendor-documented installation methods for the product the skill describes, but if an agent executes them autonomously it fetches and runs remote, unpinned code with the user's permissions. Note the guidance does use `--ignore-scripts`, which mitigates dependency lifecycle-script execution, and references/packages.md explicitly warns that packages run with full system access and should be reviewed.
+  > File: `references/packages.md`
+  > **Remediation:** Pin versions in example install commands where practical and require explicit user confirmation before the agent executes any install command or pipes a remote script into a shell.
 
 ### pkpd-modeling — 🔵 LOW
 
@@ -2932,44 +3001,3 @@
   > references/storage_backends.md contains a directive aimed at the reading agent ('Treat all `import zarr`, `import dask`, `import h5py`, and `import xarray` examples as third-party package imports, not bundled script files.'). In this package the statement is factually accurate and benign, and the surrounding guidance is security-positive (prefer IAM roles, never print credentials, avoid reading broad .env files). However, reference files instructing the agent how to classify code is a pattern that can be abused to pre-empt scrutiny of bundled code, so it is noted as informational.
   > File: `references/storage_backends.md`
   > **Remediation:** Keep reference documents purely descriptive; avoid embedding directives that tell the agent how to interpret or classify code in the package.
-
-### pi-agent — 🔵 LOW
-
-- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — allowed-tools not declared for a skill whose guidance drives shell, network and filesystem actions
-  > The manifest omits the optional `allowed-tools` field while the instruction body and references guide the agent toward installing packages, running `pi`/`npm`/`llama-server` commands, editing configuration under `~/.pi/agent/`, and enabling network-capable ecosystem packages. This is informational only (the field is optional per the Agent Skills spec) and no code in the package performs these actions itself, but declaring the field would make the capability envelope explicit.
-  > **Remediation:** Declare `allowed-tools` (e.g. Read, Grep, Glob and, if genuinely needed, Bash) so the skill's intended tool surface is auditable and enforceable.
-
-- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Large number of referenced files do not exist in the package (assets/ and templates/ paths)
-  > Roughly two thirds of the files listed as referenced (all `assets/*.md` and `templates/*.md` paths) are not present in the package; only the `references/*.md` set exists. This is a packaging/documentation-hygiene issue rather than a security threat: dangling references can cause the agent to attempt reads that fail, and could later be satisfied by attacker-supplied files placed at those relative paths inside a shared skill directory.
-  > File: `references/overview.md`
-  > **Remediation:** Remove references to non-existent assets/ and templates/ paths, or ship the files with the package so the resolved reference set is fully self-contained and verifiable.
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Documentation recommends unpinned global npm installs and remote curl|sh installer
-  > The SKILL.md body and several reference files instruct the agent to run `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` (no version pin) and `pi install npm:pi-subagents`, `pi install npm:pi-web-access`, etc. references/overview.md additionally documents `curl -fsSL https://pi.dev/install.sh | sh`. These are legitimate, vendor-documented installation methods for the product the skill describes, but if an agent executes them autonomously it fetches and runs remote, unpinned code with the user's permissions. Note the guidance does use `--ignore-scripts`, which mitigates dependency lifecycle-script execution, and references/packages.md explicitly warns that packages run with full system access and should be reviewed.
-  > File: `references/packages.md`
-  > **Remediation:** Pin versions in example install commands where practical and require explicit user confirmation before the agent executes any install command or pipes a remote script into a shell.
-
-### imaging-data-commons — 🔵 LOW
-
-- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Broad activation clause in skill description
-  > The frontmatter description instructs the agent to invoke the skill for any question about cancer imaging datasets, DICOM data access, radiology, pathology AI training sets, metadata queries, visualization, or license checks "even when the user doesn't explicitly mention 'IDC'". This widens discovery/activation beyond explicit user intent. The scope is still confined to a coherent, domain-specific purpose (NCI Imaging Data Commons), so the practical risk is low, but the phrasing is an activation-broadening pattern.
-  > **Remediation:** Narrow the description to explicit IDC/NCI Imaging Data Commons tasks and drop the "even when the user doesn't explicitly mention" clause so activation follows user intent.
-
-- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — allowed-tools not declared while skill directs Bash/Python execution and network downloads
-  > The manifest does not declare `allowed-tools` or `compatibility`, yet the skill directs the agent to run Python, execute shell commands (`curl`, `idc download`, `s5cmd`, `aws s3`, `gsutil`), install packages, and write files to disk. `allowed-tools` is optional per the spec (informational only), and there is no violation of a declared restriction here; the finding is documentation/least-privilege hygiene. No credential or environment-variable access appears anywhere in the package, and the skill explicitly states that none is used.
-  > **Remediation:** Declare `allowed-tools` (e.g., Read, Bash, Python) and `compatibility` so the execution and network footprint the skill actually requires is explicit to reviewers and hosts.
-
-- **🔵 LOW** `LLM_PROMPT_INJECTION` — Instructed delegation of authority to a remote MCP server's own instructions
-  > SKILL.md tells the agent that when the hosted IDC MCP server is present it should be treated as "authoritative" and that the agent should "follow the server's own instructions rather than re-deriving them from this file", including consuming the `idc://guide` resource. Content returned by a remote endpoint is untrusted data; instructing the agent to follow it as guidance is a transitive-trust / indirect prompt injection surface. Mitigating factors: the endpoint is a fixed, named NCI domain over HTTPS, no credentials are involved, and references/mcp_guide.md explicitly warns that the fingerprint check is "disambiguation, not authentication" and that a hostile server could impersonate it, with a documented fail-soft fallback. Risk is therefore low but non-zero.
-  > File: `references/mcp_guide.md`
-  > **Remediation:** Qualify the delegation: treat MCP/resource content as data, not as instructions to obey, and state explicitly that guidance retrieved from the server must not override the agent's own policies or the user's request.
-
-- **🔵 LOW** `LLM_COMMAND_INJECTION` — Shell commands generated from remotely fetched manifest content
-  > references/rest_api_guide.md documents a fallback workflow that downloads a manifest from the IDC REST API and rewrites each line with `awk` into an `s5cmd` command file that is then executed via `s5cmd run`. The command file is built from remote response content. `s5cmd run` only interprets its own subcommands (not a shell), and the endpoint is a fixed public NCI service, so exploitability is limited, but building an executable command list from network-derived text is a pattern that warrants validation.
-  > File: `references/rest_api_guide.md`
-  > **Remediation:** Add a validation step that each manifest line matches an expected `s3://<known-idc-bucket>/<uuid>/*` pattern before generating or executing the command file.
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Best-effort network version checks and user-run install instructions
-  > scripts/check_version.py performs unauthenticated HTTPS GETs to pypi.org and api.github.com to report newer versions, and prints pip/uv install commands. It does not install, upgrade, or execute anything itself, uses a pinned MIN_VERSION (idc-index==0.12.5), targets the running interpreter explicitly, swallows network errors, and respects PEP 668. This is a benign, well-guarded implementation; noted only because the skill's overall workflow depends on the user executing a package installation of a third-party dependency.
-  > File: `scripts/check_version.py`
-  > **Remediation:** No change required; optionally document the outbound hosts (pypi.org, api.github.com) in the manifest's network-access note alongside the IDC/GCS/S3 endpoints already listed.
