@@ -197,10 +197,10 @@ Descriptors.NumAromaticAtoms(mol)
 
 ## Fraction Descriptors
 
-### FractionCsp3
+### FractionCSP3
 Fraction of carbons that are sp3 hybridized.
 ```python
-Descriptors.FractionCsp3(mol)
+Descriptors.FractionCSP3(mol)
 ```
 
 ## Complexity Descriptors
@@ -580,7 +580,7 @@ def molecular_complexity(mol):
         'BertzCT': Descriptors.BertzCT(mol),
         'NumRings': Descriptors.RingCount(mol),
         'NumRotBonds': Descriptors.NumRotatableBonds(mol),
-        'FractionCsp3': Descriptors.FractionCsp3(mol),
+        'FractionCSP3': Descriptors.FractionCSP3(mol),
         'NumAromaticRings': Descriptors.NumAromaticRings(mol)
     }
 ```

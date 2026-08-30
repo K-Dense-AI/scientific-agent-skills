@@ -5,7 +5,7 @@ license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Examples target RDKit 2026.03.x. Use conda-forge for the broadest binary support or PyPI package `rdkit` for supported platform wheels; `rdkit-pypi` is the legacy PyPI name.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
