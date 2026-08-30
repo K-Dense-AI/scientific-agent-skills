@@ -51,8 +51,9 @@ not replace it.
 export FASTCRW_API_KEY="crw_live_..."   # https://fastcrw.com/dashboard
 ```
 
-Requests without a key return 401. A new account includes 500 one-time credits with
-no card. The engine behind the API is open source (AGPL-3.0,
+Requests without a key return 401. The free tier is one-time credits with no card,
+current numbers at [fastcrw.com/pricing](https://fastcrw.com/pricing). The engine
+behind the API is open source (AGPL-3.0,
 [github.com/us/crw](https://github.com/us/crw)); this skill targets the hosted
 endpoints at `https://api.fastcrw.com`.
 
