@@ -92,6 +92,13 @@ each, union the arXiv ids, and rank an id by how many of the queries surfaced it
 This decomposition is the single largest recall lever, because one broad query
 misses the niche papers.
 
+Then expand, on every question type and not only on B below: take the 5 ids the
+most queries agreed on and call the citation-graph endpoint with
+`mode=references` for each, appending any new ids below the union. This is where
+the papers that no query names directly come from. Measured on the first 12
+questions of the benchmark with one raw query each, so the expansion is the only
+variable: 47.0% for the search union alone, 66.5% with the expansion.
+
 **B. Compare-against** ("what does X benchmark against, build on, use as a
 baseline"). Resolve X to its arXiv id, then call `mode=references`. The answer is
 in X's own bibliography, not in a topical search.
