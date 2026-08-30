@@ -212,56 +212,67 @@ Compatible clients (Cursor, Codex, GitHub Copilot, VS Code, Kiro, and others lis
 ### Option 4: SkillHub / Astron registry (governed team distribution)
 
 [SkillHub](https://github.com/iflytek/skillhub), part of the
-[iFLYTEK Astron ecosystem](https://github.com/topics/iflytek-astron), can validate and publish each
-immediate child of this repository's `skills/` directory as a separate, versioned registry
-package. This is useful when a team needs namespace ownership, review, security scanning, audit,
-and controlled installation rather than copying an entire collection directly into every agent.
+[iFLYTEK Astron ecosystem](https://github.com/topics/iflytek-astron), can publish each immediate
+child of this repository's `skills/` directory as a separate registry package. This is useful when
+a team needs namespace ownership, review, audit, and controlled installation rather than copying an
+entire collection directly into every agent.
 
-Pin the source checkout first, stage a reviewed topical subset, then validate that import plan
+> [!IMPORTANT]
+> The commands below were verified on 2026-08-30 against the published npm CLI
+> `@astron-team/skillhub@0.1.9`. SkillHub server releases use a separate version line. Check the
+> [official CLI guide](https://github.com/iflytek/skillhub/blob/main/cli/README.md) and your registry
+> administrator's compatibility policy before changing the pin. In CLI 0.1.9, `publish` uploads
+> immediately and has **no `--dry-run` option**.
+
+Pin the source checkout first, stage a reviewed topical subset, and run this repository's validator
 without uploading anything:
 
 ```bash
 git clone https://github.com/K-Dense-AI/scientific-agent-skills.git
 cd scientific-agent-skills
-git checkout v2.64.0  # or another reviewed release tag / commit SHA
+git checkout v2.64.0  # verified release tag; another reviewed tag or commit SHA also works
 
 mkdir ../scientific-agent-skills-import
 cp -R skills/scanpy skills/rdkit skills/literature-review ../scientific-agent-skills-import/
 
-export SKILLHUB_REGISTRY=https://skillhub.example.com
-export SKILLHUB_TOKEN=sk_replace_with_your_api_token
-export SKILLHUB_NAMESPACE=research-team
-
-npx @astron-team/skillhub@0.1.9 whoami
+uv sync
 for skill_dir in ../scientific-agent-skills-import/*; do
   [ -d "$skill_dir" ] || continue
-  npx @astron-team/skillhub@0.1.9 publish "$skill_dir" \
-    --namespace "$SKILLHUB_NAMESPACE" \
-    --visibility namespace-only \
-    --dry-run
+  uv run skills-ref validate "$skill_dir"
 done
 ```
 
-Review the dry-run result and each selected skill's license and dependencies. To upload valid
-packages through the normal SkillHub publication and review policy, repeat the same loop without
-`--dry-run`:
+Before authentication, obtain all three values below from the target registry administrator. Do not
+use `https://skillhub.example.com` as a real endpoint: it is a placeholder in the upstream CLI
+documentation. The official guide currently documents `https://skill.xfyun.cn` as the hosted
+default, while self-hosted deployments use an administrator-provided HTTPS base URL.
 
 ```bash
-for skill_dir in ../scientific-agent-skills-import/*; do
-  [ -d "$skill_dir" ] || continue
-  npx @astron-team/skillhub@0.1.9 publish "$skill_dir" \
-    --namespace "$SKILLHUB_NAMESPACE" \
-    --visibility namespace-only
-done
+: "${SKILLHUB_REGISTRY:?Set the real SkillHub registry base URL}"
+: "${SKILLHUB_TOKEN:?Set a token issued by that registry}"
+: "${SKILLHUB_NAMESPACE:?Set an approved namespace slug}"
+
+npx @astron-team/skillhub@0.1.9 version
+npx @astron-team/skillhub@0.1.9 whoami --registry "$SKILLHUB_REGISTRY"
 ```
 
-The published SkillHub CLI handles one skill per `publish` command, so the loop publishes the
-individual skill directories. It does **not** import the root
+After reviewing the selected skill's license, dependencies, validator output, namespace policy, and
+the registry's review behavior, publish **one explicitly approved directory at a time**. The next
+command is state-changing and uploads a package:
+
+```bash
+skill_dir=../scientific-agent-skills-import/scanpy
+npx @astron-team/skillhub@0.1.9 publish "$skill_dir" \
+  --registry "$SKILLHUB_REGISTRY" \
+  --namespace "$SKILLHUB_NAMESPACE" \
+  --visibility namespace-only
+```
+
+CLI 0.1.9 packages one directory per `publish` command. It does **not** import the root
 `plugin.json`, preserve repository-level collection semantics, or schedule future synchronization;
 those broader external-repository features are tracked in
-[SkillHub #516](https://github.com/iflytek/skillhub/issues/516). Process a larger selection only
-after reviewing the complete collection and confirming that the target registry's request limits
-and review capacity can handle the batch.
+[SkillHub #516](https://github.com/iflytek/skillhub/issues/516). Avoid an unattended publication
+loop: review and authorize every package separately until a verified bulk import workflow exists.
 
 ### Other Agent Skills hosts (OpenClaw, NemoClaw, Pi, Hermes, …)
 
