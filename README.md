@@ -470,7 +470,7 @@ This repository contains **163 scientific and research skills** organized across
 
 > **Note:** The Python package and integration skills listed below are *explicitly defined* skills — curated with documentation, examples, and best practices for stronger, more reliable performance. They are not a ceiling: the agent can install and use *any* Python package or call *any* API, even without a dedicated skill. The skills listed simply make common workflows faster and more dependable.
 
-#### 🧬 **Bioinformatics & Genomics** (27 skills)
+#### 🧬 **Bioinformatics & Genomics** (163 skills)
 - RNA-seq pipelines: Bulk RNA-seq (end-to-end FASTQ -> counts -> DE -> enrichment orchestrator)
 - Sequence analysis: BioPython, pysam, scikit-bio, BioServices
 - Single-cell analysis: Scanpy, AnnData, scvi-tools, scVelo (RNA velocity), Arboreto, Cellxgene Census
@@ -482,7 +482,7 @@ This repository contains **163 scientific and research skills** organized across
 - Phylogenetics: ETE Toolkit, Phylogenetics (MAFFT, IQ-TREE 2, FastTree)
 - Microbiome foundation models: Waypoint (Outpost Bio's open Waypoint-6m/45m/170m checkpoints, the Atlas 539k-sample MGnify pretraining corpus, and the eight-task Compass benchmark — embedding, fine-tuning, benchmarking, and pretraining on taxonomic abundance profiles, with MetaPhlAn/Kraken2/QIIME 2 conversion)
 
-#### 🧪 **Cheminformatics & Drug Discovery** (10 skills)
+#### 🧪 **Cheminformatics & Drug Discovery** (163 skills)
 - Molecular manipulation: RDKit, Datamol, Molfeat
 - Deep learning: DeepChem, TorchDrug
 - Docking & screening: DiffDock
@@ -491,10 +491,10 @@ This repository contains **163 scientific and research skills** organized across
 - Drug-likeness: MedChem
 - Benchmarks: PyTDC 1.1.15 on its verified CPython 3.11 compatibility stack
 
-#### 🔬 **Proteomics & Mass Spectrometry** (2 skills)
+#### 🔬 **Proteomics & Mass Spectrometry** (163 skills)
 - Spectral processing: matchms, pyOpenMS
 
-#### 🏥 **Clinical Research & Evidence Workflows** (8 skills)
+#### 🏥 **Clinical Research & Evidence Workflows** (163 skills)
 - Clinical databases: via Database Lookup (ClinicalTrials.gov, ClinVar, ClinPGx, COSMIC, FDA, cBioPortal, Monarch, and more)
 - Clinical pharmacology: PK/PD Modeling (non-compartmental analysis, compartmental and population PK, exposure-response and Emax, TMDD, PBPK orientation, bioequivalence including RSABE/ABEL, allometric scaling and first-in-human dose, DDI prediction under ICH M12, concentration-QTc, and Bayesian therapeutic drug monitoring — stdlib + numpy/scipy, no proprietary estimation software invoked)
 - Cancer genomics: DepMap (cancer dependency scores, drug sensitivity)
@@ -503,15 +503,15 @@ This repository contains **163 scientific and research skills** organized across
 - Decision-support research: local, aggregate or synthetic Clinical Decision Support evaluation and governance artifacts only
 - Clinical documentation: source-bound Clinical Reports drafts and formatting of verified clinician-authored decisions with Treatment Plans; neither skill diagnoses or recommends care
 
-#### 🐭 **Preclinical Research & Animal Welfare** (1 skill)
+#### 🐭 **Preclinical Research & Animal Welfare** (163 skill)
 - Severity assessment: RELSA Severity Assessment (multivariate RELSA scores from body weight, temperature, clinical/nesting scores, biomarkers, activity, heart rate, burrowing and wheel running; ARIMA humane-endpoint forecasting with 95% prediction intervals; KDE-derived attention and danger zones for 3Rs/refinement and EU Directive 2010/63/EU severity reporting) — an aid to severity assessment, never a decision rule
 
-#### 🖼️ **Medical Imaging & Digital Pathology** (4 skills)
+#### 🖼️ **Medical Imaging & Digital Pathology** (163 skills)
 - DICOM processing: pydicom 3.0.2 with privacy-first local preflight and no diagnostic or de-identification-compliance claims
 - Whole slide imaging: histolab and research-only PathML 3.0.5
 - Virtual spatial transcriptomics: noncommercial DeepSpot-M for transcriptome-wide spatial gene expression from 224x224 H&E tiles
 
-#### 🧠 **Neuroscience & Electrophysiology** (3 skills)
+#### 🧠 **Neuroscience & Electrophysiology** (163 skills)
 - Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets)
 - Neural recordings: Neuropixels-Analysis (extracellular spikes, silicon probes, spike sorting)
 - Physiological signals: NeuroKit2 0.2.13 for reproducible research workflows—not diagnosis, monitoring decisions, or medical-device validation
@@ -526,13 +526,13 @@ This repository contains **163 scientific and research skills** organized across
 - Dimensionality reduction: UMAP-learn
 - Statistical modeling: statsmodels
 
-#### 🔮 **Materials Science, Chemistry & Physics** (7 skills)
+#### 🔮 **Materials Science, Chemistry & Physics** (163 skills)
 - Materials: current split pymatgen wrapper/core plus explicitly bounded Materials Project queries
 - Metabolic modeling: COBRApy
 - Astronomy: Astropy
 - Quantum computing: Cirq, PennyLane, Qiskit, QuTiP 5.3
 
-#### ⚙️ **Engineering & Simulation** (6 skills)
+#### ⚙️ **Engineering & Simulation** (163 skills)
 - Lab hardware CAD: parametric build123d 0.11.1 models for microfluidic chips and molds, optomechanical mounts, microplate and cuvette adapters, and behavior rigs, checked against ANSI/SLAS and optical-table dimensional standards and reviewed with mandatory multi-view renders
 - Numerical computing: proprietary MATLAB R2026a and distinct GNU Octave 11.3 planning/review workflows
 - Computational fluid dynamics: bounded FluidSim 0.9 simulations with numerical-validity and HPC checks
@@ -540,7 +540,7 @@ This repository contains **163 scientific and research skills** organized across
 - Discrete-event simulation: SimPy 4.1.2 with replication, warm-up, and output-analysis guidance
 - Symbolic math: SymPy
 
-#### 📊 **Data Analysis & Visualization** (22 skills)
+#### 📊 **Data Analysis & Visualization** (163 skills)
 - Visualization: Matplotlib, Seaborn, Scientific Visualization
 - Geospatial analysis: GeoPandas 1.1.4 and GeoMaster (remote sensing, GIS, satellite imagery, spatial ML, 500+ examples)
 - Data processing: Dask, Polars, Vaex
@@ -554,23 +554,23 @@ This repository contains **163 scientific and research skills** organized across
 - Experimental design: Experimental Design (randomization, blocking, factorial/fractional-factorial DOE, crossover, cluster, sequential designs; pyDOE3)
 - Statistical power: Statistical Power (sample-size & power for t-tests, ANOVA, proportions, correlation, regression — closed-form plus simulation-based for GLMs, mixed models, and cluster designs)
 
-#### 🧪 **Laboratory Automation** (6 skills)
+#### 🧪 **Laboratory Automation** (163 skills)
 - Liquid handling: offline-first PyLabRobot planning/simulation and Opentrons authoring, with physical execution behind explicit operator safety gates
 - Cloud lab: Ginkgo Cloud Lab (protein expression & purification across cell-free/E. coli/Pichia, IVT RNA synthesis, thermal shift and Echo-MS assays, SPR onboarding, fluorescent pixel art via autonomous RAC infrastructure)
 - Protocol management: bounded protocols.io reads across documented v3/v4 endpoints and non-executing write plans
 - LIMS/ELN integration: Benchling and the separate LabArchives legacy ELN and Inventory v1 APIs
 
-#### 🔬 **Multi-omics & Systems Biology** (3 skills)
+#### 🔬 **Multi-omics & Systems Biology** (163 skills)
 - Pathway analysis: via Database Lookup (KEGG, Reactome, STRING) and PrimeKG
 - Data management: LaminDB
 
-#### 🧬 **Protein Engineering & Design** (4 skills)
+#### 🧬 **Protein Engineering & Design** (163 skills)
 - Protein language models: ESM
 - Glycoengineering: Glycoengineering (N/O-glycosylation prediction, therapeutic antibody optimization)
 - Cloud laboratory platform: Adaptyv (automated protein testing and validation)
 - Cloud structure & design platform: Tamarind (managed-GPU access to AlphaFold, Boltz, Chai, ESMFold, RFdiffusion, ProteinMPNN, BoltzGen, antibody/nanobody design, DiffDock/Vina docking, binding affinity, and MSA generation via REST API or MCP)
 
-#### 📚 **Scientific Communication** (27 skills)
+#### 📚 **Scientific Communication** (163 skills)
 - Literature: Paper Lookup (PubMed, PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall), Literature Review, Paperzilla
 - Full-text corpus access: Paperclip (read-only virtual filesystem over ~11M full-text papers, 217K+ FDA/PMDA/EMA regulatory documents, clinical trial registries, and UniProt/PDB/ChEMBL entries — source-scoped semantic search, corpus-wide grep, SQL metadata queries, map/reduce reading across many papers, figure vision analysis, and line-pinned citations)
 - Advanced paper search: BGPT Paper Search (25+ structured fields per paper — methods, results, sample sizes, quality scores — from full text, not just abstracts)
@@ -585,7 +585,7 @@ This repository contains **163 scientific and research skills** organized across
 - Citations: Citation Management, pyzotero
 - Illustration: Generate Image (AI image generation with FLUX.2 Pro and Gemini 3.1 Flash Image / Nano Banana 2)
 
-#### 🔬 **Scientific Databases & Data Access** (11 skills → 100+ databases total)
+#### 🔬 **Scientific Databases & Data Access** (163 skills → 100+ databases total)
 > A unified database-lookup skill provides deterministic REST API access to 78 public databases across all domains, with retrieval contracts, pagination/count reconciliation, and endpoint provenance. Dedicated skills cover specialized data platforms. Multi-database packages like BioServices (~40 bioinformatics services), BioPython (39 NCBI sub-databases via Entrez), and gget (20+ genomics databases) add further coverage.
 - Unified access: Database Lookup (78 databases spanning chemistry, genomics, clinical, pathways, patents, economics, and more — PubChem, ChEMBL, UniProt, PDB, AlphaFold, KEGG, Reactome, STRING, ClinVar, COSMIC, ClinicalTrials.gov, FDA, FRED, USPTO, SEC EDGAR, and dozens more — with auditable filters and provenance)
 - Cancer genomics: DepMap (cancer cell line dependencies, drug sensitivity, gene effect profiles)
@@ -599,7 +599,7 @@ This repository contains **163 scientific and research skills** organized across
 - Ontology identifiers: Ontology Term Resolution (resolve free-text tissue, cell-type, disease, phenotype, assay, chemical, organism, and developmental-stage labels to term IDs and validate CURIEs against EBI OLS4, for GEO/ENA/BioSamples/CELLxGENE/HCA/ISA-Tab metadata)
 - Live pathogen surveillance: Pathogen Variant Surveillance (which viral lineages are circulating now, how fast they are growing, and what mutations they carry — SARS-CoV-2, influenza including H5N1, RSV, mpox, measles, dengue and more through the GenSpectrum LAPIS API, with lineage names resolved against the live pango-designation nomenclature and reporting lag measured rather than assumed)
 
-#### 🔧 **Infrastructure & Platforms** (11 skills)
+#### 🔧 **Infrastructure & Platforms** (163 skills)
 - Cloud compute: Modal
 - GPU acceleration: Optimize for GPU (CuPy, Numba CUDA, Warp, cuDF, cuML, cuGraph, KvikIO, cuCIM, cuxfilter, cuVS, cuSpatial, RAFT)
 - Genomics platforms: DNAnexus, LatchBio
@@ -610,7 +610,7 @@ This repository contains **163 scientific and research skills** organized across
 - Workflow mining: Autoskill (local screenpipe-based repeated workflow detection and skill drafting)
 - Agent platform development: Pi Agent (using Pi as a terminal coding harness and building on it with SDK, RPC/JSONL, extensions, custom providers/models, packages, TUI components, and session tooling)
 
-#### 🎓 **Research Methodology & Planning** (13 skills)
+#### 🎓 **Research Methodology & Planning** (163 skills)
 - Ideation: evidence-aware Scientific Brainstorming and non-scoring Hypothesis Generation that keeps hypotheses labeled as candidates
 - Text-dataset hypothesis software: HypoGeniC/HypoRefine produces candidate textual patterns and task-prediction statistics, not validated scientific hypotheses
 - Autonomous optimization: Arbor (Hypothesis Tree Refinement — iteratively improve a code/model/agent-harness/data artifact against a dev evaluator while a held-out test gate guards against overfitting)
@@ -622,7 +622,7 @@ This repository contains **163 scientific and research skills** organized across
 - Discovery: Research Lookup, Paper Lookup (10 academic databases)
 - Market analysis: evidence-traceable Market Research Reports with assumption-led sizing and forecast sensitivity
 
-#### ⚖️ **Regulatory & Standards** (2 skills)
+#### ⚖️ **Regulatory & Standards** (163 skills)
 - Standards readiness: draft evidence-preparation artifacts for ISO 13485 (medical device QMS), ISO 14971 (device risk management), ISO/IEC 17025 (testing and calibration laboratories), and ISO 15189 (medical laboratories), with per-standard process domains selected by a `--standard` profile
 - Analytical method validation: plan, evaluate, and document validation, verification, and transfer of analytical procedures (HPLC, LC-MS/MS, GC, CE, ICP-MS, dissolution, qNMR, qPCR, NIR, ligand-binding and cell-based assays) under whichever framework governs — ICH Q2(R2)/Q14 and ICH M10 encoded from their openly licensed text, with USP `<1220>`/`<1225>`/`<1226>`, the CLSI EP series, and ISO/IEC 17025 cited by designation and scope only; stdlib-only statistics, no network access
 - Assurance-lane separation: keeps ISO certification, laboratory accreditation, FDA QMSR inspection, CLIA certification, MDSAP, and EU MDR/IVDR evidence boundaries distinct—laboratories are accredited rather than certified, and ISO 15189 accreditation does not satisfy CLIA
@@ -649,7 +649,7 @@ Deep dives, benchmarks, and guides from the [K-Dense blog](https://www.k-dense.a
 
 - **[The Silent 97%: Introducing the waypoint-bio Agent Skill](https://www.k-dense.ai/blog/introducing-waypoint-agent-skill)** — [waypoint-bio](skills/waypoint-bio/) against silent data loss: an unconverted MetaPhlAn table keeps 3% of abundance mass and still returns a valid embedding; skill-equipped agents won 16 to 0 on matched pairs.
 - **[The Millimetre Problem: Introducing the lab-hardware-cad Agent Skill](https://www.k-dense.ai/blog/lab-hardware-cad-skill)** — [lab-hardware-cad](skills/lab-hardware-cad/) over 98 geometry-scored runs: the skill arm produced parametric, regenerable models in 49 of 49 cases (baseline 0 of 49) and named the missing Y-maze standard instead of inventing one.
-- **[One Skill, 78 Databases: Why We Didn't Build 78 Skills](https://www.k-dense.ai/blog/database-lookup-one-skill-78-databases)** — The design rationale behind [database-lookup](skills/database-lookup/): consolidation cut always-on context cost by 13.9x while holding routing accuracy across five models.
+- **[One Skill, 78 Databases: Why We Didn't Build 163 Skills](https://www.k-dense.ai/blog/database-lookup-one-skill-78-databases)** — The design rationale behind [database-lookup](skills/database-lookup/): consolidation cut always-on context cost by 13.9x while holding routing accuracy across five models.
 - **[Can an AI Agent Run Your Mass Spec Pipeline? Benchmarking the PyOpenMS Skill](https://www.k-dense.ai/blog/benchmarking-pyopenms-skill-mass-spectrometry)** — A 250-run study of [pyopenms](skills/pyopenms/): 100% task success with the skill versus 96% without, 92% fewer pyOpenMS API errors, and 10% lower cost.
 - **[Beyond RDKit: Benchmarking the Rowan Agent Skill Against Experiment](https://www.k-dense.ai/blog/benchmarking-rowan-skill-chemistry)** — [rowan](skills/rowan/) compared against RDKit and experimental data: pKa MAE 0.23 (R² 0.986), logD₇.₄ MAE 1.15, and 0.19 Å RMSD docking pose recovery for roughly $0.52 of compute.
 - **[GPU-Accelerate Your Science: 58x Average Speedup with a Single Skill](https://www.k-dense.ai/blog/optimize-for-gpu-skill)** — [optimize-for-gpu](skills/optimize-for-gpu/) rewriting CPU-bound Python across 12 libraries, with speedups ranging from 1.7x to 492x.
