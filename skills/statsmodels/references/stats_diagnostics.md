@@ -808,18 +808,43 @@ print(f"p-value: {result.pvalue:.4f}")
 
 ## Treatment Effects and Causal Inference
 
-**Propensity score matching**:
+**Treatment effect estimation** (`TreatmentEffect`):
 
 ```python
-from statsmodels.treatment import propensity_score
+import statsmodels.api as sm
+from statsmodels.treatment.treatment_effects import TreatmentEffect
 
-# Estimate propensity scores
-ps_model = sm.Logit(treatment, X).fit()
-propensity_scores = ps_model.predict(X)
+# exog: observed confounders (with constant); treatment: 0/1 indicator
+exog = sm.add_constant(confounders)
+select_model = sm.Probit(treatment, exog)  # treatment (selection) model
+outcome_model = sm.OLS(outcome, exog)      # outcome model
 
-# Use for matching or weighting
-# (manual implementation of matching needed)
+te = TreatmentEffect(outcome_model, treatment,
+                     results_select=select_model.fit(disp=0))
+
+print(te.ipw())   # inverse probability weighting
+print(te.ra())    # regression adjustment
+print(te.aipw())  # augmented IPW (doubly robust)
+# Also available: te.aipw_wls(), te.ipw_ra()
+# Results report the ATE and potential-outcome means POM0/POM1
 ```
+
+**Propensity scores** (for diagnostics or custom weighting):
+
+```python
+ps_model = sm.Logit(treatment, exog).fit(disp=0)
+propensity_scores = ps_model.predict(exog)
+# statsmodels does not implement matching; estimating scores
+# alone is not propensity score matching
+```
+
+Causal caveats:
+
+- Estimates are causal only under no unmeasured confounding and positivity
+- Check overlap of propensity score distributions between groups; extreme
+  scores near 0 or 1 make IPW unstable
+- Check covariate balance after weighting (e.g. standardized mean differences)
+- `TreatmentEffect` targets the ATE; the ATT is a different estimand
 
 **Difference-in-differences**:
 
