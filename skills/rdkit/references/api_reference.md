@@ -249,7 +249,7 @@ Additional descriptor calculations.
 - `rdMolDescriptors.CalcNumAromaticHeterocycles(mol)` - Aromatic heterocycles
 - `rdMolDescriptors.CalcNumSpiroAtoms(mol)` - Spiro atoms
 - `rdMolDescriptors.CalcNumBridgeheadAtoms(mol)` - Bridgehead atoms
-- `rdMolDescriptors.CalcFractionCsp3(mol)` - Fraction of sp3 carbons
+- `rdMolDescriptors.CalcFractionCSP3(mol)` - Fraction of sp3 carbons
 - `rdMolDescriptors.CalcLabuteASA(mol)` - Labute accessible surface area
 - `rdMolDescriptors.CalcTPSA(mol)` - TPSA
 - `rdMolDescriptors.CalcMolFormula(mol)` - Molecular formula
