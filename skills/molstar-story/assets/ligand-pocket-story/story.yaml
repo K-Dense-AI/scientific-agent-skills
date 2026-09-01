@@ -1,0 +1,66 @@
+title: "REPLACE_TITLE"
+author_note: "Frozen local coordinates. Contact membership and measurements were computed upstream; the browser does not recompute scientific evidence."
+
+scenes:
+  - id: "context"
+    header: "1 · REPLACE_CONTEXT_HEADER"
+    key: "assembly-context"
+    builder: "01_context.js"
+    linger_duration_ms: 8500
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_CONTEXT_QUESTION
+
+      **Observation:** REPLACE_CONTEXT_OBSERVATION
+
+      **Interpretation:** REPLACE_CONTEXT_INTERPRETATION
+
+      **Claim boundary:** REPLACE_CONTEXT_CAVEAT
+    camera:
+      mode: "perspective"
+      target: [REPLACE_CONTEXT_TARGET_X, REPLACE_CONTEXT_TARGET_Y, REPLACE_CONTEXT_TARGET_Z]
+      position: [REPLACE_CONTEXT_POSITION_X, REPLACE_CONTEXT_POSITION_Y, REPLACE_CONTEXT_POSITION_Z]
+      up: [REPLACE_CONTEXT_UP_X, REPLACE_CONTEXT_UP_Y, REPLACE_CONTEXT_UP_Z]
+      fov: 0.785398
+
+  - id: "pocket"
+    header: "2 · REPLACE_POCKET_HEADER"
+    key: "ligand-pocket"
+    builder: "02_pocket.js"
+    linger_duration_ms: 8500
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_POCKET_QUESTION
+
+      **Frozen evidence:** REPLACE_POCKET_COUNT contact residues were defined upstream as REPLACE_POCKET_DEFINITION.
+
+      **Geometry interpretation:** REPLACE_POCKET_INTERPRETATION
+
+      **Claim boundary:** REPLACE_POCKET_CAVEAT
+    camera:
+      mode: "perspective"
+      target: [REPLACE_POCKET_TARGET_X, REPLACE_POCKET_TARGET_Y, REPLACE_POCKET_TARGET_Z]
+      position: [REPLACE_POCKET_POSITION_X, REPLACE_POCKET_POSITION_Y, REPLACE_POCKET_POSITION_Z]
+      up: [REPLACE_POCKET_UP_X, REPLACE_POCKET_UP_Y, REPLACE_POCKET_UP_Z]
+      fov: 0.785398
+
+  - id: "decision"
+    header: "3 · REPLACE_DECISION_HEADER"
+    key: "review-decision"
+    builder: "03_decision.js"
+    transition_duration_ms: 250
+    description: |
+      ## Decision: REPLACE_DECISION_QUESTION
+
+      **Evidence supports:** REPLACE_DECISION_INTERPRETATION
+
+      **Next action:** REPLACE_DECISION_ACTION
+
+      **Still unsupported:** REPLACE_DECISION_CAVEAT
+    linger_duration_ms: 11000
+    camera:
+      mode: "perspective"
+      target: [REPLACE_DECISION_TARGET_X, REPLACE_DECISION_TARGET_Y, REPLACE_DECISION_TARGET_Z]
+      position: [REPLACE_DECISION_POSITION_X, REPLACE_DECISION_POSITION_Y, REPLACE_DECISION_POSITION_Z]
+      up: [REPLACE_DECISION_UP_X, REPLACE_DECISION_UP_Y, REPLACE_DECISION_UP_Z]
+      fov: 0.785398
