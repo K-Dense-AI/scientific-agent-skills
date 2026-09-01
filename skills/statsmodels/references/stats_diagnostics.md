@@ -822,11 +822,11 @@ outcome_model = sm.OLS(outcome, exog)      # outcome model
 te = TreatmentEffect(outcome_model, treatment,
                      results_select=select_model.fit(disp=0))
 
-print(te.ipw())   # inverse probability weighting
-print(te.ra())    # regression adjustment
-print(te.aipw())  # augmented IPW (doubly robust)
+res = te.ipw()             # inverse probability weighting
+print(res.summary_frame())  # ATE and potential-outcome means POM0/POM1 with GMM SEs
+print(te.ra().summary_frame())    # regression adjustment
+print(te.aipw().summary_frame())  # augmented IPW (doubly robust)
 # Also available: te.aipw_wls(), te.ipw_ra()
-# Results report the ATE and potential-outcome means POM0/POM1
 ```
 
 **Propensity scores** (for diagnostics or custom weighting):
@@ -844,7 +844,14 @@ Causal caveats:
 - Check overlap of propensity score distributions between groups; extreme
   scores near 0 or 1 make IPW unstable
 - Check covariate balance after weighting (e.g. standardized mean differences)
-- `TreatmentEffect` targets the ATE; the ATT is a different estimand
+- Default target is the sample ATE (`effect_group="all"`). ATT/ATU:
+  `te.ipw(effect_group=1)` / `te.ipw(effect_group=0)` (also `ra`, `ipw_ra`).
+  Not available on `aipw` / `aipw_wls`
+- Outcome model is OLS-only in 0.14.x; Logit/Poisson outcomes are not
+  supported yet
+- In 0.14.x, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
+  selection model has exactly 6 parameters; `return_results=False` avoids the
+  GMM step and returns `(ate, pom0, pom1)`
 
 **Difference-in-differences**:
 
