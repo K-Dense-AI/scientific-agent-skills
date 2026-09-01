@@ -11,7 +11,7 @@ import argparse
 import time
 import re
 import json
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from typing import Optional, Dict, List, Tuple
 from urllib.parse import urlparse, quote
 
