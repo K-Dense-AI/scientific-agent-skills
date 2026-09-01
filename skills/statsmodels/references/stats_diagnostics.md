@@ -847,9 +847,9 @@ Causal caveats:
 - Default target is the sample ATE (`effect_group="all"`). ATT/ATU:
   `te.ipw(effect_group=1)` / `te.ipw(effect_group=0)` (also `ra`, `ipw_ra`).
   Not available on `aipw` / `aipw_wls`
-- Outcome model is OLS-only in 0.14.x; Logit/Poisson outcomes are not
-  supported yet
-- In 0.14.x, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
+- Outcome model is OLS-only (still true in 0.15); Logit/Poisson outcomes are
+  not supported yet
+- As of 0.15, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
   selection model has exactly 6 parameters; `return_results=False` avoids the
   GMM step and returns `(ate, pom0, pom1)`
 
