@@ -808,18 +808,50 @@ print(f"p-value: {result.pvalue:.4f}")
 
 ## Treatment Effects and Causal Inference
 
-**Propensity score matching**:
+**Treatment effect estimation** (`TreatmentEffect`):
 
 ```python
-from statsmodels.treatment import propensity_score
+import statsmodels.api as sm
+from statsmodels.treatment.treatment_effects import TreatmentEffect
 
-# Estimate propensity scores
-ps_model = sm.Logit(treatment, X).fit()
-propensity_scores = ps_model.predict(X)
+# exog: observed confounders (with constant); treatment: 0/1 indicator
+exog = sm.add_constant(confounders)
+select_model = sm.Probit(treatment, exog)  # treatment (selection) model
+outcome_model = sm.OLS(outcome, exog)      # outcome model
 
-# Use for matching or weighting
-# (manual implementation of matching needed)
+te = TreatmentEffect(outcome_model, treatment,
+                     results_select=select_model.fit(disp=0))
+
+res = te.ipw()             # inverse probability weighting
+print(res.summary_frame())  # ATE and potential-outcome means POM0/POM1 with GMM SEs
+print(te.ra().summary_frame())    # regression adjustment
+print(te.aipw().summary_frame())  # augmented IPW (doubly robust)
+# Also available: te.aipw_wls(), te.ipw_ra()
 ```
+
+**Propensity scores** (for diagnostics or custom weighting):
+
+```python
+ps_model = sm.Logit(treatment, exog).fit(disp=0)
+propensity_scores = ps_model.predict(exog)
+# statsmodels does not implement matching; estimating scores
+# alone is not propensity score matching
+```
+
+Causal caveats:
+
+- Estimates are causal only under no unmeasured confounding and positivity
+- Check overlap of propensity score distributions between groups; extreme
+  scores near 0 or 1 make IPW unstable
+- Check covariate balance after weighting (e.g. standardized mean differences)
+- Default target is the sample ATE (`effect_group="all"`). ATT/ATU:
+  `te.ipw(effect_group=1)` / `te.ipw(effect_group=0)` (also `ra`, `ipw_ra`).
+  Not available on `aipw` / `aipw_wls`
+- Outcome model is OLS-only (still true in 0.15); Logit/Poisson outcomes are
+  not supported yet
+- As of 0.15, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
+  selection model has exactly 6 parameters; `return_results=False` avoids the
+  GMM step and returns `(ate, pom0, pom1)`
 
 **Difference-in-differences**:
 
