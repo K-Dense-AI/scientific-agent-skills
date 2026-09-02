@@ -1,6 +1,6 @@
 [project]
 name = "scientific-agent-skills"
-version = "2.65.0"
+version = "2.66.0"
 description = "A set of ready to use Agent Skills for research, science, engineering, analysis, finance and writing."
 readme = "README.md"
 requires-python = ">=3.13"

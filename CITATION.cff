@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+message: >-
+  If you use Scientific Agent Skills in your research or project, please cite
+  the paper listed under preferred-citation. To pin the exact skill set an
+  analysis ran against, also cite this repository and record the release tag
+  or commit you used.
+type: software
+title: Scientific Agent Skills
+abstract: >-
+  An open library of 163 ready-to-use Agent Skills for science and research,
+  covering genomics, cheminformatics, medical imaging, study design, scientific
+  communication, and more, for any AI agent that supports the open Agent Skills
+  standard.
+authors:
+  - name: K-Dense Inc.
+    website: https://www.k-dense.ai
+repository-code: https://github.com/K-Dense-AI/scientific-agent-skills
+url: https://github.com/K-Dense-AI/scientific-agent-skills
+license: MIT
+keywords:
+  - agent-skills
+  - science
+  - research
+  - bioinformatics
+  - cheminformatics
+  - biology
+  - chemistry
+  - medicine
+preferred-citation:
+  type: generic
+  title: "Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents"
+  authors:
+    - family-names: Kassis
+      given-names: Timothy
+    - family-names: Agarwal
+      given-names: Vinayak
+    - family-names: He
+      given-names: Yuhuan
+    - family-names: Patel
+      given-names: Darshil
+    - family-names: Brueckner
+      given-names: Aubrey M.
+  year: 2026
+  month: 8
+  date-published: 2026-08-30
+  doi: 10.48550/arXiv.2609.00065
+  url: https://arxiv.org/abs/2609.00065
+  identifiers:
+    - type: other
+      value: "arXiv:2609.00065"
+      description: arXiv preprint identifier
+  notes: arXiv preprint, primary class cs.CL

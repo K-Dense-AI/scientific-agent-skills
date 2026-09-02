@@ -1,12 +1,12 @@
 # Security Scan Report
 
-**Generated:** 2026-08-24 09:22 UTC  
+**Generated:** 2026-08-31 09:27 UTC  
 **Skills scanned:** 163  
 **Total findings:** 988  
 **Critical:** 34 | **High:** 9 | **Safe skills:** 147/163
 
 **Scanner:** cisco-ai-skill-scanner 2.0.13 · **Model:** claude-opus-5  
-**This run:** 1 skill(s) rescanned; 162 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
+**This run:** 2 skill(s) rescanned; 161 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
 
 ## Summary
 
@@ -139,7 +139,6 @@
 | rdkit | 🔵 LOW | 3 | ✅ | 29.8s |
 | relsa-severity-assessment | 🔵 LOW | 2 | ✅ | 31.2s |
 | research-grants | 🔵 LOW | 2 | ✅ | 20.4s |
-| rowan | 🔵 LOW | 5 | ✅ | 26.4s |
 | scholar-evaluation | 🔵 LOW | 3 | ✅ | 32.8s |
 | scientific-brainstorming | 🔵 LOW | 2 | ✅ | 25.4s |
 | scientific-visualization | 🔵 LOW | 2 | ✅ | 29.9s |
@@ -150,7 +149,6 @@
 | scvi-tools | 🔵 LOW | 2 | ✅ | 19.0s |
 | seaborn | 🔵 LOW | 2 | ✅ | 26.0s |
 | simpy | 🔵 LOW | 2 | ✅ | 26.4s |
-| stable-baselines3 | 🔵 LOW | 2 | ✅ | 22.2s |
 | statistical-analysis | 🔵 LOW | 3 | ✅ | 24.6s |
 | statistical-power | 🔵 LOW | 3 | ✅ | 26.6s |
 | statsmodels | 🔵 LOW | 2 | ✅ | 24.4s |
@@ -166,6 +164,8 @@
 | venue-templates | 🔵 LOW | 3 | ✅ | 29.7s |
 | what-if-oracle | 🔵 LOW | 2 | ✅ | 17.7s |
 | zarr-python | 🔵 LOW | 3 | ✅ | 31.9s |
+| stable-baselines3 | 🔵 LOW | 3 | ✅ | 24.2s |
+| rowan | 🔵 LOW | 4 | ✅ | 31.8s |
 | analytical-method-validation | 🟢 SAFE | 0 | ✅ | 18.9s |
 | deepspot-m | 🟢 SAFE | 0 | ✅ | 13.7s |
 | genomic-coordinates | 🟢 SAFE | 0 | ✅ | 11.6s |
@@ -2587,30 +2587,6 @@
   > The manifest declares allowed-tools: Read, Write, Edit, Bash. The instruction body's only Bash use is the optional schematic generation command; all other guidance is documentation authoring. No violation of the declared tool set was found, but Bash is broader than needed for a writing-guidance skill and is the vector by which an external API call is made.
   > **Remediation:** Consider narrowing allowed-tools to Read/Write/Edit and delegating any script execution to the scientific-schematics skill, which can declare Bash itself.
 
-### rowan — 🔵 LOW
-
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Documentation shows hardcoded API key assignment pattern
-  > Multiple code examples instruct setting `rowan.api_key = "your_api_key_here"` or `rowan.api_key = "..."` directly in Python source. While placeholders (no real secrets present), promoting inline key assignment can lead users to commit credentials to source control. The skill does also recommend the ROWAN_API_KEY environment variable, which mitigates this.
-  > **Remediation:** Prefer environment-variable-only examples (os.environ["ROWAN_API_KEY"]) and explicitly warn against hardcoding keys.
-
-- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Explicit trigger-keywords metadata field for discovery
-  > The manifest includes a `trigger-keywords` list (pKa prediction, molecular docking, conformer search, chemistry workflow, drug discovery, SMILES, protein structure, batch molecular modeling, cloud chemistry). These keywords are all tightly scoped to the skill's genuine chemistry domain and do not constitute over-broad capability claims or brand impersonation, but the presence of a dedicated keyword-baiting field is noted as informational.
-  > **Remediation:** No action strictly needed; keep keywords narrowly scoped to the actual domain as they currently are.
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned package installation instructions
-  > Installation guidance uses `uv pip install rowan-python` without a version pin, and examples import pandas/rdkit/fastapi without pinned versions. This is standard practice but leaves the skill vulnerable to upstream package compromise or unexpected breaking changes.
-  > **Remediation:** Pin a known-good version (e.g., rowan-python==X.Y.Z) or document a lockfile/hash-verified install to reduce supply-chain risk.
-
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Webhook secret printed to stdout in examples
-  > Example code prints webhook secret values (`print(f"Secret key: {secret.secret}")`), which can leak secrets into logs or terminal history if copied verbatim. Low impact and typical of vendor docs, but worth noting.
-  > File: `references/batch_and_webhooks.md`
-  > **Remediation:** Avoid printing secret material in examples; suggest storing it in a secret manager or env var instead.
-
-- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Several referenced file paths do not resolve
-  > Many referenced paths were not found in the package (assets/*.md, templates/*.md, rdkit.py, rowan.py). Most appear to be artifacts of path-resolution heuristics over code-fence imports rather than genuine missing dependencies; the four real reference docs under references/ are present and benign. Missing files could cause the agent to attempt to read or fetch nonexistent resources.
-  > File: `references/batch_and_webhooks.md`
-  > **Remediation:** Ensure all documented reference paths exist in the package, and avoid patterns that create phantom file references.
-
 ### scholar-evaluation — 🔵 LOW
 
 - **🔵 LOW** `LLM_DATA_EXFILTRATION` — User-specified output path can write JSON anywhere the agent can write
@@ -2742,17 +2718,6 @@
   > scripts/resource_monitor.py replaces bound methods on SimPy Resource/Container instances (resource.request, resource.release, container.put/get), wraps Environment.step, and reads the private env._queue attribute. This is an intentional, documented instrumentation technique for local simulation objects and does not modify library files on disk, execute external code, or touch data outside the running process. It is flagged only as a robustness/maintainability concern: monkey-patching could alter behavior of other instrumentation layers or break on SimPy upgrades. Detach() methods and duplicate-attachment guards are provided.
   > File: `scripts/resource_monitor.py`
   > **Remediation:** Continue pinning simpy==4.1.2, keep regression tests for the private queue tuple shape, and prefer subclassing over instance patching where feasible.
-
-### stable-baselines3 — 🔵 LOW
-
-- **🔵 LOW** `LLM_OBFUSCATION` — Static analyzer eval/exec matches are false positives
-  > The pre-scan flagged 'Python code block uses eval/exec' (MDBLOCK_PYTHON_EVAL_EXEC) twice. Manual review of all markdown code blocks and scripts shows no use of Python `eval()`, `exec()`, `compile()`, `os.system`, `subprocess`, `pickle.loads` on untrusted data, or dynamic imports. The matches correspond to benign identifiers containing the substring 'eval' (e.g., `evaluate_policy`, `EvalCallback`, `eval_env`, `eval_freq`, `evaluate_agent`). No obfuscation, base64 blobs, or hidden stagers were found anywhere in the package.
-  > **Remediation:** No action required; tune the static rule to word-boundary matching for `eval(`/`exec(` to reduce false positives.
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned dependency installation instructions
-  > SKILL.md instructs the agent/user to install packages using loose version specifiers (`uv pip install "stable-baselines3>=2.8"`, `"stable-baselines3[extra]>=2.8"`, `"gymnasium[mujoco]"`, `sb3-contrib`) without exact version pins or hash verification. This is standard practice for library documentation but leaves a small supply-chain surface if an upstream release or transitive dependency is compromised. No untrusted/third-party GitHub installs or typosquatted names are present — all referenced packages are the well-known upstream projects.
-  > File: `SKILL.md`
-  > **Remediation:** Pin exact versions (e.g., `stable-baselines3==2.8.0`) or provide a lock/requirements file with hashes so installs are reproducible and tamper-evident.
 
 ### statistical-analysis — 🔵 LOW
 
@@ -3001,3 +2966,39 @@
   > references/storage_backends.md contains a directive aimed at the reading agent ('Treat all `import zarr`, `import dask`, `import h5py`, and `import xarray` examples as third-party package imports, not bundled script files.'). In this package the statement is factually accurate and benign, and the surrounding guidance is security-positive (prefer IAM roles, never print credentials, avoid reading broad .env files). However, reference files instructing the agent how to classify code is a pattern that can be abused to pre-empt scrutiny of bundled code, so it is noted as informational.
   > File: `references/storage_backends.md`
   > **Remediation:** Keep reference documents purely descriptive; avoid embedding directives that tell the agent how to interpret or classify code in the package.
+
+### stable-baselines3 — 🔵 LOW
+
+- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Cross-skill routing recommendation in description
+  > The skill description directs the agent to a different skill ('use pufferlib instead') for high-performance parallel training, multi-agent systems, or custom vectorized environments. This influences skill selection/discovery outside the skill's own scope. In this case it appears to be benign, informative scoping guidance rather than capability inflation or activation-priority manipulation, and no self-promotional or over-broad claims are present.
+  > **Remediation:** Keep descriptions limited to the skill's own capabilities; avoid embedding routing directives that steer the agent toward or away from other skills.
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned dependency installation instructions
+  > The SKILL.md instructs the agent to install packages using unpinned lower-bound version specifiers (e.g., `uv pip install "stable-baselines3>=2.8"`, `uv pip install "gymnasium[mujoco]"`, `uv pip install sb3-contrib`). Unpinned installs mean the exact code pulled at install time is not deterministic and could change if an upstream release is compromised. This is common practice for documentation skills and the packages referenced are well-known, legitimate PyPI projects, so risk is low.
+  > File: `SKILL.md`
+  > **Remediation:** Pin exact versions (e.g., stable-baselines3==2.8.0) or reference a lockfile/requirements file so installed code is reproducible and auditable.
+
+- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Several referenced support files are missing / inaccurate documentation references
+  > Some paths listed as referenced (templates/*.md, assets/*.md, stable_baselines3.py, gymnasium.py) do not exist in the package; the actual bundled docs live under references/. The four documented reference files (algorithms.md, custom_environments.md, callbacks.md, vectorized_envs.md) and the three scripts do exist and contain only benign RL guidance. Additionally, the SKILL.md states an upstream version/date ('SB3 2.8.0 (April 2026)') that may be inaccurate. These are documentation accuracy issues, not security threats.
+  > File: `references/custom_environments.md`
+  > **Remediation:** Correct or remove stale/dangling file references and verify version claims so the agent does not attempt to read non-existent paths.
+
+### rowan — 🔵 LOW
+
+- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Broad trigger-keyword list in metadata for activation targeting
+  > The manifest includes a `trigger-keywords` metadata list ('pKa prediction, molecular docking, conformer search, chemistry workflow, drug discovery, SMILES, protein structure, batch molecular modeling, cloud chemistry') to broaden skill discovery. The keywords are all topically consistent with the skill's stated computational-chemistry purpose and do not impersonate other brands or claim general-purpose capability, so this is only a minor activation-surface note rather than genuine capability inflation.
+  > **Remediation:** Keep trigger keywords narrowly scoped to the documented chemistry workflows; avoid generic terms that could cause activation on unrelated requests.
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Unpinned dependency installation instruction
+  > The skill instructs the agent to install the `rowan-python` package with no version pin (`uv pip install rowan-python`), while the documentation elsewhere claims verification against version 3.1.13. An unpinned install can silently pull a newer or compromised release, and the documentation/behavior mismatch could cause the agent to run code it did not validate. Risk is low because the package name is consistent, from a named vendor, and installed from the default index (no direct VCS/unknown-repo install).
+  > **Remediation:** Pin the dependency to the validated version (e.g., `uv pip install "rowan-python==3.1.13"`) or specify a bounded, tested range, and note the provenance/index used.
+
+- **🔵 LOW** `LLM_UNAUTHORIZED_TOOL_USE` — No `allowed-tools` declared in manifest
+  > The YAML frontmatter does not specify an `allowed-tools` field, even though the skill's instructions direct the agent to run shell commands (`uv pip install rowan-python`, `export ROWAN_API_KEY=...`) and execute Python code that performs network I/O and file writes. This field is optional per spec, so this is informational only, but declaring Bash/Python explicitly would make the skill's privilege surface auditable.
+  > File: `SKILL.md`
+  > **Remediation:** Add an explicit `allowed-tools` list (e.g., [Read, Write, Bash, Python]) matching the operations actually performed by the documented workflows.
+
+- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Several referenced file paths do not exist in the package
+  > The instruction body/reference resolution surfaces multiple missing paths (assets/troubleshooting.md, templates/*.md, assets/*.md, rdkit.py, rowan.py). The five files actually referenced in SKILL.md prose (references/workflow_catalog.md, references/batch_and_webhooks.md, references/access_and_pricing.md, references/end_to_end_example.md, references/troubleshooting.md) are all present and benign; the unresolved entries appear to be scanner path-permutation artifacts and module-name matches (`rowan.py`, `rdkit.py` from `import rowan` / `from rdkit import Chem`) rather than intentionally dangling references. No dynamic fetching of external URLs is instructed. Informational only.
+  > File: `references/batch_and_webhooks.md`
+  > **Remediation:** Ensure all documentation links resolve to files bundled in the package and remove or correct stale paths so the agent never attempts to read files outside the skill directory.

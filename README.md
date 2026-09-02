@@ -1,6 +1,7 @@
 # Scientific Agent Skills
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+[![arXiv](https://img.shields.io/badge/arXiv-2609.00065-b31b1b.svg)](https://arxiv.org/abs/2609.00065)
 [![Version](https://img.shields.io/badge/Version-2.65.0-blue.svg)](pyproject.toml)
 [![Skills](https://img.shields.io/badge/Skills-164-brightgreen.svg)](#-whats-included)
 [![Databases](https://img.shields.io/badge/Databases-100%2B-orange.svg)](#-whats-included)
@@ -22,6 +23,8 @@
 > A hands-on walkthrough of [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok), our free, open-source AI co-scientist that runs locally on your own machine and is powered by Scientific Agent Skills. We cover how to set it up, bring your own API keys, and run real research workflows with these skills. No prior technical experience needed. **[Watch the recording →](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)**
 
 > **Stay up to date:** Follow K-Dense on [X](https://x.com/k_dense_ai), [LinkedIn](https://www.linkedin.com/company/k-dense-inc), [YouTube](https://www.youtube.com/@K-Dense-Inc), and [Reddit](https://www.reddit.com/user/-k-dense-/) for new skills, release announcements, walkthroughs, research workflow demos, and examples you can use with your own AI agent.
+
+> **📄 Paper:** Scientific Agent Skills is described in [*Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents*](https://arxiv.org/abs/2609.00065) (arXiv:2609.00065). If you use these skills in your research, please [cite the paper](#-citation).
 
 A comprehensive collection of **164 ready-to-use scientific and research skills** (covering cancer genomics, individual-level 1000 Genomes queries, hosted regulatory-sequence prediction, live pathogen-variant surveillance, analytical method validation, PK/PD modelling and dose selection, full-text biomedical and regulatory literature retrieval, drug-target binding, bounded biomedical knowledge graph search, molecular dynamics, RNA velocity, microbiome foundation models, geospatial science, time series forecasting, scientific ML resource discovery via Hugging Science, 78+ scientific databases, and more) for any AI agent that supports the open [Agent Skills](https://agentskills.io/) standard, created by [K-Dense](https://k-dense.ai). The repository is also a portable [Agent Plugins](https://agent-plugins.org/) package (`plugin.json` + `skills/`), so plugin-capable clients can load the whole collection as one plugin. Works with **Cursor, Claude Code, Codex, Google Antigravity, and more**. Transform your AI agent into a research assistant capable of executing complex multi-step scientific workflows across biology, chemistry, medicine, and beyond.
 
@@ -860,18 +863,55 @@ Need help? Here's how to get support:
 
 ## 📖 Citation
 
-If you use Scientific Agent Skills in your research or project, please cite the overall collection and, when relevant, the individual skill or skills that materially supported your work.
+If you use Scientific Agent Skills in your research or project, please cite our paper:
 
-The collection citation helps others find the repository, understand the broader skill ecosystem used in your workflow, and credit the maintenance effort behind Scientific Agent Skills. Individual skill citations give more precise credit for the specific package, database, or workflow guidance your agent used.
+> Timothy Kassis, Vinayak Agarwal, Yuhuan He, Darshil Patel, and Aubrey M. Brueckner. **Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents.** arXiv:2609.00065, 2026. [https://arxiv.org/abs/2609.00065](https://arxiv.org/abs/2609.00065)
+
+When relevant, also cite the individual skill or skills that materially supported your work.
+
+GitHub's **Cite this repository** button, backed by [`CITATION.cff`](CITATION.cff), produces the same paper citation in APA or BibTeX.
+
+The paper citation helps others find the repository, understand the broader skill ecosystem used in your workflow, and credit the maintenance effort behind Scientific Agent Skills. Individual skill citations give more precise credit for the specific package, database, or workflow guidance your agent used.
 
 Recommended practice:
-- Always cite **Scientific Agent Skills** using one of the formats below.
+- Always cite the **Scientific Agent Skills paper** using one of the formats below.
 - Also cite each individual skill that directly contributed to your analysis, code, figures, reports, or research workflow.
 - If a skill wraps or documents an external package, database, or platform, cite that upstream project too when your field's norms require it.
 
-### Collection Citation
+### Paper Citation
 
 #### BibTeX
+```bibtex
+@misc{kassis2026scientificagentskills,
+  title         = {Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents},
+  author        = {Kassis, Timothy and Agarwal, Vinayak and He, Yuhuan and Patel, Darshil and Brueckner, Aubrey M.},
+  year          = {2026},
+  eprint        = {2609.00065},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url           = {https://arxiv.org/abs/2609.00065}
+}
+```
+
+#### APA
+```
+Kassis, T., Agarwal, V., He, Y., Patel, D., & Brueckner, A. M. (2026). Scientific Agent Skills: A library of procedural knowledge for research agents. arXiv. https://arxiv.org/abs/2609.00065
+```
+
+#### MLA
+```
+Kassis, Timothy, et al. "Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents." arXiv, 2026, arxiv.org/abs/2609.00065.
+```
+
+#### Plain Text
+```
+Kassis, T., Agarwal, V., He, Y., Patel, D., & Brueckner, A. M. (2026). Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents. arXiv:2609.00065. https://arxiv.org/abs/2609.00065
+```
+
+### Software Citation
+
+If you also need to cite a specific version of the repository itself (for example, to pin the exact skill set an analysis ran against), add a software citation alongside the paper and record the release tag or commit you used:
+
 ```bibtex
 @software{scientific_agent_skills_2026,
   author = {{K-Dense Inc.}},
@@ -880,22 +920,6 @@ Recommended practice:
   url = {https://github.com/K-Dense-AI/scientific-agent-skills},
   note = {164 skills covering databases, packages, integrations, and analysis tools}
 }
-```
-
-#### APA
-```
-K-Dense Inc. (2026). Scientific Agent Skills: A comprehensive collection of scientific tools for AI agents [Computer software]. https://github.com/K-Dense-AI/scientific-agent-skills
-```
-
-#### MLA
-```
-K-Dense Inc. Scientific Agent Skills: A Comprehensive Collection of Scientific Tools for AI Agents. 2026, github.com/K-Dense-AI/scientific-agent-skills.
-```
-
-#### Plain Text
-```
-Scientific Agent Skills by K-Dense Inc. (2026)
-Available at: https://github.com/K-Dense-AI/scientific-agent-skills
 ```
 
 ### Individual Skill Citation
@@ -941,13 +965,3 @@ See [LICENSE.md](LICENSE.md) for full terms.
 ### Individual Skill Licenses
 
 > ⚠️ **Important**: Each skill has its own license specified in the `license` metadata field within its `SKILL.md` file. These licenses may differ from the repository's MIT License and may include additional terms or restrictions. **Users are responsible for reviewing and adhering to the license terms of each individual skill they use.**
-
-## Star History
-
-<a href="https://star-history.dera.page/#K-Dense-AI/scientific-agent-skills">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=K-Dense-AI/scientific-agent-skills&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=K-Dense-AI/scientific-agent-skills" />
-   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=K-Dense-AI/scientific-agent-skills" />
- </picture>
-</a>
