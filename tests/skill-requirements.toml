@@ -103,6 +103,14 @@ packages = [
     "scholarly",
 ]
 
+[skills.verify-citations]
+# Parsing, normalisation, matching, and report rendering are standard library
+# (scripts/_common.py and friends). `requests` covers Crossref, arXiv (Atom
+# XML over HTTPS), PubMed E-utilities, and the OpenAlex fallback.
+packages = [
+    "requests",
+]
+
 [skills.pyzotero]
 packages = ["pyzotero", "bibtexparser", "python-dotenv"]
 
