@@ -115,6 +115,9 @@ packages = ["requests"]
 [skills.exa-search]
 packages = ["exa-py", "python-dotenv"]
 
+[skills.firecrawl-research]
+packages = ["firecrawl-py>=4.41.0"]
+
 [skills.parallel-web]
 packages = []
 

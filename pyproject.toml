@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "cisco-ai-skill-scanner>=2.0.12",
-    "firecrawl-py>=4.9.0",
+    "firecrawl-py>=4.41.0",
     "pytest>=9.1.1",
     "python-dotenv>=1.0.0",
 ]
