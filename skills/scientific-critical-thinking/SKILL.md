@@ -40,10 +40,10 @@ Only add figures when the **user explicitly requests** a diagram (for example, a
 - **Preferred:** Use the **scientific-schematics** skill for AI-generated diagrams from a natural-language description
 - **Alternative:** Build figures in your usual tools (draw.io, PowerPoint, matplotlib, etc.)
 
-From the `scientific-schematics` skill directory, with `OPENROUTER_API_KEY` set:
+Run from the repository root, with `OPENROUTER_API_KEY` set:
 
 ```bash
-python scripts/generate_schematic.py "GRADE evidence assessment flowchart with downgrade and upgrade factors" -o figures/grade_flowchart.png --doc-type report
+python skills/scientific-schematics/scripts/generate_schematic.py "GRADE evidence assessment flowchart with downgrade and upgrade factors" -o figures/grade_flowchart.png --doc-type report
 ```
 
 **Disclosure:** AI schematic generation sends your prompt to [OpenRouter](https://openrouter.ai/) (a third-party API). Do not include unpublished sensitive details unless that transmission is appropriate for your project.

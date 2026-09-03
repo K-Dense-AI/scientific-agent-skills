@@ -178,7 +178,7 @@ When creating PowerPoint presentations, use Nano Banana Pro to generate images a
 **How it works:**
 1. **Plan the deck**: Create content plan for each slide
 2. **Generate visuals**: Use Nano Banana Pro with `--visual-only` flag to create images for slides
-3. **Build PPTX**: Use the PPTX skill (html2pptx or template-based) to create slides with generated visuals and separate text
+3. **Build PPTX**: Use the PPTX skill (PptxGenJS or template-based) to create slides with generated visuals and separate text
 
 **Step 1: Generate Visuals for Each Slide**
 
@@ -195,7 +195,7 @@ python scripts/generate_slide_image.py "Before and after comparison showing impr
 
 **Step 2: Build PowerPoint with PPTX Skill**
 
-Use the PPTX skill's html2pptx workflow to create slides that include:
+Use the PPTX skill's PptxGenJS workflow to create slides that include:
 - Generated images from step 1
 - Title and body text added separately
 - Professional layout and formatting
@@ -261,7 +261,7 @@ often sink a talk are catalogued in
 - Use for PowerPoint creation and editing
 - Leverage scripts for template workflows
 - Use thumbnail generation for validation
-- Reference html2pptx for programmatic creation
+- Reference the PPTX skill's `SKILL.md` for programmatic creation
 
 **Data Visualization**:
 - Create presentation-appropriate figures
