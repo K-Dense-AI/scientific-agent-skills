@@ -1,0 +1,128 @@
+title: "REPLACE_TITLE"
+author_note: "Aligned endpoint structures and all quantitative annotations were computed upstream. Arrows show endpoint displacement, not a physical trajectory."
+
+settings:
+  autoPlay: false
+  loopStory: false
+  showControls: true
+
+scenes:
+  - id: "context"
+    header: "1 · REPLACE_CONTEXT_HEADER"
+    key: "comparison-provenance"
+    builder: "01_context.js"
+    linger_duration_ms: 9000
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_CONTEXT_QUESTION
+
+      **Trace:** REPLACE_CONTEXT_TRACE
+
+      **Structures:** REPLACE_CONTEXT_OBSERVATION
+
+      **Why comparable:** REPLACE_CONTEXT_INTERPRETATION
+
+      **Claim boundary:** REPLACE_CONTEXT_CAVEAT
+    camera: &overview_camera
+      mode: "perspective"
+      target: [REPLACE_COMMON_TARGET_X, REPLACE_COMMON_TARGET_Y, REPLACE_COMMON_TARGET_Z]
+      position: [REPLACE_COMMON_POSITION_X, REPLACE_COMMON_POSITION_Y, REPLACE_COMMON_POSITION_Z]
+      up: [REPLACE_COMMON_UP_X, REPLACE_COMMON_UP_Y, REPLACE_COMMON_UP_Z]
+      fov: 0.785398
+
+  - id: "reference"
+    header: "2 · REPLACE_REFERENCE_HEADER"
+    key: "reference-state"
+    builder: "02_reference.js"
+    linger_duration_ms: 9000
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_REFERENCE_QUESTION
+
+      **Trace:** REPLACE_REFERENCE_TRACE
+
+      **Observation:** REPLACE_REFERENCE_OBSERVATION
+
+      **Interpretation:** REPLACE_REFERENCE_INTERPRETATION
+
+      **Claim boundary:** REPLACE_REFERENCE_CAVEAT
+    camera: *overview_camera
+
+  - id: "mobile-ligand"
+    header: "3 · REPLACE_MOBILE_HEADER"
+    key: "mobile-ligand-state"
+    builder: "03_mobile_ligand.js"
+    linger_duration_ms: 9000
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_MOBILE_QUESTION
+
+      **Trace:** REPLACE_MOBILE_TRACE
+
+      **Frozen ligand evidence:** REPLACE_MOBILE_OBSERVATION
+
+      **Interpretation:** REPLACE_MOBILE_INTERPRETATION
+
+      **Claim boundary:** REPLACE_MOBILE_CAVEAT
+    camera: &detail_camera
+      mode: "perspective"
+      target: [REPLACE_DETAIL_TARGET_X, REPLACE_DETAIL_TARGET_Y, REPLACE_DETAIL_TARGET_Z]
+      position: [REPLACE_DETAIL_POSITION_X, REPLACE_DETAIL_POSITION_Y, REPLACE_DETAIL_POSITION_Z]
+      up: [REPLACE_DETAIL_UP_X, REPLACE_DETAIL_UP_Y, REPLACE_DETAIL_UP_Z]
+      fov: 0.785398
+
+  - id: "overlay"
+    header: "4 · REPLACE_OVERLAY_HEADER"
+    key: "aligned-overlay"
+    builder: "04_overlay.js"
+    linger_duration_ms: 9000
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_OVERLAY_QUESTION
+
+      **Trace:** REPLACE_OVERLAY_TRACE
+
+      **Frozen alignment:** REPLACE_ALIGNMENT_ATOM_COUNT C-alpha atoms over REPLACE_ALIGNMENT_RANGES gave core RMSD REPLACE_ALIGNMENT_RMSD_A Å.
+
+      **Interpretation:** REPLACE_OVERLAY_INTERPRETATION
+
+      **Claim boundary:** REPLACE_OVERLAY_CAVEAT
+    camera: *detail_camera
+
+  - id: "motion"
+    header: "5 · REPLACE_MOTION_HEADER"
+    key: "localized-displacement"
+    builder: "05_motion.js"
+    linger_duration_ms: 9000
+    transition_duration_ms: 250
+    description: |
+      ## Review question: REPLACE_MOTION_QUESTION
+
+      **Trace:** REPLACE_MOTION_TRACE
+
+      **Frozen displacement:** REPLACE_MOTION_OBSERVATION
+
+      **Interpretation:** REPLACE_MOTION_INTERPRETATION
+
+      **Claim boundary:** Arrows connect corresponding endpoint C-alpha coordinates; they are not a transition pathway. REPLACE_MOTION_CAVEAT
+    camera: *detail_camera
+
+  - id: "decision"
+    header: "6 · REPLACE_DECISION_HEADER"
+    key: "comparison-decision"
+    builder: "06_decision.js"
+    transition_duration_ms: 250
+    description: |
+      ## Decision: REPLACE_DECISION_QUESTION
+
+      **Trace:** REPLACE_DECISION_TRACE
+
+      **Observed:** REPLACE_DECISION_OBSERVATION
+
+      **Interpretation:** REPLACE_DECISION_INTERPRETATION
+
+      **Next action:** REPLACE_DECISION_ACTION
+
+      **Still unsupported:** REPLACE_DECISION_CAVEAT
+    linger_duration_ms: 12000
+    camera: *detail_camera

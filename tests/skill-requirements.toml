@@ -550,6 +550,9 @@ packages = ["pyopenms", "matplotlib", "numpy", "pandas"]
 [skills.molecular-dynamics]
 packages = ["mdanalysis", "openmm", "matplotlib", "numpy", "pandas", "scipy"]
 
+[skills.molstar-story]
+packages = ["numpy", "pillow", "playwright"]
+
 [skills.pymatgen]
 # Pinned to the skill's own "Verified snapshot (2026-07-23)", which its
 # `_common.py` enforces before any network execution. Left unpinned, a new
