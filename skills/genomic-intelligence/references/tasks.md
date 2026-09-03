@@ -123,8 +123,8 @@ Result: `data.prediction.expression_log_tpm` (and `expression_tpm`).
 `meta.task_specific_counts` carries `tss_index` and `scored_window`
 (`[start, end]`, always 9,198 wide) — assert on it, because an in-range but
 wrong `tss_index` scores the wrong window with a `200`. `data.input` echoes
-`tss_index`, `scored_window`, and `submitted_sequence_length`; note
-`data.input.sequence_length` is the **scored** 9,198, not what you submitted.
+`tss_index`, `scored_window`, and `submitted_sequence_length`; the length you
+submitted is `meta.sequence_length`, and the scored width is always 9,198.
 
 Both `tss_index` failures come from a whole-model validator and so report at
 `loc: ["body"]`, **never** `body.tss_index`. Match on

@@ -164,9 +164,10 @@ or query parameter:
 > a locus start rather than the submitted slice) does not error — it returns a
 > confident `200` for the wrong window. Assert on
 > `meta.task_specific_counts.scored_window` / `.tss_index` in the response.
-> Also note `data.input.sequence_length` is the **scored** length (always
-> 9,198); the length you submitted is `data.input.submitted_sequence_length`
-> (and `meta.sequence_length`).
+> The length you submitted is `meta.sequence_length` (also echoed as
+> `data.input.submitted_sequence_length`); the scored width is always 9,198,
+> i.e. `scored_window[1] - scored_window[0]`. (`data.input.sequence_length`
+> was removed at contract revision 13.)
 >
 > Both `tss_index` violations — "required unless exactly 9,198 bp" and the range
 > check — come from a whole-model validator, so they surface at the body level
