@@ -238,3 +238,7 @@
 ### Web Search & Information Retrieval
 - **[Exa Search](../skills/exa-search/)** - Web search and URL content extraction via the Exa API. Use for high-quality web search tuned for scientific and technical content, scholarly filtering via `category="research paper"` plus academic domain allowlists, and batch URL extraction
 - **[Parallel Web](../skills/parallel-web/)** - Search the web, extract URL content, and run deep research using the Parallel Chat API and Extract API. Use for web searches, research queries, and general information gathering with synthesized summaries and citations
+
+## Composing & Orchestrating Skills
+
+- **[Zhengming Skill Fabric](../skills/zhengming-skill-fabric/)** - Meta-orchestrator that turns a large collection of Agent Skills into a composable, evidence-traceable pipeline instead of isolated tools. Adds intent routing, multi-skill composition, a unified evidence ledger, local-first execution with an opt-in cloud-upgrade gate, a fail-closed sandbox, and a self-evolution hook. Authored by chenhz01; full methodology and one-click scripts at https://github.com/chenhz01/ai-agent-skill-breakthrough.
