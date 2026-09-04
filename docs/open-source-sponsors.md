@@ -1,6 +1,6 @@
 # Support the Open Source Projects We Depend On
 
-Scientific Agent Skills is built on the shoulders of giants. The 150 skills in this repository leverage dozens of incredible open source projects created and maintained by dedicated developers and research communities around the world.
+Scientific Agent Skills is built on the shoulders of giants. The 163 skills in this repository leverage dozens of incredible open source projects created and maintained by dedicated developers and research communities around the world.
 
 **If you find value in these skills, please consider supporting the underlying open source projects that make them possible.**
 
