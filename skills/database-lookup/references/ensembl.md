@@ -375,11 +375,12 @@ https://rest.ensembl.org/xrefs/symbol/homo_sapiens/TP53?content-type=application
 ### 10. Comparative genomics -- Homology
 
 ```
-GET /homology/id/{id}?content-type=application/json
+GET /homology/id/{species}/{id}?content-type=application/json
 ```
 
 | Parameter     | Type   | Description |
 |--------------|--------|-------------|
+| `species`     | string | Species name, e.g. `homo_sapiens`. Required; `/homology/id/{id}` without it returns 404. |
 | `id`          | string | Ensembl gene ID. |
 | `type`        | string | `orthologues`, `paralogues`, `projections`, `all`. |
 | `target_species` | string | Filter to specific species (e.g., `mus_musculus`). |
@@ -388,7 +389,7 @@ GET /homology/id/{id}?content-type=application/json
 
 **Example -- get mouse orthologs of human TP53:**
 ```
-https://rest.ensembl.org/homology/id/ENSG00000141510?type=orthologues&target_species=mus_musculus&content-type=application/json
+https://rest.ensembl.org/homology/id/homo_sapiens/ENSG00000141510?type=orthologues&target_species=mus_musculus&content-type=application/json
 ```
 
 **Response:**
@@ -435,13 +436,16 @@ https://rest.ensembl.org/homology/symbol/homo_sapiens/TP53?type=orthologues&targ
 
 ### 11. Regulatory features
 
+The dedicated `/regulatory/species/{species}/id/{id}` endpoint is retired and
+returns 404. Query regulatory features through the overlap endpoint instead.
+
 ```
-GET /regulatory/species/{species}/id/{id}?content-type=application/json
+GET /overlap/region/{species}/{region}?feature=regulatory&content-type=application/json
 ```
 
 **Example:**
 ```
-https://rest.ensembl.org/regulatory/species/homo_sapiens/id/ENSR00000000163?content-type=application/json
+https://rest.ensembl.org/overlap/region/homo_sapiens/17:7660000-7690000?feature=regulatory&content-type=application/json
 ```
 
 ---
