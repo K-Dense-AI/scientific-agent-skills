@@ -4,7 +4,7 @@ description: Formulate evidence-bounded scientific questions, candidate hypothes
 license: MIT
 compatibility: Python 3.11+ standard library. Bundled CLIs are deterministic and local-only; they accept bounded JSON, CSV, or Markdown and require no network, credentials, models, image services, or external packages.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-23"
 ---

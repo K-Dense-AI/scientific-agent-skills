@@ -1,6 +1,6 @@
 # Medchem API Reference
 
-Reference for **medchem 2.0.5**. Official docs: https://medchem-docs.datamol.io/stable/api/
+Reference for **medchem 2.0.5**. Official docs: https://medchem-docs.datamol.io/stable/
 
 ## Module: medchem.rules
 
