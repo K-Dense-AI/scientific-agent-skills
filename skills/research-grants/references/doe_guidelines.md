@@ -435,7 +435,7 @@ Proposals typically evaluated on:
 **Sources**:
 - **EERE Exchange**: https://eere-exchange.energy.gov
 - **ARPA-E OPEN**: https://arpa-e.energy.gov
-- **Office of Science FOAs**: https://science.osti.gov/grants/Funding-Opportunities
+- **Office of Science FOAs**: https://science.osti.gov/Funding-Opportunities
 - **Grants.gov**: Federal grants database
 - **FedConnect**: Subscribe to FOA announcements
 
