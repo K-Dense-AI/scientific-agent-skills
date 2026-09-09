@@ -3,7 +3,7 @@ name: phylogenetics
 description: Build and analyze phylogenetic trees using MAFFT (multiple alignment), IQ-TREE 2 (maximum likelihood), and FastTree (fast NJ/ML). Visualize with ETE3 or FigTree. For evolutionary analysis, microbial genomics, viral phylodynamics, protein family analysis, and molecular clock studies.
 license: Unknown
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Kuan-lin Huang
 ---
 
@@ -400,7 +400,7 @@ def full_phylogenetic_analysis(
 ## Additional Resources
 
 - **MAFFT**: https://mafft.cbrc.jp/alignment/software/
-- **IQ-TREE 2**: http://www.iqtree.org/ | Tutorial: https://www.iqtree.org/workshop/molevol2022
+- **IQ-TREE 2**: https://iqtree.github.io/ | Tutorial: https://iqtree.github.io/doc/
 - **FastTree**: http://www.microbesonline.org/fasttree/
 - **ETE3**: http://etetoolkit.org/
 - **FigTree** (GUI visualization): https://tree.bio.ed.ac.uk/software/figtree/

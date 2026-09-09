@@ -4,7 +4,7 @@ description: Prepare evidence-bounded, constructive peer-review drafts and struc
 license: MIT
 compatibility: Python 3.11+ standard library. Bundled CLIs are deterministic and local-only; they accept bounded JSON, CSV, or Markdown and make no network, model, image, or external-service calls.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
 ---
 

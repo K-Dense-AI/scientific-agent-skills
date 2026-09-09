@@ -622,7 +622,7 @@
 - **BAA Listings**: https://beta.sam.gov (search "DARPA")
 - **DARPA Social Media**: Twitter @DARPA (PMs often announce programs)
 - **SBIR/STTR**: https://www.darpa.mil/work-with-us/for-small-businesses
-- **Heilmeier Catechism**: https://www.darpa.mil/about-us/timeline/heilmeier-catechism
+- **Heilmeier Catechism**: https://www.darpa.mil/about/heilmeier-catechism
 
 ### Key Contacts
 

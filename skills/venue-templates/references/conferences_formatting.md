@@ -107,8 +107,8 @@ The following links are discovery starting points, not cached requirements.
 | ACM CHI | https://chi.acm.org/ | Check the current papers track and ACM workflow |
 | ACM SIGKDD | https://kdd.org/ | Check the exact track; limits differ |
 | ACM SIGIR | https://sigir.org/ | Check the target year's call |
-| USENIX Security | https://www.usenix.org/conference/usenixsecurity | Check the current submission cycle and artifact rules |
-| ISMB | https://www.iscb.org/ismb | Check the proceedings track and journal instructions |
+| USENIX Security | https://www.usenix.org/conference/usenixsecurity26 | Check the current submission cycle and artifact rules |
+| ISMB | https://www.iscb.org/ismb2026 | Check the proceedings track and journal instructions |
 | RECOMB | https://www.recomb.org/ | Check the target year's Springer/author kit |
 | PSB | https://psb.stanford.edu/ | Check the current author instructions |
 | IEEE conferences | https://conferences.ieeeauthorcenter.ieee.org/ | Use the conference-selected IEEE template |

@@ -23,9 +23,9 @@ No API key required.
 # Gene data by Ensembl ID
 https://www.proteinatlas.org/ENSG00000141510.json
 
-# Gene data by symbol -- NOT supported; the JSON route needs an Ensembl gene ID.
-# https://www.proteinatlas.org/TP53.json returns 404. Resolve the symbol first,
-# then use the ENSG form above.
+# Gene data by symbol is NOT supported. The JSON route needs an Ensembl gene
+# ID; passing a symbol returns 404. Resolve the symbol first, then use the
+# ENSG form above.
 
 # Search
 https://www.proteinatlas.org/search/TP53?format=json
