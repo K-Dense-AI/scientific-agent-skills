@@ -8,7 +8,8 @@ The ECB SDW API provides access to European Central Bank statistical data: excha
 https://data-api.ecb.europa.eu/service
 ```
 
-Note: The legacy URL `https://sdw-wsrest.ecb.europa.eu/service` still works but the above is the current endpoint.
+Note: the legacy host `sdw-wsrest.ecb.europa.eu` no longer resolves (checked
+2026-09-09). Use `https://data-api.ecb.europa.eu/service`, which answers 200.
 
 ## Authentication
 **No API key required.** The API is fully open and public.

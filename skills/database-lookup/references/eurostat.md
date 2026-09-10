@@ -39,7 +39,7 @@ GET /data/{datasetCode}/{filter}
 **Query parameters:**
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `format` | No | `sdmx+json` (default), `sdmx+csv`, `sdmx+xml`, `TSV` |
+| `format` | No | `sdmx+json` (default), `sdmx+csv`, `sdmx+xml`, `TSV`. Write the `+` as `%2B` or omit the parameter: an unencoded `+` decodes to a space and the request 406s |
 | `startPeriod` | No | Start year/quarter/month: `2015`, `2020-Q1`, `2020-01` |
 | `endPeriod` | No | End year/quarter/month |
 | `detail` | No | `full` (default), `dataonly`, `serieskeysonly`, `nodata` |
@@ -67,7 +67,8 @@ https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hicp_mmor/M.RC
 
 ### 2. Get Dataset as CSV
 
-Append `?format=sdmx+csv` to any data request for a flat CSV response that is easier to parse.
+Append `?format=sdmx%2Bcsv` to any data request for a flat CSV response that is easier
+to parse. Omitting `format` entirely also works and returns the SDMX-JSON default.
 
 **Example:**
 ```

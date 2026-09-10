@@ -52,7 +52,7 @@ GET /v1/accounting/od/rates_of_exchange
 ```
 
 **Daily Treasury Par Yield Curve Rates:**
-Note: Daily yield curve rates are published at `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/` and available via the TreasuryDirect API. For programmatic access via Fiscal Data:
+Note: Daily yield curve rates are published at `https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics` and available via the TreasuryDirect API. For programmatic access via Fiscal Data:
 
 ```
 GET /v2/accounting/od/avg_interest_rates

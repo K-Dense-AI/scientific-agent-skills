@@ -294,4 +294,6 @@ https://api.stlouisfed.org/fred/series/search/tags?series_search_text=mortgage+r
 - Real-time periods: FRED supports vintage data. The `realtime_start`/`realtime_end` parameters let you retrieve data as it was known at a specific point in time (useful for analyzing data revisions).
 - The `units` parameter for transformations is very powerful -- it avoids having to compute percent changes client-side.
 - Values are returned as strings; `"."` means missing/unavailable.
-- For FRED bulk data, they offer a download API at `https://api.stlouisfed.org/geofred/` for geographic/regional data.
+- GeoFRED is retired: `https://api.stlouisfed.org/geofred/` returns 404 and its
+  documentation page no longer resolves (checked 2026-09-09). Regional series are
+  available through the ordinary FRED series endpoints.
