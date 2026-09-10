@@ -3,7 +3,7 @@ name: phylogenetics
 description: Build and analyze phylogenetic trees using MAFFT (multiple alignment), IQ-TREE 2 (maximum likelihood), and FastTree (fast NJ/ML). Visualize with ETE3 or FigTree. For evolutionary analysis, microbial genomics, viral phylodynamics, protein family analysis, and molecular clock studies.
 license: Unknown
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: Kuan-lin Huang
 ---
 
@@ -22,7 +22,10 @@ Phylogenetic analysis reconstructs the evolutionary history of biological sequen
 ```bash
 # Conda (recommended for CLI tools)
 conda install -c bioconda mafft iqtree fasttree
-uv pip install ete3
+# ete3 3.1.3 declares no dependencies at all, yet imports six and numpy at
+# import time. Installing it alone gives you a package that raises
+# ModuleNotFoundError on `from ete3 import Tree`. Install them explicitly:
+uv pip install ete3 six numpy
 
 # ete3's TreeStyle/NodeStyle rendering lives in its Qt backend, so image output
 # needs PyQt5 as well; tree parsing and statistics work without it.
