@@ -191,7 +191,11 @@ GET /vep/{species}/hgvs/{hgvs_notation}?content-type=application/json
 **Example:**
 ```
 https://rest.ensembl.org/vep/homo_sapiens/hgvs/ENST00000269305.9:c.817C>T?content-type=application/json
-https://rest.ensembl.org/vep/homo_sapiens/hgvs/17:g.7674220G>A?content-type=application/json
+# Genomic HGVS through the /hgvs/ path returns 400, with either a bare chromosome
+# (17:g....) or an RefSeq accession (NC_000017.11:g....), checked 2026-09-09.
+# Transcript HGVS (the line above) works. For a genomic position use the region
+# endpoint instead:
+https://rest.ensembl.org/vep/homo_sapiens/region/17:7674220-7674220/A?content-type=application/json
 ```
 
 **By genomic region:**

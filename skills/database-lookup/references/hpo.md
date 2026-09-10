@@ -57,7 +57,9 @@ JSON.
 Note the gene and disease objects use `id`/`name`, not `geneId`/`geneSymbol`/`diseaseId`.
 
 ## Rate Limits
-No published limits. Bulk annotation files at https://hpo.jax.org/data/annotations
+No published limits. Bulk annotation and ontology files are released on GitHub at
+https://github.com/obophenotype/human-phenotype-ontology/releases . The old
+hpo.jax.org/data/annotations path returns 404.
 
 ## Verification
 Checked 2026-09-09: `/hp/search`, `/hp/terms/{id}`, `/hp/terms/{id}/children`,

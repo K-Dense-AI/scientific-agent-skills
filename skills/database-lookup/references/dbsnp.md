@@ -100,6 +100,9 @@ SPDI format: `SeqID:Position:Deletion:Insertion`
 **Example:**
 ```
 GET https://api.ncbi.nlm.nih.gov/variation/v0/spdi/NC_000011.10:5227002:T:A/rsids
+# Checked 2026-09-09: this call returned 500 and the hgvs/contextuals call
+# returned 400, while /refsnp/{rsid} returned 200. The service is up but these
+# two sub-resources did not respond correctly. Verify before relying on them.
 ```
 
 ### 3. Lookup variant by HGVS

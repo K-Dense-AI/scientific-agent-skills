@@ -15,8 +15,12 @@ No API key required.
 | `/search?q={query}` | Text search across all entities |
 | `/autocomplete?q={prefix}` | Autocomplete entity names |
 | `/entity/{id}` | Entity details (gene, disease, phenotype) |
-| `/entity/{id}/associations` | Associations for an entity |
-| `/entity/{id}/associations?category={cat}` | Filtered associations |
+| `/association?subject={id}` | Associations for an entity |
+| `/association?subject={id}&category={cat}` | Filtered associations |
+| `/entity/{id}/{category}` | Associations of one biolink category |
+
+The `/entity/{id}/associations` form returns 422. Use `/association?subject=` or the
+category path form above.
 
 ## Entity ID Prefixes
 - `MONDO:` — diseases (e.g. `MONDO:0007947`)
@@ -36,7 +40,7 @@ https://api.monarchinitiative.org/v3/api/search?q=Marfan+syndrome&limit=5
 https://api.monarchinitiative.org/v3/api/entity/MONDO:0007947
 
 # Gene-to-phenotype for FBN1
-https://api.monarchinitiative.org/v3/api/entity/HGNC:3603/associations?category=biolink:GeneToPhenotypicFeatureAssociation&limit=10
+https://api.monarchinitiative.org/v3/api/association?subject=HGNC:3603&limit=10
 ```
 
 ## Response Format
