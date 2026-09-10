@@ -14,9 +14,6 @@ Use GitHub's private vulnerability reporting, which keeps the report confidentia
 
 > **Security** tab → **Report a vulnerability**
 
-<!-- TODO(maintainers): add a monitored security contact address here as a second channel,
-     or delete this comment if private vulnerability reporting is the only intended route. -->
-
 Please include, as far as you are able:
 
 - The affected skill (or repository tooling) and the version or commit you observed it on
