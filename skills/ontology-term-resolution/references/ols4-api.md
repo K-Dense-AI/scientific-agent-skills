@@ -117,17 +117,10 @@ Do not template IRIs when you can resolve them. The OBO PURL pattern is not univ
 
 ## Related services
 
-**ZOOMA** (`https://www.ebi.ac.uk/spot/zooma/v2/api/services/annotate`) maps free text to terms
-using curated annotation history. Unfiltered it is unusable — `propertyValue=liver` returns
-`https://w3id.org/gold.vocab/Liver`. Always pass a filter:
-
-```
-?propertyValue=liver&propertyType=organism+part&filter=required:[none],ontologies:[uberon]
-```
-
-which returns `UBERON:0002107` and related terms with `confidence: HIGH|GOOD` and
-`evidence: ZOOMA_INFERRED_FROM_CURATED`. Worth trying when OLS search fails on lab shorthand,
-because it has seen how curators mapped that exact string before.
+**ZOOMA, Bioregistry, Identifiers.org, and Ontobee** are documented in
+`companion-apis.md`. Use `map_terms.py` (ontology filter required) when OLS
+search fails on lab shorthand, and `lookup_prefix.py` for prefix/CURIE shape
+and landing pages. None of them replace OLS for emitting or validating a term.
 
 **OxO** (`https://www.ebi.ac.uk/spot/oxo/api/...`) is **retired**. It returns an HTML upgrade
 notice with HTTP **200**, so a naive `curl | jq` fails confusingly rather than cleanly. For

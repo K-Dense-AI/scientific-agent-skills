@@ -14,7 +14,7 @@ The OLS ontology id is almost always the lowercased CURIE prefix. Note the excep
 | `CLO` | `clo` | Cell lines |
 | `MONDO` | `mondo` | Diseases (the merged disease ontology; prefer over DOID/NCIT) |
 | `DOID` | `doid` | Human Disease Ontology (largely subsumed by MONDO) |
-| `HP` | `hp` | Human phenotypic abnormalities — **id is `hp`, not `hpo`** |
+| `HP` | `hp` | Human phenotypic abnormalities — **id is `hp`, not `hpo`**. `HPO` is a Bioregistry synonym; Identifiers.org rejects `HPO:…` |
 | `EFO` | `efo` | Experimental factors, assays, platforms, cell lines |
 | `CHEBI` | `chebi` | Chemical entities, drugs, metabolites |
 | `NCBITaxon` | `ncbitaxon` | Organisms |

@@ -39,9 +39,10 @@ Do **not** normalise away hyphens, Greek letters, digits, or capitalised gene sy
 and `alpha-beta T cell` mean what they say, and `normalize_label()` deliberately folds only case and
 whitespace.
 
-When plain search keeps failing on lab shorthand, try ZOOMA with an ontology filter
-(`ols4-api.md`). It matches against how curators previously mapped that exact string, which is a
-different and often better signal than lexical search.
+When plain search keeps failing on lab shorthand, run `map_terms.py` with `--ontology` set
+(see `companion-apis.md`). ZOOMA matches against how curators previously mapped that exact
+string, which is a different and often better signal than lexical search. Every HIGH/GOOD
+CURIE still goes through `validate_terms.py` before it is written down.
 
 ## What "unresolved" should look like
 

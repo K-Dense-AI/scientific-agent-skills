@@ -42,6 +42,10 @@ def _load_script(name: str):
 ols_client = _load_script("ols_client")
 resolve_terms = _load_script("resolve_terms")
 validate_terms = _load_script("validate_terms")
+id_client = _load_script("id_client")
+lookup_prefix = _load_script("lookup_prefix")
+zooma_client = _load_script("zooma_client")
+map_terms = _load_script("map_terms")
 
 
 def doc(**overrides):
@@ -439,6 +443,187 @@ class ExitCodeTests(unittest.TestCase):
             ["UBERON:0002107", "--format", "json"], [self.result("ok")]
         )
         self.assertEqual(json.loads(output)[0]["status"], "ok")
+
+
+HP_RESOURCE = {
+    "prefix": "hp",
+    "preferred_prefix": "HP",
+    "name": "Human Phenotype Ontology",
+    "pattern": r"^\d{7}$",
+    "example": "0011140",
+    "uri_format": "http://purl.obolibrary.org/obo/HP_$1",
+    "synonyms": ["hpo"],
+    "mappings": {"ols": "hp", "ontobee": "HP", "miriam": "hp"},
+}
+
+
+class PrefixHelperTests(unittest.TestCase):
+    def test_split_query_handles_prefix_and_curie(self):
+        self.assertEqual(id_client.split_query("HP"), ("HP", None))
+        self.assertEqual(id_client.split_query("HP:0001250"), ("HP", "0001250"))
+        self.assertEqual(id_client.split_query("  HPO:0001250 "), ("HPO", "0001250"))
+
+    def test_local_pattern_is_the_local_id_only(self):
+        self.assertTrue(id_client.local_matches_pattern("0001250", r"^\d{7}$"))
+        self.assertFalse(
+            id_client.local_matches_pattern("HP:0001250", r"^\d{7}$"),
+            "the Bioregistry pattern applies to the local id, not the CURIE",
+        )
+        self.assertIsNone(id_client.local_matches_pattern("0001250", None))
+
+    def test_uri_format_and_ontobee_url(self):
+        iri = id_client.apply_uri_format(HP_RESOURCE["uri_format"], "0001250")
+        self.assertEqual(iri, "http://purl.obolibrary.org/obo/HP_0001250")
+        page = id_client.ontobee_url("HP", iri)
+        self.assertTrue(page.startswith("https://ontobee.org/ontology/HP?iri="))
+        self.assertIn("HP_0001250", page)
+
+    def test_identifiers_resolver_url_keeps_the_colon(self):
+        url = id_client.identifiers_resolver_url("HP:0001250")
+        self.assertEqual(url, "https://resolver.api.identifiers.org/HP:0001250")
+        self.assertNotIn("%3A", url)
+
+    def test_preferred_prefix_is_ok_in_either_case(self):
+        for query in ("HP", "hp"):
+            result = id_client.classify_prefix_query(query, HP_RESOURCE, local=None)
+            self.assertEqual(result["status"], "ok", query)
+            self.assertEqual(result["preferred_prefix"], "HP")
+
+    def test_synonym_prefix_is_flagged(self):
+        result = id_client.classify_prefix_query("HPO", HP_RESOURCE, local=None)
+        self.assertEqual(result["status"], "synonym_prefix")
+        self.assertIn("preferred prefix HP", result["detail"])
+
+    def test_synonym_curie_still_builds_the_preferred_form(self):
+        result = id_client.classify_prefix_query("HPO:0001250", HP_RESOURCE, local="0001250")
+        self.assertEqual(result["status"], "synonym_prefix")
+        self.assertEqual(result["canonical_curie"], "HP:0001250")
+        self.assertEqual(result["default_iri"], "http://purl.obolibrary.org/obo/HP_0001250")
+
+    def test_invalid_local_id_is_caught_without_a_network_call(self):
+        result = id_client.classify_prefix_query("HP:notanid", HP_RESOURCE, local="notanid")
+        self.assertEqual(result["status"], "invalid_local")
+        self.assertEqual(result["canonical_curie"], "")
+
+    def test_unknown_prefix(self):
+        result = id_client.classify_prefix_query("NOTAREAL", None, local=None)
+        self.assertEqual(result["status"], "unknown_prefix")
+
+    def test_reference_detail_overrides_for_invalid_local(self):
+        result = id_client.classify_prefix_query(
+            "HP:abc",
+            HP_RESOURCE,
+            local="abc",
+            reference_detail="invalid identifier: hp:abc for pattern ^\\d{7}$",
+        )
+        self.assertEqual(result["status"], "invalid_local")
+        self.assertIn("invalid identifier", result["detail"])
+
+
+class LookupPrefixCliTests(unittest.TestCase):
+    def test_malformed_input_does_not_hit_the_network(self):
+        with patch.object(lookup_prefix, "get_resource") as fetch:
+            result = lookup_prefix.lookup_one("not a curie!!!")
+        fetch.assert_not_called()
+        self.assertEqual(result["status"], "malformed")
+
+    def test_lookup_uses_bioregistry_then_identifiers(self):
+        with patch.object(lookup_prefix, "get_resource", return_value=HP_RESOURCE), \
+             patch.object(lookup_prefix, "get_reference", return_value={"providers": {}}), \
+             patch.object(
+                 lookup_prefix,
+                 "resolve_identifiers",
+                 return_value={"errorMessage": None, "payload": {"resolvedResources": []}},
+             ):
+            result = lookup_prefix.lookup_one("HP:0001250")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["canonical_curie"], "HP:0001250")
+
+    def test_unknown_prefix_from_404(self):
+        with patch.object(
+            lookup_prefix,
+            "get_resource",
+            side_effect=id_client.NotFoundError("Prefix not found: xyz", "url"),
+        ):
+            result = lookup_prefix.lookup_one("xyz")
+        self.assertEqual(result["status"], "unknown_prefix")
+
+    def test_no_input_exits_two(self):
+        # pytest captures stdin, so isatty() is False unless we force a TTY.
+        with patch.object(sys.stdin, "isatty", return_value=True), \
+             redirect_stdout(io.StringIO()):
+            self.assertEqual(lookup_prefix.main([]), 2)
+
+
+class ZoomaHelperTests(unittest.TestCase):
+    def test_filter_requires_an_ontology(self):
+        with self.assertRaises(zooma_client.ZoomaError):
+            zooma_client.ontology_filter([])
+        self.assertEqual(
+            zooma_client.ontology_filter(["UBERON", "CL"]),
+            "required:[none],ontologies:[uberon,cl]",
+        )
+
+    def test_flatten_hit_converts_obo_iris_and_flags_weak_confidence(self):
+        hit = {
+            "confidence": "MEDIUM",
+            "semanticTags": ["http://purl.obolibrary.org/obo/CL_2000001"],
+            "annotatedProperty": {"propertyType": "unspecified", "propertyValue": "PBMC"},
+            "provenance": {
+                "evidence": "OLS_TEXT_TAGGER",
+                "source": {"name": "cl"},
+            },
+        }
+        rows = zooma_client.flatten_hit(hit)
+        self.assertEqual(rows[0]["curie"], "CL:2000001")
+        self.assertFalse(rows[0]["safe"])
+        self.assertEqual(rows[0]["confidence"], "MEDIUM")
+
+    def test_high_confidence_is_safe(self):
+        hit = {
+            "confidence": "HIGH",
+            "semanticTags": ["http://purl.obolibrary.org/obo/UBERON_0002107"],
+            "annotatedProperty": {},
+            "provenance": {},
+        }
+        self.assertTrue(zooma_client.flatten_hit(hit)[0]["safe"])
+
+
+class MapTermsTests(unittest.TestCase):
+    def test_safe_only_drops_weak_hits(self):
+        hits = [
+            {
+                "confidence": "HIGH",
+                "semanticTags": ["http://purl.obolibrary.org/obo/CL_2000001"],
+                "annotatedProperty": {},
+                "provenance": {},
+            },
+            {
+                "confidence": "MEDIUM",
+                "semanticTags": ["http://purl.obolibrary.org/obo/CL_0000784"],
+                "annotatedProperty": {},
+                "provenance": {},
+            },
+        ]
+        with patch.object(map_terms, "annotate", return_value=hits):
+            result = map_terms.map_one(
+                "PBMC", ontologies=["cl"], property_type=None, top=5, safe_only=True
+            )
+        self.assertEqual([c["curie"] for c in result["candidates"]], ["CL:2000001"])
+
+    def test_unresolved_row_has_no_curie(self):
+        rows = map_terms.to_rows([{"query": "zzz", "candidates": []}])
+        self.assertEqual(rows[0]["match_type"], "unresolved")
+        self.assertEqual(rows[0]["curie"], "")
+
+    def test_missing_ontology_exits_two(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(map_terms.main(["PBMC", "--ontology", ""]), 2)
+
+    def test_no_input_exits_two(self):
+        with patch.object(sys.stdin, "isatty", return_value=True), \
+             redirect_stdout(io.StringIO()):
+            self.assertEqual(map_terms.main(["--ontology", "cl"]), 2)
 
 
 @unittest.skipUnless(LIVE, "set OLS_LIVE_TESTS=1 to run tests that call EBI OLS")
