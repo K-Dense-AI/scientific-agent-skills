@@ -51,6 +51,7 @@ structure = skill_contract.structure
 office = skill_contract.office
 
 SCRIPT_BEARING = structure.script_bearing_skills(SKILLS_DIR)
+DOCUMENTED = structure.documented_skills(SKILLS_DIR)
 KNOWN_SKILLS = structure.all_skill_names(SKILLS_DIR)
 
 
@@ -122,7 +123,12 @@ class StructuralContractTests(unittest.TestCase):
     def test_all_skills_satisfy_every_structural_rule(self) -> None:
         self.assertTrue(SCRIPT_BEARING, "no skills found -- the anchor is wrong")
         for rule, check in structure.CHECKS.items():
-            for skill in SCRIPT_BEARING:
+            # Document rules hold for every skill; script rules only where a
+            # skill ships scripts to inspect.
+            subjects = (
+                DOCUMENTED if rule in structure.DOCUMENT_RULES else SCRIPT_BEARING
+            )
+            for skill in subjects:
                 with self.subTest(rule=rule, skill=skill.name):
                     problems = (
                         check(skill, KNOWN_SKILLS)

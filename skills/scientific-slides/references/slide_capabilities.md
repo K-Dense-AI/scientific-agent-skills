@@ -196,13 +196,13 @@ Use Nano Banana Pro with `--visual-only` to generate images, then build PPTX wit
 
 **Key Resources**:
 - `assets/powerpoint_design_guide.md`: Complete PowerPoint design guide
-- PPTX skill's `html2pptx.md`: Programmatic creation workflow
-- PPTX skill's scripts: `rearrange.py`, `inventory.py`, `replace.py`, `thumbnail.py`
+- PPTX skill's `SKILL.md`: Programmatic creation with PptxGenJS, plus template editing
+- PPTX skill's scripts: `thumbnail.py`, `add_slide.py`, `clean.py`, `office/validate.py`
 
 **Workflow**:
 1. Generate visuals with `generate_slide_image.py --visual-only`
-2. Design HTML slides (for programmatic) or use templates
-3. Create presentation using html2pptx or template editing
+2. Author slides with PptxGenJS (for programmatic) or use templates
+3. Create presentation using PptxGenJS or template editing
 4. Add generated images and text content
 5. Generate thumbnails for visual validation
 6. Iterate based on visual inspection

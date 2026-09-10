@@ -119,7 +119,8 @@ For in-depth help on specific components:
 - `references/review_criteria.md` - Comparative review criteria by agency
 - `references/writing_principles.md` - What separates funded proposals from competent ones
 - `references/proposal_types_and_resubmission.md` - Proposal types and resubmission strategy
-- `references/timeline_planning.md` - Project management (coming soon)
+Project timelines and milestone planning are covered inside
+`references/core_components.md` rather than in a file of their own.
 
 ### Templates
 - `assets/nsf_project_summary_template.md`

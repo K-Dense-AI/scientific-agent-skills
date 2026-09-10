@@ -289,7 +289,8 @@ nf-core pipelines schema build      # interactive web editor to add/edit params
 nf-core pipelines schema lint       # CI checks schema ↔ params consistency
 ```
 
-The samplesheet itself is validated against `assets/schema_input.json`.
+The samplesheet itself is validated against the pipeline's own
+`<pipeline>/assets/schema_input.json`.
 
 ## Linting and the Harshil alignment style
 
