@@ -1,27 +1,27 @@
 ---
 name: paper-lookup
-description: Search 11 academic literature APIs for papers, preprints, citations, and open-access full text, and return results with reproducible provenance. Covers PubMed, PMC (full text), Europe PMC (full-text and preprint search), bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall. Use when searching for papers, citations, DOI/PMID/arXiv lookups, abstracts, full text, open-access PDFs, preprints, citation graphs, author publications, or any scholarly literature query. Triggers on mentions of any supported database or requests like "find papers on X", "look up this DOI", "who cites this paper", or "get me the PDF".
+description: Search 18 scholarly APIs for papers, preprints, citations, open-access full text, repository records, and journal OA status, and return results with reproducible provenance. Covers PubMed, PMC, Europe PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall, OpenCitations, PubTator3, Zenodo, Figshare, ROR, BioStudies, and DOAJ. Use when searching for papers, citations, DOI/PMID/arXiv lookups, abstracts, full text, open-access PDFs, preprints, citation graphs, author publications, biomedical entity annotations, deposited records (Zenodo, Figshare, BioStudies), institution ROR IDs, or any scholarly literature query. Triggers on mentions of any supported database or requests like "find papers on X", "look up this DOI", "who cites this paper", or "get me the PDF".
 allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: "K-Dense Inc."
 ---
 
 # Paper Lookup
 
-This skill gives you 11 academic literature APIs with documented endpoints. Your job is to turn the user's intent into a reproducible retrieval: pick the authoritative database(s), make bounded and rate-limited calls, and return an answer with enough provenance (endpoints, parameters, identifiers, access date) that a human or another agent can repeat it.
+This skill gives you 18 scholarly APIs with documented endpoints. Your job is to turn the user's intent into a reproducible retrieval: pick the authoritative database(s), make bounded and rate-limited calls, and return an answer with enough provenance (endpoints, parameters, identifiers, access date) that a human or another agent can repeat it.
 
 A literature lookup is only as trustworthy as it is repeatable. Prefer explicit identifiers and documented endpoints over broad guessing, report what you queried, and say plainly when a result is partial or a database came back empty — a silent gap reads as "nothing exists" when it may just mean "not indexed here."
 
-**These APIs fail with HTTP 200.** That is the recurring hazard across all eleven, and the reason for most of the rules below. PMC eFetch returns a well-formed article with no `<body>` when the publisher forbids redistribution. arXiv returns `totalResults: 1` and one entry titled `Error` for a malformed parameter, and silently rewrites an unknown field prefix to `all:`. Europe PMC puts `errCode` in a 200 body. bioRxiv accepts an out-of-step pagination cursor and returns the wrong 30 records. None of these raise, and every one of them produces a confident, wrong answer. Verify the shape of what you got, not just the status code.
+**These APIs fail with HTTP 200.** That is the recurring hazard, and the reason for most of the rules below. PMC eFetch returns a well-formed article with no `<body>` when the publisher forbids redistribution. arXiv returns `totalResults: 1` and one entry titled `Error` for a malformed parameter, and silently rewrites an unknown field prefix to `all:`. Europe PMC puts `errCode` in a 200 body. bioRxiv accepts an out-of-step pagination cursor and returns the wrong 30 records. Figshare `GET /articles?search_for=` ignores the query and still 200s. OpenCitations answers an unknown DOI with `[{"count": "0"}]`. None of these raise, and every one of them produces a confident, wrong answer. Verify the shape of what you got, not just the status code.
 
 ## Core Workflow
 
 1. **Define the retrieval contract** — What is the user after? A specific paper by DOI/PMID/arXiv ID? Papers on a topic? An author's publications? A citation graph? An open-access PDF? Full text? Note any constraints that change the answer: date range, field of study, open-access-only, exhaustive list vs. a few top hits. If a constraint that affects correctness is missing (e.g., "recent" with no year, or an author name with many namesakes), ask rather than guess.
 
-2. **Select database(s)** — Use the selection guide below. Route to the primary database for the intent, then add others only when they earn their place: identifier resolution, open-access lookup, or a known coverage gap. Don't fan out across all eleven just because they're available.
+2. **Select database(s)** — Use the selection guide below. Route to the primary database for the intent, then add others only when they earn their place: identifier resolution, open-access lookup, or a known coverage gap. Don't fan out across all eighteen just because they're available.
 
 3. **Read the reference file** — Each database has a file in `references/` with endpoints, parameters, example calls, response shapes, and **the specific ways it fails quietly**. Read the relevant file(s) before calling. The hazard sections are not optional background; they are where the wrong answers come from.
 
@@ -51,7 +51,8 @@ Match the user's intent to the right database(s).
 | Papers across all fields | OpenAlex | Semantic Scholar, Crossref |
 | A specific paper by DOI | Crossref | Unpaywall, Semantic Scholar |
 | Open-access PDF for a paper | Unpaywall | CORE, PMC |
-| Citation graph (who cites whom) | Semantic Scholar | OpenAlex, Europe PMC |
+| Citation graph (who cites whom) | Semantic Scholar | OpenAlex, Europe PMC, OpenCitations |
+| Open citation edges / OCI | OpenCitations | Semantic Scholar, Europe PMC |
 | Author's publications | Semantic Scholar | OpenAlex |
 | Paper recommendations | Semantic Scholar | — |
 | Full text (any field) | CORE | PMC, Europe PMC (biomedical only) |
@@ -59,12 +60,19 @@ Match the user's intent to the right database(s).
 | Funder information | Crossref | OpenAlex |
 | Convert between PMID/PMCID/DOI | PMC (ID Converter) | Crossref, Europe PMC |
 | Is this paper retracted? | PMC OA Web Service (`retracted` attribute) | Crossref (`update-type:retraction`) |
+| Genes/diseases/chemicals in a paper | PubTator3 | Europe PMC `textMinedTerms` |
+| Institution / affiliation → ROR ID | ROR | OpenAlex (already-linked ROR) |
+| Deposited dataset, software, or poster | Zenodo | Figshare, BioStudies |
+| EBI study package / supplementary archive | BioStudies | Zenodo, ArrayExpress via BioStudies |
+| Is this *journal* in DOAJ? | DOAJ | OpenAlex (`sources.is_in_doaj`) for the yes/no; Unpaywall (article-level OA) |
 
 ### Cross-Database Queries
 
 | User is asking about... | Databases to query |
 |---|---|
 | Everything about a paper (metadata + citations + OA) | Crossref + Semantic Scholar + Unpaywall |
+| Entities mentioned in a paper | PubTator3 export + PubMed/Europe PMC for the record |
+| Affiliation string to a stable org ID | ROR (`affiliation=`), then OpenAlex for that org's works |
 | Comprehensive literature search | PubMed + Europe PMC + OpenAlex + Semantic Scholar |
 | Find and read a paper | PubMed (find) + Unpaywall (OA link) + Europe PMC or CORE (full text) |
 | Preprint and its published version | Europe PMC or bioRxiv/medRxiv + Crossref |
@@ -96,7 +104,11 @@ Different databases use different identifier systems. When a lookup fails, a wro
 | Semantic Scholar ID | 40-char hex | `649def34f8be...` | Semantic Scholar |
 | Europe PMC ID | `{source}/{id}` pair | `MED/32117569`, `PPR1283561` | Europe PMC |
 | ORCID | `0000-XXXX-XXXX-XXXX` | `0000-0001-6187-6610` | OpenAlex, Crossref |
-| ISSN | `XXXX-XXXX` | `0028-0836` | Crossref, OpenAlex |
+| ISSN | `XXXX-XXXX` | `0028-0836` | Crossref, OpenAlex, DOAJ |
+| ROR ID | `https://ror.org/` + 9 chars | `https://ror.org/05a0ya142` | ROR, OpenAlex, Crossref |
+| OCI | `{citing}-{cited}` omid suffixes | `06101801781-06180334099` | OpenCitations |
+| Zenodo record | integer, concept ≠ version | `3246411` (version of `3246410`) | Zenodo |
+| BioStudies accession | `S-` / `E-` prefix | `S-BSST12345`, `E-MTAB-1234` | BioStudies |
 
 **Cross-referencing IDs:** Semantic Scholar accepts DOI, PMID, PMCID, and arXiv ID via prefixes (`DOI:10.1038/nature12373`, `PMID:34567890`, `ARXIV:2103.15348`). OpenAlex accepts DOI and PMID via prefixes (`doi:10.1038/...`, `pmid:34567890`). Use the PMC ID Converter to translate between PMID, PMCID, and DOI. When one database has no result for an identifier, converting it and trying another is usually faster than reformulating the query.
 
@@ -116,7 +128,7 @@ Most of these APIs are fully open. A few benefit from a key for higher rate limi
 | Semantic Scholar | `S2_API_KEY` | No (shared pool without, often 429s) | https://www.semanticscholar.org/product/api#api-key-form |
 | OpenAlex | `OPENALEX_API_KEY` | Recommended | https://openalex.org/settings/api |
 
-**Fully open (no key):** Europe PMC (nothing at all — no key, no email), bioRxiv/medRxiv (no documented limits), arXiv (1 req / 3 s), Crossref (add `mailto` for the 2× "polite pool"), Unpaywall (requires a real `email` parameter — placeholders like `test@example.com` are rejected with HTTP 422).
+**Fully open (no key):** Europe PMC (nothing at all — no key, no email), bioRxiv/medRxiv (no documented limits), arXiv (1 req / 3 s), Crossref (add `mailto` for the 2× "polite pool"), Unpaywall (requires a real `email` parameter — placeholders like `test@example.com` are rejected with HTTP 422), OpenCitations, PubTator3 (3 req/s), Zenodo and Figshare *public* record routes, ROR (2000 req / 5 min), BioStudies, DOAJ search.
 
 **Loading keys:** Check the environment first (`$NCBI_API_KEY`, etc.). If a key is absent there and a `.env` exists in the working directory, read **only** the four variables named in the table above — do not load the file wholesale into the environment or into your context, since it routinely holds unrelated secrets that have nothing to do with literature search. If a key is missing, proceed at the lower rate limit and tell the user which key would help and where to get it — don't stall.
 
@@ -141,7 +153,7 @@ curl -s -H "Accept: application/json" -H "x-api-key: $S2_API_KEY" \
 
 - **URL-encode query parameters — including brackets.** DOIs contain `/` (encode as `%2F`), and titles and queries contain spaces, quotes, and parentheses. With `curl`, `--data-urlencode` combined with `--get` is the safe way to pass a search term. Never interpolate an unescaped user string into a URL or shell command. Square brackets need `%5B`/`%5D`: curl reads a literal `[` as a globbing range and **exits 3 before sending the request**, which is how the arXiv date-range syntax silently fetches nothing.
 - **Serialize requests to rate-limited APIs.** NCBI (PubMed, PMC): 3 req/s without key, 10 with. arXiv: **1 request per 3 seconds** — be patient. Crossref: 5 req/s public, 10 with `mailto`.
-- **Parallelize across *different* open APIs only.** OpenAlex, Crossref, Semantic Scholar, Europe PMC, and Unpaywall can run concurrently; keep it to a handful of requests in flight, and never parallelize against the same rate-limited host.
+- **Parallelize across *different* open APIs only.** OpenAlex, Crossref, Semantic Scholar, Europe PMC, Unpaywall, OpenCitations, Zenodo, ROR, BioStudies, and DOAJ can run concurrently; keep it to a handful of requests in flight, and never parallelize against the same rate-limited host. Serialize PubTator3 (3 req/s) and NCBI.
 - **Bound total work.** Start with a count or first page. Don't continue past ~1,000 records or ~50 calls without confirming a short plan with the user — the defaults in `scripts/paginate.py` enforce exactly these bounds. For truly bulk needs, point to the database's snapshot/dump (Unpaywall, OpenAlex, CORE all offer one).
 - **On HTTP 429/503**, wait briefly and retry once. Semantic Scholar without a key hits this often — one retry, then tell the user a key would help.
 
@@ -229,7 +241,7 @@ Default to a readable summary of the fields that matter, not a raw JSON dump. Ra
 
 This skill is designed to grow. Each database is a self-contained file in `references/`. To add one: create `references/<name>.md` following the format of the existing files (base URL, auth, key endpoints with parameter tables, example calls, response shape, pagination/count behavior, rate limits, identifier conventions, and any known hazards), then add a row to the selection guide and the Available Databases tables below.
 
-Run every call you document and record what came back, including the failure modes — the hazard sections in these files are the part that earns the skill its keep. If the new API paginates, add an adapter to `scripts/paginate.py` and a case to `tests/paper-lookup/`.
+Run every call you document and record what came back, including the failure modes — the hazard sections in these files are the part that earns the skill its keep. If the new API paginates *and the walk is easy to get wrong* (bioRxiv-style cursors, silent short pages), add an adapter to `scripts/paginate.py` and a case to `tests/paper-lookup/`. Simple `page`/`size` APIs and dump-all citation lists stay in the reference file.
 
 ## Available Databases
 
@@ -255,12 +267,23 @@ Read the relevant reference file before making any API call.
 | OpenAlex | `references/openalex.md` | 250M+ works, authors, institutions, topics, citation data |
 | Crossref | `references/crossref.md` | 150M+ DOI metadata, journals, funders, references |
 | Semantic Scholar | `references/semantic-scholar.md` | 200M+ papers, citation graphs, AI TLDRs, recommendations |
+| OpenCitations | `references/opencitations.md` | Open citation edges and counts (DOI/PMID/OMID; prefix required) |
+| PubTator3 | `references/pubtator.md` | Text-mined genes, chemicals, diseases, variants, relations |
 
 ### Open Access & Full Text
 | Database | Reference File | What it covers |
 |---|---|---|
 | CORE | `references/core.md` | 37M+ full texts from OA repositories worldwide |
 | Unpaywall | `references/unpaywall.md` | OA status and PDF links for any DOI |
+| DOAJ | `references/doaj.md` | Directory of OA *journals* and their registered articles |
+
+### Repositories & organizations
+| Database | Reference File | What it covers |
+|---|---|---|
+| Zenodo | `references/zenodo.md` | Deposited papers, software, data (concept DOI ≠ version DOI) |
+| Figshare | `references/figshare.md` | Deposited figures, data, media (search is POST, not GET) |
+| BioStudies | `references/biostudies.md` | EBI study packages and links to other archives |
+| ROR | `references/ror.md` | Research organization IDs from names or affiliation strings |
 
 ## Citing Scientific Agent Skills
 
