@@ -177,7 +177,9 @@ Returns all values reported by a company for a specific XBRL tag across all fili
 
 **Example:**
 ```
-https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenue.json
+https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax.json
+# The concept must be one the filer actually reports. `us-gaap/Revenue` returns 404
+# for Apple. Use /api/xbrl/companyfacts/CIK{10-digit}.json to list available concepts.
 ```
 
 **Response:**
