@@ -23,12 +23,12 @@ two different calls.
 | `/hp/terms/{id}` | Term details |
 | `/hp/terms/{id}/children` | Child terms in hierarchy |
 | `/hp/terms/{id}/parents` | Parent terms |
-| `/network/annotation/{HP id}` | Everything annotated to a phenotype: `diseases[]`, `genes[]`, `assays[]`, `medicalActions[]` |
+| `/network/annotation/{hp_id}` | Everything annotated to a phenotype: `diseases[]`, `genes[]`, `assays[]`, `medicalActions[]` |
 | `/network/annotation/NCBIGene:{entrez}` | Phenotypes for a gene |
 | `/network/annotation/OMIM:{id}` | Phenotypes for a disease (also accepts ORPHA/MONDO CURIEs) |
 
 There is no `/genes` or `/diseases` sub-path on a term. Use one
-`/network/annotation/{HP id}` call and read the `genes` or `diseases` array from it.
+`/network/annotation/{hp_id}` call and read the `genes` or `diseases` array from it.
 
 ## Example Calls
 ```
@@ -63,7 +63,7 @@ hpo.jax.org/data/annotations path returns 404.
 
 ## Verification
 Checked 2026-09-09: `/hp/search`, `/hp/terms/{id}`, `/hp/terms/{id}/children`,
-`/hp/terms/{id}/parents`, `/network/annotation/{HP id}`,
+`/hp/terms/{id}/parents`, `/network/annotation/{hp_id}`,
 `/network/annotation/NCBIGene:{entrez}` and `/network/annotation/OMIM:{id}` all
 returned HTTP 200. The base URL itself has no route and returns 404, which is
 expected. The previous `/api/hp/hpo/...` paths documented here are retired and

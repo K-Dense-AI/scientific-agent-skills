@@ -13,9 +13,11 @@ No API key required.
 | Purpose | URL Pattern |
 |---|---|
 | Gene data by Ensembl ID | `/{ENSEMBL_ID}.json` |
-| Gene data by symbol | `/{GENE_NAME}.json` |
+| Gene data by symbol | not supported; `/{GENE_NAME}.json` returns 404. Resolve the symbol to an Ensembl gene ID first |
 | Search (JSON) | `/search/{QUERY}?format=json` |
 | Search (XML) | `/search/{QUERY}?format=xml` |
+
+Verified 2026-09-09.
 
 ## Example Calls
 

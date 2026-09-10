@@ -24,6 +24,8 @@ https://www.ebi.ac.uk/pride/ws/archive/v2
 | `GET /peptideevidences` | Search peptide evidences |
 | `GET /proteinevidences` | Search protein evidences |
 
+Endpoint list verified 2026-09-09; `/stats` was removed because it returns 404.
+
 ## Query Parameters
 - `keyword` — free-text search
 - `filter` — field-specific filters (e.g., species, instrument, modification)

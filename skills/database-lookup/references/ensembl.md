@@ -376,6 +376,8 @@ https://rest.ensembl.org/xrefs/symbol/homo_sapiens/TP53?content-type=application
 
 ---
 
+Homology and regulatory endpoints below verified 2026-09-09.
+
 ### 10. Comparative genomics -- Homology
 
 ```
