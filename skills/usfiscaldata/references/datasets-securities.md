@@ -16,10 +16,11 @@ Historical data on Treasury securities auctions including bills, notes, bonds, T
 | `security_term` | STRING | e.g., "4-Week", "2-Year", "10-Year" |
 | `cusip` | STRING | CUSIP identifier |
 | `offering_amt` | CURRENCY | Amount offered |
-| `accepted_comp_bid_rate_amt` | PERCENTAGE | High accepted competitive bid rate |
+| `high_yield` | PERCENTAGE | High accepted yield (notes/bonds/TIPS; bills use `high_discnt_rate`) |
+| `int_rate` | PERCENTAGE | Coupon/interest rate of the security |
 | `bid_to_cover_ratio` | NUMBER | Bid-to-cover ratio |
 | `total_accepted_amt` | CURRENCY | Total accepted amount |
-| `indirect_bid_pct_accepted` | PERCENTAGE | Indirect bidder percentage |
+| `indirect_bidder_accepted` | CURRENCY | Indirect bidder amount accepted (USD) |
 | `issue_date` | DATE | Issue/settlement date |
 | `maturity_date` | DATE | Maturity date |
 
