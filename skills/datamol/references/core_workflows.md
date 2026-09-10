@@ -117,8 +117,19 @@ Refer to `references/descriptors_viz.md` for detailed descriptor documentation.
 ```python
 # Get standard descriptor set
 descriptors = dm.descriptors.compute_many_descriptors(mol)
-# Returns: {'mw': 46.07, 'logp': -0.03, 'hbd': 1, 'hba': 1,
-#           'tpsa': 20.23, 'n_aromatic_atoms': 0, ...}
+# Careful: the `mw` key is the MONOISOTOPIC (exact) mass, not average molecular
+# weight, and it sits in the same dict as `n_lipinski_hba` / `n_lipinski_hbd`,
+# which invites applying Lipinski's MW <= 500 to the wrong quantity. Measured
+# 2026-09-09: aspirin dm mw 180.0423 vs RDKit MolWt 180.1590; atorvastatin
+# 558.2530 vs 558.6500. The gap is about -0.07%, so it will not usually flip a
+# 500 Da cutoff, but the two numbers are different quantities. For average
+# molecular weight use rdkit.Chem.Descriptors.MolWt.
+# Returns (ethanol, measured on datamol 0.13.0):
+#   {'mw': 46.0419, 'clogp': -0.0014, 'n_lipinski_hbd': 1, 'n_lipinski_hba': 1,
+#    'tpsa': 20.23, 'n_aromatic_rings': 0, 'qed': ..., 'sas': ..., 'fsp3': ...}
+# Note the key names: it is `clogp`, not `logp`, and `n_lipinski_hba` /
+# `n_lipinski_hbd`, not `hba` / `hbd`. There is no `n_aromatic_atoms` key in
+# this dict; `dm.descriptors.n_aromatic_atoms(mol)` is a separate function.
 ```
 
 **Batch descriptor computation** (recommended for datasets):

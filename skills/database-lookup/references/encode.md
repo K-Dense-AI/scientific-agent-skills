@@ -22,7 +22,9 @@ No auth required. Append `?format=json` or set `Accept: application/json`.
 
 ## Search Parameters
 - `type` — Experiment, File, Biosample, Annotation, etc.
-- `assay_title` — ChIP-seq, RNA-seq, ATAC-seq, etc.
+- `assay_title` — `TF ChIP-seq`, `Histone ChIP-seq`, `polyA plus RNA-seq`, `ATAC-seq`, etc.
+  Note the exact facet values: a bare `ChIP-seq` returns 404. Read the live list from
+  the `facets` array of any search response.
 - `target.label` — target protein (e.g. CTCF, H3K27ac)
 - `biosample_ontology.term_name` — cell type
 - `limit` — results per page
@@ -31,7 +33,7 @@ No auth required. Append `?format=json` or set `Accept: application/json`.
 ## Example Calls
 ```
 # ChIP-seq experiments for CTCF
-https://www.encodeproject.org/search/?type=Experiment&assay_title=ChIP-seq&target.label=CTCF&format=json&limit=5
+https://www.encodeproject.org/search/?type=Experiment&assay_title=TF+ChIP-seq&target.label=CTCF&format=json&limit=5
 
 # Specific experiment
 https://www.encodeproject.org/experiments/ENCSR000AAA/?format=json

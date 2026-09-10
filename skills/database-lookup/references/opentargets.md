@@ -370,12 +370,13 @@ These are simpler alternatives for common operations.
 ### Search
 
 ```
-GET /api/v4/search?q={query}&page=0&size=10
+# The v4 REST search endpoint is retired and returns 404. Open Targets is
+# GraphQL-only: POST to /api/v4/graphql. See the GraphQL section above.
 ```
 
 **Example:**
 ```
-https://api.platform.opentargets.org/api/v4/search?q=TP53&size=5
+https://api.platform.opentargets.org/api/v4/graphql   (POST, GraphQL query in the body)
 ```
 
 **Response:**

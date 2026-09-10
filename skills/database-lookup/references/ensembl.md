@@ -191,7 +191,11 @@ GET /vep/{species}/hgvs/{hgvs_notation}?content-type=application/json
 **Example:**
 ```
 https://rest.ensembl.org/vep/homo_sapiens/hgvs/ENST00000269305.9:c.817C>T?content-type=application/json
-https://rest.ensembl.org/vep/homo_sapiens/hgvs/17:g.7674220G>A?content-type=application/json
+# Genomic HGVS through the /hgvs/ path returns 400, with either a bare chromosome
+# (17:g....) or an RefSeq accession (NC_000017.11:g....), checked 2026-09-09.
+# Transcript HGVS (the line above) works. For a genomic position use the region
+# endpoint instead:
+https://rest.ensembl.org/vep/homo_sapiens/region/17:7674220-7674220/A?content-type=application/json
 ```
 
 **By genomic region:**
@@ -372,14 +376,17 @@ https://rest.ensembl.org/xrefs/symbol/homo_sapiens/TP53?content-type=application
 
 ---
 
+Homology and regulatory endpoints below verified 2026-09-09.
+
 ### 10. Comparative genomics -- Homology
 
 ```
-GET /homology/id/{id}?content-type=application/json
+GET /homology/id/{species}/{id}?content-type=application/json
 ```
 
 | Parameter     | Type   | Description |
 |--------------|--------|-------------|
+| `species`     | string | Species name, e.g. `homo_sapiens`. Required; `/homology/id/{id}` without it returns 404. |
 | `id`          | string | Ensembl gene ID. |
 | `type`        | string | `orthologues`, `paralogues`, `projections`, `all`. |
 | `target_species` | string | Filter to specific species (e.g., `mus_musculus`). |
@@ -388,7 +395,7 @@ GET /homology/id/{id}?content-type=application/json
 
 **Example -- get mouse orthologs of human TP53:**
 ```
-https://rest.ensembl.org/homology/id/ENSG00000141510?type=orthologues&target_species=mus_musculus&content-type=application/json
+https://rest.ensembl.org/homology/id/homo_sapiens/ENSG00000141510?type=orthologues&target_species=mus_musculus&content-type=application/json
 ```
 
 **Response:**
@@ -435,13 +442,16 @@ https://rest.ensembl.org/homology/symbol/homo_sapiens/TP53?type=orthologues&targ
 
 ### 11. Regulatory features
 
+The dedicated `/regulatory/species/{species}/id/{id}` endpoint is retired and
+returns 404. Query regulatory features through the overlap endpoint instead.
+
 ```
-GET /regulatory/species/{species}/id/{id}?content-type=application/json
+GET /overlap/region/{species}/{region}?feature=regulatory&content-type=application/json
 ```
 
 **Example:**
 ```
-https://rest.ensembl.org/regulatory/species/homo_sapiens/id/ENSR00000000163?content-type=application/json
+https://rest.ensembl.org/overlap/region/homo_sapiens/17:7660000-7690000?feature=regulatory&content-type=application/json
 ```
 
 ---

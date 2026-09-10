@@ -89,7 +89,9 @@ The user must have a PatentsView API key for this endpoint. If they don't have o
 
 ## 3. PEDS — Patent Examination Data System
 
-**URL**: `https://ped.uspto.gov/api/queries`
+**URL**: retired. `ped.uspto.gov` no longer resolves (checked 2026-09-09).
+PEDS was replaced by the USPTO Open Data Portal API at `https://api.uspto.gov`
+(returns 403 without a key; register through https://developer.uspto.gov).
 
 **Method**: POST
 

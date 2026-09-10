@@ -3,9 +3,9 @@ name: gget
 description: "Fast CLI/Python queries to 20+ bioinformatics databases. Use for quick lookups: gene info, BLAST/BLAT, viral sequence downloads, AlphaFold structures, enrichment analysis, OpenTargets, COSMIC, CELLxGENE, and 8cube mouse specificity/expression data. Best for interactive exploration and simple queries. For batch processing or advanced BLAST use biopython; for multi-database Python workflows use bioservices."
 license: BSD-2-Clause license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python >=3.8 and gget 0.30.5-compatible APIs. Optional setup modules may install scientific dependencies that lag the newest Python releases; use Python 3.9 or 3.10 if `gget setup cellxgene` or `gget setup alphafold` fails.
+compatibility: Requires Python >=3.12 for current gget. The floor moved at gget 0.30.7 (0.30.5 and 0.30.6 declared >=3.8; 0.30.7 onward declare >=3.12, checked 2026-09-09 against latest 0.30.8). Pin gget<=0.30.6 to stay on an older interpreter. Some setup modules still need network access and their own dependencies.
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: K-Dense Inc.
 ---
 

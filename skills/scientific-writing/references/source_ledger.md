@@ -138,7 +138,9 @@ IDs for a user's manuscript.
 
 - Organization: SQUIRE
 - Date: 2015
-- URL: https://www.squire-statement.org/index.cfm?fuseaction=page.viewPage&pageID=471&nodeID=1
+- URL: https://www.equator-network.org/reporting-guidelines/squire/
+- URL re-checked 2026-09-09: squire-statement.org no longer resolves; the
+  guideline is hosted by the EQUATOR Network at the address above.
 - Used for: healthcare quality-improvement reporting.
 
 ### SW-S18 — CHEERS 2022

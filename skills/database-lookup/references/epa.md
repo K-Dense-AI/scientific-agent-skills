@@ -81,6 +81,11 @@ https://data.epa.gov/efservice/TRI_RELEASE_QTY/STATE_ABBR/TX/REPORTING_YEAR/2022
 Air quality monitoring data from the national monitoring network.
 
 **Key Tables:**
+These AQS table names are **not** available through Envirofacts efservice; every
+path built from them returns 404 (checked 2026-09-09). They are listed here only
+to describe what the AQS API below exposes. Envirofacts table and column names
+are lowercase, for example `tri_facility/state_abbr`.
+
 | Table | Description |
 |-------|-------------|
 | `AQS_SITES` | Monitoring site metadata. |
@@ -90,13 +95,15 @@ Air quality monitoring data from the national monitoring network.
 
 **Example -- AQS monitoring sites in California:**
 ```
-https://data.epa.gov/efservice/AQS_SITES/STATE_CODE/06/rows/0:9/JSON
+# AQS is NOT an Envirofacts table: these efservice paths return 404 in any case
+# (checked 2026-09-09). Air quality data comes from the AQS API below, which
+# needs a free email plus key. Envirofacts table and column names are lowercase,
+# for example:
+https://data.epa.gov/efservice/tri_facility/state_abbr/VA/rows/0:9/JSON
 ```
 
-**Example -- annual ozone summary for a county:**
-```
-https://data.epa.gov/efservice/AQS_ANNUAL_SUMMARY/STATE_CODE/06/COUNTY_CODE/037/PARAMETER_CODE/44201/rows/0:9/JSON
-```
+**Example -- annual ozone summary for a county:** use the AQS API (key required),
+not efservice. See the AQS section below.
 
 **Common AQS Parameter Codes:**
 | Code  | Pollutant |

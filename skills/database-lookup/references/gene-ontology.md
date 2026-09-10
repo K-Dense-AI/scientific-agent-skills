@@ -3,7 +3,8 @@
 ## Base URLs
 - **QuickGO (EBI, recommended)**: `https://www.ebi.ac.uk/QuickGO/services` — most reliable endpoint
 - **GO API**: `https://api.geneontology.org/api` — may return 403; use QuickGO as fallback
-- **AmiGO / GOlr (Solr-based)**: `http://golr-aux.geneontology.org/solr`
+- **AmiGO / GOlr (Solr-based)**: `http://golr-aux.geneontology.org/solr` (host did
+  not resolve when checked 2026-09-09; prefer the REST API or OLS4 below)
 
 ## Authentication
 None required. All endpoints are public.
@@ -47,11 +48,15 @@ Returns genes/proteins annotated with that GO term.
 
 ### 4. Search Entities
 ```
-GET https://api.geneontology.org/api/search/entity/{query}
+GET https://api.geneontology.org/api/ontology/term/{GO_ID}
+GET https://api.geneontology.org/api/ontology/term/{GO_ID}/subgraph
+# Free-text search: /api/search/entity/{query} is retired (404). Use OLS4:
+GET https://www.ebi.ac.uk/ols4/api/search?q={query}&ontology=go&rows=10
 ```
 Example:
 ```
-GET https://api.geneontology.org/api/search/entity/apoptosis?rows=10
+GET https://api.geneontology.org/api/ontology/term/GO:0006915
+GET https://www.ebi.ac.uk/ols4/api/search?q=apoptosis&ontology=go&rows=10
 ```
 
 ### 5. Ontology Ancestors / Descendants
@@ -89,7 +94,7 @@ GET https://www.ebi.ac.uk/QuickGO/services/annotation/search?goId=GO:0006915&tax
 
 ### 4. Filter Annotations by Evidence
 ```
-GET https://www.ebi.ac.uk/QuickGO/services/annotation/search?geneProductId=P04637&goUsage=descendants&evidenceCode=ECO:0000269&limit=25
+GET https://www.ebi.ac.uk/QuickGO/services/annotation/search?geneProductId=P04637&goId=GO:0006915&goUsage=descendants&limit=25
 ```
 
 ### 5. GO Term Children
@@ -112,7 +117,7 @@ GET https://www.ebi.ac.uk/QuickGO/services/ontology/go/search?query=apoptosis&li
 |-----------|-------------|
 | `geneProductId` | UniProt accession (e.g., P04637) |
 | `goId` | GO term (e.g., GO:0006915) |
-| `goUsage` | `exact` or `descendants` (include child terms) |
+| `goUsage` | `exact` or `descendants` (include child terms). Requires `goId`; sending it alone returns 400 |
 | `taxonId` | NCBI taxonomy ID (9606 = human) |
 | `evidenceCode` | ECO code (e.g., ECO:0000269 = experimental) |
 | `aspect` | `biological_process`, `molecular_function`, `cellular_component` |

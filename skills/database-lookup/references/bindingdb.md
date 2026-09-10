@@ -3,7 +3,7 @@
 ## Base URLs
 ```
 https://bindingdb.org/rest/
-https://bindingdb.org/axis2/services/BDBService/
+https://bindingdb.org/rest/
 ```
 
 ## Auth
@@ -81,5 +81,6 @@ No documented limit. Keep requests to ~1 per second as a courtesy.
 ## Notes
 - The API surface is small (4 endpoints) but focused on binding affinity data
 - For compound-name search, resolve to SMILES first via PubChem, then use `getTargetByCompound`
-- For bulk data access, use downloadable TSV/SDF files from https://www.bindingdb.org/bind/chemsearch/marvin/Download.jsp
+- For bulk data access, use downloadable TSV/SDF files from https://www.bindingdb.org/rwd/bind/chemsearch/marvin/Download.jsp
+- The former `/axis2/services/BDBService/` SOAP endpoints return 404. The REST base above is current.
 - Contains ~3.2M binding measurements for ~1.4M compounds and ~11.4K targets

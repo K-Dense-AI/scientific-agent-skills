@@ -83,4 +83,4 @@ GET /studies/metadata
 Uses cursor-based pagination via `pageToken` (NOT numeric offsets). Include `countTotal=true` on first request to get total.
 
 ## Rate Limits
-No API key. Be reasonable — a few requests per second. Bulk: https://clinicaltrials.gov/AllAPIJSON.zip
+No API key. Be reasonable — a few requests per second. Bulk: the AllAPIJSON.zip download is gone; see https://clinicaltrials.gov/data-api/about-api

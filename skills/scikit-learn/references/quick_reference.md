@@ -433,4 +433,5 @@ print(f"scikit-learn version: {sklearn.__version__}")
 - User Guide: https://scikit-learn.org/stable/user_guide.html
 - API Reference: https://scikit-learn.org/stable/api/index.html
 - Examples: https://scikit-learn.org/stable/auto_examples/index.html
-- Tutorials: https://scikit-learn.org/stable/tutorial/index.html
+- User guide: https://scikit-learn.org/stable/user_guide.html
+- Getting started: https://scikit-learn.org/stable/getting_started.html

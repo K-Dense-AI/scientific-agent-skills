@@ -146,7 +146,7 @@ Official source: [ARRIVE 2.0](https://arriveguidelines.org/arrive-guidelines).
 
 SQUIRE states that every item should be considered, but not every element belongs in every manuscript. Attend to local context, rationale, intervention evolution, measures, analysis, ethics, unintended consequences, and sustainability.
 
-Official source: [SQUIRE 2.0](https://www.squire-statement.org/index.cfm?fuseaction=page.viewPage&pageID=471&nodeID=1).
+Official source: [SQUIRE 2.0](https://www.equator-network.org/reporting-guidelines/squire/).
 
 ### Health economic evaluations — CHEERS 2022
 

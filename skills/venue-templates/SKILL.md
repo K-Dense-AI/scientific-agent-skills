@@ -4,7 +4,7 @@ description: Prepare journal manuscripts, conference papers, research posters, a
 license: MIT license
 compatibility: Requires Python 3.11+ for helper scripts; LaTeX and Poppler command-line tools are optional for compilation and PDF inspection.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 

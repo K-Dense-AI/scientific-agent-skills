@@ -23,7 +23,8 @@ https://www.ebi.ac.uk/pride/ws/archive/v2
 | `GET /spectra` | Search spectra |
 | `GET /peptideevidences` | Search peptide evidences |
 | `GET /proteinevidences` | Search protein evidences |
-| `GET /stats` | Database statistics |
+
+Endpoint list verified 2026-09-09; `/stats` was removed because it returns 404.
 
 ## Query Parameters
 - `keyword` — free-text search
@@ -48,8 +49,6 @@ curl "https://www.ebi.ac.uk/pride/ws/archive/v2/projects/PXD010000/files?pageSiz
 # Search by species (human = 9606)
 curl "https://www.ebi.ac.uk/pride/ws/archive/v2/projects?filter=organisms_facet==9606&pageSize=5"
 
-# Get database statistics
-curl "https://www.ebi.ac.uk/pride/ws/archive/v2/stats"
 ```
 
 ## Response Format

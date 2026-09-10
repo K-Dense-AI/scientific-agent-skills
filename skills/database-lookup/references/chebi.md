@@ -2,7 +2,10 @@
 
 ## Base URLs
 - **OLS (Ontology Lookup Service) API**: `https://www.ebi.ac.uk/ols4/api`
-- **ChEBI Web Services (SOAP)**: `https://www.ebi.ac.uk/webservices/chebi/2.0/test` (SOAP/XML only)
+- **ChEBI Web Services (SOAP)**: `https://www.ebi.ac.uk/webservices/chebi/2.0/` returned
+  HTTP 500 for both `/test` and `?wsdl` when checked 2026-09-09. Prefer the two
+  working routes below.
+- **ChEBI search backend (JSON)**: `https://www.ebi.ac.uk/chebi/backend/api/public/es_search/?term={q}&size=10`
 - **ChEBI LibChebi REST (limited)**: entity pages at `https://www.ebi.ac.uk/chebi`
 
 ## Authentication
