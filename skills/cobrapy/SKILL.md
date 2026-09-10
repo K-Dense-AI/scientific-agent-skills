@@ -5,7 +5,7 @@ license: GPL-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ (cobra 0.30+ dropped 3.8). Install with uv pip install. GLPK (swiglpk) is the default solver; CPLEX/Gurobi optional. load_model fetches from bundled data, BiGG, or BioModels (network required for remote models).
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -428,43 +428,9 @@ print(f"Original growth: {solution.objective_value}")
 
 ## Key Concepts
 
-### DictList Objects
-Models use `DictList` objects for reactions, metabolites, and genes - behaving like both lists and dictionaries:
-```python
-# Access by index
-first_reaction = model.reactions[0]
-
-# Access by ID
-pfk = model.reactions.get_by_id("PFK")
-
-# Query methods
-atp_reactions = model.reactions.query("atp")
-```
-
-### Flux Constraints
-Reaction bounds define feasible flux ranges:
-- **Irreversible**: `lower_bound = 0, upper_bound > 0`
-- **Reversible**: `lower_bound < 0, upper_bound > 0`
-- Set both bounds simultaneously with `.bounds` to avoid inconsistencies
-
-### Gene-Reaction Rules (GPR)
-Boolean logic linking genes to reactions:
-```python
-# AND logic (both required)
-reaction.gene_reaction_rule = "gene1 and gene2"
-
-# OR logic (either sufficient)
-reaction.gene_reaction_rule = "gene1 or gene2"
-
-# Complex logic
-reaction.gene_reaction_rule = "(gene1 and gene2) or (gene3 and gene4)"
-```
-
-### Exchange Reactions
-Special reactions representing metabolite import/export:
-- Named with prefix `EX_` by convention
-- Positive flux = secretion, negative flux = uptake
-- Managed through `model.medium` dictionary
+`DictList` access patterns, flux-bound conventions, gene-reaction rules (GPR), and the
+`EX_` exchange-reaction sign convention are covered in
+`references/api_quick_reference.md` under "Key Concepts".
 
 ## Best Practices
 

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.00065-b31b1b.svg)](https://arxiv.org/abs/2609.00065)
-[![Version](https://img.shields.io/badge/Version-2.65.0-blue.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/Version-2.67.0-blue.svg)](pyproject.toml)
 [![Skills](https://img.shields.io/badge/Skills-164-brightgreen.svg)](#-whats-included)
 [![Databases](https://img.shields.io/badge/Databases-100%2B-orange.svg)](#-whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io/)
@@ -176,7 +176,7 @@ Pin to a specific release tag or commit SHA for reproducible installs:
 
 ```bash
 # Pin to a release tag
-gh skill install K-Dense-AI/scientific-agent-skills --pin v2.65.0
+gh skill install K-Dense-AI/scientific-agent-skills --pin v2.66.0
 
 # Pin to a commit SHA
 gh skill install K-Dense-AI/scientific-agent-skills --pin abc123def

@@ -663,3 +663,33 @@ df = pd.DataFrame(results)
 This quick reference covers the most commonly used COBRApy functions and patterns. For complete API documentation, see https://cobrapy.readthedocs.io/en/latest/
 
 **File outputs:** Workflow examples that call `to_csv` or `savefig` should use a user-approved `OUTDIR` — see `references/workflows.md`.
+
+## Key Concepts
+
+Conventions that every workflow above relies on. `DictList` access is covered under
+"DictList Methods" in Model Structure.
+
+### Flux Constraints
+Reaction bounds define feasible flux ranges:
+- **Irreversible**: `lower_bound = 0, upper_bound > 0`
+- **Reversible**: `lower_bound < 0, upper_bound > 0`
+- Set both bounds simultaneously with `.bounds` to avoid inconsistencies
+
+### Gene-Reaction Rules (GPR)
+Boolean logic linking genes to reactions:
+```python
+# AND logic (both required)
+reaction.gene_reaction_rule = "gene1 and gene2"
+
+# OR logic (either sufficient)
+reaction.gene_reaction_rule = "gene1 or gene2"
+
+# Complex logic
+reaction.gene_reaction_rule = "(gene1 and gene2) or (gene3 and gene4)"
+```
+
+### Exchange Reactions
+Special reactions representing metabolite import/export:
+- Named with prefix `EX_` by convention
+- Positive flux = secretion, negative flux = uptake
+- Managed through `model.medium` dictionary

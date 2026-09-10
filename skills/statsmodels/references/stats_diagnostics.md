@@ -826,7 +826,8 @@ res = te.ipw()             # inverse probability weighting
 print(res.summary_frame())  # ATE and potential-outcome means POM0/POM1 with GMM SEs
 print(te.ra().summary_frame())    # regression adjustment
 print(te.aipw().summary_frame())  # augmented IPW (doubly robust)
-# Also available: te.aipw_wls(), te.ipw_ra()
+# Also available: te.aipw_wls(), te.ipw_ra() -- both need a 6-parameter
+# selection model unless return_results=False; see the caveats below
 ```
 
 **Propensity scores** (for diagnostics or custom weighting):
@@ -849,7 +850,7 @@ Causal caveats:
   Not available on `aipw` / `aipw_wls`
 - Outcome model is OLS-only (still true in 0.15); Logit/Poisson outcomes are
   not supported yet
-- As of 0.15, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
+- In 0.14.6 and 0.15, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
   selection model has exactly 6 parameters; `return_results=False` avoids the
   GMM step and returns `(ate, pom0, pom1)`
 

@@ -4,7 +4,7 @@ description: Query the U.S. Treasury Fiscal Data REST API for federal financial 
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Upstream SimPy 4.1.2 supports Python 3.8+; bundled CLIs require Python 3.10+, uv, and SimPy 4.1.2. They use only SimPy and the standard library, operate on local bounded inputs, and make no network calls.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
