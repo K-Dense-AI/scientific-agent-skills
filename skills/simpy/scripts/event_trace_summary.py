@@ -199,10 +199,10 @@ def summarize_resource_csv(path: Path, *, max_records: int) -> dict[str, Any]:
                     }
                 )
                 event_counts[event] += 1
-    except ValueError as exc:
-        raise CliError(f"resource CSV contains an invalid integer: {exc}") from exc
     except (OSError, UnicodeError, csv.Error) as exc:
         raise CliError(f"cannot read resource CSV {path.name}: {exc}") from exc
+    except ValueError as exc:
+        raise CliError(f"resource CSV contains an invalid integer: {exc}") from exc
     if len(samples) < 2:
         raise CliError("resource CSV needs at least an initial and final sample")
     start = samples[0]["time"]
