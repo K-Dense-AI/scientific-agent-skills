@@ -126,8 +126,8 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 ### Patents & Regulatory
 | User is asking about... | Primary database(s) | Also consider |
 |---|---|---|
-| Patents by keyword or technology | USPTO (PatentsView) | — |
-| Patents by inventor or assignee | USPTO (PatentsView) | — |
+| Patents by keyword or technology | USPTO ODP PatentsView bulk (PatentSearch API paused) | — |
+| Patents by inventor or assignee | USPTO ODP PatentsView bulk (PatentSearch API paused) | — |
 | Patent prosecution status | USPTO (PEDS) | — |
 | Trademark lookup | USPTO (TSDR) | — |
 | SEC company filings, 10-K, 10-Q | SEC EDGAR | — |

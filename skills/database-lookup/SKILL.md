@@ -117,7 +117,7 @@ Some databases require API keys or have access restrictions. When an API key is 
 | BLS | `BLS_API_KEY` | https://data.bls.gov/registrationEngine/ |
 | NCBI (GEO, Gene) | `NCBI_API_KEY` | https://www.ncbi.nlm.nih.gov/account/settings/ |
 | OpenFDA | `OPENFDA_API_KEY` | https://open.fda.gov/apis/authentication/ |
-| USPTO (PatentsView) | `PATENTSVIEW_API_KEY` | https://patentsview.org/apis/keyrequest |
+| USPTO Open Data Portal (PatentsView bulk) | `USPTO_ODP_API_KEY` | https://data.uspto.gov/apikey |
 | Data Commons | `DATACOMMONS_API_KEY` | Google Cloud Console |
 | Materials Project | `MP_API_KEY` | https://materialsproject.org (free account) |
 | NASA | `NASA_API_KEY` | https://api.nasa.gov (free, DEMO_KEY available) |
