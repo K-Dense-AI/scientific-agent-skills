@@ -79,6 +79,9 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | Protein sequences (NCBI) | NCBI Protein | UniProt |
 | Taxonomic classification | NCBI Taxonomy | — |
 | SNP/variant data (dbSNP) | dbSNP | ClinVar, gnomAD |
+| Variant consequence / CADD PHRED | Ensembl VEP (`CADD=1`) | dbSNP |
+| Noncoding regulatory evidence | RegulomeDB | ENCODE, JASPAR |
+| Cached variant annotation bundle | MyVariant.info | Ensembl VEP (live scores) |
 | Population variant frequencies | gnomAD | dbSNP |
 | Sequencing run metadata | SRA | ENA, GEO |
 | Nucleotide sequences (European archive) | ENA | SRA, NCBI Gene |

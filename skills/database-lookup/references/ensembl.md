@@ -191,8 +191,13 @@ GET /vep/{species}/hgvs/{hgvs_notation}?content-type=application/json
 **Example:**
 ```
 https://rest.ensembl.org/vep/homo_sapiens/hgvs/ENST00000269305.9:c.817C>T?content-type=application/json
-https://rest.ensembl.org/vep/homo_sapiens/hgvs/17:g.7674220G>A?content-type=application/json
+https://rest.ensembl.org/vep/homo_sapiens/hgvs/17:g.7675088C>G?CADD=1&content-type=application/json
 ```
+
+`CADD=1` is how you get `cadd_phred`. Without it the field is absent.
+Verified 2026-09-11: `17:g.7675088C>G` is `missense_variant` / TP53 /
+`cadd_phred` **29.4**. The older worked example `17:g.7674220G>A` is
+HTTP 400 — the reference at 7674220 is `C`, not `G`.
 
 **By genomic region:**
 ```
@@ -201,8 +206,13 @@ GET /vep/{species}/region/{region}/{allele}?content-type=application/json
 
 **Example:**
 ```
-https://rest.ensembl.org/vep/homo_sapiens/region/17:7674220-7674220:1/A?content-type=application/json
+https://rest.ensembl.org/vep/homo_sapiens/region/17:7675088-7675088:1/G?CADD=1&content-type=application/json
 ```
+
+The path carries the **alt** only. VEP reads the reference from the
+assembly. `17:7675088-7675088:1/G` returns `allele_string: C/G` even if
+you thought the ref was `A`. Compare `allele_string` to the alleles you
+meant, or use `/hgvs/` (which 400s on a wrong ref).
 
 **By rsID:**
 ```
@@ -211,20 +221,25 @@ GET /vep/{species}/id/{rsid}?content-type=application/json
 
 **Example:**
 ```
+https://rest.ensembl.org/vep/homo_sapiens/id/rs28934578?CADD=1&content-type=application/json
 https://rest.ensembl.org/vep/homo_sapiens/id/rs699?content-type=application/json
 ```
+
+`rs28934578` is multi-allelic (`C/A/G/T`). `most_severe_consequence` is
+one label across **every** transcript (117 here, vs 39 on the single-alt
+region call). Do not quote it as the consequence of one allele.
 
 **VEP Response:**
 ```json
 [
   {
-    "input": "17:g.7674220G>A",
+    "input": "17:g.7675088C>G",
     "assembly_name": "GRCh38",
     "seq_region_name": "17",
-    "start": 7674220,
-    "end": 7674220,
+    "start": 7675088,
+    "end": 7675088,
     "strand": 1,
-    "allele_string": "G/A",
+    "allele_string": "C/G",
     "most_severe_consequence": "missense_variant",
     "transcript_consequences": [
       {
@@ -234,14 +249,12 @@ https://rest.ensembl.org/vep/homo_sapiens/id/rs699?content-type=application/json
         "biotype": "protein_coding",
         "consequence_terms": ["missense_variant"],
         "impact": "MODERATE",
-        "amino_acids": "R/H",
-        "codons": "cGc/cAc",
-        "protein_start": 248,
-        "polyphen_prediction": "probably_damaging",
-        "polyphen_score": 1.0,
+        "amino_acids": "R/P",
+        "codons": "cGc/cCc",
+        "protein_start": 175,
         "sift_prediction": "deleterious",
         "sift_score": 0.0,
-        "cadd_phred": 35.0
+        "cadd_phred": 29.4
       }
     ],
     "colocated_variants": [
@@ -260,8 +273,12 @@ https://rest.ensembl.org/vep/homo_sapiens/id/rs699?content-type=application/json
 POST /vep/homo_sapiens/region
 Content-Type: application/json
 
-{ "variants": ["17 7674220 7674220 G/A 1", "7 140753336 140753336 A/T 1"] }
+{ "variants": ["17 7675088 7675088 C/G 1", "7 140753336 140753336 A/T 1"] }
 ```
+
+Add `CADD=1` as a query parameter on GET or in the POST body when you
+need live CADD v1.7. That value matches a direct CADD lookup; MyVariant's
+cached `cadd.phred` for this variant was 35 the same day (`myvariant.md`).
 
 ---
 
