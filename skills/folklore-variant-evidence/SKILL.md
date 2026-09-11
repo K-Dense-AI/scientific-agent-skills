@@ -1,10 +1,10 @@
 ---
 name: folklore-variant-evidence
-description: "Retrieve and review source-linked public evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Use when a scientific agent must branch deterministically on resolved, ambiguous, not-found, invalid, unsupported, or unavailable variant outcomes; chain a resolved public variant into related literature or publication details; or preserve evidence provenance without accepting patient, phenotype, family, segregation, or private case data."
+description: "Retrieve ClinGen gene-disease validity assertions for a public gene or disease, and review source-linked public evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Use when a scientific agent must branch deterministically on resolved, ambiguous, not-found, invalid, unsupported, or unavailable variant outcomes; chain a resolved public variant into related literature or publication details; or preserve evidence provenance without accepting patient, phenotype, family, segregation, or private case data."
 license: MIT
 compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
@@ -15,7 +15,7 @@ metadata:
 Use Folklore Clinical Variant Interpretation MCP to retrieve structured public
 variant evidence, automated variant-level ACMG/AMP decision support, provenance,
 and source-linked literature for professional review. Keep the workflow limited
-to public variant-level inputs and preserve every explicit outcome state.
+to public identifiers and preserve every explicit outcome state. Adapter 1.5.0 also provides ClinGen Gene-Disease Validity assertions; source coverage is bounded, not every known association.
 
 Folklore Clinical Variant Interpretation MCP is published by Helena
 Bioinformatics. Its hosted endpoint is:
@@ -36,7 +36,10 @@ curl --silent --show-error --fail-with-body --max-time 60 \
   -X POST https://api.helena.bio/folklore/v1/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_variant_evidence","arguments":{"assembly":"GRCh38","query":"rs80357914"}}}'
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' \
+  -H 'Mcp-Name: search_variant_evidence' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"search_variant_evidence","arguments":{"assembly":"GRCh38","query":"rs80357914"}}}'
 ```
 
 Inspect the returned outcome before continuing. This example can return
@@ -46,7 +49,7 @@ variant notation instead of selecting a candidate automatically.
 ## Select the right skill
 
 Use this skill when the task is one public variant to structured Folklore
-evidence, explicit resolution-state handling, or variant-linked literature.
+evidence, explicit resolution-state handling, variant-linked literature, or ClinGen gene-to-disease/disease-to-gene assertions.
 
 - Use `database-lookup` for broad direct queries across ClinVar, dbSNP, gnomAD,
   Ensembl VEP, COSMIC, or multiple databases.
@@ -61,7 +64,7 @@ review or qualified clinical judgment.
 
 ## Enforce the input boundary
 
-Before any tool call:
+Before a variant tool call:
 
 1. Extract exactly one public variant identifier or notation.
 2. Require GRCh38 and a germline nuclear SNV or simple indel.
@@ -86,12 +89,22 @@ instead of relying on model memory. The documented public catalog contains:
 - `search_variant_literature`
 - `get_publication_details`
 - `search_literature_corpus`
+- `get_gene_disease_associations`
+- `search_disease_genes`
+
+The separate seventh tool `support_helena` is not scientific evidence; use it only when explicitly requested.
 
 If discovery or a tool call fails, preserve the failure as an availability
 problem. Do not reinterpret it as lack of scientific evidence.
 
 Read [the public MCP contract](references/mcp-contract.md) before composing tool
 calls or interpreting response states.
+
+## Retrieve gene-disease assertions
+
+Use `get_gene_disease_associations` for one exact gene symbol or HGNC identifier, or `search_disease_genes` for an exact MONDO identifier or public disease-name substring. Both accept `limit` (default 20, 1–50) and `offset` (default 0, 0–1000). See the reference for request examples. This is a separate source lookup and requires no variant input or assembly.
+
+Preserve each returned disease identity, inheritance, evidence assessment, source URL, date and snapshot. Do not combine distinct diseases or silently choose among name matches. Gene-disease validity does not classify a particular variant. Empty results mean no matching assertion in the available ClinGen source, not no association. No patient, phenotype, family, segregation, private case data or sequencing files may be sent. Qualified professional review remains required.
 
 ## Run the variant-evidence workflow
 

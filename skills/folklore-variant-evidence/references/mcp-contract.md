@@ -71,6 +71,19 @@ question, publication identifier, gene, variant, phenotype, HPO, or OMIM
 concept. Inspect the live input schema for current bounds and optional controls.
 Keep all queries public and nonsensitive.
 
+## Gene-disease assertions in adapter 1.5.0
+
+Request examples (not captured scientific results):
+
+```json
+{"name":"get_gene_disease_associations","arguments":{"gene":"BRCA1","limit":20,"offset":0}}
+{"name":"search_disease_genes","arguments":{"disease":"Marfan","limit":20,"offset":0}}
+```
+
+The gene lookup accepts an exact gene symbol or HGNC identifier. Disease lookup accepts an exact MONDO identifier or a disease-name substring. Both have limit 1–50 and offset 0–1000. Preserve distinct disease matches and returned pagination; one page is not an exhaustive catalogue.
+
+Successful structured output directly carries query, associations, pagination, source, warnings and usage_boundary. Read JSON-RPC and adapter errors before interpreting output. The source is ClinGen Gene-Disease Validity; preserve assertion-specific inheritance, assessment, source links and dates. Missing source values stay unavailable. No result does not establish no association, and association validity is not variant pathogenicity.
+
 ## Interpretation boundary
 
 - Folklore Clinical Variant Interpretation MCP accepts no patient, phenotype,
