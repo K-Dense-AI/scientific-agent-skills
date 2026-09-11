@@ -3,7 +3,7 @@ name: glycoengineering
 description: Analyze and engineer protein glycosylation. Scan sequences for N-glycosylation sequons (N-X-S/T), predict O-glycosylation hotspots, and access curated glycoengineering tools (NetOGlyc, GlycoShield, GlycoWorkbench). For glycoprotein engineering, therapeutic antibody optimization, and vaccine design.
 license: Unknown
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: Kuan-lin Huang
 ---
 
@@ -222,24 +222,40 @@ def submit_netoglycv4(fasta_sequence: str) -> str:
 # URL: https://services.healthtech.dtu.dk/services/NetNGlyc-1.0/
 ```
 
-### 2. GlycoShield-MD (Glycan Shielding Analysis)
+### 2. GlycoSHIELD (Glycan Shielding Analysis)
 
-GlycoShield-MD analyzes how glycans shield protein surfaces during MD simulations:
-- **URL**: https://gitlab.mpcdf.mpg.de/dioscuri-biophysics/glycoshield-md/
-- **Use**: Map glycan shielding on protein surface over MD trajectory
-- **Output**: Per-residue shielding fraction, visualization
+GlycoSHIELD grafts libraries of pre-simulated glycan conformers onto a static protein structure and
+scores how much of the protein surface the glycans shield, without running new MD
+(Tsai et al., *Cell* 2024, doi:10.1016/j.cell.2024.01.034):
+- **URL**: https://gitlab.mpcdf.mpg.de/dioscuri-biophysics/glycoshield-md/ (web app: https://glycoshield.eu)
+- **Use**: Model the glycan shield on a glycoprotein and map per-residue shielding
+- **Output**: Glycosylated PDB/XTC ensembles per site, per-residue shielding plot, PDB with shielding in the B-factor column
+
+GlycoSHIELD is **not on PyPI** — `uv pip install glycoshield` fails. It ships as three scripts on top
+of a small `glycoshield` package (needs numpy, scipy, matplotlib, MDAnalysis; `GlycoSASA.py` also needs
+`gmx` from GROMACS on `PATH`). Install from the checkout:
 
 ```bash
-# Installation
-uv pip install glycoshield
+# Installation (GPL-3.0). Glycan conformer libraries are downloaded separately —
+# see glycan_library_downloader.py and GLYCAN_LIBRARY/ in the repository.
+git clone https://gitlab.mpcdf.mpg.de/dioscuri-biophysics/glycoshield-md.git
+cd glycoshield-md
+uv pip install -e .
 
-# Basic usage: analyze glycan shielding from glycosylated protein MD trajectory
-glycoshield \
-    --topology glycoprotein.pdb \
-    --trajectory glycoprotein.xtc \
-    --glycan_resnames BGLCNA FUC \
-    --output shielding_analysis/
+# 1. Graft glycan conformers onto each sequon listed in the input file.
+#    One line per site: <chain> <res-1,res,res+1> <1,2,3> <glycan.pdb> <glycan.xtc> <out.pdb> <out.xtc>
+python GlycoSHIELD.py --protpdb protein.pdb --inputfile sequons_input \
+    --threshold 3.5 --mode CG --shuffle-sugar
+
+# 2. Per-residue shielding score across the grafted ensembles (probe radii in nm)
+python GlycoSASA.py --pdblist A_463.pdb,A_492.pdb --xtclist A_463.xtc,A_492.xtc \
+    --probelist 0.14,0.25 --plottrace
 ```
+
+Illustrative: the flags come from the scripts' argparse definitions and the upstream tutorial
+(N-cadherin EC5 with Man5 glycans); they were not run here. `--mode CG` checks clashes against
+Cα atoms only and pairs with `--threshold 3.5`; `--mode All` with `--threshold 0.7` is the all-atom
+setting.
 
 ### 3. GlycoWorkbench (Glycan Structure Drawing/Analysis)
 

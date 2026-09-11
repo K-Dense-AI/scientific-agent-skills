@@ -66,7 +66,8 @@ conda install -c conda-forge gdal rasterio fiona shapely pyproj geopandas
 
 ### Remote Sensing
 ```bash
-uv pip install rsgislib torchgeo earthengine-api
+conda install -c conda-forge rsgislib   # conda-forge only, not on PyPI
+uv pip install torchgeo earthengine-api
 ```
 
 ## Quick Examples
