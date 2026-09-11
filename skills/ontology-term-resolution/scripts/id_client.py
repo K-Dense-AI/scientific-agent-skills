@@ -21,8 +21,12 @@ Verified against the live APIs in September 2026 (see
 * ``/api/reference/{CURIE}`` validates the local id against ``pattern``. A
   404 body of ``{"detail": "invalid identifier: ..."}`` means the prefix is
   known and the local part is wrong — not that the prefix is unknown.
-* Identifiers.org rejects synonym prefixes (``HPO:0001250`` → HTTP 400).
-  Always resolve through the Bioregistry preferred prefix first.
+* Identifiers.org rejects synonym prefixes (``HPO:0001250`` → HTTP 400) and
+  also rejects Bioregistry's preferred prefix when that is not the MIRIAM
+  namespace (``ORPHA:558`` → 400; ``orphanet:558`` → 200). Landing pages
+  come from ``/api/reference/{CURIE}`` ``providers.miriam`` and the
+  registry ``mappings.ontobee`` field — never from templating
+  ``preferred_prefix``.
 """
 from __future__ import annotations
 
@@ -37,7 +41,7 @@ from typing import Any
 BIOREGISTRY_BASE = "https://bioregistry.io/api"
 IDENTIFIERS_RESOLVER = "https://resolver.api.identifiers.org"
 ONTOBEE_TERM = "https://ontobee.org/ontology/{prefix}?iri={iri}"
-USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.1"
+USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.2"
 TIMEOUT = 30
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}
@@ -166,7 +170,10 @@ def local_matches_pattern(local: str, pattern: str | None) -> bool | None:
     """
     if not pattern:
         return None
-    return re.fullmatch(pattern, local) is not None
+    try:
+        return re.fullmatch(pattern, local) is not None
+    except re.error:
+        return None
 
 
 def apply_uri_format(uri_format: str | None, local: str) -> str | None:
@@ -176,18 +183,52 @@ def apply_uri_format(uri_format: str | None, local: str) -> str | None:
     return uri_format.replace("$1", local)
 
 
-def ontobee_url(preferred_prefix: str | None, iri: str | None) -> str | None:
+def ontobee_url(ontobee_prefix: str | None, iri: str | None) -> str | None:
     """Build the Ontobee HTML/RDF page for a term IRI.
 
-    Ontobee has no JSON search API. The page is the product: HTML for
-    humans, RDF when the same IRI is dereferenced as linked data.
+    ``ontobee_prefix`` is Bioregistry ``mappings.ontobee``, not
+    ``preferred_prefix``. Ontobee has no JSON search API. The page is the
+    product: HTML for humans, RDF when the same IRI is dereferenced as
+    linked data.
     """
-    if not preferred_prefix or not iri:
+    if not ontobee_prefix or not iri:
         return None
     return ONTOBEE_TERM.format(
-        prefix=preferred_prefix,
+        prefix=ontobee_prefix,
         iri=urllib.parse.quote(iri, safe=""),
     )
+
+
+def compact_id_from_identifiers_url(url: str) -> str | None:
+    """``https://identifiers.org/orphanet:558`` → ``orphanet:558``."""
+    if not url:
+        return None
+    path = urllib.parse.urlparse(url).path.lstrip("/")
+    return path or None
+
+
+def landing_page_urls(
+    resource: dict | None,
+    reference: dict | None,
+    iri: str | None,
+) -> tuple[str, str]:
+    """Return ``(identifiers_org, ontobee)`` from mappings, never templates.
+
+    Identifiers.org comes from ``/api/reference/{CURIE}`` ``providers.miriam``.
+    Ontobee comes from the registry ``mappings.ontobee`` field plus ``iri``.
+    Either side is empty when that mapping is missing — Bioregistry's
+    preferred prefix is not a substitute.
+    """
+    identifiers = ""
+    if reference:
+        providers = reference.get("providers") or {}
+        if isinstance(providers, dict):
+            identifiers = providers.get("miriam") or ""
+    ontobee = ""
+    if resource:
+        mappings = resource.get("mappings") or {}
+        ontobee = ontobee_url(mappings.get("ontobee"), iri) or ""
+    return identifiers, ontobee
 
 
 def identifiers_landing_pages(payload: dict) -> list[dict[str, Any]]:
@@ -271,6 +312,7 @@ def classify_prefix_query(
     result["canonical_curie"] = canonical
     iri = apply_uri_format(resource.get("uri_format"), local)
     result["default_iri"] = iri or ""
-    result["ontobee"] = ontobee_url(preferred, iri) or ""
-    result["identifiers_org"] = f"https://identifiers.org/{canonical}" if preferred else ""
+    # Landing pages are filled by the caller from /api/reference providers
+    # and mappings.ontobee. Templating preferred_prefix here emits dead URLs
+    # (ORPHA:558, OBA:0000001).
     return result

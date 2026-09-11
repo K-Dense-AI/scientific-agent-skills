@@ -28,10 +28,11 @@ from id_client import (  # noqa: E402
     IdError,
     NotFoundError,
     classify_prefix_query,
+    compact_id_from_identifiers_url,
     get_reference,
     get_resource,
-    identifiers_landing_pages,
     is_prefix,
+    landing_page_urls,
     resolve_identifiers,
     split_query,
 )
@@ -101,6 +102,7 @@ def lookup_one(value: str) -> dict:
         }
 
     resource = None
+    reference = None
     reference_detail = None
     try:
         resource = get_resource(prefix)
@@ -109,29 +111,37 @@ def lookup_one(value: str) -> dict:
 
     if local is not None:
         try:
-            get_reference(value)
+            reference = get_reference(value)
         except NotFoundError as exc:
             reference_detail = exc.detail
 
     result = classify_prefix_query(
         value, resource, local=local, reference_detail=reference_detail
     )
+    if result["status"] not in {"ok", "synonym_prefix"}:
+        return result
 
-    if result["canonical_curie"] and result["status"] in {"ok", "synonym_prefix"}:
-        try:
-            payload = resolve_identifiers(result["canonical_curie"])
-        except IdError:
-            payload = None
-        if payload:
-            if payload.get("errorMessage"):
-                extra = f"Identifiers.org rejected {result['canonical_curie']!r}: {payload['errorMessage']}"
-                result["detail"] = (
-                    f"{result['detail']}; {extra}" if result["detail"] else extra
-                )
-            else:
-                pages = identifiers_landing_pages(payload)
-                if pages and not result["identifiers_org"]:
-                    result["identifiers_org"] = pages[0]["url"]
+    identifiers, ontobee = landing_page_urls(
+        resource, reference, result["default_iri"] or None
+    )
+    result["identifiers_org"] = identifiers
+    result["ontobee"] = ontobee
+
+    compact = compact_id_from_identifiers_url(result["identifiers_org"])
+    if not compact:
+        return result
+
+    try:
+        payload = resolve_identifiers(compact)
+    except IdError:
+        result["identifiers_org"] = ""
+        extra = f"Identifiers.org rejected {compact!r}"
+        result["detail"] = f"{result['detail']}; {extra}" if result["detail"] else extra
+        return result
+    if payload.get("errorMessage"):
+        result["identifiers_org"] = ""
+        extra = f"Identifiers.org rejected {compact!r}: {payload['errorMessage']}"
+        result["detail"] = f"{result['detail']}; {extra}" if result["detail"] else extra
     return result
 
 

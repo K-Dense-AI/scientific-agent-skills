@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages. Needs network access to https://www.ebi.ac.uk/ols4, https://bioregistry.io, https://resolver.api.identifiers.org, and https://www.ebi.ac.uk/spot/zooma (all public, no API key).
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -130,7 +130,10 @@ HPO:0001250  synonym_prefix  HP                HP:0001250       ^\d{7}$    'HPO'
 ```
 
 Bioregistry accepts synonym prefixes. Identifiers.org does not — `HPO:0001250` is HTTP 400.
-Rewrite to the preferred prefix before handing a CURIE to any other resolver. This script does
+Rewrite to the preferred prefix before handing a CURIE to OLS. Landing-page columns come from
+Bioregistry mappings (`providers.miriam`, `mappings.ontobee`), not from templating that
+preferred prefix: `ORPHA:558` is a 400, `orphanet:558` is a 200, and OBA has no Identifiers.org
+namespace at all. Empty cells mean the service does not host the prefix. This script does
 **not** say the term exists; that is still `validate_terms.py`.
 
 ## Map lab shorthand (ZOOMA)
@@ -162,6 +165,7 @@ than a recipe. Full detail in `references/ols4-api.md`.
 | ZOOMA without an ontology filter | `liver` returns 100+ HIGH hits across FOODON, XAO, BTO, UBERON |
 | Identifiers.org synonym prefixes | `HPO:0001250` is HTTP 400; Bioregistry accepted the same CURIE |
 | Identifiers.org encoded colon | `HP%3A0001250` is HTTP 400; the path must keep `:` |
+| Bioregistry `preferred_prefix` is not the Identifiers.org namespace | `ORPHA:558` is 400; `orphanet:558` is 200. `hp:0001250` and `chebi:15377` are 400 because those namespaces embed the prefix in the LUI. Use `providers.miriam` from `/api/reference/{CURIE}`; omit the URL when that mapping is missing (OBA, XAO, ECTO) |
 | Ontobee search | HTML page only — no JSON API; do not scrape it |
 
 ## Choosing the ontology

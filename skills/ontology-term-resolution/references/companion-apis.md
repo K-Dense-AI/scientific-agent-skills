@@ -7,7 +7,7 @@ against the live APIs in September 2026.
 | Service | Use it for | Do not use it for |
 | --- | --- | --- |
 | Bioregistry | Is this prefix real? Does the local id match the recorded pattern? What is the preferred prefix? | Whether the term exists or is obsolete |
-| Identifiers.org | Landing-page URLs for a *preferred-prefix* CURIE | Synonym prefixes (`HPO:…`); existence checks |
+| Identifiers.org | Landing-page URLs from Bioregistry `providers.miriam` | Synonym prefixes (`HPO:…`); templating `preferred_prefix`; existence checks |
 | ZOOMA | Mapping lab shorthand OLS cannot lexical-match | Unfiltered annotate; writing an ID without OLS validation |
 | Ontobee | The OBO Foundry HTML/RDF page for a term IRI | Search, validation, or routine resolution — there is no JSON search API |
 
@@ -66,11 +66,25 @@ A successful body is `{apiVersion, errorMessage: null, payload: {resolvedResourc
 Each resource has `compactIdentifierResolvedUrl`, `providerCode`, `official`,
 and `recommendation.recommendationIndex`.
 
-### Trap — preferred prefix only
+### Trap — preferred prefix is not the Identifiers.org namespace
 
-Identifiers.org namespaces are the MIRIAM / preferred form. `HP:0001250`
-resolves; `HPO:0001250` is HTTP 400. Always run Bioregistry first and pass
-`{preferred_prefix}:{local}`.
+Bioregistry `preferred_prefix` is the form OLS wants. It is not the MIRIAM
+compact-identifier namespace, and not every prefix has one:
+
+```
+GET /reference/orphanet:558  -> providers.miriam = https://identifiers.org/orphanet:558
+GET resolver/ORPHA:558       -> 400 NOT A NAMESPACE   (preferred_prefix is ORPHA)
+GET resolver/orphanet:558    -> 200
+GET /reference/OBA:0000001   -> no providers.miriam   (OBA, XAO, ECTO have none)
+GET resolver/hp:0001250      -> 400                   (namespace embeds HP: in the LUI)
+GET resolver/CHEBI:15377     -> 200
+GET resolver/chebi:15377     -> 400
+```
+
+Always take the landing page from `/api/reference/{CURIE}` `providers.miriam`.
+Leave the column empty when that mapping is missing. Do not template
+`https://identifiers.org/{preferred_prefix}:{local}` — that is how
+`ORPHA:558` and `OBA:0000001` become dead links next to a rejection note.
 
 ### Trap — do not encode the colon
 
@@ -133,9 +147,12 @@ Term page:
 https://ontobee.org/ontology/{PREFIX}?iri={url-encoded IRI}
 ```
 
-`lookup_prefix.py` builds this from Bioregistry `preferred_prefix` +
+`lookup_prefix.py` builds this only when the registry record has
+`mappings.ontobee`, using that value (not `preferred_prefix`) plus
 `uri_format`. Example: `HP:0001250` →
 `https://ontobee.org/ontology/HP?iri=http%3A%2F%2Fpurl.obolibrary.org%2Fobo%2FHP_0001250`.
+Orphanet has no `mappings.ontobee` — the templated `ORPHA` / `ORDO` page is
+HTTP 500 — so that cell stays empty.
 
 HTML keyword search (`/search?ontology=UBERON&keywords=liver`) is a browser
 page, not an API — do not scrape it. For text → ID use OLS (or ZOOMA for

@@ -456,6 +456,37 @@ HP_RESOURCE = {
     "mappings": {"ols": "hp", "ontobee": "HP", "miriam": "hp"},
 }
 
+CHEBI_RESOURCE = {
+    "prefix": "chebi",
+    "preferred_prefix": "CHEBI",
+    "name": "Chemical Entities of Biological Interest",
+    "pattern": r"^\d+$",
+    "example": "3698",
+    "uri_format": "http://purl.obolibrary.org/obo/CHEBI_$1",
+    "mappings": {"ols": "chebi", "ontobee": "CHEBI", "miriam": "chebi"},
+}
+
+ORPHA_RESOURCE = {
+    "prefix": "orpha",
+    "preferred_prefix": "ORPHA",
+    "name": "Orphanet Rare Disease Ontology",
+    "pattern": r"^\d+$",
+    "example": "189564",
+    "uri_format": "http://www.orpha.net/ORDO/Orphanet_$1",
+    "synonyms": ["orphanet"],
+    "mappings": {"ols": "ordo", "miriam": "orphanet"},
+}
+
+OBA_RESOURCE = {
+    "prefix": "oba",
+    "preferred_prefix": "OBA",
+    "name": "Ontology of Biological Attributes",
+    "pattern": r"^\d{7}$",
+    "example": "0000001",
+    "uri_format": "http://purl.obolibrary.org/obo/OBA_$1",
+    "mappings": {"ols": "oba", "ontobee": "OBA"},
+}
+
 
 class PrefixHelperTests(unittest.TestCase):
     def test_split_query_handles_prefix_and_curie(self):
@@ -470,6 +501,10 @@ class PrefixHelperTests(unittest.TestCase):
             "the Bioregistry pattern applies to the local id, not the CURIE",
         )
         self.assertIsNone(id_client.local_matches_pattern("0001250", None))
+        self.assertIsNone(
+            id_client.local_matches_pattern("0001250", r"(unclosed"),
+            "an uncompilable Bioregistry pattern is unchecked, not a crash",
+        )
 
     def test_uri_format_and_ontobee_url(self):
         iri = id_client.apply_uri_format(HP_RESOURCE["uri_format"], "0001250")
@@ -519,6 +554,52 @@ class PrefixHelperTests(unittest.TestCase):
         self.assertEqual(result["status"], "invalid_local")
         self.assertIn("invalid identifier", result["detail"])
 
+    def test_classify_does_not_template_landing_pages(self):
+        result = id_client.classify_prefix_query(
+            "orphanet:558", ORPHA_RESOURCE, local="558"
+        )
+        self.assertEqual(result["canonical_curie"], "ORPHA:558")
+        self.assertEqual(result["identifiers_org"], "")
+        self.assertEqual(result["ontobee"], "")
+
+    def test_landing_pages_hp_uses_miriam_and_ontobee_mapping(self):
+        identifiers, ontobee = id_client.landing_page_urls(
+            HP_RESOURCE,
+            {"providers": {"miriam": "https://identifiers.org/HP:0001250"}},
+            "http://purl.obolibrary.org/obo/HP_0001250",
+        )
+        self.assertEqual(identifiers, "https://identifiers.org/HP:0001250")
+        self.assertTrue(ontobee.startswith("https://ontobee.org/ontology/HP?iri="))
+
+    def test_landing_pages_chebi_keeps_embedded_prefix(self):
+        identifiers, ontobee = id_client.landing_page_urls(
+            CHEBI_RESOURCE,
+            {"providers": {"miriam": "https://identifiers.org/CHEBI:15377"}},
+            "http://purl.obolibrary.org/obo/CHEBI_15377",
+        )
+        self.assertEqual(identifiers, "https://identifiers.org/CHEBI:15377")
+        self.assertNotIn("chebi:15377", identifiers)
+        self.assertTrue(ontobee.startswith("https://ontobee.org/ontology/CHEBI?iri="))
+
+    def test_landing_pages_orphanet_uses_miriam_namespace_not_preferred(self):
+        identifiers, ontobee = id_client.landing_page_urls(
+            ORPHA_RESOURCE,
+            {"providers": {"miriam": "https://identifiers.org/orphanet:558"}},
+            "http://www.orpha.net/ORDO/Orphanet_558",
+        )
+        self.assertEqual(identifiers, "https://identifiers.org/orphanet:558")
+        self.assertNotIn("ORPHA", identifiers)
+        self.assertEqual(ontobee, "")
+
+    def test_landing_pages_oba_has_no_identifiers_org(self):
+        identifiers, ontobee = id_client.landing_page_urls(
+            OBA_RESOURCE,
+            {"providers": {}},
+            "http://purl.obolibrary.org/obo/OBA_0000001",
+        )
+        self.assertEqual(identifiers, "")
+        self.assertTrue(ontobee.startswith("https://ontobee.org/ontology/OBA?iri="))
+
 
 class LookupPrefixCliTests(unittest.TestCase):
     def test_malformed_input_does_not_hit_the_network(self):
@@ -529,15 +610,80 @@ class LookupPrefixCliTests(unittest.TestCase):
 
     def test_lookup_uses_bioregistry_then_identifiers(self):
         with patch.object(lookup_prefix, "get_resource", return_value=HP_RESOURCE), \
-             patch.object(lookup_prefix, "get_reference", return_value={"providers": {}}), \
+             patch.object(
+                 lookup_prefix,
+                 "get_reference",
+                 return_value={"providers": {"miriam": "https://identifiers.org/HP:0001250"}},
+             ), \
              patch.object(
                  lookup_prefix,
                  "resolve_identifiers",
                  return_value={"errorMessage": None, "payload": {"resolvedResources": []}},
-             ):
+             ) as resolve:
             result = lookup_prefix.lookup_one("HP:0001250")
+        resolve.assert_called_once_with("HP:0001250")
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["canonical_curie"], "HP:0001250")
+        self.assertEqual(result["identifiers_org"], "https://identifiers.org/HP:0001250")
+        self.assertTrue(result["ontobee"].startswith("https://ontobee.org/ontology/HP?"))
+
+    def test_lookup_orphanet_emits_miriam_url_not_preferred_prefix(self):
+        with patch.object(lookup_prefix, "get_resource", return_value=ORPHA_RESOURCE), \
+             patch.object(
+                 lookup_prefix,
+                 "get_reference",
+                 return_value={"providers": {"miriam": "https://identifiers.org/orphanet:558"}},
+             ), \
+             patch.object(
+                 lookup_prefix,
+                 "resolve_identifiers",
+                 return_value={"errorMessage": None, "payload": {"resolvedResources": []}},
+             ) as resolve:
+            result = lookup_prefix.lookup_one("orphanet:558")
+        resolve.assert_called_once_with("orphanet:558")
+        self.assertEqual(result["identifiers_org"], "https://identifiers.org/orphanet:558")
+        self.assertEqual(result["ontobee"], "")
+
+    def test_lookup_oba_leaves_identifiers_org_empty(self):
+        with patch.object(lookup_prefix, "get_resource", return_value=OBA_RESOURCE), \
+             patch.object(lookup_prefix, "get_reference", return_value={"providers": {}}), \
+             patch.object(lookup_prefix, "resolve_identifiers") as resolve:
+            result = lookup_prefix.lookup_one("OBA:0000001")
+        resolve.assert_not_called()
+        self.assertEqual(result["identifiers_org"], "")
+        self.assertTrue(result["ontobee"].startswith("https://ontobee.org/ontology/OBA?"))
+
+    def test_lookup_chebi_keeps_embedded_prefix_in_miriam_url(self):
+        with patch.object(lookup_prefix, "get_resource", return_value=CHEBI_RESOURCE), \
+             patch.object(
+                 lookup_prefix,
+                 "get_reference",
+                 return_value={"providers": {"miriam": "https://identifiers.org/CHEBI:15377"}},
+             ), \
+             patch.object(
+                 lookup_prefix,
+                 "resolve_identifiers",
+                 return_value={"errorMessage": None, "payload": {"resolvedResources": []}},
+             ) as resolve:
+            result = lookup_prefix.lookup_one("CHEBI:15377")
+        resolve.assert_called_once_with("CHEBI:15377")
+        self.assertEqual(result["identifiers_org"], "https://identifiers.org/CHEBI:15377")
+
+    def test_lookup_blanks_identifiers_org_when_resolver_rejects(self):
+        with patch.object(lookup_prefix, "get_resource", return_value=HP_RESOURCE), \
+             patch.object(
+                 lookup_prefix,
+                 "get_reference",
+                 return_value={"providers": {"miriam": "https://identifiers.org/HP:0001250"}},
+             ), \
+             patch.object(
+                 lookup_prefix,
+                 "resolve_identifiers",
+                 return_value={"errorMessage": "NOT A NAMESPACE", "payload": None},
+             ):
+            result = lookup_prefix.lookup_one("HP:0001250")
+        self.assertEqual(result["identifiers_org"], "")
+        self.assertIn("NOT A NAMESPACE", result["detail"])
 
     def test_unknown_prefix_from_404(self):
         with patch.object(

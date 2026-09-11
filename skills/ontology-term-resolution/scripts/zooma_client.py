@@ -27,7 +27,7 @@ from typing import Any
 from ols_client import iri_to_curie
 
 ZOOMA_ANNOTATE = "https://www.ebi.ac.uk/spot/zooma/v2/api/services/annotate"
-USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.1"
+USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.2"
 TIMEOUT = 60
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}
