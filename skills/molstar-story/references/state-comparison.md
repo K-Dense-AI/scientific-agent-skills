@@ -54,6 +54,14 @@ The script writes `reference.pdb`, `mobile_aligned.pdb`,
 `ligand_contacts.tsv`. It matches Cα atoms by author residue number/insertion
 code, so do not use it when renumbering or nontrivial sequence alignment is
 required; prepare an explicit mapping with an appropriate structure tool instead.
+Complete modified-polymer residues stored as `HETATM` (for example, MSE) are
+accepted only when one complete `(auth_seq_id, insertion_code, resname)` group
+contains N/CA/C/O; the accepted groups and this rule are recorded under
+`modified_polymer_detection` in `comparison_metrics.json`. Treat that heuristic
+as an auditable input assumption and review unusual peptide-like components
+manually. The aligned PDB keeps coordinate records plus `TER`, `CONECT`,
+`LINK`, `SSBOND`, `HELIX`, `SHEET`, and `END`; retain the original PDB when other
+header metadata such as `REMARK` or `CRYST1` is needed downstream.
 
 ## Quantify Global And Local Change
 

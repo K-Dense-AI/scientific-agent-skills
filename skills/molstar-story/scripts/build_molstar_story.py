@@ -131,6 +131,8 @@ def validate_checkout(repo: Path) -> tuple[Path, Path, Path, str]:
         if not path.is_file():
             raise RuntimeError(f"incomplete MolViewStories checkout; missing {path}")
 
+    ensure_clean_checkout(repo)
+
     commit = subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
     ).strip()
@@ -150,6 +152,36 @@ def validate_checkout(repo: Path) -> tuple[Path, Path, Path, str]:
     if not any(f"molstar@{MOLSTAR_VERSION}" in str(value) for value in imports.values()):
         raise RuntimeError(f"Mol* {MOLSTAR_VERSION} is not pinned by cli/deno.json")
     return cli_main, manager, html_template, commit
+
+
+def ensure_clean_checkout(repo: Path) -> None:
+    status = subprocess.check_output(
+        ["git", "-C", str(repo), "status", "--porcelain"], text=True
+    )
+    if status.strip():
+        raise RuntimeError(
+            "MolViewStories checkout is dirty; refuse to build from modified or "
+            "untracked files: "
+            + status.strip().replace("\n", "; ")
+        )
+
+
+def validate_output_directory(output: Path, *, name: str, full_package: bool) -> None:
+    """Reject stale full-package artifacts that could outlive the manifest."""
+    stale: list[Path] = []
+    stale.extend(sorted(output.glob("*.mvsx")))
+    stale.extend(sorted(output.glob("*_self_hosted.zip")))
+    viewer = output / "viewer"
+    if viewer.exists():
+        stale.append(viewer)
+    if stale:
+        rendered = ", ".join(path.name for path in stale)
+        profile = "full-package" if full_package else "file-review"
+        raise RuntimeError(
+            f"output directory contains existing full-package artifacts ({rendered}); "
+            f"refuse {profile} build because stale artifacts could be mistaken for "
+            "current outputs. Use a new directory or remove them explicitly."
+        )
 
 
 def safe_extract(archive: Path, destination: Path) -> list[str]:
@@ -195,6 +227,7 @@ def main() -> int:
     source_files = validate_source(source)
     cli_main, manager, html_template, commit = validate_checkout(repo)
     output.mkdir(parents=True, exist_ok=True)
+    validate_output_directory(output, name=args.name, full_package=args.full_package)
     env = os.environ.copy()
     if args.deno_dir:
         cache = args.deno_dir.expanduser().resolve()

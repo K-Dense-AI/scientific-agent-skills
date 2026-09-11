@@ -119,11 +119,13 @@ def camera_state(page, scene_index: int) -> dict[str, object]:
         """sceneIndex => {
           const plugin = window.mvsStories.getContext()
             .state.viewers._value[0].model.plugin;
-          const entry = plugin.managers.snapshot.state.entries
-            .toArray()[sceneIndex];
+          const snapshotState = plugin.managers.snapshot.state;
+          const entry = snapshotState.entries.toArray()[sceneIndex];
           return {
             live: plugin.canvas3d.camera.getSnapshot(),
             target: entry?.snapshot?.camera?.current ?? null,
+            current_snapshot_id: snapshotState.current ?? null,
+            expected_snapshot_id: entry?.snapshot?.id ?? null,
             busy: plugin.behaviors.state.isBusy.value,
           };
         }""",
@@ -133,6 +135,46 @@ def camera_state(page, scene_index: int) -> dict[str, object]:
 
 def vector_error(left: list[float], right: list[float]) -> float:
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
+
+
+def wait_for_scene(page, scene_index: int, timeout_ms: int) -> dict[str, object]:
+    """Wait until the requested snapshot, rather than only its camera, is current."""
+    started = time.monotonic()
+    initial = camera_state(page, scene_index)
+    expected = initial["expected_snapshot_id"]
+    if expected is None:
+        return {
+            "method": "snapshot_id",
+            "converged": False,
+            "waited_ms": 0,
+            "expected_snapshot_id": None,
+            "current_snapshot_id": initial["current_snapshot_id"],
+            "reason": "scene snapshot has no id",
+        }
+
+    state = initial
+    while True:
+        current = state["current_snapshot_id"]
+        waited_ms = round((time.monotonic() - started) * 1000)
+        if current == expected and not state["busy"]:
+            return {
+                "method": "snapshot_id",
+                "converged": True,
+                "waited_ms": waited_ms,
+                "expected_snapshot_id": expected,
+                "current_snapshot_id": current,
+            }
+        if waited_ms >= timeout_ms:
+            return {
+                "method": "snapshot_id",
+                "converged": False,
+                "waited_ms": waited_ms,
+                "expected_snapshot_id": expected,
+                "current_snapshot_id": current,
+                "busy": state["busy"],
+            }
+        page.wait_for_timeout(100)
+        state = camera_state(page, scene_index)
 
 
 def wait_for_camera(page, scene_index: int, timeout_ms: int, tolerance: float) -> dict[str, object]:
@@ -252,6 +294,36 @@ def wait_for_canvas_stability(page, canvas, scene_index: int, timeout_ms: int):
     )
 
 
+def live_camera(page) -> dict[str, object]:
+    return page.evaluate(
+        """() => {
+          const plugin = window.mvsStories.getContext()
+            .state.viewers._value[0].model.plugin;
+          return plugin.canvas3d.camera.getSnapshot();
+        }"""
+    )
+
+
+def camera_delta(
+    before: dict[str, object], after: dict[str, object], threshold: float = 1e-3
+) -> dict[str, object]:
+    vector_deltas = {
+        key: vector_error(before[key], after[key])
+        for key in ("position", "target", "up")
+    }
+    scalar_deltas = {
+        key: abs(float(after[key]) - float(before[key]))
+        for key in ("radius", "fov")
+        if key in before and key in after
+    }
+    deltas = {**vector_deltas, **scalar_deltas}
+    return {
+        "deltas": {key: round(value, 6) for key, value in deltas.items()},
+        "threshold": threshold,
+        "changed": any(value > threshold for value in deltas.values()),
+    }
+
+
 def main() -> int:
     args = parse_args()
     if args.expected_scenes is not None and args.expected_scenes <= 0:
@@ -353,6 +425,9 @@ def main() -> int:
             report["webgl"] = webgl_report(page)
             for scene_index in selected:
                 selector.select_option(index=scene_index - 1)
+                scene_switch = wait_for_scene(
+                    page, scene_index - 1, max(args.scene_settle_ms, 1)
+                )
                 camera = wait_for_camera(
                     page,
                     scene_index - 1,
@@ -380,19 +455,25 @@ def main() -> int:
                     "canvas_screenshot": canvas_name,
                     "viewport_screenshot": viewport_name,
                     "pixels": pixels,
+                    "scene_switch": scene_switch,
                     "camera": camera,
                     "visual": visual,
                     "passed": bool(
                         pixels["passed"]
+                        and scene_switch["converged"]
                         and camera["converged"]
                         and visual["converged"]
                     ),
                 }
                 report["scenes"].append(scene)
 
-            interaction_exercised = False
+            interaction_report: dict[str, object] = {
+                "attempted": False,
+                "camera_changed": False,
+            }
             box = canvas.bounding_box()
             if box:
+                before = live_camera(page)
                 center_x = box["x"] + box["width"] / 2
                 center_y = box["y"] + box["height"] / 2
                 page.mouse.move(center_x, center_y)
@@ -401,9 +482,25 @@ def main() -> int:
                 page.mouse.up()
                 page.mouse.wheel(0, -250)
                 page.mouse.click(center_x, center_y)
-                page.wait_for_timeout(300)
-                interaction_exercised = True
-            report["interaction_exercised"] = interaction_exercised
+                after = before
+                delta = camera_delta(before, after)
+                for _ in range(20):
+                    page.wait_for_timeout(100)
+                    after = live_camera(page)
+                    delta = camera_delta(before, after)
+                    if delta["changed"]:
+                        break
+                interaction_report = {
+                    "attempted": True,
+                    "camera_before": before,
+                    "camera_after": after,
+                    "camera_changed": bool(delta["changed"]),
+                    **delta,
+                }
+            report["interaction"] = interaction_report
+            report["interaction_exercised"] = bool(
+                interaction_report.get("camera_changed")
+            )
             context.close()
         finally:
             browser.close()

@@ -567,11 +567,12 @@ This repository contains **165 scientific and research skills** organized across
 - Pathway analysis: via Database Lookup (KEGG, Reactome, STRING) and PrimeKG
 - Data management: LaminDB
 
-#### 🧬 **Protein Engineering & Design** (4 skills)
+#### 🧬 **Protein Engineering & Design** (5 skills)
 - Protein language models: ESM
 - Glycoengineering: Glycoengineering (N/O-glycosylation prediction, therapeutic antibody optimization)
 - Cloud laboratory platform: Adaptyv (automated protein testing and validation)
 - Cloud structure & design platform: Tamarind (managed-GPU access to AlphaFold, Boltz, Chai, ESMFold, RFdiffusion, ProteinMPNN, BoltzGen, antibody/nanobody design, DiffDock/Vina docking, binding affinity, and MSA generation via REST API or MCP)
+- Structural mechanism stories: [Mol* Story](skills/molstar-story/) (evidence retrieval, upstream alignment/contacts/displacement analysis, and decision-focused interactive MolViewStories)
 
 #### 📚 **Scientific Communication** (27 skills)
 - Literature: Paper Lookup (PubMed, PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall), Literature Review, Paperzilla

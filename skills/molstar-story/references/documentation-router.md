@@ -43,11 +43,11 @@ conflict.
 | Full scientific Story example | <https://molstar.org/mol-view-stories/example-stories/making-of-cyp3a4.html> | `cli/examples/cyp3a4/` |
 | `.mvstory`, HTML, MVSJ/MVSX, self-hosted behavior | <https://molstar.org/mol-view-stories/webapp-cloud-storage.html> | `@mol-view-stories/lib/src/story-manager.ts`, `html-template.ts` |
 | Runtime/build failures | <https://molstar.org/mol-view-stories/faq-troubleshooting.html> | `docs/faq-troubleshooting.qmd`, CLI error plus `cli/deno.lock` |
-| Mol* core architecture or an undocumented MVS behavior | <https://github.com/molstar/molstar> | Use DeepWiki for `molstar/molstar`, then verify the named source path in the matching Mol* version |
+| Mol* core architecture or an undocumented MVS behavior | <https://github.com/molstar/molstar> | Use DeepWiki for `molstar/molstar` when available, then verify the named source path in the matching Mol* version |
 
-If the MolViewStories repository is unavailable through DeepWiki, query its
-official current web docs and pinned Git checkout directly rather than
-substituting an ungrounded summary.
+Use DeepWiki for Mol* internals when it is available. If the repository or tool
+is unavailable, query the official current web docs and pinned Git checkout
+directly rather than substituting an ungrounded summary.
 
 ## Capability Boundary
 
@@ -68,8 +68,9 @@ When a needed capability is absent or uncertain:
 1. Open the focused official page in the table.
 2. Search the pinned checkout for the exact public builder method and one working
    example; inspect its YAML/JS together.
-3. For Mol* core questions, ask DeepWiki about `molstar/molstar` and require exact
-   public paths/type names, then verify against Mol* `5.8.0`.
+3. For Mol* core questions, use DeepWiki about `molstar/molstar` when available
+   and require exact public paths/type names; otherwise query the official docs
+   or pinned checkout directly. Verify the result against Mol* `5.8.0`.
 4. Prefer public MolViewSpec nodes. Do not use private viewer state transforms as
    a shortcut.
 5. If the pin lacks the needed public capability, report the limitation before

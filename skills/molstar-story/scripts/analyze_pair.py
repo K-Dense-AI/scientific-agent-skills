@@ -24,6 +24,21 @@ except ImportError as exc:  # pragma: no cover - depends on the caller's runtime
 
 
 RANGE_RE = re.compile(r"^(-?\d+):(-?\d+)$")
+BACKBONE_ATOMS = {"N", "CA", "C", "O"}
+MODIFIED_POLYMER_RULE = (
+    "HETATM residues are grouped by author residue number, insertion code, and "
+    "residue name; a group is treated as modified polymer only when it contains "
+    "N/CA/C/O backbone atoms"
+)
+PRESERVED_PDB_RECORDS = {
+    "TER",
+    "CONECT",
+    "LINK",
+    "SSBOND",
+    "HELIX",
+    "SHEET",
+    "END",
+}
 
 
 @dataclass(frozen=True)
@@ -64,6 +79,16 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="optional ligand residue name in the mobile PDB; repeatable",
     )
+    parser.add_argument(
+        "--mobile-ligand-chain",
+        action="append",
+        default=None,
+        metavar="CHAIN",
+        help=(
+            "chain containing the mobile ligand; repeatable. Defaults to "
+            "--mobile-chain; use this to explicitly include a ligand on another chain"
+        ),
+    )
     parser.add_argument("--contact-cutoff", type=float, default=4.0)
     parser.add_argument("--top", type=int, default=12)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -79,7 +104,7 @@ def sha256(path: Path) -> str:
 
 
 def infer_element(atom_name: str) -> str:
-    text = atom_name.strip()
+    text = atom_name.strip().lstrip("0123456789")
     return (text[0] if text else "").upper()
 
 
@@ -141,21 +166,118 @@ def in_ranges(resseq: int, ranges: list[tuple[int, int]]) -> bool:
     return any(start <= resseq <= end for start, end in ranges)
 
 
-def residue_ca(atoms: list[Atom], chain: str) -> dict[tuple[int, str], Atom]:
-    selected: dict[tuple[int, str], Atom] = {}
+def _group_residue_atoms(
+    atoms: list[Atom], chain: str
+) -> dict[tuple[int, str, str], list[Atom]]:
+    """Group atoms by the complete author residue identity."""
+    grouped: dict[tuple[int, str, str], list[Atom]] = {}
     for atom in atoms:
-        if (
-            atom.record != "ATOM"
-            or atom.chain != chain
-            or atom.name != "CA"
-            or atom.altloc not in {"", "A"}
-        ):
+        if atom.chain != chain or atom.altloc not in {"", "A"}:
             continue
-        key = (atom.resseq, atom.icode)
-        previous = selected.get(key)
-        if previous is None or (previous.altloc == "A" and atom.altloc == ""):
-            selected[key] = atom
+        grouped.setdefault((atom.resseq, atom.icode, atom.resname), []).append(atom)
+    return grouped
+
+
+def _has_complete_backbone(residue_atoms: list[Atom]) -> bool:
+    return BACKBONE_ATOMS <= {atom.name.upper() for atom in residue_atoms}
+
+
+def residue_ca_report(
+    atoms: list[Atom], chain: str
+) -> tuple[dict[tuple[int, str], Atom], list[dict[str, object]]]:
+    """Return C-alpha atoms and auditable HETATM C-alpha exclusions.
+
+    Standard ``ATOM`` residues retain the historical behavior.  A C-alpha
+    recorded as ``HETATM`` is accepted only when the residue also contains the
+    polymer backbone atoms N/CA/C/O, which covers modified residues such as
+    selenomethionine without treating arbitrary ligand atoms as polymer.
+    """
+    grouped = _group_residue_atoms(atoms, chain)
+
+    selected: dict[tuple[int, str], Atom] = {}
+    selected_candidates: dict[tuple[int, str], list[Atom]] = {}
+    excluded: list[dict[str, object]] = []
+    for identity, residue_atoms in sorted(grouped.items()):
+        key = identity[:2]
+        ca_candidates = [atom for atom in residue_atoms if atom.name.upper() == "CA"]
+        if not ca_candidates:
+            continue
+        ca = next(
+            (atom for atom in ca_candidates if atom.altloc == ""), ca_candidates[0]
+        )
+        if ca.record == "ATOM":
+            selected_candidates.setdefault(key, []).append(ca)
+            continue
+
+        if _has_complete_backbone(residue_atoms):
+            selected_candidates.setdefault(key, []).append(ca)
+            continue
+        missing = sorted(BACKBONE_ATOMS - {atom.name.upper() for atom in residue_atoms})
+        excluded.append(
+            {
+                "chain": chain,
+                "auth_seq_id": key[0],
+                "icode": key[1],
+                "resname": ca.resname,
+                "record": ca.record,
+                "missing_backbone_atoms": missing,
+                "reason": "HETATM C-alpha lacks complete N/CA/C/O backbone",
+            }
+        )
+    for key, candidates in selected_candidates.items():
+        # Prefer a standard ATOM residue, then a blank-altloc candidate, when
+        # multiple residue names share an author number.
+        selected[key] = min(
+            candidates,
+            key=lambda atom: (
+                atom.record != "ATOM",
+                atom.altloc != "",
+                atom.resname,
+            ),
+        )
+    return selected, excluded
+
+
+def residue_ca(atoms: list[Atom], chain: str) -> dict[tuple[int, str], Atom]:
+    """Return C-alpha atoms, including complete modified polymer residues."""
+    selected, _excluded = residue_ca_report(atoms, chain)
     return selected
+
+
+def modified_polymer_residue_keys(
+    atoms: list[Atom], chain: str
+) -> set[tuple[int, str, str]]:
+    """Return complete modified-polymer identities for contact filtering."""
+    return {
+        (int(row["auth_seq_id"]), str(row["icode"]), str(row["resname"]))
+        for row in modified_polymer_residue_report(atoms, chain)
+    }
+
+
+def modified_polymer_residue_report(
+    atoms: list[Atom], chain: str
+) -> list[dict[str, object]]:
+    """Return accepted HETATM modified-polymer residues and the rule evidence."""
+    rows: list[dict[str, object]] = []
+    for identity, residue_atoms in sorted(_group_residue_atoms(atoms, chain).items()):
+        resseq, icode, resname = identity
+        if not any(
+            atom.name.upper() == "CA" and atom.record == "HETATM"
+            for atom in residue_atoms
+        ) or not _has_complete_backbone(residue_atoms):
+            continue
+        rows.append(
+            {
+                "chain": chain,
+                "auth_seq_id": resseq,
+                "icode": icode,
+                "resname": resname,
+                "record": "HETATM",
+                "backbone_atoms": sorted(BACKBONE_ATOMS),
+                "reason": "HETATM residue has complete N/CA/C/O backbone",
+            }
+        )
+    return rows
 
 
 def fit_transform(mobile: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -223,7 +345,7 @@ def write_aligned_pdb(
             output.append(
                 f"{base[:30]}{coord[0]:8.3f}{coord[1]:8.3f}{coord[2]:8.3f}{base[54:].rstrip()}\n"
             )
-        elif record in {"TER", "CONECT", "END"}:
+        elif record in PRESERVED_PDB_RECORDS:
             output.append(line if line.endswith("\n") else line + "\n")
     if not output[-1].startswith("END"):
         output.append("END\n")
@@ -272,26 +394,45 @@ def ligand_contacts(
     receptor_chain: str,
     ligand_resnames: set[str],
     cutoff: float,
+    ligand_chains: set[str] | None = None,
 ) -> list[dict[str, object]]:
-    if not ligand_resnames:
+    normalized_resnames = {name.upper() for name in ligand_resnames}
+    if not normalized_resnames:
         return []
+    if ligand_chains is None:
+        ligand_chains = {receptor_chain}
     ligand = [
         atom
         for atom in atoms
         if atom.record == "HETATM"
-        and atom.resname.upper() in ligand_resnames
+        and atom.chain in ligand_chains
+        and atom.resname.upper() in normalized_resnames
         and atom.element not in {"H", "D"}
     ]
     if not ligand:
         raise ValueError(
             "no heavy-atom HETATM records matched mobile ligand residue names: "
-            + ", ".join(sorted(ligand_resnames))
+            + ", ".join(sorted(normalized_resnames))
+            + " on chains "
+            + ", ".join(sorted(ligand_chains))
         )
+    modified_polymer_keys = modified_polymer_residue_keys(atoms, receptor_chain)
+    ligand_keys = {
+        (atom.chain, atom.resseq, atom.icode, atom.resname)
+        for atom in ligand
+    }
     receptor = [
         atom
         for atom in atoms
-        if atom.record == "ATOM"
-        and atom.chain == receptor_chain
+        if atom.chain == receptor_chain
+        and (
+            atom.record == "ATOM"
+            or (
+                atom.record == "HETATM"
+                and (atom.resseq, atom.icode, atom.resname) in modified_polymer_keys
+            )
+        )
+        and (atom.chain, atom.resseq, atom.icode, atom.resname) not in ligand_keys
         and atom.element not in {"H", "D"}
         and atom.altloc in {"", "A"}
     ]
@@ -339,6 +480,9 @@ def main() -> int:
     args = parse_args()
     if len(args.reference_chain) != 1 or len(args.mobile_chain) != 1:
         raise SystemExit("PDB chain IDs must be exactly one character")
+    ligand_chains = set(args.mobile_ligand_chain or [args.mobile_chain])
+    if any(len(chain) != 1 for chain in ligand_chains):
+        raise SystemExit("--mobile-ligand-chain values must be exactly one character")
     if args.contact_cutoff <= 0:
         raise SystemExit("--contact-cutoff must be positive")
     if args.top <= 0:
@@ -360,9 +504,21 @@ def main() -> int:
         segments = load_segments(args.segments_tsv.expanduser().resolve() if args.segments_tsv else None)
         reference_lines, reference_atoms = parse_pdb(reference)
         mobile_lines, mobile_atoms = parse_pdb(mobile)
-        reference_ca = residue_ca(reference_atoms, args.reference_chain)
-        mobile_ca = residue_ca(mobile_atoms, args.mobile_chain)
+        reference_ca, reference_excluded_ca = residue_ca_report(
+            reference_atoms, args.reference_chain
+        )
+        mobile_ca, mobile_excluded_ca = residue_ca_report(
+            mobile_atoms, args.mobile_chain
+        )
+        reference_modified_polymer = modified_polymer_residue_report(
+            reference_atoms, args.reference_chain
+        )
+        mobile_modified_polymer = modified_polymer_residue_report(
+            mobile_atoms, args.mobile_chain
+        )
         common = sorted(set(reference_ca) & set(mobile_ca))
+        missing_in_mobile_keys = sorted(set(reference_ca) - set(mobile_ca))
+        missing_in_reference_keys = sorted(set(mobile_ca) - set(reference_ca))
         fit_keys = [key for key in common if in_ranges(key[0], ranges)]
         if len(fit_keys) < 3:
             raise ValueError(
@@ -407,6 +563,7 @@ def main() -> int:
             args.mobile_chain,
             {name.upper() for name in args.mobile_ligand_resname},
             args.contact_cutoff,
+            ligand_chains,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -436,6 +593,22 @@ def main() -> int:
         for row in residues
         if row["reference_resname"] != row["mobile_resname"]
     ]
+
+    def missing_rows(
+        keys: list[tuple[int, str]], source: dict[tuple[int, str], Atom]
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "auth_seq_id": key[0],
+                "icode": key[1],
+                "chain": source[key].chain,
+                "resname": source[key].resname,
+            }
+            for key in keys
+        ]
+
+    missing_in_mobile = missing_rows(missing_in_mobile_keys, reference_ca)
+    missing_in_reference = missing_rows(missing_in_reference_keys, mobile_ca)
     metrics_path = output_dir / "comparison_metrics.json"
     metrics = {
         "schema_version": 1,
@@ -453,6 +626,19 @@ def main() -> int:
             "C-alpha atoms matched by identical author residue number and insertion code; "
             "no sequence alignment or renumbering"
         ),
+        "modified_polymer_detection": {
+            "rule": MODIFIED_POLYMER_RULE,
+            "reference": {
+                "chain": args.reference_chain,
+                "count": len(reference_modified_polymer),
+                "residues": reference_modified_polymer,
+            },
+            "mobile": {
+                "chain": args.mobile_chain,
+                "count": len(mobile_modified_polymer),
+                "residues": mobile_modified_polymer,
+            },
+        },
         "alignment": {
             "atom": "CA",
             "ranges": [{"start": start, "end": end} for start, end in ranges],
@@ -461,6 +647,10 @@ def main() -> int:
                 {"auth_seq_id": key[0], "icode": key[1]} for key in fit_keys
             ],
             "residue_name_mismatches": mismatches,
+            "excluded_reference_ca": reference_excluded_ca,
+            "excluded_reference_ca_count": len(reference_excluded_ca),
+            "excluded_mobile_ca": mobile_excluded_ca,
+            "excluded_mobile_ca_count": len(mobile_excluded_ca),
             "rmsd_before_A": round_float(rmsd(mobile_fit, reference_fit)),
             "rmsd_after_A": round_float(rmsd(mobile_fit_aligned, reference_fit)),
             "row_vector_formula": "x_aligned = x_mobile @ rotation_row + translation",
@@ -472,11 +662,20 @@ def main() -> int:
         },
         "comparison": {
             "matched_residue_count": len(residues),
+            "missing_in_mobile": {
+                "count": len(missing_in_mobile),
+                "residues": missing_in_mobile,
+            },
+            "missing_in_reference": {
+                "count": len(missing_in_reference),
+                "residues": missing_in_reference,
+            },
             "top_residues": top_residues,
             "segments": segment_summaries(residues, segments),
         },
         "ligand_contacts": {
             "mobile_resnames": sorted({name.upper() for name in args.mobile_ligand_resname}),
+            "mobile_chains": sorted(ligand_chains),
             "cutoff_A": args.contact_cutoff,
             "count": len(contacts),
             "contacts": contacts,
