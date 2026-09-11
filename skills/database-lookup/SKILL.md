@@ -4,13 +4,13 @@ description: Query documented public database APIs with explicit endpoints, filt
 allowed-tools: Read Bash
 license: MIT
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: "K-Dense Inc."
 ---
 
 # Database Lookup
 
-This skill catalogs 78 public databases with documented API access patterns. Your job is to turn the user's intent into a reproducible retrieval: select the authoritative database(s), make bounded and rate-limited API calls, verify counts when completeness matters, and return results with enough provenance that another agent or human can repeat the lookup.
+This skill catalogs 80 public databases with documented API access patterns. Your job is to turn the user's intent into a reproducible retrieval: select the authoritative database(s), make bounded and rate-limited API calls, verify counts when completeness matters, and return results with enough provenance that another agent or human can repeat the lookup.
 
 For complex biomedical retrievals, assume small filtering differences can change downstream conclusions. Prefer deterministic APIs, explicit identifiers, exhaustive pagination, and auditable logs over broad searching or plausible summaries.
 
@@ -82,7 +82,7 @@ When a database doesn't recognize an identifier, convert it using these workflow
 
 **Compounds**: Name → **PubChem** `/compound/name/{name}/cids/JSON` → get CID → convert to ChEMBL ID via **UniChem** or **ChEMBL** molecule search. If name lookup fails, try SMILES, InChIKey, or CAS number.
 
-**Variants**: rsID (e.g. "rs334") works directly in **dbSNP**, **ClinVar**, **GWAS Catalog**, **gnomAD**. For genomic coordinates, use **Ensembl** VEP to get consequence annotations and linked rsIDs.
+**Variants**: rsID (e.g. "rs334") works directly in **dbSNP**, **ClinVar**, **GWAS Catalog**, **gnomAD**. For genomic coordinates, use **Ensembl** VEP for consequence annotations (`CADD=1` for live `cadd_phred`) and **RegulomeDB** for noncoding regulatory rank. MyVariant is a cached bundle — confirm any score at those live sources.
 
 **Diseases**: Name → **Open Targets** or **Monarch** search → get EFO or MONDO ID → use in downstream queries.
 
@@ -314,7 +314,7 @@ Read the relevant reference file before making any API call.
 | BRENDA | `references/brenda.md` | Enzyme kinetics, catalysis (SOAP) |
 | UniProt | `references/uniprot.md` | Protein sequences, function |
 | STRING | `references/string.md` | Protein-protein interactions |
-| Ensembl | `references/ensembl.md` | Genomes, variants, sequences |
+| Ensembl | `references/ensembl.md` | Genomes, variants, sequences, VEP (+ CADD) |
 | NCBI Gene | `references/ncbi-gene.md` | Gene information, links |
 | NCBI Protein | `references/ncbi-protein.md` | Protein sequences, records |
 | NCBI Taxonomy | `references/ncbi-taxonomy.md` | Taxonomic classification |
@@ -333,6 +333,8 @@ Read the relevant reference file before making any API call.
 | UCSC Genome Browser | `references/ucsc-genome.md` | Genome annotations, tracks |
 | ENCODE | `references/encode.md` | DNA elements, ChIP-seq, ATAC-seq |
 | JASPAR | `references/jaspar.md` | TF binding profiles/motifs |
+| RegulomeDB | `references/regulomedb.md` | Noncoding SNV regulatory rank (0-based window) |
+| MyVariant.info | `references/myvariant.md` | Cached variant annotation bundle (hg19 ids) |
 | Human Protein Atlas | `references/human-protein-atlas.md` | Protein expression across tissues |
 | Human Cell Atlas | `references/hca.md` | Single-cell atlas data |
 | LINCS L1000 | `references/lincs-l1000.md` | Gene expression signatures (CMap) |
