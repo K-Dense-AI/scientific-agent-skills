@@ -2,8 +2,9 @@
 name: folklore-variant-evidence
 description: "Retrieve and review source-linked public evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Use when a scientific agent must branch deterministically on resolved, ambiguous, not-found, invalid, unsupported, or unavailable variant outcomes; chain a resolved public variant into related literature or publication details; or preserve evidence provenance without accepting patient, phenotype, family, segregation, or private case data."
 license: MIT
+compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
@@ -25,6 +26,22 @@ https://api.helena.bio/folklore/v1/mcp
 
 No account or API key is required. The public Apache-2.0 adapter and contract are
 available at <https://github.com/helena-bioinformatics/folklore-mcp>.
+
+## Minimal connection example
+
+A host without native MCP support can make the same public JSON-RPC call:
+
+```bash
+curl --silent --show-error --fail-with-body --max-time 60 \
+  -X POST https://api.helena.bio/folklore/v1/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_variant_evidence","arguments":{"assembly":"GRCh38","query":"rs80357914"}}}'
+```
+
+Inspect the returned outcome before continuing. This example can return
+`ambiguous` with multiple candidates: stop and request an unambiguous public
+variant notation instead of selecting a candidate automatically.
 
 ## Select the right skill
 
