@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.00065-b31b1b.svg)](https://arxiv.org/abs/2609.00065)
-[![Version](https://img.shields.io/badge/Version-2.67.0-blue.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/Version-2.68.0-blue.svg)](pyproject.toml)
 [![Skills](https://img.shields.io/badge/Skills-165-brightgreen.svg)](#-whats-included)
 [![Databases](https://img.shields.io/badge/Databases-100%2B-orange.svg)](#-whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io/)

@@ -4,7 +4,7 @@ description: "Retrieve ClinGen gene-disease validity assertions for a public gen
 license: MIT
 compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
 metadata:
-  version: "1.2"
+  version: "1.0"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
