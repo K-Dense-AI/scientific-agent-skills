@@ -26,9 +26,9 @@ Source of truth for bounds: the live OpenAPI at
 | enhancer | sync | 50–500,000 bp | 249 bp | DeepSTARR — ***Drosophila*** |
 | chromatin | sync | 200–500,000 bp | 1,000 bp | DeepSEA — hundreds of tracks |
 | expression | sync | **9,198–500,000 bp** (scores one 9,198 bp window) | n/a (`trained_window_bp` 9,198) | log(TPM+1) |
-| annotation | async | 1,000–500,000 bp | n/a | de-novo transcripts |
+| annotation | async | 1,000–500,000 bp | n/a | de-novo transcripts; sync above 200,000 bp (`x-sync-limit-bp`) is `413 sync_too_large` |
 
-`Recommended mode` is guidance, not a constraint — every task accepts both. Omit `Prefer` for a synchronous `200`; send `Prefer: respond-async` for a `202` plus `GET /v1/tasks/jobs/{job_id}`. Only the composite workflow enforces a mode, rejecting sync above 50,000 bp with `413 sync_too_large`.
+`Recommended mode` is guidance, not a constraint — every task accepts both. Omit `Prefer` for a synchronous `200`; send `Prefer: respond-async` for a `202` plus `GET /v1/tasks/jobs/{job_id}`. The one enforced limit is per operation: where `/v1/openapi.json` publishes `x-sync-limit-bp` on a `POST`, a synchronous request above that length is `413 sync_too_large` — 200,000 bp on `annotation` and 50,000 bp on the composite workflow as of `info.version` 2026.09.10.1. Read the field rather than memorising the numbers; the other predict tasks carry no limit today.
 
 The minimum is published as `minLength` on each task's request schema and enforced
 before any model loads. There are **no per-model floors**: a task's floor is the
@@ -81,8 +81,27 @@ orientation (reverse-complement minus-strand genes). A reverse-complemented
 sequence does *not* return zeros or an empty result: measured live, it returns
 plausible sites at different positions, often still at high confidence, and site
 counts can hold or collapse depending on the locus. **Neither the score nor the
-count tells you the orientation was wrong**, so there is no post-hoc check —
-get the orientation right on input.
+count tells you the orientation was wrong**, and the obvious post-hoc check does
+not work either — get the orientation right on input.
+
+That check was measured (2026-08-20; HBB, SMN1 and BRCA1 exon 11, both
+orientations, threshold 0.5) and it does not discriminate. Canonical donor `GT`
+at the reported boundary holds well above chance in *both* orientations
+(12/14 gene-sense, 2/3 reverse complement, against a ~5% random null); the `AC`
+signature a mirrored call would leave never appears (0/14, 0/3). Acceptor `AG`
+inside the reported span is 100% in both orientations (13/13, 7/7, against a
+30–45% null) because the post-processor snaps the span onto an `AG`, so that
+test passes every input, including a deliberately wrong-strand one. The model
+does not mirror sites onto the other strand; it calls a different, usually
+smaller set, anchored on real `GT`s in whatever orientation it was given.
+
+**`start`/`end` are token spans, not junctions.** Each site's `start`/`end` is a
+variable-width BPE token span — 4 to 8 bp on the HBB fixture — with a
+`token_index` beside it, not a base-resolution exon/intron boundary. Anything
+that intersects these against a reference annotation is off by up to ~10 bp
+regardless of strand. The `gff3` export writes the same spans to columns 4–5,
+so saved files carry them too. Report the span as a span; do not derive a
+single junction position from it.
 
 ## enhancer
 Enhancer activity. The default (DeepSTARR) reports **developmental**
@@ -165,10 +184,11 @@ refuses to pad at all. `meta.task_specific_counts` =
 `genes_predicted + genes_skipped == genes_found`; per-gene causes in
 `data.expression_predictions[].skip_reason`.
 
-Above **50,000 bp** it forces async: a synchronous request over that size is
-`413 sync_too_large` with `error.details = {sequence_length, threshold}`. Retry
-the same body with `Prefer: respond-async`. This is the only endpoint that
-forces a delivery mode.
+Above **50,000 bp** (its `x-sync-limit-bp`) it forces async: a synchronous
+request over that size is `413 sync_too_large` with
+`error.details = {sequence_length, threshold}`. Retry the same body with
+`Prefer: respond-async`. `annotation` carries the same guard at 200,000 bp; no
+other predict task publishes one today.
 
 The equivalent by hand is `annotation` to discover genes, then one `expression`
 call per gene with that gene's window and `tss_index` — useful when you want

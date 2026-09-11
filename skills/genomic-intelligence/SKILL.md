@@ -4,7 +4,7 @@ description: "Predict regulatory features, gene structure, and expression direct
 license: MIT
 compatibility: Python 3.10+ with the `requests` library for the REST path (no dedicated SDK). Network access required. The REST `/v1` API needs a `GI_API_KEY` (a `gi_` bearer); the hosted MCP server at mcp.genomicintelligence.ai/mcp works keyless against a rate- and concurrency-limited public demo tier, key optional.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: Genomic Intelligence
   trigger-keywords: DNA sequence prediction, regulatory genomics, promoter prediction, splice site prediction, enhancer activity, chromatin state, gene expression prediction, sequence to expression, log TPM, gene annotation, transcript prediction, DNA language model, genomic intelligence, hosted inference, Ensembl sequence, FASTA prediction, cis-regulatory, TSS window, DeepSEA, DeepSTARR, BigBird splice, MCP genomics
   openclaw:
@@ -98,9 +98,9 @@ options?}`, returning a `{data, meta}` envelope. What differs per task:
 | `enhancer` | sync | 50–500,000 bp | 249 bp | dev + housekeeping scores (DeepSTARR, *Drosophila*) |
 | `chromatin` | sync | 200–500,000 bp | 1,000 bp | hundreds of tracks (DeepSEA) |
 | `expression` | sync | **9,198–500,000 bp** | n/a (`trained_window_bp` 9,198) | log(TPM+1); needs `tss_index` unless exactly 9,198 bp, plus a cell-type `description` |
-| `annotation` | async | 1,000–500,000 bp | n/a | de-novo transcripts; submit + poll |
+| `annotation` | async | 1,000–500,000 bp | n/a | de-novo transcripts; submit + poll; sync above 200,000 bp is `413 sync_too_large` |
 
-`Recommended mode` is guidance, not a constraint — every task accepts both. Omit `Prefer` for a synchronous `200`; send `Prefer: respond-async` for a `202` plus `GET /v1/tasks/jobs/{job_id}`. Only the composite workflow enforces a mode, rejecting sync above 50,000 bp with `413 sync_too_large`.
+`Recommended mode` is guidance, not a constraint — every task accepts both. Omit `Prefer` for a synchronous `200`; send `Prefer: respond-async` for a `202` plus `GET /v1/tasks/jobs/{job_id}`. The one enforced limit is per operation: where `/v1/openapi.json` publishes `x-sync-limit-bp` on a `POST`, a synchronous request above that length is `413 sync_too_large` — 200,000 bp on `annotation` and 50,000 bp on the composite workflow as of `info.version` 2026.09.10.1. Read the field rather than memorising the numbers; the other predict tasks carry no limit today.
 
 **The minimum is admission control, not regime.** A request above the floor but
 shorter than the selected model's `bio_spec.context_window_bp` is *accepted and
@@ -308,7 +308,7 @@ composite:
   rather than dropping an edge gene), and returns a prediction per gene.
   `meta.task_specific_counts` = `{genes_found, genes_predicted, genes_skipped}`
   with `genes_predicted + genes_skipped == genes_found`; per-gene causes in
-  `data.expression_predictions[].skip_reason`. Above **50,000 bp** it forces
+  `data.expression_predictions[].skip_reason`. Above **50,000 bp** (its `x-sync-limit-bp`) it forces
   async: a synchronous request over that size is `413 sync_too_large` with
   `error.details = {sequence_length, threshold}` — retry the same body with
   `Prefer: respond-async`.
@@ -321,7 +321,7 @@ composite:
 | 401 / 403 | `unauthorized` / `forbidden` | Missing/invalid key (REST) | Set `GI_API_KEY`; or use the keyless MCP demo |
 | 404 | `not_found` | **Unknown task** (`/v1/tasks/bogus/predict`) or unknown job | Check the task name — an unrecognised task is a 404, not a 422 |
 | 413 | `payload_too_large` | Raw request body over **16 MiB** | Split the input — this is the body cap, not the sequence cap |
-| 413 | `sync_too_large` | Composite called synchronously above 50,000 bp | Retry with `Prefer: respond-async` |
+| 413 | `sync_too_large` | Synchronous request above the operation's `x-sync-limit-bp` (200,000 bp on `annotation`, 50,000 bp on the composite) | Retry with `Prefer: respond-async` |
 | 415 | `unsupported_format` | Unsupported `format` query value | Use a format the task supports; there is no silent fallback to JSON |
 | 422 | `validation_failed` | The most common failure: sequence **under the task floor or over 500,000 bp**, expression below 9,198 bp, a missing/out-of-range `tss_index`, a missing `options.description`, or **any unknown body or `options` key** | Read the message; fix the body |
 | 429 | `rate_limited` / `too_many_requests` | Rate / concurrency cap | Back off (honour `Retry-After`); ask GI to raise your tier |
