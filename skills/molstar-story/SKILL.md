@@ -14,7 +14,7 @@ compatibility: >-
   Chromium, and Pillow. Network access is normally needed for evidence
   retrieval and the first pinned-runtime build.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: Molaison
 ---
 

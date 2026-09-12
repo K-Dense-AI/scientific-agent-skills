@@ -220,6 +220,25 @@ class PairAnalysisTests(unittest.TestCase):
 
 
 class BuildSourceTests(unittest.TestCase):
+    def test_source_validation_accepts_nested_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested_asset = root / "assets" / "structures" / "model.pdb"
+            nested_asset.parent.mkdir(parents=True)
+            nested_asset.write_text("END\n")
+            (root / "story.yaml").write_text("scenes: []\n")
+
+            records = build_story.validate_source(root)
+
+            self.assertIn(
+                {
+                    "path": "assets/structures/model.pdb",
+                    "bytes": 4,
+                    "sha256": build_story.sha256(nested_asset),
+                },
+                records,
+            )
+
     def test_source_validation_rejects_ignored_scene_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

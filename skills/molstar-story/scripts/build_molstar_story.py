@@ -94,7 +94,7 @@ def validate_source(source: Path) -> list[dict[str, object]]:
     assets = source / "assets"
     if not story_yaml.is_file():
         raise RuntimeError(f"story source is missing story.yaml: {source}")
-    if not assets.is_dir() or not any(path.is_file() for path in assets.iterdir()):
+    if not assets.is_dir() or not any(path.is_file() for path in assets.rglob("*")):
         raise RuntimeError("a local assets/ file is required for portable Story output")
 
     story_text = story_yaml.read_text(encoding="utf-8")
