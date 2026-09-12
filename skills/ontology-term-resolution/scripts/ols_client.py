@@ -30,7 +30,7 @@ import urllib.request
 from typing import Any, Iterable
 
 OLS_BASE = "https://www.ebi.ac.uk/ols4/api"
-USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.0"
+USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.2"
 TIMEOUT = 30
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}

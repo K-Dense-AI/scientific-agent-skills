@@ -1,11 +1,11 @@
 ---
 name: ontology-term-resolution
-description: Resolve free-text scientific labels to ontology term IDs and validate existing CURIEs against the EBI Ontology Lookup Service (OLS4). Use whenever an ontology identifier must be produced or checked - annotating tissue, cell type, disease, phenotype, assay, chemical, organism, sex, or developmental stage fields; preparing metadata for GEO, ENA, BioSamples, CELLxGENE, HCA, or ISA-Tab submission; auditing a metadata table of term IDs; checking whether a term is obsolete and what replaced it; or mapping between ontologies. Triggers include "ontology term", "ontology ID", "CURIE", "controlled vocabulary", "UBERON", "CL:", "MONDO", "HPO", "EFO", "ChEBI", "NCBITaxon", "GO term", "PATO", "annotate this tissue/cell type/disease", and any request to emit or verify an identifier shaped like PREFIX:0001234.
+description: Resolve free-text scientific labels to ontology term IDs and validate existing CURIEs against the EBI Ontology Lookup Service (OLS4). Also look up prefixes in Bioregistry, resolve compact identifiers via Identifiers.org, map lab shorthand with ZOOMA, and build Ontobee term pages. Use whenever an ontology identifier must be produced or checked - annotating tissue, cell type, disease, phenotype, assay, chemical, organism, sex, or developmental stage fields; preparing metadata for GEO, ENA, BioSamples, CELLxGENE, HCA, or ISA-Tab submission; auditing a metadata table of term IDs; checking whether a term is obsolete and what replaced it; or deciding HPO vs HP. Triggers include "ontology term", "ontology ID", "CURIE", "controlled vocabulary", "UBERON", "CL:", "MONDO", "HPO", "EFO", "ChEBI", "NCBITaxon", "GO term", "PATO", "Zooma", "Bioregistry", "Identifiers.org", "Ontobee", "annotate this tissue/cell type/disease", and any request to emit or verify an identifier shaped like PREFIX:0001234.
 license: MIT
-compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages. Needs network access to https://www.ebi.ac.uk/ols4 (public, no API key).
+compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages. Needs network access to https://www.ebi.ac.uk/ols4, https://bioregistry.io, https://resolver.api.identifiers.org, and https://www.ebi.ac.uk/spot/zooma (all public, no API key).
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -27,16 +27,21 @@ substitution — the ID is well-formed, the ontology is right, and the metadata 
 Reviewers cannot spot it either, which is why these errors persist into published datasets.
 
 Every ID this skill emits comes from a live OLS lookup. Every ID it is handed gets verified.
+Bioregistry, Identifiers.org, ZOOMA, and Ontobee answer prefix, landing-page, and shorthand
+questions — they do not replace that OLS check.
 
-## Two directions
+## Which service
 
-| Direction | Script | Question answered |
+| Question | Script | Authority |
 | --- | --- | --- |
-| text → ID | `scripts/resolve_terms.py` | What is the term for "left ventricle"? |
-| ID → verdict | `scripts/validate_terms.py` | Is `EFO:0001067` real, current, and labelled what this file claims? |
+| What is the term for "left ventricle"? | `scripts/resolve_terms.py` | OLS |
+| OLS missed lab shorthand (`PBMC`, `WT`) | `scripts/map_terms.py`, then `validate_terms.py` | ZOOMA proposes; OLS decides |
+| Is `EFO:0001067` real, current, correctly labelled? | `scripts/validate_terms.py` | OLS |
+| Is `HPO` a real prefix? Does `HP:notanid` match the pattern? | `scripts/lookup_prefix.py` | Bioregistry |
+| Which landing page should this CURIE open? | `scripts/lookup_prefix.py` | Identifiers.org + Ontobee URLs |
 
-Both take single values or files, emit TSV or JSON, and need no packages beyond the standard
-library.
+All four scripts take single values or files, emit TSV or JSON, and need no packages beyond the
+standard library. Full traps for the non-OLS services are in `references/companion-apis.md`.
 
 ## Resolve text to terms
 
@@ -110,6 +115,38 @@ python3 validate_terms.py --input tissue_ids.tsv \
 
 `--strict` promotes warnings to failures.
 
+## Check a prefix or compact identifier
+
+```bash
+python3 lookup_prefix.py HP HPO HP:0001250 HPO:0001250
+```
+
+```
+query        status          preferred_prefix  canonical_curie  pattern    detail
+HP           ok              HP                                 ^\d{7}$
+HPO          synonym_prefix  HP                                 ^\d{7}$    'HPO' is a synonym of preferred prefix HP
+HP:0001250   ok              HP                HP:0001250       ^\d{7}$
+HPO:0001250  synonym_prefix  HP                HP:0001250       ^\d{7}$    'HPO' is a synonym of preferred prefix HP
+```
+
+Bioregistry accepts synonym prefixes. Identifiers.org does not — `HPO:0001250` is HTTP 400.
+Rewrite to the preferred prefix before handing a CURIE to OLS. Landing-page columns come from
+Bioregistry mappings (`providers.miriam`, `mappings.ontobee`), not from templating that
+preferred prefix: `ORPHA:558` is a 400, `orphanet:558` is a 200, and OBA has no Identifiers.org
+namespace at all. Empty cells mean the service does not host the prefix. This script does
+**not** say the term exists; that is still `validate_terms.py`.
+
+## Map lab shorthand (ZOOMA)
+
+```bash
+# after resolve_terms.py returned unresolved / partial
+python3 map_terms.py PBMC --ontology cl --exact-only
+```
+
+`--ontology` is required. Unfiltered ZOOMA annotate returns FOODON, XAO, and BTO alongside UBERON
+for `liver`, all at HIGH confidence. HIGH/GOOD hits are candidates only — run `validate_terms.py`
+on every CURIE before writing it down.
+
 ## API behaviour that will mislead you
 
 These are verified against the live service and are the reason this skill ships scripts rather
@@ -125,6 +162,11 @@ than a recipe. Full detail in `references/ols4-api.md`.
 | IRIs are not all OBO PURLs | EFO and Orphanet use their own namespaces — resolve IRIs, do not template them |
 | OxO is retired | Returns HTML with HTTP 200; use term cross-references or SSSOM instead |
 | A branch check does not exclude cell types from anatomy | CARO puts `cell` under `anatomical structure`; constrain the prefix too |
+| ZOOMA without an ontology filter | `liver` returns 100+ HIGH hits across FOODON, XAO, BTO, UBERON |
+| Identifiers.org synonym prefixes | `HPO:0001250` is HTTP 400; Bioregistry accepted the same CURIE |
+| Identifiers.org encoded colon | `HP%3A0001250` is HTTP 400; the path must keep `:` |
+| Bioregistry `preferred_prefix` is not the Identifiers.org namespace | `ORPHA:558` is 400; `orphanet:558` is 200. `hp:0001250` and `chebi:15377` are 400 because those namespaces embed the prefix in the LUI. Use `providers.miriam` from `/api/reference/{CURIE}`; omit the URL when that mapping is missing (OBA, XAO, ECTO) |
+| Ontobee search | HTML page only — no JSON API; do not scrape it |
 
 ## Choosing the ontology
 
@@ -140,7 +182,9 @@ reviewed. State unresolved terms explicitly rather than filling them with the ne
 
 ## References
 
-- `references/ols4-api.md` — endpoints, parameters, response fields, and every verified trap.
+- `references/ols4-api.md` — endpoints, parameters, response fields, and every verified OLS trap.
+- `references/companion-apis.md` — Bioregistry, Identifiers.org, ZOOMA, and Ontobee: when to use
+  each, and the traps that make an unfiltered or synonym-prefix call look successful.
 - `references/ontology-registry.md` — prefix/ontology-id table, branch roots, which ontology owns
   which concept.
 - `references/curation-rules.md` — candidate-selection procedure, normalisations to retry,
