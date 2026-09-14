@@ -1,10 +1,10 @@
 # QuTiP 5.3 Visualization
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0` with its pinned graphics extra.
+Research and API verification date: **2026-08-04**. Examples target
+`qutip==5.3.1` with its pinned graphics extra.
 
 ```bash
-uv pip install "qutip[graphics]==5.3.0"
+uv pip install "qutip[graphics]==5.3.1"
 ```
 
 Plots are diagnostics and communication artifacts, not substitutes for
@@ -325,10 +325,10 @@ Use an explicit local output path, avoid overwriting without user intent, and
 save the numeric data/configuration next to the figure. A raster image alone is
 not a reproducible result.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-08-04)
 
 - [Visualization and animation API](https://qutip.readthedocs.io/en/stable/apidoc/visualization.html)
 - [Wigner and Q-function API](https://qutip.readthedocs.io/en/stable/apidoc/visualization.html#pseudoprobability-functions)
 - [Bloch sphere guide](https://qutip.readthedocs.io/en/stable/guide/guide-bloch.html)
-- [QuTiP 5.3.0 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [Official QuTiP version-5 tutorials](https://github.com/qutip/qutip-tutorials/tree/main/tutorials-v5)

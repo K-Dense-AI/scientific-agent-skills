@@ -1,7 +1,7 @@
 # QuTiP 5.3 Advanced Methods and Package Boundaries
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0`.
+Research and API verification date: **2026-08-04**. Examples target
+`qutip==5.3.1`.
 
 Specialized methods add assumptions and convergence parameters. Use them only
 when the physical model requires them.
@@ -313,7 +313,7 @@ Official PyPI metadata snapshot:
 
 | Distribution | Latest published | Release date | Maturity | `Requires-Python` | Required distributions |
 |---|---:|---:|---|---|---|
-| `qutip` | 5.3.0 | 2026-05-22 | production/stable | `>=3.11` | NumPy `>=1.23.2`; SciPy `>=1.9.2` except `1.16.0`/`1.17.0`; `packaging` |
+| `qutip` | 5.3.1 | 2026-08-04 | production/stable | `>=3.11` | NumPy `>=1.23.2`; SciPy `>=1.9.2` except `1.16.0`/`1.17.0`; `packaging` |
 | `qutip-qip` | 0.4.2 | 2026-06-23 | production/stable | not declared | NumPy `>=1.16.6`; SciPy `>=1.0`; QuTiP `>=4.6`; `packaging` |
 | `qutip-qtrl` | 0.2.0 | 2026-06-23 | pre-alpha classifier | not declared | NumPy `>=1.19`; SciPy `>=1.0`; QuTiP `>=5.0.1`; `packaging` |
 | `qutip-jax` | 0.1.1 | 2025-05-29 | pre-alpha classifier | not declared | QuTiP `>=5.1.0`; JAX; Diffrax; Equinox |
@@ -399,14 +399,14 @@ it to this pinned skill snapshot.
 - QuTiP 5.3's `matrix_form` option for `mesolve` and new Krylov density-matrix
   support are performance choices that require output equivalence tests.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-08-04)
 
 - [Bloch-Redfield guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-bloch-redfield.html)
 - [Stochastic solver guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-stochastic.html)
 - [Floquet API](https://qutip.readthedocs.io/en/stable/apidoc/solver.html#floquet-states-and-floquet-markov-master-equation)
 - [HEOM API](https://qutip.readthedocs.io/en/stable/apidoc/heom.html)
 - [PIQS API](https://qutip.readthedocs.io/en/stable/apidoc/piqs.html)
-- [QuTiP 5.3.0 release](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [qutip-qip 0.4.2](https://pypi.org/project/qutip-qip/)
 - [qutip-qtrl 0.2.0](https://pypi.org/project/qutip-qtrl/)
 - [qutip-jax 0.1.1](https://pypi.org/project/qutip-jax/)

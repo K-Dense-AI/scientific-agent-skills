@@ -54,7 +54,12 @@ class CommonSafetyTests(unittest.TestCase):
             output = Path(directory) / "report.json"
             _common.emit_json({"ok": True}, output=output)
             self.assertEqual(json.loads(output.read_text()), {"ok": True})
-            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+            if sys.platform == "win32":
+                # Windows NTFS ACLs do not enforce POSIX 0o600 via os.chmod;
+                # Linux CI still enforces 0o600, so skip the mode check here.
+                self.assertTrue(output.exists())
+            else:
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
             with self.assertRaises(_common.CliError):
                 _common.emit_json({"ok": False}, output=output)
 
@@ -166,7 +171,7 @@ class PortableAuditTests(unittest.TestCase):
     def test_simulation_report_audit_passes_without_qutip(self) -> None:
         document = {
             "report_type": "qutip.two_level_simulation",
-            "qutip_version": "5.3.0",
+            "qutip_version": "5.3.1",
             "configuration": {"solver": "mesolve"},
             "model": {"assumptions": ["a", "b", "c"]},
             "times": [0.0, 1.0, 2.0],
@@ -190,7 +195,7 @@ class PortableAuditTests(unittest.TestCase):
     def test_audit_rejects_out_of_range_population(self) -> None:
         document = {
             "report_type": "qutip.two_level_simulation",
-            "qutip_version": "5.3.0",
+            "qutip_version": "5.3.1",
             "configuration": {"solver": "mesolve"},
             "model": {"assumptions": ["a", "b", "c"]},
             "times": [0.0, 1.0],
