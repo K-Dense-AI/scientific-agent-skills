@@ -4,7 +4,7 @@ description: "Compile current scholarly evidence for a scientific manuscript or 
 license: MIT license
 compatibility: Requires network access to api.parallel.ai through parallel-cli 0.7.1+ for Search, Extract, and Research; explicit Chat uses api.parallel.ai with PARALLEL_API_KEY; optional Perplexity requests use openrouter.ai and require OPENROUTER_API_KEY.
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: PARALLEL_API_KEY
@@ -22,6 +22,8 @@ metadata:
 Compile the external evidence needed to plan and write a high-quality scientific
 manuscript. The default academic workflow targets **60 verified, unique references**
 and produces a manuscript-ready research packet rather than a loose list of links.
+
+See `README.md` for an overview and the backend routing table.
 
 ## Scope and boundaries
 
