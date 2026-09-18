@@ -101,7 +101,7 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 6. **Sort by citations**: When available, sort search results by citation count to surface influential work first
 7. **Use parallel-cli extract**: Fetch full content from promising URLs found during search to verify relevance before full-text screening
 
-### Screening and Selection
+### Database Coverage
 1. **Use multiple databases** (minimum 3): Ensures comprehensive coverage
 2. **Include preprint servers**: Captures latest unpublished findings
 3. **Document everything**: Search strings, dates, result counts for reproducibility
