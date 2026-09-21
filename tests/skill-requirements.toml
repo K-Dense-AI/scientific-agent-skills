@@ -702,6 +702,9 @@ packages = ["build123d", "matplotlib"]
 [skills.geopandas]
 packages = ["geopandas", "pyogrio", "pyproj", "shapely", "pyarrow", "matplotlib", "sqlalchemy"]
 
+[skills.sentinel2-parcel-timeseries]
+packages = ["numpy", "pandas", "geopandas", "rasterio", "xarray", "pystac-client", "planetary-computer", "stackstac", "scikit-learn"]
+
 [skills.geomaster]
 packages = [
     "geopandas",
