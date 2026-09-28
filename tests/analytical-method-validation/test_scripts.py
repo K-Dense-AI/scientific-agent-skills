@@ -908,6 +908,48 @@ class TestInputHandling(unittest.TestCase):
         self.assertEqual(res.returncode, 2)
         self.assertIn("not numeric", res.stderr)
 
+    def test_a_row_with_more_fields_than_the_header_is_bad_input(self):
+        """A ragged row must be refused, not crash.
+
+        csv.DictReader parks the surplus fields under the None restkey as a
+        list, so the caller's .strip() used to raise AttributeError. run_cli
+        only catches InputError, so the traceback escaped and the process
+        exited 1 -- documented as "findings raised". A wrapper that reads
+        exit 1 as "analysis completed, problems found" would then treat a
+        malformed file as a clean result.
+        """
+        with self.assertRaises(common.InputError) as ctx:
+            common.parse_rows("level,response\n50,10100\n100,20100,extra\n")
+        message = str(ctx.exception)
+        self.assertIn("more fields than the header", message)
+        self.assertIn("row 2", message)
+
+    def test_a_ragged_csv_exits_2_not_1(self):
+        res = run_script("check_response", "-i", str(FIXTURES / "calibration_ragged.csv"))
+        self.assertEqual(res.returncode, 2, res.stderr)
+        self.assertIn("more fields than the header", res.stderr)
+        self.assertNotIn("Traceback", res.stderr)
+
+    def test_a_row_with_fewer_fields_still_names_the_missing_value(self):
+        """The short-row case was already handled; keep it pinned.
+
+        A missing field is not the same defect as a surplus one: DictReader
+        fills it with None, which the existing .strip() coerces to "" and
+        to_float then rejects by name. Only a *surplus* field produces the
+        None *key*. Both must stay exit 2, and this one goes through the CLI
+        because the numeric check lives in to_float, not in parse_rows.
+        """
+        res = run_script("check_response", "-i", str(FIXTURES / "calibration_short_row.csv"))
+        self.assertEqual(res.returncode, 2, res.stderr)
+        self.assertIn("not numeric", res.stderr)
+        self.assertNotIn("Traceback", res.stderr)
+
+    def test_the_tsv_reader_rejects_a_ragged_row_too(self):
+        """The guard sits in the shared parser, so it covers the TSV path too."""
+        with self.assertRaises(common.InputError) as ctx:
+            common.parse_rows("a\tb\n1\t2\t3\n", path_hint="study.tsv")
+        self.assertIn("more fields than the header", str(ctx.exception))
+
     def test_missing_file_exits_2(self):
         res = run_script("check_response", "-i", str(FIXTURES / "does_not_exist.csv"))
         self.assertEqual(res.returncode, 2)

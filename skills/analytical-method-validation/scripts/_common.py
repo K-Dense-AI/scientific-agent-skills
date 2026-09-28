@@ -843,6 +843,15 @@ def parse_rows(text: str, path_hint: str | None = None) -> list[dict[str, str]]:
     for i, row in enumerate(reader):
         if i >= MAX_ROWS:
             raise InputError(f"more than {MAX_ROWS} rows")
+        # A row with more fields than the header lands the surplus under the
+        # None restkey as a list, which has no .strip(). Refuse it here so a
+        # ragged file is bad input (exit 2) rather than a traceback that exits
+        # 1 -- the code documented as "findings raised".
+        if None in row:
+            raise InputError(
+                f"row {i + 1}: more fields than the header "
+                f"({len(row[None])} extra)"
+            )
         rows.append({(k or "").strip(): (v or "").strip() for k, v in row.items()})
     if not rows:
         raise InputError("no data rows found")
