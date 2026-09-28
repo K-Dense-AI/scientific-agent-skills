@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash WebSearch WebFetch
 license: MIT License
 compatibility: Requires Python 3.9+ with requests. Google Scholar search additionally needs scholarly. Needs network access to api.openalex.org, api.crossref.org, eutils.ncbi.nlm.nih.gov, export.arxiv.org, and api.datacite.org.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:

@@ -141,6 +141,8 @@ class MetadataExtractor:
                     'volume': str(message.get('volume', '')) if message.get('volume') else '',
                     'issue': str(message.get('issue', '')) if message.get('issue') else '',
                     'pages': message.get('page', ''),
+                    # Article locators are not page ranges or issue numbers.
+                    'article_number': str(message['article-number']) if message.get('article-number') is not None else '',
                     'publisher': message.get('publisher', ''),
                     'isbn': isbns[0] if isbns else '',
                     'issn': issns[0] if issns else '',
@@ -343,6 +345,7 @@ class MetadataExtractor:
             'volume': metadata.get('volume', ''),
             'number': metadata.get('issue', ''),
             'pages': format_pages(metadata.get('pages')),
+            'eid': metadata.get('article_number', ''),
             'doi': metadata.get('doi') or '',
             'isbn': metadata.get('isbn', ''),
             'issn': metadata.get('issn', ''),
