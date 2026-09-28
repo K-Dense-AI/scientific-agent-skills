@@ -7,7 +7,7 @@ message: >-
 type: software
 title: Scientific Agent Skills
 abstract: >-
-  An open library of 163 ready-to-use Agent Skills for science and research,
+  An open library of 166 ready-to-use Agent Skills for science and research,
   covering genomics, cheminformatics, medical imaging, study design, scientific
   communication, and more, for any AI agent that supports the open Agent Skills
   standard.
