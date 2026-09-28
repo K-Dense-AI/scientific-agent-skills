@@ -70,6 +70,23 @@ class RatioTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "positive integers"):
                     randomization._normalize_ratio(["a", "b"], ratio)
 
+    def test_fractional_ratio_entries_are_refused(self) -> None:
+        # A ratio below 1 floors to zero, which deletes the arm entirely: the
+        # template collapses to the surviving arm and every unit is assigned to
+        # it. A ratio between 1 and 2 floors to 1, silently changing the
+        # requested split. Both are worse than a loud refusal, because an
+        # unbalanced or single-arm trial still reports a clean result.
+        for ratio in ((0.5, 1), (1, 0.5), (1.5, 1), (1, 2.5), (1.1, 0.9)):
+            with self.subTest(ratio=ratio):
+                with self.assertRaisesRegex(ValueError, "positive integers"):
+                    randomization._normalize_ratio(["a", "b"], ratio)
+
+    def test_whole_number_floats_are_still_accepted(self) -> None:
+        # 1.0 and 2.0 are integers as values, so they must not be rejected.
+        self.assertEqual(
+            randomization._normalize_ratio(["a", "b"], (2.0, 1.0)), ["a", "a", "b"]
+        )
+
 
 class SimpleRandomizationTests(unittest.TestCase):
     def test_every_unit_is_assigned_exactly_once(self) -> None:
@@ -102,6 +119,25 @@ class SimpleRandomizationTests(unittest.TestCase):
             300, arms=("a", "b", "c"), seed=5
         )
         self.assertEqual(set(frame["arm"]), {"a", "b", "c"})
+
+    def test_a_fractional_ratio_is_refused_instead_of_dropping_an_arm(self) -> None:
+        # ratio=(0.5, 1) used to floor the first entry to zero, delete the
+        # treatment arm from the template, and hand every one of the 500 units
+        # to control. The trial produced a clean-looking result with no
+        # treatment arm at all, so the refusal has to happen at the API.
+        with self.assertRaisesRegex(ValueError, "positive integers"):
+            randomization.simple_randomization(
+                500, arms=("treatment", "control"), ratio=(0.5, 1), seed=0
+            )
+
+    def test_every_requested_arm_survives_the_allocation(self) -> None:
+        # The invariant behind the refusal: a ratio of positive integers never
+        # removes an arm from the schedule.
+        for ratio in ((1, 1), (2, 1), (3, 1), (1, 3), (1, 1, 1)):
+            with self.subTest(ratio=ratio):
+                arms = ["a", "b", "c"][:len(ratio)]
+                template = randomization._normalize_ratio(arms, ratio)
+                self.assertEqual(set(template), set(arms))
 
 
 class BlockRandomizationTests(unittest.TestCase):
