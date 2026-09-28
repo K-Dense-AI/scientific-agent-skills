@@ -640,6 +640,22 @@ packages = ["numpy", "pillow"]
 
 # --- neuroscience ---------------------------------------------------------
 
+[skills.mne-python]
+# The pipeline tests round-trip EDF, BrainVision, and EEGLAB exports and compare
+# against mne.stats.erp (pandas); preprocess_eeg.py prefers the Picard ICA solver.
+packages = [
+    "mne",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "scikit-learn",
+    "python-picard",
+    "edfio",
+    "pybv",
+    "eeglabio",
+]
+
 [skills.neurokit2]
 packages = ["neurokit2", "numpy", "pandas"]
 
