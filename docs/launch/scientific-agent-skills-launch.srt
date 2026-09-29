@@ -1,0 +1,34 @@
+1
+00:00:00,150 --> 00:00:02,800
+Query 78 public databases
+
+2
+00:00:03,000 --> 00:00:05,500
+Scientific Agent Skills Science skills for
+agents
+
+3
+00:00:05,700 --> 00:00:09,400
+Ask like a scientist
+
+4
+00:00:09,500 --> 00:00:13,000
+One question. Databases and tools,
+chained.
+
+5
+00:00:13,200 --> 00:00:14,900
+70+ Python package skills
+
+6
+00:00:14,950 --> 00:00:17,000
+78 public databases
+
+7
+00:00:17,100 --> 00:00:19,000
+Add research skills to your agent
+
+8
+00:00:19,000 --> 00:00:22,000
+npx skills add
+K-Dense-AI/scientific-agent-skills

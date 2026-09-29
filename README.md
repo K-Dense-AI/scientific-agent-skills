@@ -72,6 +72,12 @@ Recorded walkthroughs of these skills on real research tasks, from the [K-Dense 
 
 ---
 
+## 🎬 Launch video
+
+<a href="docs/launch/scientific-agent-skills-launch.mp4"><img src="docs/launch/scientific-agent-skills-launch.jpg" width="400" alt="Scientific Agent Skills launch video"></a>
+
+A 22-second 1:1 launch video with sound ([captions](docs/launch/scientific-agent-skills-launch.srt)). Click the poster to play.
+
 ## 📦 What's Included
 
 This repository provides **168 scientific and research skills** organized into the following categories:
