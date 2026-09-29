@@ -220,6 +220,13 @@ def cmd_set_evidence(args):
         meta["branch_ref"] = args.branch_ref
     if args.insight is not None:
         node["insight"] = args.insight
+    # Same check cmd_set_status makes. Without it a typo such as "inprogress"
+    # is persisted, validate then reports the whole tree invalid, and observe
+    # drops the node from both the frontier and the evidence list -- so a node
+    # carrying real evidence becomes invisible to the coordinator that reads
+    # observe each cycle.
+    if args.status is not None and args.status not in VALID_STATUS:
+        sys.exit(f"error: status must be one of {sorted(VALID_STATUS)}")
     node["status"] = args.status or "executed"
     _stamp(node)
     _save(_tree_path(args.run_dir), tree)
@@ -523,7 +530,7 @@ def build_parser():
     s.add_argument("--result", default=None, help="Factual result summary")
     s.add_argument("--insight", default=None, help="Distilled, reusable lesson from this experiment")
     s.add_argument("--branch-ref", default=None, help="Git branch/commit/worktree path of the artifact")
-    s.add_argument("--status", default=None, help="Override status (default: executed)")
+    s.add_argument("--status", default=None, help=f"Override status (default: executed), one of {sorted(VALID_STATUS)}")
     s.set_defaults(func=cmd_set_evidence)
 
     s = sub.add_parser("propagate", help="Abstract a leaf insight up to ancestors (Backpropagate, upward)")

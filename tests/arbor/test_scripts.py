@@ -202,6 +202,35 @@ class EvidenceTests(ArborRunTestCase):
         )
         self.assertEqual(self.tree["nodes"]["n2"]["status"], "pruned")
 
+    def test_an_unknown_status_is_refused_rather_than_persisted(self) -> None:
+        """A typo must not be able to write a status the tool itself rejects.
+
+        set-status validates against VALID_STATUS. set-evidence writes the same
+        field, so an unchecked value made validate report the tree invalid and
+        dropped the node from both observe lists -- the node holding the dev
+        score and result disappeared from the coordinator's own projection.
+        """
+        with self.assertRaises(SystemExit) as raised:
+            self.run_command(
+                "set-evidence", "--node", "n2", "--dev-score", "0.5", "--status", "inprogress"
+            )
+        self.assertIn("status must be one of", str(raised.exception))
+        # the node keeps its previous status, and the evidence stays writable
+        self.assertEqual(self.tree["nodes"]["n2"]["status"], "pending")
+
+        self.run_command("set-evidence", "--node", "n2", "--dev-score", "0.5")
+        self.assertEqual(self.tree["nodes"]["n2"]["status"], "executed")
+        self.assertEqual(self.tree["nodes"]["n2"]["metadata"]["dev_score"], 0.5)
+
+    def test_every_documented_status_is_accepted_by_set_evidence(self) -> None:
+        """The fix must not narrow what set-evidence accepts."""
+        for status in ("executed", "merged", "pruned", "running", "pending"):
+            with self.subTest(status=status):
+                self.run_command(
+                    "set-evidence", "--node", "n2", "--status", status
+                )
+                self.assertEqual(self.tree["nodes"]["n2"]["status"], status)
+
     def test_a_partial_update_leaves_untouched_fields_alone(self) -> None:
         self.run_command(
             "set-evidence",
