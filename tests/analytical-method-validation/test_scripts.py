@@ -924,6 +924,42 @@ class TestInputHandling(unittest.TestCase):
         rows = common.parse_rows(json.dumps(payload))
         self.assertEqual(len(rows), common.MAX_ROWS)
 
+    def test_json_and_csv_normalise_keys_and_values_identically(self):
+        """The same record must behave the same in either supported format.
+
+        The CSV branch strips keys and values; the JSON branch did not, so a
+        padded key such as " level" survived and require_columns then rejected
+        the file as missing a column it plainly had -- purely because the data
+        arrived as JSON rather than CSV.
+        """
+        payload = json.dumps([
+            {" level": 50, " response ": " 10100 "},
+            {" level": 100, " response ": " 20100 "},
+        ])
+        from_json = common.parse_rows(payload)
+        from_csv = common.parse_rows(
+            " level, response \n50, 10100 \n100, 20100 \n", path_hint="x.csv"
+        )
+
+        self.assertEqual(list(from_json[0].keys()), ["level", "response"])
+        self.assertEqual(list(from_json[0].keys()), list(from_csv[0].keys()))
+        self.assertEqual(from_json[0], from_csv[0])
+
+        # and both now satisfy the same required-column check
+        for rows in (from_json, from_csv):
+            with self.subTest(rows=list(rows[0].keys())):
+                common.require_columns(rows, ["level", "response"])
+
+    def test_a_padded_json_key_no_longer_fails_the_column_check(self):
+        """The user-visible symptom, pinned on its own."""
+        rows = common.parse_rows(json.dumps([{" level": 50, "response": 10100}]))
+        common.require_columns(rows, ["level", "response"])
+
+    def test_json_null_values_still_become_the_empty_string(self):
+        """Stripping must not break the None -> "" mapping the checks rely on."""
+        rows = common.parse_rows(json.dumps([{"level": 50, "response": None}]))
+        self.assertEqual(rows[0]["response"], "")
+
     def test_empty_json_array_rejected(self):
         with self.assertRaises(common.InputError):
             common.parse_rows("[]")

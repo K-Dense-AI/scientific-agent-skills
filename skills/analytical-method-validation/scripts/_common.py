@@ -829,7 +829,14 @@ def parse_rows(text: str, path_hint: str | None = None) -> list[dict[str, str]]:
         for item in payload:
             if not isinstance(item, dict):
                 raise InputError("JSON rows must be objects")
-            rows.append({str(k): "" if v is None else str(v) for k, v in item.items()})
+            # Strip like the CSV branch below. Without it the same logical
+            # record is accepted or rejected depending only on which of the two
+            # documented input formats it arrived in, and require_columns
+            # reports "missing required column(s): level; found:  level".
+            rows.append({
+                str(k).strip(): ("" if v is None else str(v)).strip()
+                for k, v in item.items()
+            })
         if not rows:
             raise InputError("no data rows found")
         return rows
