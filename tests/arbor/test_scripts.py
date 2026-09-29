@@ -441,6 +441,86 @@ class ProjectionTests(ArborRunTestCase):
         self.assertEqual(self.tree, before)
 
 
+class NodeOrderingTests(ArborRunTestCase):
+    """Node ids are minted n1, n2, ... so they must sort numerically."""
+
+    @staticmethod
+    def _section(out: str, header: str) -> list[str]:
+        """Lines of one observe section, up to the next dashed heading.
+
+        The headings themselves end in "--", so the section has to be cut on
+        whole lines rather than by splitting the text on "--".
+        """
+        lines = out.splitlines()
+        start = next(i for i, line in enumerate(lines) if header in line)
+        body: list[str] = []
+        for line in lines[start + 1:]:
+            if line.strip().startswith("--"):
+                break
+            body.append(line)
+        return body
+
+    @staticmethod
+    def _ids(lines: list[str]) -> list[str]:
+        # the pruned section prints "n2: hypothesis", the others "n1 (depth ...)"
+        return [
+            line.strip().split()[0].rstrip(":") for line in lines
+            if line.strip().startswith("n") and line.strip()[1:2].isdigit()
+        ]
+
+    def _seed(self, count: int) -> None:
+        self.init()
+        for i in range(count):
+            self.run_command("add-node", "--parent", "n0", "--hypothesis", f"hyp{i:02d}")
+        for i in range(1, count + 1):
+            self.run_command("set-status", "--node", f"n{i}", "--status", "running")
+
+    def test_observe_lists_the_frontier_in_creation_order(self) -> None:
+        # A string sort puts n10 before n2. The default budget is 20 cycles at
+        # branching 3, so more than nine nodes is the normal case, and observe
+        # is the projection the coordinator re-grounds on every cycle.
+        self._seed(11)
+        out, _ = self.run_command("observe")
+        ids = self._ids(self._section(out, "Active frontier"))
+        self.assertEqual(ids, [f"n{i}" for i in range(1, 12)])
+
+    def test_status_renders_depth_first_in_creation_order(self) -> None:
+        self._seed(11)
+        out, _ = self.run_command("status")
+        ids = [w for w in out.split() if w.startswith("n") and w[1:].isdigit()]
+        self.assertEqual(ids, [f"n{i}" for i in range(0, 12)])
+
+    def test_evidence_and_pruned_lists_also_sort_numerically(self) -> None:
+        # The other two observe lists used the same key and would drift the
+        # same way, so they are pinned too.
+        self.init()
+        for i in range(11):
+            self.run_command("add-node", "--parent", "n0", "--hypothesis", f"h{i:02d}")
+        for i in range(1, 12):
+            if i % 2:
+                self.run_command("set-evidence", "--node", f"n{i}", "--dev-score", "0.5")
+            else:
+                self.run_command("set-status", "--node", f"n{i}", "--status", "pruned")
+
+        out, _ = self.run_command("observe")
+        self.assertEqual(
+            self._ids(self._section(out, "Executed / merged nodes")),
+            ["n1", "n3", "n5", "n7", "n9", "n11"],
+        )
+        self.assertEqual(
+            self._ids(self._section(out, "Pruned lessons")),
+            ["n2", "n4", "n6", "n8", "n10"],
+        )
+
+    def test_the_sort_key_keeps_unexpected_ids_deterministic(self) -> None:
+        key = arbor_tree._id_sort_key
+        # well-formed ids come first, ordered by their number
+        ordered = sorted(["n10", "n2", "n1", "weird", "n9"], key=key)
+        self.assertEqual(ordered, ["n1", "n2", "n9", "n10", "weird"])
+        # n0 is the root and must sort before its children
+        self.assertEqual(sorted(["n1", "n0"], key=key), ["n0", "n1"])
+
+
 class PersistenceTests(ArborRunTestCase):
     def test_writes_leave_no_temporary_file_behind(self) -> None:
         # _save writes to a .tmp sibling and replaces, so a crash cannot leave
