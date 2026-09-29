@@ -12,6 +12,7 @@ in a temporary directory rather than mocking `open`.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -313,6 +314,62 @@ class FileValidationTests(unittest.TestCase):
         ok, messages = validate_files.validate_files()
         self.assertTrue(ok)
         self.assertEqual(messages, [])
+
+
+class ConsoleEncodingTests(unittest.TestCase):
+    """The scripts print U+2713 / U+2717, which a cp1252 console cannot encode.
+
+    A stock Windows terminal uses cp1252, so without a tolerant errors handler
+    the first status print raises UnicodeEncodeError and the tool dies before
+    reporting anything -- including on the success path. `PYTHONIOENCODING` is
+    how a caller reproduces that encoding without a real console.
+    """
+
+    def _run(self, script, *args, cwd=None):
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "cp1252"
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / script), *args],
+            capture_output=True, text=True, errors="replace", env=env, timeout=60,
+            cwd=cwd,
+        )
+
+    def test_validate_files_reports_under_a_cp1252_console(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.bed").write_text("chr1\t10\t20\n", encoding="utf-8")
+            result = self._run("validate_files.py", "--bed", str(root / "sample.bed"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("UnicodeEncodeError", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_validate_files_reports_a_failure_under_a_cp1252_console(self) -> None:
+        # The failure path prints the ballot-X marker, which is the other half
+        # of the same problem.
+        result = self._run("validate_files.py", "--bam", "no-such-file.bam")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertNotIn("UnicodeEncodeError", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_workflow_generator_reports_under_a_cp1252_console(self) -> None:
+        # The check-mark lives in the "Generated ... workflow" success message,
+        # not in --help, so the test has to actually generate something.
+        with tempfile.TemporaryDirectory() as directory:
+            # A relative output name, run with cwd set, because sanitize_path
+            # rejects anything outside [A-Za-z0-9._/-] and a native temporary
+            # path is full of separators a Windows temp dir may abbreviate.
+            result = self._run(
+                "workflow_generator.py",
+                "chipseq_qc",
+                "-o", "workflow.sh",
+                "--input-bam", "data/input.bam",
+                "--chip-bam", "data/chip1.bam",
+                "--output-dir", "results/qc",
+                cwd=directory,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("UnicodeEncodeError", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
 
 if __name__ == "__main__":

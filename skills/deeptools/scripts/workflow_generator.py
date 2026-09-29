@@ -10,6 +10,15 @@ import re
 import shlex
 import sys
 
+# See validate_files.py: the status lines here use U+2713, which a cp1252 console
+# (the default on a stock Windows terminal) cannot encode. Without this the
+# first status print raises UnicodeEncodeError and the generator reports nothing.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass  # already-redirected or non-reconfigurable stream (e.g. under pytest)
+
 
 SAFE_PATH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
 

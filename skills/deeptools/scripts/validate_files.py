@@ -11,6 +11,19 @@ import sys
 import argparse
 from pathlib import Path
 
+# The status lines below use U+2713 / U+2717. On a console whose encoding is
+# cp1252 -- the default for a stock Windows terminal -- those code points are
+# unencodable, so the very first print raised UnicodeEncodeError and the tool
+# died before reporting anything, including on the success path. Replacing the
+# encoding is not acceptable: the caller may be piping bytes elsewhere. Making
+# the errors handler tolerant keeps the glyphs intact on UTF-8 terminals and
+# degrades to "?" on legacy code pages instead of crashing.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass  # already-redirected or non-reconfigurable stream (e.g. under pytest)
+
 
 def check_file_exists(filepath):
     """Check if file exists and is readable."""
