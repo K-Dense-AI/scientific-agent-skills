@@ -236,6 +236,50 @@ class FileValidationTests(unittest.TestCase):
             ok, _ = validate_files.check_bam_index(str(bam))
             self.assertTrue(ok)
 
+    def test_bam_index_is_found_when_a_parent_directory_ends_in_bam(self) -> None:
+        """Only the final suffix may be rewritten.
+
+        str.replace() is global, so a stage directory named "align.bam" turned
+        the probe into ".../align.bai/chr1.bai" -- a directory that does not
+        exist -- and a correctly indexed BAM was reported as unindexed, sending
+        the user to run samtools index on a file that was already indexed.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / "deeptools2" / "align.bam"
+            stage.mkdir(parents=True)
+            bam = stage / "chr1.bam"
+            bam.write_bytes(b"BAM\1")
+
+            # genuinely unindexed
+            ok, message = validate_files.check_bam_index(str(bam))
+            self.assertFalse(ok)
+            self.assertIn("samtools index", message)
+
+            # the real sibling index, the samtools convention
+            (stage / "chr1.bai").write_bytes(b"BAI\1")
+            ok, _ = validate_files.check_bam_index(str(bam))
+            self.assertTrue(ok)
+
+            (stage / "chr1.bai").unlink()
+            # the .bam.bai convention, also inside the "align.bam" directory
+            (stage / "chr1.bam.bai").write_bytes(b"BAI\1")
+            ok, _ = validate_files.check_bam_index(str(bam))
+            self.assertTrue(ok)
+
+    def test_a_doubled_bam_suffix_still_resolves(self) -> None:
+        """A doubled suffix rewrites the final one, not the first."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bam = root / "x.bam.bam"
+            bam.write_bytes(b"BAM\1")
+
+            ok, _ = validate_files.check_bam_index(str(bam))
+            self.assertFalse(ok)
+
+            (root / "x.bam.bai").write_bytes(b"BAI\1")
+            ok, _ = validate_files.check_bam_index(str(bam))
+            self.assertTrue(ok)
+
     def test_tiny_bigwig_is_flagged_as_suspicious(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             small = Path(directory) / "small.bw"

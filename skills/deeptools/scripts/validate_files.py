@@ -24,7 +24,11 @@ def check_file_exists(filepath):
 def check_bam_index(bam_file):
     """Check if BAM file has an index (.bai or .bam.bai)."""
     bai_file1 = bam_file + ".bai"
-    bai_file2 = bam_file.replace(".bam", ".bai")
+    # with_suffix() replaces only the final suffix. str.replace() replaced every
+    # occurrence, so any path with ".bam" earlier in it -- an "align.bam/"
+    # stage directory, or a doubled "x.bam.bam" -- probed a directory that does
+    # not exist and reported a correctly indexed BAM as unindexed.
+    bai_file2 = str(Path(bam_file).with_suffix(".bai"))
 
     if os.path.exists(bai_file1):
         return True, f"✓ BAM index found: {bai_file1}"
