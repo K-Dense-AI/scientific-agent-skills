@@ -729,6 +729,9 @@ packages = [
     "sqlalchemy",
 ]
 
+[skills.sentinel2-parcel-timeseries]
+packages = ["numpy", "pandas", "geopandas", "rasterio", "xarray", "pystac-client", "planetary-computer", "stackstac", "scikit-learn"]
+
 [skills.geomaster]
 packages = [
     "geopandas",
