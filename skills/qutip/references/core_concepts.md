@@ -1,7 +1,7 @@
 # QuTiP 5.3 Core Concepts
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0`.
+Research and API verification date: **2026-08-04**. Examples target
+`qutip==5.3.1`.
 
 ## Units and the equation being solved
 
@@ -292,9 +292,9 @@ collapse rates.
 
 It is a preflight audit, not a proof that the physical model is appropriate.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-08-04)
 
 - [QuTiP 5.3 quantum-object API](https://qutip.readthedocs.io/en/stable/apidoc/quantumobject.html)
 - [Tensor-product guide](https://qutip.readthedocs.io/en/stable/guide/guide-tensor.html)
-- [QuTiP 5.3.0 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5.3 changelog](https://qutip.readthedocs.io/en/stable/changelog.html)

@@ -1,7 +1,7 @@
 # QuTiP 5.3 Time Evolution
 
-Research and API verification date: **2026-07-23**. All signatures and examples
-target `qutip==5.3.0`.
+Research and API verification date: **2026-08-04**. All signatures and examples
+target `qutip==5.3.1`.
 
 ## Solver selection
 
@@ -361,7 +361,7 @@ The bundled CLIs use bounded strict JSON and never pickle results.
 - `../scripts/convergence_sweep.py`: deterministic or trajectory convergence.
 - `../scripts/result_audit.py`: portable JSON audit.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-08-04)
 
 - [Dynamics API](https://qutip.readthedocs.io/en/stable/apidoc/solver.html)
 - [QobjEvo and coefficients API](https://qutip.readthedocs.io/en/stable/apidoc/time_dep.html)
@@ -369,5 +369,5 @@ The bundled CLIs use bounded strict JSON and never pickle results.
 - [Monte Carlo guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-monte.html)
 - [Stochastic solver guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-stochastic.html)
 - [Bloch-Redfield guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-bloch-redfield.html)
-- [QuTiP 5.3.0 release](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5 migration changelog](https://qutip.readthedocs.io/en/stable/changelog.html#qutip-5-0-0-2024-03-28)

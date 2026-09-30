@@ -1,7 +1,7 @@
 # QuTiP 5.3 Analysis, Steady States, and Spectra
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0`.
+Research and API verification date: **2026-08-04**. Examples target
+`qutip==5.3.1`.
 
 ## Analysis starts with invariants
 
@@ -309,11 +309,11 @@ other Python-object serialization.
 `../scripts/steady_state_spectrum_planner.py` produces a bounded plan for
 steady-state and direct/FFT spectrum checks without running a model.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-08-04)
 
 - [Solver, correlation, spectrum, and steady-state API](https://qutip.readthedocs.io/en/stable/apidoc/solver.html)
 - [Steady-state guide](https://qutip.readthedocs.io/en/stable/guide/guide-steady.html)
 - [Correlation guide](https://qutip.readthedocs.io/en/stable/guide/guide-correlation.html)
 - [Quantum-object API](https://qutip.readthedocs.io/en/stable/apidoc/quantumobject.html)
-- [QuTiP 5.3.0 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5 changelog](https://qutip.readthedocs.io/en/stable/changelog.html)

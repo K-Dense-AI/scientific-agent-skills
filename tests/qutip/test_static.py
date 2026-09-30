@@ -44,14 +44,14 @@ class DocumentationTests(unittest.TestCase):
         self.assertRegex(
             text,
             r"\nmetadata:\n  version: \"\d+\.\d+\"\n  skill-author:"
-            r".*\n  last-reviewed: \"2026-07-23\"",
+            r".*\n  last-reviewed: \"2026-08-04\"",
         )
 
     def test_snapshot_and_extension_boundaries_are_pinned(self) -> None:
         paths = [SKILL_ROOT / "SKILL.md", *sorted(REFERENCES.glob("*.md"))]
         combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
         for pin in (
-            "qutip==5.3.0",
+            "qutip==5.3.1",
             "qutip-qip==0.4.2",
             "qutip-qtrl==0.2.0",
             "qutip-jax==0.1.1",
@@ -91,8 +91,8 @@ class DocumentationTests(unittest.TestCase):
         for path in sorted(REFERENCES.glob("*.md")):
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
-                self.assertIn("2026-07-23", text)
-                self.assertIn("Sources (verified 2026-07-23)", text)
+                self.assertIn("2026-08-04", text)
+                self.assertIn("Sources (verified 2026-08-04)", text)
 
     def test_documented_cli_inventory_exists(self) -> None:
         scripts = {path.name for path in SCRIPTS.glob("*.py")}
