@@ -1,0 +1,46 @@
+{
+  "artifact": "dataset_index_r7.tsv",
+  "derived": true,
+  "sha256": "8b31447c9a5865205ff44f5423a99bbbf144ccb5a5125f69eeab23932f4d2fd6",
+  "bytes": 66786,
+  "rows": 758,
+  "columns": [
+    "study_id",
+    "dataset_id",
+    "study_label",
+    "sample_group",
+    "tissue_id",
+    "tissue_label",
+    "condition_label",
+    "sample_size",
+    "quant_method",
+    "file_class"
+  ],
+  "release": "r7",
+  "derived_on": "2026-09-12",
+  "source_file": "tabix/tabix_ftp_paths.tsv",
+  "source_url": "https://raw.githubusercontent.com/eQTL-Catalogue/eQTL-Catalogue-resources/master/tabix/tabix_ftp_paths.tsv",
+  "source_repository": "https://github.com/eQTL-Catalogue/eQTL-Catalogue-resources",
+  "source_sha256": "20912adbeb700bb0224e73f1acba79921cb7afd4323955b00e4e9a73da49b7f4",
+  "source_bytes": 287387,
+  "source_retrieved": "2026-08-19",
+  "modifications": "Derived from the catalogue's published table by dropping its three FTP URL columns (ftp_path, ftp_cs_path, ftp_lbf_path) and adding file_class, READ off the published ftp_path file name ('all' or 'cc'), never inferred from quant_method. Every other value is byte-identical to the source. The three URLs are reconstructed from study_id, dataset_id and file_class by the skill; reconstruction was asserted equal to the source on 758 of 758 rows for all three families at derivation time.",
+  "reconstruction": {
+    "sumstats": "ftp://ftp.ebi.ac.uk/pub/databases/spot/eQTL/sumstats/<QTS>/<QTD>/<QTD>.<file_class>.tsv.gz",
+    "credible_sets": "ftp://ftp.ebi.ac.uk/pub/databases/spot/eQTL/susie/<QTS>/<QTD>/<QTD>.credible_sets.tsv.gz",
+    "lbf_variable": "ftp://ftp.ebi.ac.uk/pub/databases/spot/eQTL/susie/<QTS>/<QTD>/<QTD>.lbf_variable.txt.gz",
+    "mismatches_at_derivation": 0,
+    "rows_checked": 758,
+    "file_class_counts": {
+      "all": 306,
+      "cc": 452
+    }
+  },
+  "why_derived": "ClawBio's wheel build hook (hatch_build.py, SMALL_DATA_MAX_BYTES = 262144) drops non-headline skill data files over 256 KB; the source table is 287,387 bytes.",
+  "why_bundled": "The catalogue's metadata REST API was permanently disabled in September 2026; the maintainer confirmed it on our issue, https://github.com/eQTL-Catalogue/eQTL-Catalogue-resources/issues/59 (closed 2026-09-09). This table is the metadata route in its place.",
+  "licence": "CC-BY-4.0 (https://www.ebi.ac.uk/eqtl/License/)",
+  "licence_note": "The eQTL Catalogue licence page states, in one sentence covering both halves: \"All eQTL Catalogue code is distributed under Apache 2.0 license and all its data is distributed under Creative Commons Attribution 4.0 International License\" (read verbatim 2026-08-20). This table is DATA -- dataset metadata published by the project -- so CC-BY-4.0 with attribution. The GitHub repository that publishes it holds data tables and scripts and carries no LICENSE file of its own, but the licensor has assigned a licence to BOTH categories, so no content in that repository is unlicensed. Approved for this use by the project owner on 2026-08-19.",
+  "attribution": "eQTL Catalogue dataset index. Source: eQTL Catalogue published tabix path table, tabix/tabix_ftp_paths.tsv, from the eQTL-Catalogue/eQTL-Catalogue-resources repository (https://github.com/eQTL-Catalogue/eQTL-Catalogue-resources), retrieved 2026-08-19. Distributed under CC-BY-4.0 (https://www.ebi.ac.uk/eqtl/License/). Cite: Kerimov N, Hayhurst JD, Peikova K, et al. A compendium of uniformly processed human gene expression and splicing quantitative trait loci. Nat Genet. 2021;53(9):1290-1299 (doi:10.1038/s41588-021-00924-w; PMID 34493866); and Kerimov N, Tambets R, Hayhurst JD, et al. eQTL Catalogue 2023: New datasets, X chromosome QTLs, and improved detection and visualisation of transcript-level QTLs. PLoS Genet. 2023;19(9):e1010932 (doi:10.1371/journal.pgen.1010932; PMID 37721944). MODIFICATIONS: this file is DERIVED from the source table, not a copy of it -- see the modifications field above (three FTP URL columns dropped, file_class added from the published file name; every other value byte-identical). The sha256 above is of THIS derived file; source_sha256 is of the retrieved source bytes.",
+  "per_study_attribution": "This file carries NO pmid column (its 10 columns are study_id, dataset_id, study_label, sample_group, tissue_id, tissue_label, condition_label, sample_size, quant_method, file_class; the source's three FTP URL columns are dropped, as stated above), so it cannot by itself discharge per-study attribution to each dataset's original publication. What supplies that: (a) study_label, present and non-empty on all 758 rows, is the author-year handle of the original publication and is what rides into rendered output; (b) the PMID itself lives in the sibling table data_tables/dataset_metadata_r7.tsv in the same repository, which covers exactly the same 758 dataset ids with a pmid column that is non-empty on all 758 (verified 2026-08-19). That sibling is deliberately NOT vendored here, because nothing on the fetch path reads it; a caller needing PMIDs should join against it rather than expect them in this artifact.",
+  "release_keyed": "Keyed to eQTL Catalogue r7; listed in docs/research/data_source_upgrade_derived_artifacts.md. An r8 bump re-derives this table with scripts/research/derive_eqtl_dataset_index_slim.py, which re-asserts the reconstruction; the 0-mismatch result is an r7 measurement."
+}

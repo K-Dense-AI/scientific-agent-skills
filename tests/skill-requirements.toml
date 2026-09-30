@@ -112,6 +112,9 @@ packages = ["requests", "python-dotenv"]
 [skills.research-lookup]
 packages = ["requests"]
 
+[skills.eqtl-catalogue-region-fetch]
+packages = ["pysam", "pyyaml"]
+
 [skills.exa-search]
 packages = ["exa-py", "python-dotenv"]
 
