@@ -883,6 +883,8 @@ packages = [
     "tellurium==2.2.13.1", "libroadrunner==2.10.0", "antimony==3.2.0",
     "python-libsbml==5.21.2", "python-libsedml==2.0.34", "python-libcombine==0.2.20",
 ]
+[skills.tket]
+packages = ["pytket[zx]", "pytket-qiskit[aer]", "numpy"]
 
 # --- packages a skill documents that cannot be installed here -------------
 #
@@ -912,3 +914,4 @@ dgl = "molfeat skill: no cp313 wheels"
 deepspeed = "pytorch-lightning skill: needs a CUDA toolchain to build"
 bitsandbytes = "transformers skill: CUDA-only, Linux wheels"
 "cudf-cu12" = "optimize-for-gpu skill: RAPIDS wheels are Linux + CUDA only (whole group)"
+qermit = "tket skill: every released qermit pins pytket-qiskit<0.78 and pytket-quantinuum[pecos]<0.59, so it cannot be installed beside the current extension pins (ZNE/CDR/PEC need their own environment)"
