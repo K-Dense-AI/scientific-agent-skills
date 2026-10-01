@@ -1,6 +1,6 @@
 # Scientific Skills
 
-This checkout contains **181 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
+This checkout contains **182 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
 current `description`; open its linked `SKILL.md` for setup, tested versions, workflows,
 and limitations. See [workflow examples](examples.md) for ways to combine them.
 
@@ -134,6 +134,7 @@ and limitations. See [workflow examples](examples.md) for ways to combine them.
 
 ### Protein Engineering & Design
 
+- **[Mol* Story](../skills/molstar-story/SKILL.md)** - Builds evidence-backed interactive Mol* Story/MolViewStories artifacts for structural-mechanism questions. Use when ligand pockets, conformational states, interfaces, mutations, density, or multi-structure results must be organized into a traceable scene sequence with scientific claim boundaries and browser acceptance. Do not use for ordinary HTML indexes, generic structure retrieval, or PyMOL-specific sessions.
 - **[RELION](../skills/relion/SKILL.md)** - Validates and executes RELION single-particle cryo-EM refinement and half-map postprocessing. Supports STAR optics/acquisition checks, particle-stack consistency, gold-standard half sets, soft-mask validation, diagnostic Fourier shell correlation, and restart guidance.
 - **[Adaptyv](../skills/adaptyv/SKILL.md)** - How to use the Adaptyv Bio Foundry API and Python SDK for protein experiment design, submission, and results retrieval. Use this skill whenever the user mentions Adaptyv, Foundry API, protein binding assays, protein screening experiments, BLI/SPR assays, thermostability assays, or wants to submit protein sequences for experimental characterization. Also trigger when code imports `adaptyv`, `adaptyv_sdk`, or `FoundryClient`, or references `foundry-api-public.adaptyvbio.com`.
 - **[ESM (Evolutionary Scale Modeling)](../skills/esm/SKILL.md)** - Use when working directly with the `esm` Python SDK, ESM3 or ESMC model IDs, Forge/Biohub inference clients, or ESMFold2 folding workflows.
