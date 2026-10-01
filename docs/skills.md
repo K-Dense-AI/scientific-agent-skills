@@ -1,12 +1,14 @@
 # Scientific Skills
 
-This checkout contains **181 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
+This checkout contains **182 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
 current `description`; open its linked `SKILL.md` for setup, tested versions, workflows,
 and limitations. See [workflow examples](examples.md) for ways to combine them.
 
 **Catalog reviewed:** 2026-09-30.
 
 ## Scientific Databases & Data Access
+
+- **[CoGAP Research](../skills/cogap-research/SKILL.md)** - Investigates CoGAP disease pairs, Mendelian randomization, shared genes, expression trends, stored risk models and supporting literature through connected CoGAP MCP tools. Use when a user requests CoGAP evidence or its actual dataset coverage. Requires an existing operator-authorized service; installation supplies no public endpoint or data access.
 
 - **[Database Lookup](../skills/database-lookup/SKILL.md)** - Query documented public database APIs with explicit endpoints, filters, pagination, and provenance. Use when a scientific, regulatory, financial, or other database-backed fact must be retrieved reproducibly from a named source rather than inferred from general knowledge.
 - **[DepMap](../skills/depmap/SKILL.md)** - Query the Cancer Dependency Map (DepMap) for cancer cell line gene dependency scores (CRISPR Chronos), drug sensitivity data, and gene effect profiles. Use for identifying cancer-specific vulnerabilities, synthetic lethal interactions, and validating oncology drug targets.
