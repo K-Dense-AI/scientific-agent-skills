@@ -93,6 +93,11 @@ def get_glycan_compositions(glyconnect_protein_id: int) -> list:
 - Glycan structure drawing and mass calculation
 - Annotation of MS/MS spectra with glycan fragment ions
 
+### glycowork
+- **URL**: https://github.com/BojarLab/glycowork (Python, `pip install glycowork`)
+- Notation conversion (IUPAC, WURCS, GlycoCT, Oxford, GlyTouCan IDs), masses, m/z to composition to structure
+- Motif annotation, SNFG drawing, and statistics for glycomics and site-specific glycoproteomics data; see the glycowork skill
+
 ### Skyline
 - Targeted quantification of glycopeptides
 - Integrates with glycan database

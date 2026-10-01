@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.00065-b31b1b.svg)](https://arxiv.org/abs/2609.00065)
 [![Version](https://img.shields.io/badge/Version-2.70.0-blue.svg)](pyproject.toml)
-[![Skills](https://img.shields.io/badge/Skills-181-brightgreen.svg)](#-whats-included)
+[![Skills](https://img.shields.io/badge/Skills-182-brightgreen.svg)](#-whats-included)
 [![Databases](https://img.shields.io/badge/Databases-100%2B-orange.svg)](#-whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io/)
 [![Agent Plugins](https://img.shields.io/badge/Standard-Agent_Plugins-0A7A72.svg)](https://agent-plugins.org/)
@@ -17,7 +17,7 @@
 
 > **🔔 Claude Scientific Skills is now Scientific Agent Skills.** Same skills, broader compatibility — now works with any AI agent that supports the open [Agent Skills](https://agentskills.io/) standard, not just Claude.
 
-> **New: [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)** — A free, open-source AI co-scientist that runs on your desktop, powered by Scientific Agent Skills. Bring your own API keys, pick from 40+ models, and get a full research workspace with web search, file handling, 100+ scientific databases, and access to all 181 skills in this repo. Your data stays on your computer, and you can optionally scale to cloud compute via [Modal](https://modal.com/) for heavy workloads. [Get started here.](https://github.com/K-Dense-AI/k-dense-byok)
+> **New: [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)** — A free, open-source AI co-scientist that runs on your desktop, powered by Scientific Agent Skills. Bring your own API keys, pick from 40+ models, and get a full research workspace with web search, file handling, 100+ scientific databases, and access to all 182 skills in this repo. Your data stays on your computer, and you can optionally scale to cloud compute via [Modal](https://modal.com/) for heavy workloads. [Get started here.](https://github.com/K-Dense-AI/k-dense-byok)
 
 > **🎥 Webinar recording — [Getting Started with K-Dense BYOK](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)**
 > A hands-on walkthrough of [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok), our free, open-source AI co-scientist that runs locally on your own machine and is powered by Scientific Agent Skills. We cover how to set it up, bring your own API keys, and run real research workflows with these skills. No prior technical experience needed. **[Watch the recording →](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)**
@@ -26,7 +26,7 @@
 
 > **📄 Paper:** Scientific Agent Skills is described in [*Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents*](https://arxiv.org/abs/2609.00065) (arXiv:2609.00065). If you use these skills in your research, please [cite the paper](#-citation).
 
-A collection of **181 scientific and research skills** for AI agents, created by [K-Dense](https://k-dense.ai). The skills cover biology, chemistry, medicine, physics, engineering, Earth science, data analysis, and scientific communication. Each provides guidance for a specific package, data source, or workflow, including the scientific conventions and validation checks needed to use it.
+A collection of **182 scientific and research skills** for AI agents, created by [K-Dense](https://k-dense.ai). The skills cover biology, chemistry, medicine, physics, engineering, Earth science, data analysis, and scientific communication. Each provides guidance for a specific package, data source, or workflow, including the scientific conventions and validation checks needed to use it.
 
 The collection follows the open [Agent Skills](https://agentskills.io/) standard and works with **Cursor, Claude Code, Codex, Google Antigravity, and other compatible hosts**. It is also a portable [Agent Plugins](https://agent-plugins.org/) package (`plugin.json` + `skills/`), so clients that support that standard can load the collection as one plugin. Browse the [skill categories](#-available-skills) or the [complete catalog](docs/skills.md) to choose the skills relevant to your work.
 
@@ -78,7 +78,7 @@ Recorded walkthroughs of these skills on real research tasks, from the [K-Dense 
 
 ## 📦 What's Included
 
-This repository provides **181 scientific and research skills** organized into the following categories:
+This repository provides **182 scientific and research skills** organized into the following categories:
 
 - **100+ Scientific & Financial Databases** - A unified database-lookup skill provides deterministic, provenance-rich access to 78 public databases (PubChem, ChEMBL, UniProt, COSMIC, ClinicalTrials.gov, FRED, USPTO, and more), plus dedicated skills for DepMap, Imaging Data Commons, PrimeKG, NCATS ARAX, U.S. Treasury Fiscal Data, Hugging Science, OneKGPd, Genomic Intelligence, and AlphaGenome (Atlas lookups and model scoring). Multi-database packages like BioServices (~40 bioinformatics services), BioPython (39 NCBI sub-databases via Entrez), and gget (20+ genomics databases) add further coverage
 - **70+ Optimized Python Package Skills** - Explicitly defined, version-aware workflows for RDKit, Scanpy, PyTorch Lightning, scikit-learn, PyTDC, PathML, pydicom, NeuroKit2, PufferLib, QuTiP, GeoPandas, pymatgen, BioPython, Qiskit, Molecular Dynamics (OpenMM/MDAnalysis), and others. The agent can still use *any* Python package; these skills provide stronger, safer guidance for the packages listed
@@ -131,7 +131,7 @@ Every skill has a `SKILL.md` with its purpose, workflow, and version metadata. D
 - **Multi-Step Workflows** - Execute complex pipelines with a single prompt
 
 ### 🎯 **Comprehensive Coverage**
-- **181 Skills** - Extensive coverage across all major scientific domains
+- **182 Skills** - Extensive coverage across all major scientific domains
 - **100+ Databases** - Unified access to 78+ databases via database-lookup, plus dedicated data access skills and multi-database packages like BioServices, BioPython, and gget
 - **70+ Optimized Python Package Skills** - Current, version-scoped guidance for packages including RDKit, Scanpy, PyTorch Lightning, scikit-learn, PyTDC, pydicom, PufferLib, QuTiP, GeoPandas, pymatgen, Qiskit, Molecular Dynamics (OpenMM/MDAnalysis), scVelo, and TimesFM (the agent can use any Python package; these are the pre-documented paths)
 
@@ -481,13 +481,13 @@ networks, and search GEO for similar patterns.
 
 ## 📚 Available Skills
 
-This repository contains **181 scientific and research skills** organized across multiple domains. Each skill provides comprehensive documentation, code examples, and best practices for working with scientific libraries, databases, and tools.
+This repository contains **182 scientific and research skills** organized across multiple domains. Each skill provides comprehensive documentation, code examples, and best practices for working with scientific libraries, databases, and tools.
 
 ### Skill Categories
 
 > **Note:** The Python package and integration skills listed below are *explicitly defined* skills — curated with documentation, examples, and best practices for stronger, more reliable performance. They are not a ceiling: the agent can install and use *any* Python package or call *any* API, even without a dedicated skill. The skills listed simply make common workflows faster and more dependable.
 
-Categories overlap: a skill may appear in more than one domain, so the category counts do not sum to the 181 unique skills.
+Categories overlap: a skill may appear in more than one domain, so the category counts do not sum to the 182 unique skills.
 
 #### 🧬 **Bioinformatics & Genomics** (32 skills)
 - RNA-seq pipelines: Bulk RNA-seq (end-to-end FASTQ -> counts -> DE -> enrichment orchestrator)
@@ -595,7 +595,8 @@ Categories overlap: a skill may appear in more than one domain, so the category 
 - Protocol management: bounded protocols.io reads across documented v3/v4 endpoints and non-executing write plans
 - LIMS/ELN integration: Benchling and the separate LabArchives legacy ELN and Inventory v1 APIs
 
-#### 🔬 **Multi-omics & Systems Biology** (5 skills)
+#### 🔬 **Multi-omics & Systems Biology** (6 skills)
+- Glycomics & glycan informatics: [glycowork](skills/glycowork/SKILL.md) (read any glycan notation, compositions and masses, m/z to structure, motif search, SNFG drawing, differential glycomics/glycoproteomics/lectin-array statistics, curated glycan and protein-glycan binding data, biosynthetic networks)
 - Pathway analysis: via Database Lookup (KEGG, Reactome, STRING) and PrimeKG
 - Data management: LaminDB
 - Biochemical dynamics: [Tellurium](skills/tellurium/SKILL.md) (kinetic models, time-course simulations, perturbations, and reproducible model exchange)
@@ -966,7 +967,7 @@ If you also need to cite a specific version of the repository itself (for exampl
   title = {Scientific Agent Skills: A Comprehensive Collection of Scientific Tools for AI Agents},
   year = {2026},
   url = {https://github.com/K-Dense-AI/scientific-agent-skills},
-  note = {181 skills covering databases, packages, integrations, and analysis tools}
+  note = {182 skills covering databases, packages, integrations, and analysis tools}
 }
 ```
 

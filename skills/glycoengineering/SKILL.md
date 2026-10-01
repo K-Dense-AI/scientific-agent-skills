@@ -3,7 +3,7 @@ name: glycoengineering
 description: Analyze and engineer protein glycosylation. Scan sequences for N-glycosylation sequons (N-X-S/T), predict O-glycosylation hotspots, and access curated glycoengineering tools (NetOGlyc, GlycoShield, GlycoWorkbench). For glycoprotein engineering, therapeutic antibody optimization, and vaccine design.
 license: Unknown
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: Kuan-lin Huang
 ---
 
@@ -292,6 +292,19 @@ egfr_glyco = query_glyconnect("P00533")
 - **Use**: Browse glycan structures, search by mass or composition
 - **Format**: GlycoCT or IUPAC notation
 
+### 6. glycowork (Glycan Structures and Glycomics in Python)
+
+- **URL**: https://github.com/BojarLab/glycowork (`pip install glycowork`)
+- **Use**: Convert between glycan notations (IUPAC, WURCS, GlycoCT, Oxford, GlyTouCan IDs), compute compositions and masses, test for motifs such as core fucose or bisecting GlcNAc, draw SNFG figures, and run statistics on released-glycan or site-specific glycoproteomics data
+- **Skill**: [glycowork](../glycowork/SKILL.md)
+
+```python
+from glycowork.motif.processing import canonicalize_iupac
+from glycowork.motif.graph import subgraph_isomorphism
+g = canonicalize_iupac("FA2G2")   # Oxford name of a typical afucosylation target
+subgraph_isomorphism(g, "Fuc(a1-6)GlcNAc", termini_list=['terminal', 'flexible'])   # True: core-fucosylated
+```
+
 ## Key Glycoengineering Strategies
 
 ### For Therapeutic Antibodies
@@ -315,6 +328,8 @@ egfr_glyco = query_glyconnect("P00533")
 | T299A | Removes Fc glycosylation |
 
 ## Glycan Notation
+
+To parse, convert or compare glycan sequences in code, use the glycowork skill rather than string handling; the table below is for reading notation only.
 
 ### IUPAC Condensed Notation (Monosaccharide abbreviations)
 
@@ -345,6 +360,7 @@ Neu5Ac-Gal-GlcNAc-Man/
 - **Consider site context**: Not all predicted sequons are actually glycosylated (accessibility, cell type, protein conformation)
 - **For antibodies**: Fc N297 glycan is critical — always characterize this site first
 - **Use GlyConnect** to check if your protein of interest has experimentally verified glycosylation data
+- **Use glycowork for glycan structures in code**: notation conversion, masses, motif checks (e.g., core fucose on Fc glycans), and glycoform statistics
 
 ## Additional Resources
 
