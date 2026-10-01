@@ -6,7 +6,7 @@ Base URL: `https://app.tamarind.bio/api/`
 Authentication: `x-api-key: <YOUR_KEY>` header on every request.
 Interactive docs: [app.tamarind.bio/api-docs](https://app.tamarind.bio/api-docs) · markdown docs at [docs.tamarind.bio](https://docs.tamarind.bio)
 
-There is no official Python SDK. Call the API with `requests` (Python) or `curl`. An MCP server (`https://mcp.tamarind.bio/mcp`, `X-API-Key` header) exposes the same operations with agent-friendly schemas.
+These REST recipes use `requests` (Python) or `curl`. The official `tamarind-cli` distribution also provides a Python client for Custom Tools; consult the current SDK reference for supported methods. An MCP server (`https://mcp.tamarind.bio/mcp`, `X-API-Key` header) exposes the same operations with agent-friendly schemas.
 
 ## Endpoints
 

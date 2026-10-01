@@ -559,7 +559,7 @@ pipeline = ImbPipeline([
 ## Best Practices
 
 ### Stratified Splitting
-Always use stratified splitting for classification:
+Use stratified splitting for classification only when rows are independent and the deployment task permits random splitting; retain group or temporal boundaries when those apply:
 ```python
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, stratify=y, random_state=42

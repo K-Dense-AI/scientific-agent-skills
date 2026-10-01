@@ -5,7 +5,7 @@ license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.10+ and pymoo (uv pip install). Optional matplotlib for visualization plots; optional autograd for gradient-based features; optional joblib for JoblibParallelization.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
 ---
 
@@ -61,8 +61,12 @@ result = minimize(
 **Result object contains:**
 - `result.X`: Decision variables of optimal solution(s)
 - `result.F`: Objective values of optimal solution(s)
-- `result.G`: Constraint violations (if constrained)
-- `result.algorithm`: Algorithm object with history
+- `result.G`: Raw inequality values (`g(x) <= 0` is feasible)
+- `result.H`: Raw equality residuals
+- `result.CV`: Aggregated constraint violation under the configured tolerances
+- `result.algorithm`: Final algorithm state; history is retained when requested
+
+**Check feasibility before plotting or selecting:** If no feasible solution was found, `result.X` and `result.F` can be `None`. With `return_least_infeasible=True`, a returned candidate can still violate constraints; report its `CV` and residuals instead of calling it feasible. Re-evaluate chosen candidates against the original physical constraints after any normalization or repair. See the [result contract](https://pymoo.org/interface/result.html).
 
 ### Problem Definition Styles
 

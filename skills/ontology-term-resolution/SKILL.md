@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages. Needs network access to https://www.ebi.ac.uk/ols4, https://bioregistry.io, https://resolver.api.identifiers.org, and https://www.ebi.ac.uk/spot/zooma (all public, no API key).
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -179,6 +179,12 @@ judgement calls are in `references/ontology-registry.md`.
 
 Give the ID **and** the label, and say how each was matched. A table of bare IDs cannot be
 reviewed. State unresolved terms explicitly rather than filling them with the nearest hit.
+
+Record the lookup date, ontology identifier, and ontology version IRI or release metadata
+when available, alongside the original input and selected term IRI. OLS serves changing
+ontology releases, so a live validation is evidence for that lookup date; preserve the
+response or exported mapping when an analysis must be reproduced. See the
+[OLS ontology resource](https://www.ebi.ac.uk/ols4/ols3help) for ontology metadata.
 
 ## References
 

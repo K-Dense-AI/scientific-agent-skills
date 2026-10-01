@@ -4,7 +4,7 @@ description: Prepare journal manuscripts, conference papers, research posters, a
 license: MIT license
 compatibility: Requires Python 3.11+ for helper scripts; LaTeX and Poppler command-line tools are optional for compilation and PDF inspection.
 metadata:
-  version: "1.3"
+  version: "1.5"
   skill-author: K-Dense Inc.
 ---
 
@@ -154,7 +154,7 @@ Use SciENcv and agency-provided common forms where required. Do not recreate bio
 2. Follow the official link for the exact year and track.
 3. Download the official author kit.
 4. Draft in the official template.
-5. Keep identifying information out of every submitted file when review is blind.
+5. Keep identifying information out of every submitted file when review is blind. Inspect supplementary archives and linked code/data in addition to the PDF: author names, notebook outputs, local paths, repository ownership, and revision history can disclose identity. Follow the venue's exact link and freeze rules; for example, ICML 2026 requires an anonymous code-repository branch that is not modified after the submission deadline.
 6. Check the paper checklist, supplement, rebuttal, and camera-ready rules separately.
 
 For NeurIPS 2026, the bundled wrapper can be copied after downloading the official style file:

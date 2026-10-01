@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.12+ and PyMC 6.0.1-compatible dependencies. Install reproducible environments with `uv pip install "pymc[nutpie]==6.0.1"`; optional NumPyro or BlackJAX samplers require separately pinned JAX-compatible dependencies.
 license: Apache License, Version 2.0
 metadata:
-  version: "1.4"
+  version: "1.6"
   skill-author: K-Dense Inc.
 ---
 
@@ -232,7 +232,7 @@ Checks R-hat, ESS, divergences, and tree depth.
 
 1. **Check diagnostics** before interpretation (R-hat, ESS, divergences)
 2. **Posterior predictive check** for model validation
-3. **Compare multiple models** when appropriate
+3. **Compare multiple models** on the same observed outcomes and predictive unit. Check PSIS-LOO Pareto-k diagnostics before interpreting ranks; a failed diagnostic calls for refitting or suitable K-fold validation, not an automatic switch to WAIC. See the [ArviZ LOO contract](https://python.arviz.org/en/stable/api/generated/arviz.loo.html).
 4. **Report uncertainty** (HDI intervals, not just point estimates)
 
 ### Workflow

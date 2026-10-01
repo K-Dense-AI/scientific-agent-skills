@@ -23,10 +23,10 @@ def check_python_version():
 
     print("Checking Python version...")
     if version.major == 3 and version.minor >= 9:
-        print(f"  ✓ Python {version.major}.{version.minor}.{version.micro}")
+        print(f"  [OK] Python {version.major}.{version.minor}.{version.micro}")
         return True
     else:
-        print(f"  ✗ Python {version.major}.{version.minor}.{version.micro} "
+        print(f"  [FAIL] Python {version.major}.{version.minor}.{version.micro} "
               f"(requires Python 3.9 or higher; upstream environment.yml uses Python 3.9.18)")
         return False
 
@@ -44,10 +44,10 @@ def check_package(package_name, import_name=None, version_attr='__version__'):
             if version is None:
                 version = 'unknown'
                 break
-        print(f"  ✓ {package_name:20s} (version: {version})")
+        print(f"  [OK] {package_name:20s} (version: {version})")
         return True
     except ImportError:
-        print(f"  ✗ {package_name:20s} (not installed)")
+        print(f"  [FAIL] {package_name:20s} (not installed)")
         return False
 
 
@@ -56,19 +56,19 @@ def check_pytorch():
     print("\nChecking PyTorch...")
     try:
         import torch
-        print(f"  ✓ PyTorch version: {torch.__version__}")
+        print(f"  [OK] PyTorch version: {torch.__version__}")
 
         # Check CUDA
         if torch.cuda.is_available():
-            print(f"  ✓ CUDA available: {torch.cuda.get_device_name(0)}")
+            print(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
             print(f"    - CUDA version: {torch.version.cuda}")
             print(f"    - Number of GPUs: {torch.cuda.device_count()}")
             return True, True
         else:
-            print(f"  ⚠ CUDA not available (will run on CPU)")
+            print(f"  [WARN] CUDA not available (will run on CPU)")
             return True, False
     except ImportError:
-        print(f"  ✗ PyTorch not installed")
+        print(f"  [FAIL] PyTorch not installed")
         return False, False
 
 
@@ -121,10 +121,10 @@ def check_esm():
     print("\nChecking ESM (for protein sequence folding)...")
     try:
         import esm
-        print(f"  ✓ ESM installed (version: {esm.__version__ if hasattr(esm, '__version__') else 'unknown'})")
+        print(f"  [OK] ESM installed (version: {esm.__version__ if hasattr(esm, '__version__') else 'unknown'})")
         return True
     except ImportError:
-        print(f"  ⚠ ESM not installed (needed for protein sequence folding)")
+        print(f"  [WARN] ESM not installed (needed for protein sequence folding)")
         print(f"    Install with: uv pip install fair-esm")
         return False
 
@@ -150,11 +150,11 @@ def check_diffdock_installation():
             missing_files.append(filename)
 
     if found_files:
-        print(f"  ✓ Found DiffDock files in current directory:")
+        print(f"  [OK] Found DiffDock files in current directory:")
         for f in found_files:
             print(f"    - {f}")
     else:
-        print(f"  ⚠ DiffDock files not found in current directory")
+        print(f"  [WARN] DiffDock files not found in current directory")
         print(f"    Current directory: {os.getcwd()}")
         print(f"    Make sure you're in the DiffDock repository root")
 
@@ -163,9 +163,9 @@ def check_diffdock_installation():
     confidence_dir = Path('./workdir/v1.1/confidence_model')
 
     if model_dir.exists() and confidence_dir.exists():
-        print(f"  ✓ Model checkpoints found")
+        print(f"  [OK] Model checkpoints found")
     else:
-        print(f"  ⚠ Model checkpoints not found in ./workdir/v1.1/")
+        print(f"  [WARN] Model checkpoints not found in ./workdir/v1.1/")
         print(f"    Models will be downloaded on first run")
 
     return len(found_files) > 0
@@ -208,7 +208,7 @@ def print_performance_notes(has_cuda):
 
     if has_cuda:
         print("""
-✓ GPU detected - DiffDock will run efficiently
+[OK] GPU detected - DiffDock will run efficiently
 
 Expected performance:
   - First run: ~2-5 minutes (pre-computing SO(2)/SO(3) tables)
@@ -217,7 +217,7 @@ Expected performance:
         """)
     else:
         print("""
-⚠ No GPU detected - DiffDock will run on CPU
+[WARN] No GPU detected - DiffDock will run on CPU
 
 Expected performance:
   - CPU inference is SIGNIFICANTLY slower than GPU
@@ -266,15 +266,15 @@ def main():
     all_passed = all(result for _, result in checks)
 
     for check_name, result in checks:
-        status = "✓ PASS" if result else "✗ FAIL"
+        status = "[OK] PASS" if result else "[FAIL] FAIL"
         print(f"  {status:8s} - {check_name}")
 
     if all_passed:
-        print("\n✓ All checks passed! DiffDock is ready to use.")
+        print("\n[OK] All checks passed! DiffDock is ready to use.")
         print_performance_notes(has_cuda)
         return 0
     else:
-        print("\n✗ Some checks failed. Please install missing dependencies.")
+        print("\n[FAIL] Some checks failed. Please install missing dependencies.")
         print_installation_instructions()
         return 1
 

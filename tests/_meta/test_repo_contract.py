@@ -15,10 +15,11 @@ run it on every pull request in seconds.
 from __future__ import annotations
 
 import json
-import re
 import tomllib
 import unittest
 from pathlib import Path
+
+from jsonschema import Draft202012Validator
 
 import skill_contract
 
@@ -31,21 +32,11 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 PLUGIN_NAME = "scientific-agent-skills"
-ALLOWED_PLUGIN_KEYS = frozenset(
-    {
-        "$schema",
-        "name",
-        "version",
-        "description",
-        "author",
-        "homepage",
-        "repository",
-        "license",
-        "keywords",
-        "extensions",
-    }
-)
-PLUGIN_NAME_RE = re.compile(r"^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
+# Unmodified schema from PLUGIN_SCHEMA, retrieved 2026-09-29. Upstream source:
+# https://github.com/agentplugins/agent-plugins-spec/tree/main/schemas/1.0.0
+# Apache-2.0; the upstream license is bundled alongside the schema. Keep this
+# versioned copy local so tests neither fetch nor execute remote content.
+PLUGIN_SCHEMA_FILE = Path(__file__).parent / "schemas" / "plugin-1.0.0.schema.json"
 
 structure = skill_contract.structure
 office = skill_contract.office
@@ -158,14 +149,17 @@ class AgentPluginTests(unittest.TestCase):
     def test_plugin_manifest_conforms(self) -> None:
         self.assertTrue(PLUGIN_MANIFEST.is_file(), "plugin.json must exist at the repo root")
         manifest = json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8"))
-        self.assertIsInstance(manifest, dict)
-
-        unknown = sorted(set(manifest) - ALLOWED_PLUGIN_KEYS)
-        self.assertEqual(unknown, [], "plugin.json has closed top-level schema")
+        schema = json.loads(PLUGIN_SCHEMA_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(schema["$id"], PLUGIN_SCHEMA)
+        Draft202012Validator.check_schema(schema)
+        errors = [
+            f"{error.json_path}: {error.message}"
+            for error in Draft202012Validator(schema).iter_errors(manifest)
+        ]
+        self.assertEqual(errors, [], "plugin.json must satisfy the official schema")
 
         self.assertEqual(manifest.get("$schema"), PLUGIN_SCHEMA)
         self.assertEqual(manifest.get("name"), PLUGIN_NAME)
-        self.assertRegex(manifest["name"], PLUGIN_NAME_RE)
 
         project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
         self.assertEqual(
@@ -178,11 +172,23 @@ class AgentPluginTests(unittest.TestCase):
         """Agent Plugins discovers only immediate children of skills/ with SKILL.md."""
         self.assertTrue(SKILLS_DIR.is_dir())
         self.assertTrue(KNOWN_SKILLS, "no discoverable skills under skills/")
-        for name in sorted(KNOWN_SKILLS):
-            with self.subTest(skill=name):
-                skill_md = SKILLS_DIR / name / "SKILL.md"
+        for skill in sorted(SKILLS_DIR.iterdir()):
+            if not skill.is_dir():
+                continue
+            with self.subTest(skill=skill.name):
+                skill_md = skill / "SKILL.md"
                 self.assertTrue(skill_md.is_file())
                 self.assertEqual(skill_md.parent.parent, SKILLS_DIR)
+
+    def test_package_paths_stay_within_plugin_root(self) -> None:
+        """Section 4.1 permits internal symlinks but rejects escaping package paths."""
+        root = REPO_ROOT.resolve()
+        for path in [PLUGIN_MANIFEST, SKILLS_DIR, *SKILLS_DIR.rglob("*")]:
+            with self.subTest(path=str(path.relative_to(REPO_ROOT))):
+                self.assertTrue(
+                    path.resolve().is_relative_to(root),
+                    f"{path.relative_to(REPO_ROOT)} resolves outside the plugin root",
+                )
 
 
 if __name__ == "__main__":

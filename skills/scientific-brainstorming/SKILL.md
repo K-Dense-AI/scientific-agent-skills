@@ -4,7 +4,7 @@ description: Facilitates evidence-aware scientific ideation with independent gen
 license: MIT
 compatibility: Core guidance works in any Agent Skills-compatible host. Optional bundled CLIs require Python 3.11+ and use only the standard library; they make no network or LLM calls and require no credentials.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: "K-Dense Inc."
 ---
 
@@ -199,7 +199,7 @@ pilot design, protocol development, preregistration, or no action. If a
 confirmatory study is planned, preregister hypotheses and analysis decisions
 before outcomes are known; report later deviations and exploratory work
 transparently. Preregistration improves transparency but is not peer review,
-ethical approval, or proof of validity.
+ethical approval, or proof of validity. For ideas generated after inspecting an existing dataset, record which outcomes and analyses were already seen. Treat tests on those same observations as exploratory; specify new data or an untouched holdout for a later confirmatory test rather than retroactively calling the brainstorm preregistered. See [COS guidance on existing data](https://www.cos.io/initiatives/prereg).
 
 ## Bias and failure controls
 

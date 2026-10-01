@@ -4,6 +4,8 @@
 
 ESM3 is a frontier multimodal generative language model that reasons over the sequence, structure, and function of proteins. It uses iterative masked language modeling to simultaneously generate across these three modalities.
 
+Examples below are illustrative legacy `esm==3.2.3` patterns; model inference was not rerun for this documentation refresh. PDB export signatures were checked against that release.
+
 ## Model Architecture
 
 **ESM3 Family Models:**
@@ -49,11 +51,11 @@ protein = ESMProtein(
 protein = ESMProtein.from_pdb("protein.pdb")
 
 # Export to PDB format
-pdb_string = protein.to_pdb()
+pdb_string = protein.to_pdb_string()
 
 # Save to file
 with open("output.pdb", "w") as f:
-    f.write(protein.to_pdb())
+    f.write(protein.to_pdb_string())
 ```
 
 **Masking Conventions:**
@@ -199,7 +201,7 @@ protein_with_structure = model.generate(protein, config)
 
 # Save as PDB
 with open("predicted_structure.pdb", "w") as f:
-    f.write(protein_with_structure.to_pdb())
+    f.write(protein_with_structure.to_pdb_string())
 ```
 
 ### 3. Inverse Folding

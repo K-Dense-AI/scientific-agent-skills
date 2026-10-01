@@ -4,7 +4,7 @@ description: Observe the user's screen via screenpipe, detect repeated research 
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
   openclaw:
     requires:
@@ -27,7 +27,7 @@ metadata:
 
 > **Requires a running [screenpipe](https://github.com/screenpipe/screenpipe) daemon.** This skill has no alternate data source — it reads exclusively from the local screenpipe HTTP API (default `http://localhost:3030`). If the daemon isn't running, `run()` raises `ScreenpipeUnreachable` with install instructions.
 
-> **Network access & environment variables.** This skill makes authenticated HTTP requests to (a) the user's local screenpipe daemon on loopback, and (b) the user-configured LLM backend — one of `http://localhost:1234/v1` (LM Studio, default), `https://api.anthropic.com` (opt-in Claude), or a user-supplied BYOK Foundry gateway. The skill reads three environment variables — `SCREENPIPE_TOKEN`, `ANTHROPIC_API_KEY`, `FOUNDRY_API_KEY` — and uses each only to authenticate to the single endpoint its name implies. No other network destinations, no telemetry, no data egress to any third party.
+> **Network access & environment variables.** This skill makes authenticated HTTP requests to (a) the user's local screenpipe daemon on loopback, and (b) the user-configured LLM backend — one of `http://localhost:1234/v1` (LM Studio, default), `https://api.anthropic.com` (opt-in Claude), or a user-supplied BYOK Foundry gateway. The skill reads three environment variables — `SCREENPIPE_TOKEN`, `ANTHROPIC_API_KEY`, `FOUNDRY_API_KEY` — and uses each only to authenticate to the single endpoint its name implies. Opt-in cloud backends receive redacted cluster summaries and matched skill descriptions. Embedding-model installation may also download public model files; local inference does not imply zero network access.
 
 ## Overview
 
@@ -46,9 +46,9 @@ Do **not** invoke it for one-off questions about screenpipe itself, for real-tim
 ## Privacy Posture
 
 - **Screenpipe handles app/window filtering at capture time.** Install a starter deny-list by copying `references/screenpipe-config.yaml` into the user's screenpipe config. Sensitive apps (password managers, messaging, banking) are never OCR'd in the first place.
-- **Raw OCR never leaves the machine.** `scripts/fetch_window.py` pulls data over localhost HTTP. `scripts/cluster.py` reduces the timeline to app/duration/title summaries. `scripts/redact.py` strips emails, API keys, bearer tokens, and phone numbers as defense-in-depth before any cluster summary reaches the LLM.
+- **Raw OCR is not sent to the synthesis backend by this pipeline.** `scripts/fetch_window.py` pulls data over localhost HTTP. `scripts/cluster.py` reduces the timeline to app/duration/title summaries. `scripts/redact.py` strips emails, API keys, bearer tokens, and phone numbers as defense-in-depth before any cluster summary reaches the LLM.
 - **LLM backend defaults to `local`.** The recommended setup is [LM Studio](https://lmstudio.ai/) running `Gemma-4-31B-it` — strong reasoning at a size that fits on most workstation GPUs, and no data ever leaves your machine. Cloud backends (`claude`, `foundry`) are opt-in and documented in `config.yaml` for users who explicitly want them. Detection and embeddings always run locally regardless of backend choice.
-- **Dry-run mode** (`--plan`) prints the exact timeline that will be analyzed before any LLM call.
+- **Dry-run mode** (`--dry-run`) skips skill matching and LLM synthesis and writes a clustered `plan.md`. Review the retained app names and window titles before selecting a cloud backend; the regex scrubber does not guarantee anonymization or removal of unpublished research details.
 - **TLS for localhost** (optional, for corporate policy): see `references/https-proxy.md` for the Caddy pattern.
 
 ## Prerequisites
@@ -81,6 +81,9 @@ export SCREENPIPE_TOKEN=$(screenpipe auth token)
 ```
 
 (Or set `screenpipe.token` directly in `config.yaml` — env var is preferred since it keeps secrets out of version control.)
+
+Screenpipe connections permit HTTP only on loopback; remote endpoints require HTTPS.
+Generated draft names must be valid skill names, so model output cannot write outside the proposal directory.
 
 ### 3. Python environment
 
@@ -118,7 +121,7 @@ screenpipe daemon (user-installed)
 scripts/fetch_window.py    → normalized timeline events
 scripts/redact.py          → regex scrub (defense-in-depth)
 scripts/cluster.py         → sessions + clusters (local only)
-scripts/match_skills.py    → top-k vs existing 135 skills (local embeddings)
+scripts/match_skills.py    → top-k vs discovered skills (local embeddings)
 scripts/synthesize.py      → LLM judge: reuse / compose / novel
         │
         ▼
@@ -230,7 +233,7 @@ python -m pytest tests/autoskill -v
 
 ## Composition with other skills in this repo
 
-The autoskill's embedding index covers all 135 sibling skills. Workflows that look like scientific writing will match `scientific-writing` / `literature-review` / `citation-management`; figure work will match `scientific-schematics` / `generate-image` / `infographics`; slide prep matches `scientific-slides` / `pptx`; etc. When a cluster scores high against two or three sibling skills the emitted composition recipe names them explicitly, so the user's future agent invocations use the optimized paths already documented in this repo.
+The autoskill's embedding index discovers sibling `SKILL.md` files from the configured skills directory at run time. Workflows that look like scientific writing will match `scientific-writing` / `literature-review` / `citation-management`; figure work will match `scientific-schematics` / `generate-image` / `infographics`; slide prep matches `scientific-slides` / `pptx`; etc. When a cluster scores high against two or three sibling skills the emitted composition recipe names them explicitly, so the user's future agent invocations use the optimized paths already documented in this repo.
 
 ## Citing Scientific Agent Skills
 

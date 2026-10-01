@@ -230,7 +230,7 @@ Transform new data into the existing embedded space.
 **Important notes:**
 - The model must be fitted before calling transform
 - Transform quality depends on similarity between training and test distributions
-- For significantly different data distributions, consider Parametric UMAP
+- Under distribution shift, validate neighborhood support and downstream performance; Parametric UMAP is not an automatic remedy.
 
 ### inverse_transform(X)
 Transform data from the embedded space back to the original data space.

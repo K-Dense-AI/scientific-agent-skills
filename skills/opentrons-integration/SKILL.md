@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.10+ and uv for local simulation. Flex examples target opentrons 9.1.1 and API 2.29; the separate OT-2 line targets API 2.28 and uses opentrons 9.0.0 as its local compatibility simulator. Physical execution requires compatible hardware, current robot software, and the appropriate Opentrons App.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: "K-Dense Inc."
 ---
 
@@ -238,9 +238,13 @@ range. A 100 nL operation is not an Opentrons pipetting task.
 - Use dynamic start/end locations or `dynamic_mix()` only when API 2.27+ and the
   geometry has been reviewed.
 
-Model contamination boundaries before optimizing tips. Never reuse a tip across
-unrelated samples merely to reduce consumables. See
-`references/liquid_handling.md`.
+Model contamination boundaries before optimizing tips. For standard `distribute()`
+and `consolidate()`, `new_tip="always"` still uses one tip for the complex command;
+it does not provide a fresh tip for every destination or source. When independent
+samples require fresh tips, use suitable `transfer()` calls or explicit building
+blocks and inspect the expanded simulation log. Liquid-class commands have their
+own documented tip policies. See the [complex-command parameter reference](https://docs.opentrons.com/python-api/complex-commands/parameters/)
+and `references/liquid_handling.md`.
 
 ### 5. Add setup information and runtime controls
 

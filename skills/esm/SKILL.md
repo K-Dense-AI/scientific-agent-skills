@@ -3,7 +3,7 @@ name: esm
 description: Use when working directly with the `esm` Python SDK, ESM3 or ESMC model IDs, Forge/Biohub inference clients, or ESMFold2 folding workflows.
 license: MIT license
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -62,22 +62,26 @@ See `references/esm3-api.md` for detailed ESM3 model specifications, advanced ge
 
 Use ESM3's structure track for structure prediction from sequence or inverse folding (sequence design from structure).
 
-**Structure prediction:**
+**Structure prediction (illustrative; requires the ESM3 model loaded above):**
 
 ```python
 from esm.sdk.api import ESM3InferenceClient, ESMProtein, GenerationConfig
 
-# Predict structure from sequence
-protein = ESMProtein(sequence="MPRTKEINDAGLIVHSP...")
+# Predict the missing structure track from a complete amino-acid sequence.
+protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
 protein_with_structure = model.generate(
     protein,
-    GenerationConfig(track="structure", num_steps=protein.sequence.count("_"))
+    GenerationConfig(track="structure", num_steps=8)
 )
 
-# Access predicted structure
+# Access predicted structure. Model inference has not been run for this example.
 coordinates = protein_with_structure.coordinates  # 3D coordinates
-pdb_string = protein_with_structure.to_pdb()
+pdb_string = protein_with_structure.to_pdb_string()
 ```
+
+Use a positive step count for the track being generated: a complete input sequence
+has no `_` masks but still needs structure generation. `to_pdb(path)` writes a
+file; `to_pdb_string()` returns text. See the [upstream API](https://github.com/Biohub/esm/blob/main/esm/sdk/api.py).
 
 **Inverse folding (sequence from structure):**
 
@@ -240,7 +244,7 @@ Local `ESMC.from_pretrained()` examples use underscore aliases (`esmc_300m`, `es
 
 ## Installation
 
-Install from PyPI ([`esm` on PyPI](https://pypi.org/project/esm/) by EvolutionaryScale). Current PyPI release: **3.2.3** (Oct 14, 2025). Requires **Python >=3.12,<3.13**.
+The ESM3 and legacy ESMC examples target [`esm==3.2.3`](https://pypi.org/project/esm/3.2.3/) (Oct 14, 2025), not an assertion about the latest SDK. This pinned release requires **Python >=3.12,<3.13**. Match newer Biohub/ESMFold2 examples to their documented SDK release separately.
 
 **Basic installation:**
 

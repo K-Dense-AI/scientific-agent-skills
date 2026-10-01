@@ -1,0 +1,4 @@
+variant_id	CHROM	POS	REF	ALT
+rs_a	chr22	36201698	A	C
+rs_b	9	128225994	G	A
+bad	chr1	notanumber	A	T

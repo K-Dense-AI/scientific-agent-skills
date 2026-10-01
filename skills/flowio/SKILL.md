@@ -5,7 +5,7 @@ allowed-tools: Read Write Bash
 license: BSD-3-Clause license
 compatibility: Requires Python 3.9-3.13, uv, and FlowIO 1.4.0. NumPy is installed with FlowIO; pandas is optional for DataFrame workflows. Runtime parsing is local and needs no credentials or network access.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -251,7 +251,13 @@ events while dropping PnG or `timestep`, changing later
 round-trips.
 
 Use `create_fcs()` instead when event values, event count, or channel layout
-changes.
+changes. Before copying `spill`/`spillover`, match its detector names to the output
+PnN labels, not the optional marker/PnS labels. Check the declared matrix size,
+coefficient count, and detector ordering. Renaming or dropping channels requires
+an explicit matrix review; do not carry incompatible source metadata into the
+new file. If compensation was applied elsewhere, record that state and prevent
+downstream software from applying the original matrix again. See the upstream
+[writer contract](https://flowio.readthedocs.io/en/latest/api.html).
 
 ## Bundled Inspector
 

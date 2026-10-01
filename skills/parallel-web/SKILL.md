@@ -4,7 +4,7 @@ description: "Use Parallel CLI for web search, URL extraction, deep research, st
 license: MIT
 compatibility: Requires parallel-cli and internet access.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: PARALLEL_API_KEY
@@ -61,6 +61,15 @@ When citing academic sources, include author names and publication year where av
 - Use only task IDs returned by the CLI. Before status, poll, cancel, or result commands, confirm the ID has the expected CLI-generated prefix (`trun_`, `tgrp_`, `findall_`/`frun_`, or `mon_`) and contains no whitespace or shell metacharacters.
 - Do not print, log, or include `PARALLEL_API_KEY` in command arguments or output.
 - Write result files only when the user needs an artifact. Use the user-requested path or a temporary/work directory, not the repository root by default.
+
+## Verify field-level evidence
+
+For research and enrichment, retain the returned research basis with each output
+field when available: source URLs, excerpts, reasoning, and confidence. Check
+that cited sources support the requested entity, time period, and unit rather
+than merely mentioning the topic. Preserve null or unresolved fields; do not
+turn an unavailable value into zero. Confidence describes the service's
+assessment, not independent validation. See [Parallel's research basis guide](https://docs.parallel.ai/task-api/guides/access-research-basis).
 
 ## Context chaining
 

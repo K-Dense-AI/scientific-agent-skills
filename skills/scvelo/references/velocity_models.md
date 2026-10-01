@@ -72,8 +72,10 @@ The velocity graph connects cells based on their velocity similarity to neighbor
 ```python
 scv.tl.velocity_graph(adata)
 # Stored in adata.uns['velocity_graph']
-# Entry [i,j] = probability that cell i transitions to cell j
+# Entry [i,j] = cosine similarity for a candidate transition, not a probability
 ```
+
+Convert the velocity graph using the installed scVelo transition-matrix utility before any Markov-chain calculation; check nonnegative weights and row sums for the intended stochastic matrix. Do not interpret the raw cosine graph as probabilities.
 
 **Parameters:**
 - `n_neighbors`: Number of neighbors considered

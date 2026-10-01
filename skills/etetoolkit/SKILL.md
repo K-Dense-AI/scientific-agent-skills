@@ -5,7 +5,7 @@ license: GPL-3.0-or-later
 allowed-tools: Read Write Edit Bash Python
 compatibility: Bundled scripts require Python 3.10+ and ete4 4.4.0 (upstream ete4 supports Python >=3.7). Taxonomy setup and SmartView exploration need network access; static SmartView PNG rendering needs ete4[render-sm], and Qt PDF/SVG rendering needs ete4[treeview].
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -196,6 +196,10 @@ reconciliation, use a curated species tree and
 
 ### Query taxonomy
 
+Name lookups can return several TaxIDs. Resolve ambiguity using rank and lineage
+before selecting a match. The guard below was checked with synthetic mappings;
+the database-dependent workflow is illustrative until run against your snapshot.
+
 ```python
 from ete4 import NCBITaxa
 
@@ -203,9 +207,12 @@ ncbi = NCBITaxa()
 names = ["Homo sapiens", "Pan troglodytes", "Mus musculus"]
 name_to_taxids = ncbi.get_name_translator(names)
 
-missing = [name for name in names if name not in name_to_taxids]
-if missing:
-    raise ValueError(f"Names not resolved by NCBI taxonomy: {missing}")
+unresolved = {
+    name: name_to_taxids.get(name, [])
+    for name in names if len(name_to_taxids.get(name, [])) != 1
+}
+if unresolved:
+    raise ValueError(f"Names need NCBI taxonomy disambiguation: {unresolved}")
 
 taxids = [name_to_taxids[name][0] for name in names]
 taxonomy_tree = ncbi.get_topology(taxids)

@@ -4,19 +4,24 @@ description: Zero-shot time series forecasting with Google's TimesFM foundation 
 allowed-tools: Read Write Edit Bash
 license: Apache-2.0 license
 metadata:
-  version: "1.2"
+  version: "2.1"
   skill-author: Clayton Young / Superior Byte Works, LLC (@borealBytes)
   skill-version: 1.0.0
 ---
 
 # TimesFM Forecasting
 
+## Output-schema migration (skill 2.0)
+
+`forecast_csv.py` now exports `lower_80`/`upper_80` for q10/q90 and `lower_60`/`upper_60` for q20/q80. Earlier releases mislabeled these as 90% and 80%; migrate old outer `*_90` fields to `*_80` and old inner `*_80` fields to `*_60` simultaneously. No 90% interval is supplied by these deciles (that would require q05/q95).
+
+The archived `examples/global-temperature/` scripts and generated figures/tables have incorrect quantile indexing and coverage labels. Treat them as historical, unvalidated artifacts; do not reuse their numerical bands or visuals until regenerated and checked against the model output mapping.
+
 ## Overview
 
 TimesFM (Time Series Foundation Model) is a pretrained decoder-only foundation model
 developed by Google Research for time-series forecasting. It works **zero-shot** — feed it
-any univariate time series and it returns point forecasts with calibrated quantile
-prediction intervals, no training required.
+a univariate time series and it returns point forecasts and quantile estimates, with no task-specific training required. Nominal interval coverage must be checked on representative held-out data; a quantile head does not guarantee calibration.
 
 This skill wraps TimesFM for safe, agent-friendly local inference. It includes a
 **mandatory preflight system checker** that verifies RAM, GPU memory, and disk space
@@ -32,7 +37,7 @@ Use this skill when:
 
 - Forecasting **any univariate time series** (sales, demand, sensor, vitals, price, weather)
 - You need **zero-shot forecasting** without training a custom model
-- You want **probabilistic forecasts** with calibrated prediction intervals (quantiles)
+- You want **probabilistic forecasts** with quantile-based prediction intervals
 - You have time series of **any length** (the model handles 1–16,384 context points)
 - You need to **batch-forecast** hundreds or thousands of series efficiently
 - You want a **foundation model** approach instead of hand-tuning ARIMA/ETS parameters
@@ -45,8 +50,7 @@ Do **not** use this skill when:
 - Your data is tabular (not temporal) → use `scikit-learn`
 
 > **Note on Anomaly Detection**: TimesFM does not have built-in anomaly detection, but you can
-> use the **quantile forecasts as prediction intervals** — values outside the 90% CI (q10–q90)
-> are statistically unusual. See the `examples/anomaly-detection/` directory for a full example.
+> use the **quantile forecasts as prediction intervals** — q10–q90 is a nominal **80% prediction interval**, not a 90% confidence interval. Validate empirical coverage before interpreting exceedances as anomalies. See the `examples/anomaly-detection/` directory for a full example.
 
 ## ⚠️ Mandatory Preflight: System Requirements Check
 
@@ -151,6 +155,8 @@ print("Installation OK")
 
 ## 🎯 Quick Start
 
+The model-call examples below are illustrative; no checkpoint inference was rerun for this documentation correction.
+
 ### Minimal Example (5 Lines)
 
 ```python
@@ -171,7 +177,7 @@ point, quantiles = model.forecast(horizon=24, inputs=[
     np.sin(np.linspace(0, 20, 200)),  # any 1-D array
 ])
 # point.shape == (1, 24)        — median forecast
-# quantiles.shape == (1, 24, 10) — 10th–90th percentile bands
+# quantiles.shape == (1, 24, 10) — mean, then q10 through q90
 ```
 
 ### Forecast from CSV
@@ -193,8 +199,8 @@ for i, col in enumerate(df.columns):
     forecast_df = pd.DataFrame({
         "date": future_dates,
         "forecast": point[i],
-        "lower_80": quantiles[i, :, 2],  # 20th percentile
-        "upper_80": quantiles[i, :, 8],  # 80th percentile
+        "lower_80": quantiles[i, :, 1],  # 10th percentile
+        "upper_80": quantiles[i, :, 9],  # 90th percentile
     })
     print(f"\n--- {col} ---")
     print(forecast_df.to_string(index=False))
@@ -236,24 +242,23 @@ prediction intervals** that can detect anomalies:
 ```python
 point, q = model.forecast(horizon=H, inputs=[values])
 
-# 90% prediction interval
-lower_90 = q[0, :, 1]  # 10th percentile
-upper_90 = q[0, :, 9]  # 90th percentile
+# Nominal 80% prediction interval
+lower_80 = q[0, :, 1]  # 10th percentile
+upper_80 = q[0, :, 9]  # 90th percentile
 
-# Detect anomalies: values outside the 90% CI
 actual = test_values  # your holdout data
-anomalies = (actual < lower_90) | (actual > upper_90)
+anomalies = (actual < lower_80) | (actual > upper_80)
 
-# Severity levels
-is_warning = (actual < q[0, :, 2]) | (actual > q[0, :, 8])  # outside 80% CI
-is_critical = anomalies  # outside 90% CI
+# Mutually exclusive screening levels; thresholds require application validation
+is_critical = anomalies  # outside nominal 80% PI
+is_warning = ((actual < q[0, :, 2]) | (actual > q[0, :, 8])) & ~is_critical
 ```
 
 | Severity | Condition | Interpretation |
 | -------- | --------- | -------------- |
-| **Normal** | Inside 80% CI | Expected behavior |
-| **Warning** | Outside 80% CI | Unusual but possible |
-| **Critical** | Outside 90% CI | Statistically rare (< 10% probability) |
+| **Normal** | Inside nominal 60% PI (q20–q80) | Within the inner screening band |
+| **Warning** | Outside 60% PI but inside 80% PI | Between screening bands |
+| **Critical** | Outside nominal 80% PI (q10–q90) | Exceedance; not a calibrated anomaly probability |
 
 > See `examples/anomaly-detection/` for a complete example with visualization.
 

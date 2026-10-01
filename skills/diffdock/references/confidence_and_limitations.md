@@ -55,8 +55,7 @@ DiffDock generates a confidence score for each predicted binding pose. This scor
 ### Designed For
 - **Small molecule docking**: Organic compounds typically 100-1000 Da
 - **Protein targets**: Single or multi-chain proteins
-- **Small peptides**: Short peptide ligands (< ~20 residues)
-- **Small nucleic acids**: Short oligonucleotides
+- **Outside the validated small-molecule scope**: Small peptides and oligonucleotides may run, but successful parsing or a residue-count cutoff does not establish docking reliability
 
 ### NOT Designed For
 - **Large biomolecules**: Full protein-protein interactions
@@ -87,7 +86,12 @@ DiffDock was trained on:
    - Use confidence scores for initial ranking
    - Consider multiple high-confidence predictions
 
-2. **Visual Inspection**
+2. **Chemical, geometric, and visual validation**
+   - Check ligand atom/bond identity and stereochemistry against the intended input.
+   - Check bond lengths/angles, aromatic planarity, internal strain, and protein clashes
+     with an independent validator such as PoseBusters; high confidence is not a pass.
+   - Save validation results and both original and relaxed coordinates. A relaxed pose
+     is a new artifact and should be rechecked, rather than overwriting the raw prediction.
    - Examine protein-ligand interactions in molecular viewer
    - Check for reasonable:
      - Hydrogen bonds

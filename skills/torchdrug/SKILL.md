@@ -5,7 +5,7 @@ license: Apache-2.0 license
 compatibility: TorchDrug 0.2.1 requires Python 3.7-3.10 and supports PyTorch 1.8-2.0. Apple Silicon is CPU-only; MPS is unsupported.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -70,7 +70,7 @@ revisions and expect CPU execution.
 
 ## Canonical property-prediction workflow
 
-Use the documented ClinTox → GIN → `PropertyPrediction` → `Engine` pattern:
+Use the documented ClinTox → GIN → `PropertyPrediction` → `Engine` pattern. The random split below is a tutorial baseline. For generalization to new molecular scaffolds, use `data.scaffold_split` or the benchmark's specified split, keep duplicate molecules in one partition, and record the actual split sizes and class counts. Scaffold-group allocation may not match the requested lengths exactly.
 
 ```python
 import torch

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no numpy, scipy, or network access. Statistical distributions are computed from first principles so results are reproducible in any conforming interpreter.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.4"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-27"
 ---
@@ -168,7 +168,11 @@ python3 check_accuracy_precision.py -i ap.csv --accuracy-limit 2 --rsd-limit 1.0
 ```
 
 Input is `level,measured,group`, where `group` is the intermediate-precision factor — day, analyst,
-or instrument.
+or instrument. Record independent sample-preparation IDs separately from repeat injections:
+reinjecting one preparation estimates injection repeatability, not the whole procedure.
+The bundled one-way model estimates one between-group component. If day, analyst, and
+instrument change together, it cannot identify their separate contributions; use a
+planned crossed or nested study and a matching model when those components matter.
 
 ```
 level  component                       sd      rsd_pct  df      ci90_low_sd  ci90_high_sd

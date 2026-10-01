@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+ <Workspace version="20.0"  modDate="Wed Feb 17 00:35:55 EST 2021"  clientTimestamp="1613540155792"  flowJoVersion="10.7.1"  drawRowBorders="1"  drawColumnBorders="1"  hideCompNodes="1"  curGroup="All Samples"  groupPaneHeight="80"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"  xmlns:gating="http://www.isac-net.org/std/Gating-ML/v2.0/gating"  xmlns:transforms="http://www.isac-net.org/std/Gating-ML/v2.0/transformations"  xmlns:data-type="http://www.isac-net.org/std/Gating-ML/v2.0/datatypes"  xsi:schemaLocation="http://www.isac-net.org/std/Gating-ML/v2.0/gating http://www.isac-net.org/std/Gating-ML/v2.0/gating/Gating-ML.v2.0.xsd http://www.isac-net.org/std/Gating-ML/v2.0/transformations http://www.isac-net.org/std/Gating-ML/v2.0/gating/Transformations.v2.0.xsd http://www.isac-net.org/std/Gating-ML/v2.0/datatypes http://www.isac-net.org/std/Gating-ML/v2.0/gating/DataTypes.v2.0.xsd "  nonAutoSaveFileName="file:/V:/flowkit/flowjo_export_testing/wsp_export_from_flowkit/simple_poly_and_rect_v2_poly50.wsp" >
+   <WindowPosition x="200"  y="45"  width="792"  height="720"  displayed="1"  panelState="" />
+   <TextTraits font="SansSerif"  size="14"  name=""  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+   <Columns>
+     <TColumn width="364" >
+       <Property key="fj.appnode.prop.name" />
+     </TColumn>
+     <TColumn width="204" >
+       <Property key="fj.appnode.prop.statistic" />
+     </TColumn>
+     <TColumn width="204" >
+       <Property key="fj.appnode.prop.ncells" />
+     </TColumn>
+   </Columns>
+   <Matrices/>
+   <Cytometers>
+     <Cytometer name="GENERIC"  cyt=""  useFCS3="1"  extraNegs="0"  widthBasis="-10"  linMin="0"  logMin="1"  linMax="10000"  logMax="10000"  linearRescale="1"  logRescale="1"  linFromKW="1"  logFromKW="1"  useGain="0"  useTransform="0"  transformType="LOG"  manufacturer=""  serialnumber=""  homepage="workspaces-and-samples/flowjo-and-your-cytometer/ws-instrumentation/"  icon="generic.png" >
+       <LinParams>
+         <Param>time</Param>
+       </LinParams>
+       <LogParams/>
+       <FilterParams/>
+       <TransformStore/>
+     </Cytometer>
+   </Cytometers>
+   <Groups>
+     <GroupNode name="All Samples"  annotation=""  owningGroup="All Samples"  expanded="1"  sortPriority="10"  count="-1" >
+       <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  type="Pseudocolor"  fast="1" >
+         <Axis dimension="x"  name=""  label=""  auto="auto" />
+         <Axis dimension="y"  name=""  label=""  auto="auto" />
+         <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+         <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+           <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+         </GraphEnvironment>
+       </Graph>
+       <Group name="All Samples"  live="1"  role="ws.group.dlog.test"  key=""  synchronized="0"  foreground="#000000"  fontStyle="bold" >
+         <Criteria/>
+         <SampleRefs>
+           <SampleRef sampleID="1" />
+         </SampleRefs>
+         <Keywords/>
+       </Group>
+     </GroupNode>
+     <GroupNode name="Compensation"  annotation=""  owningGroup="Compensation"  expanded="1"  sortPriority="10"  count="-1" >
+       <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  type="Pseudocolor"  fast="1" >
+         <Axis dimension="x"  name=""  label=""  auto="auto" />
+         <Axis dimension="y"  name=""  label=""  auto="auto" />
+         <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+         <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+           <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+         </GraphEnvironment>
+       </Graph>
+       <Group name="Compensation"  live="1"  role="ws.group.dlog.compensation"  key=""  synchronized="0"  foreground="#bc1900"  fontStyle="bold" >
+         <Criteria>
+           <Criterion connector="And"  keyword="$FIL"  function="Contains"  value="unstained" />
+           <Criterion connector="Or"  keyword="$FIL"  function="Contains"  value="comp" />
+         </Criteria>
+         <Keywords/>
+       </Group>
+     </GroupNode>
+     <GroupNode name="my_group"  annotation=""  owningGroup="my_group"  expanded="1"  sortPriority="10"  count="-1" >
+       <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  type="Pseudocolor"  fast="1" >
+         <Axis dimension="x"  name=""  label=""  auto="auto" />
+         <Axis dimension="y"  name=""  label=""  auto="auto" />
+         <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+         <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+           <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+           <WindowPosition x="0"  y="0"  width="0"  height="0"  displayed="0"  panelState="" />
+         </GraphEnvironment>
+       </Graph>
+       <Subpopulations>
+         <Population name="poly1"  annotation=""  owningGroup="my_group"  expanded="1"  sortPriority="10"  count="0" >
+           <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  heatMapStatParameter="channel_A"  type="Pseudocolor"  fast="1" >
+             <Axis dimension="x"  name="channel_A"  label=""  auto="auto" />
+             <Axis dimension="y"  name="channel_B"  label=""  auto="auto" />
+             <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+             <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+               <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <WindowPosition x="620"  y="0"  width="880"  height="939"  displayed="1"  panelState="---" />
+             </GraphEnvironment>
+           </Graph>
+           <Gate gating:id="ID54754627" >
+             <gating:PolygonGate eventsInside="1"  annoOffsetX="190"  annoOffsetY="-26"  tint="#000000"  isTinted="0"  lineWeight="Normal"  userDefined="1"  quadId="-1"  gateResolution="256" >
+               <gating:dimension>
+                 <data-type:fcs-dimension data-type:name="channel_A" />
+               </gating:dimension>
+               <gating:dimension>
+                 <data-type:fcs-dimension data-type:name="channel_B" />
+               </gating:dimension>
+               <gating:vertex>
+                 <gating:coordinate data-type:value="59483.5164835165" />
+                 <gating:coordinate data-type:value="106300.1745200698" />
+               </gating:vertex>
+               <gating:vertex>
+                 <gating:coordinate data-type:value="59500" />
+                 <gating:coordinate data-type:value="130638.7434554974" />
+               </gating:vertex>
+               <gating:vertex>
+                 <gating:coordinate data-type:value="136675.8241758242" />
+                 <gating:coordinate data-type:value="130638.7434554974" />
+               </gating:vertex>
+               <gating:vertex>
+                 <gating:coordinate data-type:value="136659.3406593407" />
+                 <gating:coordinate data-type:value="106366.4921465969" />
+               </gating:vertex>
+             </gating:PolygonGate>
+           </Gate>
+         </Population>
+         <Population name="rect1"  annotation=""  owningGroup="my_group"  expanded="1"  sortPriority="10"  count="0" >
+           <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  heatMapStatParameter="channel_A"  type="Pseudocolor"  fast="1" >
+             <Axis dimension="x"  name="channel_A"  label=""  auto="auto" />
+             <Axis dimension="y"  name="channel_B"  label=""  auto="auto" />
+             <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+             <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+               <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+               <WindowPosition x="620"  y="0"  width="880"  height="939"  displayed="1"  panelState="---" />
+             </GraphEnvironment>
+           </Graph>
+           <Gate gating:id="ID1134572704" >
+             <gating:RectangleGate eventsInside="1"  annoOffsetX="6"  annoOffsetY="1"  tint="#000000"  isTinted="0"  lineWeight="Normal"  userDefined="1"  percentX="0"  percentY="0" >
+               <gating:dimension gating:min="59478.02197802198"  gating:max="136675.82417582418" >
+                 <data-type:fcs-dimension data-type:name="channel_A" />
+               </gating:dimension>
+               <gating:dimension gating:min="106300.1745200698"  gating:max="130638.74345549737" >
+                 <data-type:fcs-dimension data-type:name="channel_B" />
+               </gating:dimension>
+             </gating:RectangleGate>
+           </Gate>
+         </Population>
+       </Subpopulations>
+       <Group name="my_group"  live="1"  role="ws.group.dlog.undefined"  key=""  synchronized="0"  foreground="#0000d0"  fontStyle="plain" >
+         <Criteria refGroupFunction="only"  refGroupName="my_group" />
+         <ManuallyIncludedSamples>
+           <SampleRef sampleID="1" />
+         </ManuallyIncludedSamples>
+         <SampleRefs>
+           <SampleRef sampleID="1" />
+         </SampleRefs>
+         <Keywords/>
+       </Group>
+     </GroupNode>
+   </Groups>
+   <SampleList>
+     <Sample>
+       <DataSet uri="file:data_set_simple_line_100.fcs"  sampleID="1" />
+       <Transformations>
+         <transforms:linear transforms:minRange="50000"  transforms:maxRange="150000"  gain="1" >
+           <data-type:parameter data-type:name="channel_A" />
+         </transforms:linear>
+         <transforms:linear transforms:minRange="0"  transforms:maxRange="255000"  gain="1" >
+           <data-type:parameter data-type:name="channel_B" />
+         </transforms:linear>
+       </Transformations>
+       <Keywords>
+         <Keyword name="FJ_FCS_VERSION"  value="3.1" />
+         <Keyword name="$BEGINANALYSIS"  value="0" />
+         <Keyword name="$BEGINDATA"  value="497" />
+         <Keyword name="$BEGINSTEXT"  value="0" />
+         <Keyword name="$BYTEORD"  value="1,2,3,4" />
+         <Keyword name="$DATATYPE"  value="F" />
+         <Keyword name="$ENDANALYSIS"  value="0" />
+         <Keyword name="$ENDDATA"  value="1296" />
+         <Keyword name="$ENDSTEXT"  value="0" />
+         <Keyword name="$MODE"  value="L" />
+         <Keyword name="$NEXTDATA"  value="0" />
+         <Keyword name="$PAR"  value="2" />
+         <Keyword name="$TOT"  value="100" />
+         <Keyword name="$P1B"  value="32" />
+         <Keyword name="$P1E"  value="0,0" />
+         <Keyword name="$P1R"  value="262144" />
+         <Keyword name="$P1N"  value="channel_A" />
+         <Keyword name="$P2B"  value="32" />
+         <Keyword name="$P2E"  value="0,0" />
+         <Keyword name="$P2R"  value="262144" />
+         <Keyword name="$P2N"  value="channel_B" />
+         <Keyword name="$P1S"  value="" />
+         <Keyword name="$P2S"  value="" />
+       </Keywords>
+       <SampleNode name="data_set_simple_line_100.fcs"  annotation=""  owningGroup=""  expanded="1"  sortPriority="10"  count="100"  sampleID="1" >
+         <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  heatMapStatParameter="channel_A"  type="Pseudocolor"  fast="1" >
+           <Axis dimension="x"  name="channel_A"  label=""  auto="auto" />
+           <Axis dimension="y"  name="channel_B"  label=""  auto="auto" />
+           <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+           <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+             <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+             <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+             <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+             <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+             <WindowPosition x="830"  y="12"  width="880"  height="925"  displayed="1"  panelState="-+-" />
+           </GraphEnvironment>
+         </Graph>
+         <Subpopulations>
+           <Population name="poly1"  annotation=""  owningGroup=""  expanded="1"  sortPriority="10"  count="0" >
+             <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  heatMapStatParameter="channel_A"  type="Pseudocolor"  fast="1" >
+               <Axis dimension="x"  name="channel_A"  label=""  auto="auto" />
+               <Axis dimension="y"  name="channel_B"  label=""  auto="auto" />
+               <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+               <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+                 <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <WindowPosition x="620"  y="0"  width="880"  height="939"  displayed="0"  panelState="---" />
+               </GraphEnvironment>
+             </Graph>
+             <Gate gating:id="ID1571031032" >
+               <gating:PolygonGate eventsInside="1"  annoOffsetX="190"  annoOffsetY="-26"  tint="#000000"  isTinted="0"  lineWeight="Normal"  userDefined="1"  quadId="-1"  gateResolution="256"  gating:id="ID1571031032" >
+                 <gating:dimension>
+                   <data-type:fcs-dimension data-type:name="channel_A" />
+                 </gating:dimension>
+                 <gating:dimension>
+                   <data-type:fcs-dimension data-type:name="channel_B" />
+                 </gating:dimension>
+                 <gating:vertex>
+                   <gating:coordinate data-type:value="59478.021978022" />
+                   <gating:coordinate data-type:value="106171.5399610137" />
+                 </gating:vertex>
+                 <gating:vertex>
+                   <gating:coordinate data-type:value="58928.5714285714" />
+                   <gating:coordinate data-type:value="131668.6159844054" />
+                 </gating:vertex>
+                 <gating:vertex>
+                   <gating:coordinate data-type:value="136675.8241758242" />
+                   <gating:coordinate data-type:value="130495.126705653" />
+                 </gating:vertex>
+                 <gating:vertex>
+                   <gating:coordinate data-type:value="136675.8241758242" />
+                   <gating:coordinate data-type:value="106230.0194931774" />
+                 </gating:vertex>
+               </gating:PolygonGate>
+             </Gate>
+           </Population>
+           <Population name="rect1"  annotation=""  owningGroup=""  expanded="1"  sortPriority="10"  count="0" >
+             <Graph smoothing="0"  backColor="#ffffff"  foreColor="#000000"  heatMapStatParameter="channel_A"  type="Pseudocolor"  fast="1" >
+               <Axis dimension="x"  name="channel_A"  label=""  auto="auto" />
+               <Axis dimension="y"  name="channel_B"  label=""  auto="auto" />
+               <GraphSettings level="5%"  smoothingHighResolution="1"  contourHighResolution="1"  histogramSmoothingCount="0"  graphResolution="256"  showOutliers="0"  drawLargeDots="0"  dotsToDraw="0"  tint="le.chartfill.tinted.40"  lineWeight="le.lineweight.normal"  lineStyle="le.linestyle.solid" />
+               <GraphEnvironment showGrid="0"  showAxes="tnlTNL"  showGates="1"  showFreqOnPlots="1"  showGateNameOnPlots="1"  showMedians="0"  showUncomped="0"  addEventParam="0"  lastYAxisName="" >
+                 <TextTraits font="SansSerif"  size="11"  name="Labels"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <TextTraits font="SansSerif"  size="11"  name="LayoutGates"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <TextTraits font="SansSerif"  size="9"  name="Numbers"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <TextTraits font="SansSerif"  size="9"  name="Legend"  style="plain"  color="#000000"  background="#00ffffff"  just="left" />
+                 <WindowPosition x="620"  y="0"  width="880"  height="939"  displayed="0"  panelState="---" />
+               </GraphEnvironment>
+             </Graph>
+             <Gate gating:id="ID613872335" >
+               <gating:RectangleGate eventsInside="1"  annoOffsetX="6"  annoOffsetY="1"  tint="#000000"  isTinted="0"  lineWeight="Normal"  userDefined="1"  percentX="0"  percentY="0"  gating:id="ID613872335" >
+                 <gating:dimension gating:min="63049.45054945055"  gating:max="133104.3956043956" >
+                   <data-type:fcs-dimension data-type:name="channel_A" />
+                 </gating:dimension>
+                 <gating:dimension gating:min="107397.66081871346"  gating:max="129561.40350877192" >
+                   <data-type:fcs-dimension data-type:name="channel_B" />
+                 </gating:dimension>
+               </gating:RectangleGate>
+             </Gate>
+           </Population>
+         </Subpopulations>
+       </SampleNode>
+     </Sample>
+   </SampleList>
+   <TableEditor title="FlowJo Tables: simple_poly_and_rect_v2_poly50.wsp"  current="Table" >
+     <Table name="Table"  outputFile="file:/C:/Users/swhite/Documents/Table"  color="#00ffffff"  isBatch="0"  quickclose="0"  destination="toDisplay"  outputFormat="fj.document.type.table"  autoColumnName="" >
+       <PrintLayout flipPattern0="0"  rows="1"  columns="1"  padding="36"  header=""  footer=""  headerActive="0"  footerActive="0"  scalingMode="fj.print.scale.none"  scaling="1"  orientation="1"  width="612"  height="792"  imageableX="72"  imageableY="72"  imageableWidth="468"  imageableHeight="648" />
+       <PageSection sectionName="header" >&lt;table width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;left&quot; valign=&quot;top&quot;&gt;&amp;NBSP&amp;NBSP&amp;NBSP&amp;NBSP&lt;IMG SRC=&quot;file:/C:/Program%20Files/FlowJo%2010.6.1/images/fj_icon.png&quot;&gt;&lt;/IMG&gt;&lt;br/&gt;FlowJo, LLC&lt;/td&gt;&lt;td align=&quot;right&quot; valign=&quot;top&quot;&gt;Page &lt;PageNumber/&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</PageSection>
+       <PageSection sectionName="footer" >&lt;table width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;  valign=&quot;bottom&quot;&gt;&lt;LongDate/&gt;&lt;/td&gt;&lt;td align=&quot;right&quot; valign=&quot;bottom&quot;&gt;&lt;Version/&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</PageSection>
+       <Iteration iterationType="SAMPLE"  iterationValue="1"  iterationKeyword=""  discriminator=""  panelSize="1"  groupName="workspaceSelection" />
+     </Table>
+   </TableEditor>
+   <LayoutEditor title="FlowJo Layouts: simple_poly_and_rect_v2_poly50.wsp"  current="Layout"  showGrid="0"  showPageBreaks="0"  showGuides="0"  showDebugOutput="0" >
+     <Layout name="Layout"  outputFile="file:/C:/Users/swhite/Documents/Layout"  color="#00ffffff"  isBatch="0"  showGrid="0"  showRulers="1"  showDebugOutput="0"  showGuides="0"  showPageBreaks="1"  scale="1" >
+       <PrintLayout flipPattern0="0"  rows="1"  columns="1"  padding="36"  header=""  footer=""  headerActive="0"  footerActive="0"  scalingMode="fj.print.scale.none"  scaling="1"  orientation="1"  width="612"  height="792"  imageableX="72"  imageableY="72"  imageableWidth="468"  imageableHeight="648" />
+       <PageSection sectionName="header" >&lt;table width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;left&quot; valign=&quot;top&quot;&gt;&amp;NBSP&amp;NBSP&amp;NBSP&amp;NBSP&lt;IMG SRC=&quot;file:/C:/Program%20Files/FlowJo%2010.6.1/images/fj_icon.png&quot;&gt;&lt;/IMG&gt;&lt;br/&gt;FlowJo, LLC&lt;/td&gt;&lt;td align=&quot;right&quot; valign=&quot;top&quot;&gt;Page &lt;PageNumber/&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</PageSection>
+       <PageSection sectionName="footer" >&lt;table width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;  valign=&quot;bottom&quot;&gt;&lt;LongDate/&gt;&lt;/td&gt;&lt;td align=&quot;right&quot; valign=&quot;bottom&quot;&gt;&lt;Version/&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</PageSection>
+       <Iteration iterationType="OFF"  iterationValue="1"  iterationKeyword=""  discriminator=""  panelSize="1"  groupName="workspaceSelection" />
+       <BatchSettings useCurrentGroup="1"  length="3"  name=""  order="ACROSS"  direction="COLUMNS"  append="0"  destination="toLayout"  separatePages="0"  launchApp="1"  header="0"  footer="0"  commandLineBatch="0" />
+       <FigList/>
+     </Layout>
+     <WindowPosition x="0"  y="0"  width="900"  height="600" />
+   </LayoutEditor>
+   <Scripts>
+     <Script lang="text/javascript"  name="New Script    " />
+   </Scripts>
+   <Experiment>
+     <PlateModel name="Plate"  color="#00ffffff"  rows="8"  columns="12"  plateID="00000"  expID="000-00000"  format="Plate"  showNEntries="1"  peHeatmap="1"  peShowEnums="1"  peThickBorders="1" >
+       <PrintLayout flipPattern0="0"  rows="1"  columns="1"  padding="36"  header=""  footer=""  headerActive="0"  footerActive="0"  scalingMode="fj.print.scale.none"  scaling="1"  orientation="1"  width="612"  height="792"  imageableX="72"  imageableY="72"  imageableWidth="468"  imageableHeight="648" />
+     </PlateModel>
+     <PlateEditorState>
+       <KeywordList>
+         <Keyword attribute="Treatment &quot;Drug A&quot;"  value="10ug/L" />
+         <Keyword attribute="Time point"  value="24hr" />
+         <Keyword attribute="Assay"  value="GFP Reporter" />
+       </KeywordList>
+       <StagingArea>
+         <StagingWell/>
+         <StagingWell/>
+         <StagingWell/>
+         <StagingWell/>
+       </StagingArea>
+     </PlateEditorState>
+   </Experiment>
+   <Exports/>
+   <SOPS/>
+   <experiment/>
+   <weights/>
+ </Workspace>

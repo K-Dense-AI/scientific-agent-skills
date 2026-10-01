@@ -4,7 +4,7 @@ description: Format and structurally validate local treatment-plan documentation
 license: MIT
 compatibility: Python 3.11+ standard library; local JSON files only. Bundled CLIs require no network, external services, models, images, credentials, environment variables, or third-party packages.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -137,6 +137,8 @@ Require the accountable authorized team to:
 - sign, date, and release through the authorized record system.
 
 The final handoff must retain provenance and unresolved-item routing. A script pass is not authorization to use the package for care.
+
+For a correction after sign-off, preserve the prior authorized version, identify the amendment and its author/date in the local records workflow, update source verification, and repeat checks and sign-off. Do not silently overwrite the prior record or carry its release approval forward. Apply jurisdiction-specific amendment rules only after the authorized records team confirms their applicability.
 
 ## Source boundaries
 

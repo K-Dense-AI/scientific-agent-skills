@@ -89,7 +89,7 @@ def generate_pdf(
         print(f"Generating PDF: {output_pdf}")
         print(f"Command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        print(f"✓ PDF generated successfully: {output_pdf}")
+        print(f"[OK] PDF generated successfully: {output_pdf}")
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error generating PDF:")
@@ -108,9 +108,9 @@ def check_dependencies():
     for name, cmd in dependencies.items():
         try:
             subprocess.run(cmd.split(), capture_output=True, check=True)
-            print(f"✓ {name} is installed")
+            print(f"[OK] {name} is installed")
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print(f"✗ {name} is NOT installed")
+            print(f"[FAIL] {name} is NOT installed")
             missing.append(name)
 
     if missing:

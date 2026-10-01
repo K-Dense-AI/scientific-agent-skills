@@ -152,12 +152,11 @@ smiles_with_errors = [
 transformer = MoleculeTransformer(
     FPCalculator("ecfp"),
     n_jobs=-1,
-    verbose=True,           # Log errors
-    ignore_errors=True      # Continue on failure
+    verbose=True            # Log errors
 )
 
-features = transformer(smiles_with_errors)
-# Returns: array with None for failed molecules
+features = transformer.transform(smiles_with_errors, ignore_errors=True)
+# transform preserves input positions with None for failed molecules
 print(features)  # [array(...), None, array(...), None]
 ```
 
@@ -662,18 +661,11 @@ for i, idx in enumerate(top_indices, 1):
 ### Handling Invalid Molecules
 
 ```python
-# Use ignore_errors to skip invalid molecules
-transformer = MoleculeTransformer(
-    FPCalculator("ecfp"),
-    ignore_errors=True,
-    verbose=True
-)
-
-# Filter out None values after transformation
-features = transformer(smiles_list)
-valid_mask = [f is not None for f in features]
-valid_features = [f for f in features if f is not None]
-valid_smiles = [s for s, m in zip(smiles_list, valid_mask) if m]
+# Illustrative: smiles_list is supplied by the caller.
+transformer = MoleculeTransformer(FPCalculator("ecfp"), verbose=True)
+valid_features, valid_ids = transformer(smiles_list, ignore_errors=True)
+valid_smiles = [smiles_list[i] for i in valid_ids]
+# Apply valid_ids to any labels or record identifiers too.
 ```
 
 ### Memory Management for Large Datasets

@@ -86,7 +86,7 @@ def read_ids_from_file(filename):
             if line and not line.startswith('#'):
                 ids.append(line)
 
-    print(f"✓ Read {len(ids)} identifier(s)")
+    print(f"[OK] Read {len(ids)} identifier(s)")
 
     return ids
 
@@ -119,9 +119,9 @@ def batch_convert(ids, from_db, to_db, chunk_size=100, delay=0.5):
             if results:
                 all_results.update(results)
                 mapped_count = len([v for v in results.values() if v])
-                print(f"✓ Mapped: {mapped_count}/{len(chunk)}")
+                print(f"[OK] Mapped: {mapped_count}/{len(chunk)}")
             else:
-                print(f"✗ No mappings returned")
+                print(f"[FAIL] No mappings returned")
                 failed_ids.extend(chunk)
 
             # Rate limiting
@@ -129,7 +129,7 @@ def batch_convert(ids, from_db, to_db, chunk_size=100, delay=0.5):
                 time.sleep(delay)
 
         except Exception as e:
-            print(f"✗ Error: {e}")
+            print(f"[FAIL] Error: {e}")
 
             # Try individual IDs in failed chunk
             print(f"    Retrying individual IDs...")
@@ -138,13 +138,13 @@ def batch_convert(ids, from_db, to_db, chunk_size=100, delay=0.5):
                     result = u.mapping(fr=from_db, to=to_db, query=single_id)
                     if result:
                         all_results.update(result)
-                        print(f"      ✓ {single_id}")
+                        print(f"      [OK] {single_id}")
                     else:
                         failed_ids.append(single_id)
-                        print(f"      ✗ {single_id} - no mapping")
+                        print(f"      [FAIL] {single_id} - no mapping")
                 except Exception as e2:
                     failed_ids.append(single_id)
-                    print(f"      ✗ {single_id} - {e2}")
+                    print(f"      [FAIL] {single_id} - {e2}")
 
                 time.sleep(0.2)
 
@@ -153,7 +153,7 @@ def batch_convert(ids, from_db, to_db, chunk_size=100, delay=0.5):
         if id_ not in all_results:
             all_results[id_] = None
 
-    print(f"\n✓ Conversion complete:")
+    print(f"\n[OK] Conversion complete:")
     print(f"  Total: {len(ids)}")
     print(f"  Mapped: {len([v for v in all_results.values() if v])}")
     print(f"  Failed: {len(failed_ids)}")
@@ -182,7 +182,7 @@ def save_mapping_csv(mapping, output_file, from_db, to_db):
 
             writer.writerow([source_id, from_db, target_str, to_db, status])
 
-    print(f"✓ Results saved")
+    print(f"[OK] Results saved")
 
 
 def save_failed_ids(failed_ids, output_file):
@@ -196,7 +196,7 @@ def save_failed_ids(failed_ids, output_file):
         for id_ in failed_ids:
             f.write(f"{id_}\n")
 
-    print(f"✓ Saved {len(failed_ids)} failed ID(s)")
+    print(f"[OK] Saved {len(failed_ids)} failed ID(s)")
 
 
 def print_mapping_summary(mapping, from_db, to_db):
@@ -224,7 +224,7 @@ def print_mapping_summary(mapping, from_db, to_db):
                 target_str = ", ".join(target_ids[:3])
                 if len(target_ids) > 3:
                     target_str += f" ... +{len(target_ids)-3} more"
-                print(f"  {source_id} → {target_str}")
+                print(f"  {source_id} -> {target_str}")
                 count += 1
                 if count >= 5:
                     break
@@ -304,19 +304,19 @@ Use --list-databases to see all supported aliases.
     to_db = normalize_database_code(args.to_db)
 
     if from_db != args.from_db:
-        print(f"\nNote: Normalized '{args.from_db}' → '{from_db}'")
+        print(f"\nNote: Normalized '{args.from_db}' -> '{from_db}'")
     if to_db != args.to_db:
-        print(f"Note: Normalized '{args.to_db}' → '{to_db}'")
+        print(f"Note: Normalized '{args.to_db}' -> '{to_db}'")
 
     # Read input IDs
     try:
         ids = read_ids_from_file(args.input_file)
     except Exception as e:
-        print(f"\n✗ Error reading input file: {e}")
+        print(f"\n[FAIL] Error reading input file: {e}")
         sys.exit(1)
 
     if not ids:
-        print("\n✗ No IDs found in input file")
+        print("\n[FAIL] No IDs found in input file")
         sys.exit(1)
 
     # Perform conversion
@@ -340,7 +340,7 @@ Use --list-databases to see all supported aliases.
         failed_file = output_file.replace(".csv", "_failed.txt")
         save_failed_ids(failed_ids, failed_file)
 
-    print(f"\n✓ Done!")
+    print(f"\n[OK] Done!")
 
 
 if __name__ == "__main__":

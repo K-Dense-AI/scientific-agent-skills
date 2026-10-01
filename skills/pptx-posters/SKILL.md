@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.10+, uv, and exact generation pins python-pptx 1.0.2, Pillow 12.3.0, and lxml 6.1.1. Validation and PPTX ZIP/XML inspection are local and network-free; final PowerPoint, accessibility, PDF, printer, and author review are manual.
 allowed-tools: Read Write Bash Glob Grep Python
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -222,6 +222,13 @@ font size at final physical output using the manifest's labeled basis and proofs
 
 Use the approved export plan. When PDF is required, export from the reviewed
 PowerPoint using Standard/high print quality rather than Minimum size.
+
+Check the export route as well as its quality setting. On macOS, the option labeled
+“Best for electronic distribution and accessibility (uses Microsoft online service)”
+sends the document to Microsoft for conversion; it is not a local export. For a
+local-only workflow, use a local exporter and report any resulting tag or hyperlink
+limitations after inspecting the PDF. Record the exporter and settings in the handoff.
+See [Microsoft’s accessible PDF export documentation](https://support.microsoft.com/en-us/accessibility/office-accessibility/create-accessible-pdfs).
 
 Independently verify the PDF:
 

@@ -4,7 +4,7 @@ description: Conduct comprehensive, systematic literature reviews using multiple
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.8"
+  version: "1.10"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -101,11 +101,10 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 6. **Sort by citations**: When available, sort search results by citation count to surface influential work first
 7. **Use parallel-cli extract**: Fetch full content from promising URLs found during search to verify relevance before full-text screening
 
-### Screening and Selection
-1. **Use multiple databases** (minimum 3): Ensures comprehensive coverage
-2. **Include preprint servers**: Captures latest unpublished findings
-3. **Document everything**: Search strings, dates, result counts for reproducibility
-4. **Test and refine**: Run pilot searches, review results, adjust search terms
+### Records, Reports, and Studies
+1. **Deduplicate records, then link reports**: DOI/title deduplication removes repeated search hits; it does not identify every paper from the same study. Link preprints, journal articles, protocols, and follow-up reports using trial IDs, cohort descriptions, sites, and recruitment dates.
+2. **Keep a study-to-report map**: Preserve each source and explain which report supplies each outcome; do not count overlapping participants twice in a meta-analysis.
+3. **Reconcile PRISMA counts**: Track records screened, reports sought/not retrieved/assessed, reports excluded with reasons, and included studies separately. Report counts can exceed study counts. See the [Cochrane selection guidance](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-04).
 
 ### Screening and Selection
 1. **Use clear criteria**: Document inclusion/exclusion criteria before screening

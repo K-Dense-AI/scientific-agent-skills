@@ -8,7 +8,7 @@ compatibility: >-
   without MATLAB or Octave; optional MAT inventory uses scipy and/or h5py.
 allowed-tools: Read Write Bash Glob Python
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: "K-Dense Inc."
   last-reviewed: "2026-07-23"
 ---
@@ -115,6 +115,11 @@ Read [programming](references/programming.md).
   `A{...}`, and `A.(name)` have different semantics.
 - `*`, `/`, `\`, and `^` are matrix operations; dotted forms are
   element-wise. Use `A\b`, not `inv(A)*b`.
+- After a linear solve, inspect conditioning/rank and a scale-aware residual;
+  backslash can continue after a singularity warning, and a small residual alone
+  does not establish an accurate solution. For underdetermined systems, state
+  whether minimum norm is required (`lsqminnorm`), rather than assuming `A\b`
+  returns it. See the [mldivide contract](https://www.mathworks.com/help/matlab/ref/double.mldivide.html).
 - Since R2016b, compatible dimensions expand implicitly. Assert intended shape
   before operations that could accidentally form an outer result.
 - Preallocate when output size is known, but do not vectorize at the cost of

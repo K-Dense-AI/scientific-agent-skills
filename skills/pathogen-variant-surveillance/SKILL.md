@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages. Needs network access to the public GenSpectrum LAPIS instances (lapis.cov-spectrum.org, lapis.genspectrum.org, lapis.pathoplexus.org) and to raw.githubusercontent.com for pango-designation. No API key.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-27"
 ---
@@ -150,6 +150,14 @@ S:Q493E   S     493       lost     0.000   0.998   0    5359
 
 Works the same on a segmented genome — `--instance h5n1 --gene HA` or `--gene seg4`. Use
 `--nucleotide` for primer and probe questions, where the codon is not the unit that matters.
+
+A mutation-frequency table is site-wise evidence, not a complete primer-binding
+sequence or a joint haplotype. For an assay-match assessment, align the primer or
+probe to the declared reference, inspect the complete binding interval in
+sequence-level data, and account for strand, indels, and ambiguous bases. Missing
+mutation calls do not establish reference matches. Report sequence compatibility
+separately from experimentally measured assay sensitivity; the API cannot
+validate assay performance. See [LAPIS mutation filters](https://lapis.cov-spectrum.org/open/v2/docs/concepts/mutation-filters/).
 
 ### Decide how far back to trust
 

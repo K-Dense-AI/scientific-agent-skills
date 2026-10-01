@@ -1,0 +1,4 @@
+mfapy @ git+https://github.com/fumiomatsuda/mfapy.git@a10433af16682386548b360297e2476152d46ede
+numpy==2.4.6
+scipy==1.17.1
+nlopt==2.11.0

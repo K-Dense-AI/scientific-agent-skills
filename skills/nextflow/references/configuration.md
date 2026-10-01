@@ -186,14 +186,14 @@ nextflow run main.nf -resume                 # resume the last run
 nextflow run main.nf -resume <session-id>    # resume a specific session (see `nextflow log`)
 ```
 
-How caching works: each task gets a hash of its inputs (file content/metadata), the script text, the container, and key directives. If the hash matches a previous run, the cached output is reused.
+How caching works: each task gets a hash of its inputs, script text, container, and relevant task settings. Default file hashing uses path, size, and modification time, not content. A matching cache entry is reusable only when required outputs and a valid exit status remain in its work directory.
 
 **Debugging cache misses** (a task re-runs when you expected a hit):
 - Run `nextflow log <run> -f hash,name,status,workdir` to inspect tasks.
 - Diff the task hashes of two runs: `nextflow -log a.log run … -dump-hashes json` then `nextflow -log b.log run … -resume -dump-hashes json`, and compare the `cache hash` entries to see exactly what changed.
 - Common causes: a changed input file timestamp/content, an edited script, a different container tag, a non-deterministic input order, an undeclared closure variable (use `def`), or using `cache false`.
-- `cache 'lenient'` hashes file size+timestamp (path) instead of content — useful on shared filesystems where content hashing is slow or timestamps shift. `cache 'deep'` hashes file content.
-- Caching is per **work directory**; deleting `work/` or changing `-w`/`workDir` loses the cache.
+- `cache 'lenient'` hashes file path and size, ignoring modification time; it can help inconsistent shared-filesystem timestamps but can miss same-size content changes. `cache 'deep'` hashes file content, with extra I/O cost. Keep inputs immutable or choose content hashing when needed.
+- Preserve both the task metadata cache (normally `.nextflow/cache` under the launch directory) and the task **work directories**. Published results alone cannot restore resumability; deleting either store prevents affected tasks from being reused.
 
 **Work directory management**: `work/` grows fast. Clean with:
 

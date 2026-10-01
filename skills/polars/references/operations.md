@@ -55,11 +55,11 @@ df.with_columns(
     pl.col("salary").cast(pl.Float64).alias("salary")
 )
 
-# Multiple operations in parallel
+# Multiple operations in parallel need distinct output names.
 df.with_columns(
-    pl.col("value") * 10,
-    pl.col("value") * 100,
-    pl.col("value") * 1000,
+    (pl.col("value") * 10).alias("value_times_10"),
+    (pl.col("value") * 100).alias("value_times_100"),
+    (pl.col("value") * 1000).alias("value_times_1000"),
 )
 ```
 

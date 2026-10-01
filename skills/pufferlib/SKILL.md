@@ -1,28 +1,32 @@
 ---
 name: pufferlib
-description: Version-aware guidance for PufferLib reinforcement-learning environments, vectorization, policies, PuffeRL training, evaluation, and safe checkpoint review. Use when adapting Gymnasium/PettingZoo environments to published PufferLib 3.0.0 or working with the redesigned native 4.0 source line.
+description: Version-aware guidance for PufferLib reinforcement-learning environments, vectorization, policies, PuffeRL training, evaluation, and safe checkpoint review. Use when adapting Gymnasium/PettingZoo environments to published PufferLib 3.0.0 or working with the pinned historical native 4.0 source profile; use upstream documentation for 5.0.
 license: MIT
-compatibility: Bundled CLIs require Python 3.10+ and use only the standard library. Published pufferlib 3.0.0 supports Python >=3.9 but ships as a native-code source archive; current 4.0 source requires Python >=3.10, Torch >=2.9, and an audited CPU/CUDA toolchain. Network, GPU, native builds, environment plug-ins, assets, checkpoints, and external logging are never required by the bundled CLIs.
+compatibility: Bundled CLIs require Python 3.10+ and use only the standard library. Published pufferlib 3.0.0 supports Python >=3.9 but ships as a native-code source archive; the reviewed 4.0 source requires Python >=3.10, Torch >=2.9, and an audited CPU/CUDA toolchain. Network, GPU, native builds, environment plug-ins, assets, checkpoints, and external logging are never required by the bundled CLIs.
 allowed-tools: Read Bash Grep Python
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: "K-Dense Inc."
   last-reviewed: "2026-07-23"
 ---
 
 # PufferLib
 
-Use PufferLib with an explicit version profile. Upstream currently has two
-incompatible surfaces:
+Use PufferLib with an explicit version profile. This skill targets the two
+**historical profiles** below. The [live upstream documentation](https://puffer.ai/docs.html)
+now describes **5.0**, including a native build workflow and CPU evaluation without
+CPU training. Do not apply the 4.0 CLI, fallback, or build instructions to 5.0.
+The bundled plans continue to validate only 3.0 and the reviewed 4.0 snapshot;
+using 5.0 requires checking its own source and documented build requirements.
 
 | Profile | Status on 2026-07-23 | Main use |
 |---|---|---|
 | `pufferlib==3.0.0` | Latest stable PyPI release, published 2025-06-23 | Python/Gymnasium/PettingZoo emulation, `pufferlib.vector`, Torch PuffeRL |
-| source `4.0` | Upstream default branch; not the latest stable PyPI artifact | Native C Ocean environments, native CUDA trainer, optional Torch fallback |
+| source `4.0` | Reviewed source snapshot; no longer the live documentation profile | Native C Ocean environments, native CUDA trainer, optional Torch fallback |
 
-Do not combine 3.0 imports with 4.0 config/CLI examples. The 4.0 redesign
-removed the 3.0 `emulation`, `vector`, and `pytorch` modules from the current
-package tree.
+Do not combine 3.0 imports with 4.0 config/CLI examples. The reviewed 4.0 redesign
+removed the 3.0 `emulation`, `vector`, and `pytorch` modules from the reviewed
+4.0 package tree.
 
 ## Safe defaults
 
@@ -86,7 +90,7 @@ assets, so resolve/build in a sandbox without credentials or sensitive mounts.
 The uploaded metadata does not pin Torch or CUDA; do not claim a supported CUDA
 matrix that PyPI does not declare.
 
-### Current 4.0 source
+### Pinned 4.0 source
 
 The reviewed branch head on 2026-07-23 was:
 
@@ -102,8 +106,8 @@ uv add --no-sync \
 uv lock
 ```
 
-The current package declares Python `>=3.10` and Torch `>=2.9`. Upstream
-PufferTank currently uses Ubuntu 24.04, Python 3.12, and an NVIDIA CUDA
+The reviewed 4.0 package declares Python `>=3.10` and Torch `>=2.9`. The reviewed
+PufferTank snapshot uses Ubuntu 24.04, Python 3.12, and an NVIDIA CUDA
 13.0.2/cuDNN development image with the `cu130` Torch index, but does not pin
 the exact Torch wheel or all system packages. Treat it as a reference, not a
 complete lock. Never execute a remote installer directly from a pipe.
@@ -156,7 +160,7 @@ Published 3.0 `PufferEnv` requires
 `super().__init__(buf)`. It uses in-place vector buffers and returns separate
 terminal/truncation arrays plus a list of info dictionaries.
 
-Current 4.0 uses C bindings. Start from upstream `ocean/squared` (single-agent)
+The reviewed 4.0 source uses C bindings. Start from upstream `ocean/squared` (single-agent)
 or `ocean/target` (multi-agent), build one environment in local/sanitized mode,
 and verify every buffer size/type/index before optimization.
 
@@ -180,7 +184,7 @@ Move to `Multiprocessing` only after serial traces pass. Record
 count, masks, and actual returned shapes. For multi-agent environments, batch
 length is based on agent slots, not necessarily `num_envs`.
 
-Current 4.0 config instead uses:
+The reviewed 4.0 config instead uses:
 
 ```ini
 [vec]
@@ -200,7 +204,7 @@ Published 3.0 policies are Torch modules sized from
 uses `encode_observations` and `decode_actions`; structured emulation uses
 `pufferlib.pytorch.nativize_dtype` and `nativize_tensor`.
 
-Current 4.0 Torch fallback composes:
+The reviewed 4.0 Torch fallback composes:
 
 ```python
 pufferlib.models.Policy(encoder=encoder, decoder=decoder, network=network)
@@ -221,7 +225,7 @@ from pufferlib import pufferl
 trainer = pufferl.PuffeRL(train_config, vecenv, policy)
 ```
 
-Current 4.0 CLI:
+Reviewed 4.0 CLI:
 
 ```bash
 puffer train ENV_NAME
@@ -251,7 +255,7 @@ train/eval seeds. See `references/training.md`.
 
 ## Logging
 
-PufferLib 3.0 exposes W&B and Neptune; current 4.0 CLI exposes W&B. Both are
+PufferLib 3.0 exposes W&B and Neptune; the reviewed 4.0 CLI exposes W&B. Both are
 optional external services. They may transmit configuration, metrics, source
 metadata, hardware telemetry, output, and approved artifacts, with privacy,
 retention, access-control, and cost implications.
@@ -275,8 +279,8 @@ It reports only the required variable name and never reads its value.
 
 ## Checkpoint workflow
 
-PufferLib 3.0 and the 4.0 Torch fallback use Torch serialization; current native
-4.0 writes opaque `.bin` weights. PyTorch warns that untrusted models are
+PufferLib 3.0 and the 4.0 Torch fallback use Torch serialization; the reviewed native
+4.0 source writes opaque `.bin` weights. PyTorch warns that untrusted models are
 programs and that `torch.load` uses unpickling.
 
 ```bash
@@ -316,9 +320,9 @@ sandboxed load. Never use `latest` in a reproducible evaluation.
   released 2025-06-23; checked 2026-07-23.
 - [PyPI 3.0.0 metadata](https://pypi.org/pypi/pufferlib/3.0.0/json) —
   digest/dependencies; checked 2026-07-23.
-- [PufferLib official docs](https://puffer.ai/docs.html) — current 4.0 docs;
+- [PufferLib official docs](https://puffer.ai/docs.html) — live docs now describe 5.0; the 4.0 snapshot was
   checked 2026-07-23.
-- [PufferLib source](https://github.com/PufferAI/PufferLib) — default branch and
+- [PufferLib source](https://github.com/PufferAI/PufferLib) — source history and
   implementation; checked 2026-07-23.
 - [PufferTank 4.0 Dockerfile](https://github.com/PufferAI/PufferTank/blob/4.0/puffertank.dockerfile)
   — CUDA/Python reference; checked 2026-07-23.

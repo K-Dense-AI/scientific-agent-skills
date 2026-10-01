@@ -302,9 +302,14 @@ Open PDF at 100% zoom and check:
 pdffonts poster.pdf
 
 # All fonts should show "yes" in "emb" column
-# If any show "no", recompile with:
-pdflatex -dEmbedAllFonts=true poster.tex
 ```
+
+If a font is not embedded, identify whether it comes from LaTeX or an imported
+figure, then rebuild that source with an embeddable font and inspect the final
+PDF again. `-dEmbedAllFonts=true` is a **Ghostscript pdfwrite** option, not a
+`pdflatex` option. If a printer requires a Ghostscript conversion, retain the
+original and recheck fonts, page dimensions, links, and rendered appearance;
+[conversion creates a new PDF](https://ghostscript.readthedocs.io/en/latest/VectorDevices.html).
 
 **Image Resolution Check**:
 ```bash
@@ -460,7 +465,7 @@ echo "- Proofreading for typos"
 | Large white margins | Incorrect margin settings | Reduce margin in documentclass |
 | Content cut off | Exceeds page boundaries | Check total width/height calculations |
 | Blurry images | Low resolution (<300 DPI) | Replace with higher resolution images |
-| Missing fonts | Fonts not embedded | Compile with -dEmbedAllFonts=true |
+| Missing fonts | Fonts not embedded | Rebuild the offending LaTeX or figure source with embeddable fonts; recheck the final PDF |
 | Wrong page size | Incorrect paper size setting | Verify documentclass paper size |
 | Colors look wrong | RGB vs CMYK mismatch | Convert color space for print |
 | File too large (>50MB) | Uncompressed images | Optimize images or compress PDF |

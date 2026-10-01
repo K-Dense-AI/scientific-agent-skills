@@ -5,7 +5,7 @@ license: https://github.com/sympy/sympy/blob/master/LICENSE
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ and SymPy 1.14+. Optional NumPy/SciPy/Matplotlib for lambdify examples; C/Fortran compiler for autowrap/codegen.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -127,6 +127,8 @@ results = f(np.arange(1000))
 - `nonlinsolve`: Nonlinear systems
 - `dsolve`: Differential equations
 - `solve`: General purpose (legacy, but flexible)
+
+Declare the solution domain: `solveset` defaults to complex numbers, so use `domain=S.Reals` for real-only questions. A returned `ConditionSet` means an unresolved solution condition, not that no solutions exist; distinguish it from `EmptySet`. A numerical `nsolve` result is a local root found from a starting point, not proof that every root was found.
 
 ## Reference Files Structure
 

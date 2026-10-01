@@ -259,7 +259,18 @@ def _declared_interfaces(target: Path) -> tuple[list[dict], str]:
             payload = json.loads(target.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise LabCadError(f"{target} is not valid JSON: {exc}") from exc
-        return normalise_interfaces(payload.get("interfaces") or []), "manifest"
+        if not isinstance(payload, dict) or "interfaces" not in payload:
+            raise LabCadError(
+                "manifest must be a JSON object with an interfaces list; regenerate it "
+                "with gen.py after declaring interfaces() or INTERFACES"
+            )
+        declared = payload["interfaces"]
+        if not isinstance(declared, list):
+            raise LabCadError(
+                "manifest interfaces must be a list; use [] only for an explicitly "
+                "empty declaration"
+            )
+        return normalise_interfaces(declared), "manifest"
     if suffix == ".py":
         return model_interfaces(import_model(target)), "model"
     raise LabCadError(

@@ -4,7 +4,7 @@ description: "Predict regulatory features, gene structure, and expression direct
 license: MIT
 compatibility: Python 3.10+ with the `requests` library for the REST path (no dedicated SDK). Network access required. The REST `/v1` API needs a `GI_API_KEY` (a `gi_` bearer); the hosted MCP server at mcp.genomicintelligence.ai/mcp works keyless against a rate- and concurrency-limited public demo tier, key optional.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Genomic Intelligence
   trigger-keywords: DNA sequence prediction, regulatory genomics, promoter prediction, splice site prediction, enhancer activity, chromatin state, gene expression prediction, sequence to expression, log TPM, gene annotation, transcript prediction, DNA language model, genomic intelligence, hosted inference, Ensembl sequence, FASTA prediction, cis-regulatory, TSS window, DeepSEA, DeepSTARR, BigBird splice, MCP genomics
   openclaw:
@@ -67,8 +67,11 @@ scripts, or when you need the raw envelope. See [Core REST workflow](#core-rest-
 ## Access and authentication
 
 1. The **hosted MCP demo is keyless** — try it with nothing set.
-2. The **REST `/v1` API needs a key**, sent as `Authorization: Bearer <key>`.
-   Request one at [contact@genomicintelligence.ai](mailto:contact@genomicintelligence.ai).
+2. REST prediction and job operations need a key, sent as `Authorization: Bearer <key>`.
+   Public `GET /v1/tasks/{task}/models` discovery needs no key and is rate-limited
+   by source IP; inspect model windows and bounds before requesting access.
+   See the [current authentication contract](https://docs.genomicintelligence.ai/).
+   Request a prediction key at [contact@genomicintelligence.ai](mailto:contact@genomicintelligence.ai).
 3. **Never hardcode the key.** Read it from the `GI_API_KEY` environment variable
    (or a `.env` via `python-dotenv`). Never commit keys.
 

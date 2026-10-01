@@ -3,7 +3,7 @@ name: primekg
 description: Query the Precision Medicine Knowledge Graph (PrimeKG) for multiscale biological data including genes, drugs, diseases, phenotypes, and more.
 license: Unknown
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc. (PrimeKG original from Harvard MIMS)
 ---
 
@@ -19,7 +19,9 @@ PrimeKG is a precision medicine knowledge graph that integrates over 20 primary 
 - Analyze local disease context (related genes, drugs, phenotypes)
 - Identify drug-disease paths (potential repurposing opportunities)
 
-**Data access:** Programmatic access via `query_primekg.py`. Data is stored at `C:\Users\eamon\Documents\Data\PrimeKG\kg.csv`.
+**Data access:** Download `kg.csv` from the [PrimeKG Harvard Dataverse](https://dataverse.harvard.edu/dataverse/primekg), install pandas, and set `PRIMEKG_DATA` before importing `scripts.query_primekg`. The bundled helper defaults to `data/PrimeKG/kg.csv`; no dataset is bundled.
+
+**Dataset scope:** [Upstream now recommends OptimusKG](https://github.com/mims-harvard/PrimeKG) for new work. Keep a pinned PrimeKG artifact for reproducing PrimeKG analyses, and record its Dataverse version and checksum. Upstream construction-script updates do not imply that the published CSV changed, and the bundled CSV helper should not be assumed compatible with OptimusKG.
 
 ## When to Use This Skill
 

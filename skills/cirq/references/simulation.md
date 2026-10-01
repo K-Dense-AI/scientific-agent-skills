@@ -59,8 +59,8 @@ print(f"Density matrix shape: {density_matrix.shape}")
 ```python
 # Simulate moment-by-moment
 simulator = cirq.Simulator()
-for step in simulator.simulate_moment_steps(circuit):
-    print(f"State after moment {step.moment}: {step.state_vector()}")
+for index, step in enumerate(simulator.simulate_moment_steps(circuit)):
+    print(f"State after moment {index}: {step.state_vector()}")
 ```
 
 ## Sampling and Measurements
@@ -88,7 +88,7 @@ from cirq import PauliString
 
 observable = PauliString({q0: cirq.Z, q1: cirq.Z})
 result = simulator.simulate_expectation_values(
-    circuit,
+    cirq.drop_terminal_measurements(circuit),
     observables=[observable]
 )
 print(f"⟨ZZ⟩ = {result[0]}")

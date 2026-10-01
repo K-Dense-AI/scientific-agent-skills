@@ -4,7 +4,7 @@ description: Detect host inventory and effective CPU, memory, disk, scheduler, c
 license: MIT
 compatibility: Python 3.11+ on Linux, macOS, or Windows; standard library by default, optional psutil 7.2.2; accelerator and scheduler CLIs are optional read-only probes.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -139,6 +139,13 @@ bounds, not guarantees.
 `capacity_bytes`, filesystem `free_bytes`, user-available blocks, and a
 non-writing permission check are distinct. Filesystem or project quotas can
 still be stricter. The absolute working path is always redacted.
+
+The disk snapshot covers the working filesystem only, matching
+[psutil's path-specific semantics](https://psutil.readthedocs.io/stable/#psutil.disk_usage).
+If scratch, caches, and final outputs use different filesystems, inspect each
+from its target directory and label the reports by role. Budget temporary and
+final copies that coexist; free space on the input filesystem does not establish
+space on the output filesystem.
 
 ### Scheduler and container
 

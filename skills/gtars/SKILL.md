@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python bindings require Python 3.10+ and gtars 0.9.2. The Rust meta-crate and gtars-cli are 0.9.0 and require a Rust toolchain supporting Edition 2024; upstream declares no rust-version. Bundled audit CLIs use only Python 3.10+ standard library and are local/network-free. Remote constructors, pretrained tokenizers, refget, and BEDbase caching require explicit network and storage approval.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -168,6 +168,13 @@ from gtars.genomic_distributions import consensus
 rows = consensus([query, universe])
 # rows: [{"chr": ..., "start": ..., "end": ..., "count": ...}, ...]
 ```
+
+The [0.9.0 consensus algorithm](https://github.com/databio/gtars/blob/v0.9.0/gtars-genomicdist/src/consensus.rs)
+counts input sets touching a merged union component, not support at every base.
+For example, `[0,10)` and `[5,15)` yield `[0,15)` with count 2, although its
+edges have one-set support. Do not describe a count-filtered consensus as
+basewise replicate agreement; use a support-segmenting method when that is the
+scientific requirement.
 
 Signal-track generation is **not** exposed as `gtars.uniwig` in Python 0.9.2;
 use the reviewed CLI or Rust API. `RegionSet.coverage()` is a base-pair set metric,

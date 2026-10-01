@@ -5,7 +5,7 @@ license: 3 clause BSD license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ and uv. Examples and scripts target pyOpenMS 3.5.0.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -102,6 +102,10 @@ python scripts/digest_protein.py proteins.fasta --enzyme Trypsin --missed 2 --ou
 # Identification post-processing
 python scripts/process_identifications.py search.idXML --fasta db.fasta --fdr 0.01 --out filtered.idXML --csv hits.csv
 ```
+
+## Identification confidence
+
+Before using `process_identifications.py --fdr`, verify target/decoy annotations, score direction, and the search database used to generate the hits. The script applies `FalseDiscoveryRate` to peptide identifications; its threshold does not establish protein-level FDR. Report the tested unit (PSM, unique peptide, or protein), pooling/search settings, decoy strategy, and threshold explicitly. Protein inference and protein-level error control need their own validated workflow; do not label all inferred proteins “1% FDR” from the peptide-hit filter alone. See the [OpenMS FDR API](https://www.openms.org/documentation/html/classOpenMS_1_1FalseDiscoveryRate.html).
 
 ## Key 3.5.0 API notes
 

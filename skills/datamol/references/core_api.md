@@ -52,7 +52,10 @@ Apply comprehensive standardization procedures including:
 - Metal disconnection
 - Normalization (charge corrections)
 - Reionization
-- Fragment handling (largest fragment selection)
+- Stereo assignment when requested
+
+`standardize_mol` does not automatically select the largest fragment. Use a separate,
+explicit fragment policy when appropriate and preserve the original salt/mixture record.
 
 ### `standardize_smiles(smiles, ...)`
 Apply SMILES standardization procedures directly to a SMILES string.

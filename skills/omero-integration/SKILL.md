@@ -9,7 +9,7 @@ compatibility: >-
   upcoming in its support matrix. Bundled local planners require Python 3.10+
   and read only named OMERO_* variables; they never load .env files.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:
@@ -135,7 +135,12 @@ export OMERO_SECURE="true"
 # OMERO_SESSION_KEY as an alternative. Do not echo either value.
 ```
 
-A password-authenticated, exception-safe read pattern is:
+The following password-authenticated read pattern uses the session's current
+group. Before adapting it for a requested group, check that group against the
+session context and set that explicit group as described in
+[`references/connection.md`](references/connection.md). An empty result in the
+current group does not prove that an object is absent from other groups. See
+[OME's group-context documentation](https://omero.readthedocs.io/en/stable/developers/Python.html).
 
 ```python
 import os

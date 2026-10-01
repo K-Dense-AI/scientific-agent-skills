@@ -4,7 +4,7 @@ description: Use pydicom to read, inspect, write, transform, and safely prefligh
 license: MIT
 compatibility: Python 3.10+ with pydicom 3.0.2; optional pinned NumPy, Pillow, and pixel plugins. Helper CLIs are local-only and require authorized data.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: "K-Dense Inc."
   last-reviewed: "2026-07-23"
 ---
@@ -232,6 +232,14 @@ MONOCHROME1 may require presentation inversion. Palette Color requires
 `apply_color_lut()`. Presentation states and ICC behavior may require a
 validated viewer. Never use per-frame min/max normalization for quantitative
 analysis.
+
+For enhanced multi-frame objects, inspect Shared/Per-Frame Functional Groups
+for the selected frame before applying rescale or VOI transforms. The
+[Pixel Value Transformation and Frame VOI macros](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.6.16.2.html)
+may carry frame-specific parameters; top-level tags alone can be insufficient.
+Confirm the output units and relevant real-world-value mapping before describing
+decoded values as quantitative measurements. Do not assume a decoded array is
+already in Hounsfield units or that every frame uses the same transform.
 
 ## Compression, decompression, and encapsulation
 

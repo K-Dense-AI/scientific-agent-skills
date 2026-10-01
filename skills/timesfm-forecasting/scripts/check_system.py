@@ -80,7 +80,7 @@ class CheckResult:
 
     @property
     def icon(self) -> str:
-        return {"pass": "✅", "warn": "⚠️", "fail": "🛑"}.get(self.status, "❓")
+        return {"pass": "[OK]", "warn": "[WARN]", "fail": "[FAIL]"}.get(self.status, "[?]")
 
     def __str__(self) -> str:
         return f"[{self.name:<10}] {self.value:<40} {self.icon} {self.status.upper()}"
@@ -459,14 +459,14 @@ def run_checks(model_version: str = "v2.5") -> SystemReport:
     # Verdict
     if report.passed:
         report.verdict = (
-            f"✅ System is ready for {profile['name']} ({report.mode.upper()} mode)"
+            f"[OK] System is ready for {profile['name']} ({report.mode.upper()} mode)"
         )
         report.verdict_detail = (
             f"Recommended: per_core_batch_size={report.recommended_batch_size}"
         )
     else:
         failed = [c for c in report.checks if c.status == "fail"]
-        report.verdict = f"🛑 System does NOT meet requirements for {profile['name']}"
+        report.verdict = f"[FAIL] System does NOT meet requirements for {profile['name']}"
         report.verdict_detail = "; ".join(c.detail for c in failed)
 
     return report

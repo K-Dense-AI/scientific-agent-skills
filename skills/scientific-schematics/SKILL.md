@@ -4,7 +4,7 @@ description: Create publication-quality scientific diagrams using Nano Banana 2 
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.7"
+  version: "1.9"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -222,8 +222,7 @@ diagram works better than relying on the built-in guidelines alone.
 3. **Color space** - RGB only; convert for CMYK print workflows downstream
 4. **Exact line weights or text sizes** - describe them in the prompt, then verify by eye
 
-For a journal that requires vector art or 300+ dpi TIFF, convert the PNG after generation and check
-the result at the size it will actually be printed.
+For raster submissions, check effective resolution as pixel width divided by final width in inches before converting to TIFF. Changing DPI metadata or enlarging pixels does not restore missing detail. Wrapping a PNG in PDF/EPS also leaves it raster: if the venue requires editable vector lines and text, redraw those elements with vector tools and verify their scientific content. Follow the [venue's figure specifications](https://research-figure-guide.nature.com/figures/preparing-figures-our-specifications/).
 
 ### Integration Guidelines
 

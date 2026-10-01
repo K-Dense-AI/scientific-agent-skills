@@ -1,0 +1,13 @@
+{
+  "model": "SPM",
+  "parameter_set": "Chen2020",
+  "initial_soc": 0.8,
+  "temperature_K": 298.15,
+  "sample_period_s": 10.0,
+  "parameter_overrides": {},
+  "steps": [
+    {"kind": "discharge", "c_rate": 0.5, "duration_s": 600.0},
+    {"kind": "rest", "duration_s": 120.0},
+    {"kind": "charge", "c_rate": 0.5, "duration_s": 600.0}
+  ]
+}

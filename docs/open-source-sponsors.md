@@ -1,6 +1,6 @@
 # Support the Open Source Projects We Depend On
 
-Scientific Agent Skills is built on the shoulders of giants. The 163 skills in this repository leverage dozens of incredible open source projects created and maintained by dedicated developers and research communities around the world.
+The [skills in this repository](skills.md) depend on open source projects maintained by developers and research communities around the world. This page highlights projects to cite, contribute to, and support; the skill catalog is the complete inventory.
 
 **If you find value in these skills, please consider supporting the underlying open source projects that make them possible.**
 
@@ -22,24 +22,34 @@ Scientific Agent Skills is built on the shoulders of giants. The 163 skills in t
 
 | Project | Description | Links |
 |---------|-------------|-------|
-| **Biopython** | Computational molecular biology toolkit | [GitHub](https://github.com/biopython/biopython) - [Donate](https://numfocus.org/donate-to-biopython) |
+| **Biopython** | Computational molecular biology toolkit | [GitHub](https://github.com/biopython/biopython) - [Contribute](https://biopython.org/wiki/Contributing) |
 | **Scanpy** | Single-cell analysis in Python | [GitHub](https://github.com/scverse/scanpy) - [scverse](https://scverse.org/) |
 | **AnnData** | Annotated data matrices for single-cell | [GitHub](https://github.com/scverse/anndata) |
 | **scvi-tools** | Deep learning for single-cell omics | [GitHub](https://github.com/scverse/scvi-tools) |
 | **Arboreto** | Gene regulatory network inference | [GitHub](https://github.com/aertslab/arboreto) |
 | **pysam** | SAM/BAM/VCF file interface | [GitHub](https://github.com/pysam-developers/pysam) |
 | **scikit-bio** | Bioinformatics library | [GitHub](https://github.com/scikit-bio/scikit-bio) |
-| **gget** | Gene and transcript info retrieval | [GitHub](https://github.com/pachterlab/gget) |
+| **gget** | Gene and transcript info retrieval | [GitHub](https://github.com/scverse/gget) |
 | **deepTools** | Tools for deep-sequencing data | [GitHub](https://github.com/deeptools/deepTools) |
 | **geniml** | Machine learning for genomic interval sets | [GitHub](https://github.com/databio/geniml) |
 | **Gtars** | Rust/Python genomic interval toolkit | [GitHub](https://github.com/databio/gtars) |
 | **ETE Toolkit** | Phylogenetic tree analysis | [GitHub](https://github.com/etetoolkit/ete) |
+| **Waypoint** | Microbiome foundation models, taxonomic embeddings, and the Compass benchmark | [GitHub](https://github.com/Outpost-Bio/waypoint) |
+| **Folklore MCP adapter** | Public protocol adapter for variant evidence, gene-disease assertions, and literature; the hosted interpretation engine is separate | [GitHub](https://github.com/helena-bioinformatics/folklore-mcp) |
+
+### Scientific Data Management & Knowledge Graphs
+
+| Project | Description | Links |
+|---------|-------------|-------|
+| **DataLad** | Dataset retrieval, versioning, and computational provenance | [GitHub](https://github.com/datalad/datalad) |
+| **git-annex** | Large-file content management used by DataLad | [Project](https://git-annex.branchable.com/) |
+| **ARAX / RTX** | Biomedical knowledge-graph queries and provenance through NCATS Translator | [GitHub](https://github.com/RTXteam/RTX) |
 
 ### Cheminformatics & Drug Discovery
 
 | Project | Description | Links |
 |---------|-------------|-------|
-| **RDKit** | Cheminformatics toolkit | [GitHub](https://github.com/rdkit/rdkit) - [Donate](https://github.com/sponsors/rdkit) |
+| **RDKit** | Cheminformatics toolkit | [GitHub](https://github.com/rdkit/rdkit) - [Cite](https://www.rdkit.org/docs/Overview.html#citing-the-rdkit) |
 | **Datamol** | Molecular manipulation made easy | [GitHub](https://github.com/datamol-io/datamol) |
 | **DeepChem** | Deep learning for chemistry | [GitHub](https://github.com/deepchem/deepchem) |
 | **TorchDrug** | Drug discovery with PyTorch | [GitHub](https://github.com/DeepGraphLearning/torchdrug) |
@@ -58,7 +68,7 @@ Scientific Agent Skills is built on the shoulders of giants. The 163 skills in t
 
 | Project | Description | Links |
 |---------|-------------|-------|
-| **PyTorch Lightning** | Deep learning framework | [GitHub](https://github.com/Lightning-AI/pytorch-lightning) - [Sponsor](https://github.com/sponsors/Lightning-AI) |
+| **PyTorch Lightning** | Deep learning framework | [GitHub](https://github.com/Lightning-AI/pytorch-lightning) |
 | **Transformers** | State-of-the-art NLP | [GitHub](https://github.com/huggingface/transformers) |
 | **scikit-learn** | Machine learning in Python | [GitHub](https://github.com/scikit-learn/scikit-learn) - [Donate](https://numfocus.org/donate-to-scikit-learn) |
 | **PyTorch Geometric** | Geometric deep learning | [GitHub](https://github.com/pyg-team/pytorch_geometric) |
@@ -159,8 +169,8 @@ Scientific Agent Skills is built on the shoulders of giants. The 163 skills in t
 
 Many of the projects above are sponsored by [NumFOCUS](https://numfocus.org/), a nonprofit supporting open source scientific computing. Consider [donating to NumFOCUS](https://numfocus.org/donate) to support the broader ecosystem.
 
-**NumFOCUS-sponsored projects in this collection:**
-- Biopython
+**Projects in this collection listed in the [NumFOCUS sponsorship directory](https://numfocus.org/sponsored-projects) (checked 2026-09-13):**
+
 - scikit-learn
 - Matplotlib
 - NetworkX
@@ -168,6 +178,9 @@ Many of the projects above are sponsored by [NumFOCUS](https://numfocus.org/), a
 - Dask
 - Astropy
 - PyMC
+- GeoPandas
+- Zarr
+- scverse
 
 ---
 

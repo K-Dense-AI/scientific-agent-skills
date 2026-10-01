@@ -30,7 +30,7 @@ def _normalize_ratio(arms, ratio):
         ratio = [1] * len(arms)
     if len(ratio) != len(arms):
         raise ValueError("ratio must have one entry per arm")
-    if any(r <= 0 for r in ratio):
+    if any(r <= 0 or int(r) != r for r in ratio):
         raise ValueError("ratio entries must be positive integers")
     template = []
     for arm, r in zip(arms, ratio):

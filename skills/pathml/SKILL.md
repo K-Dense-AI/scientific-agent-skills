@@ -5,7 +5,7 @@ license: MIT
 compatibility: PathML 3.0.5 is the latest PyPI release and targets Python 3.10-3.12; installation needs uv plus platform libraries for OpenSlide, BLAS/LAPACK, and Java/Bio-Formats. Bundled Python 3.10+ CLIs are local, bounded, dependency-free, and network-free.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -118,6 +118,12 @@ for tile in islice(slide.generate_tiles(shape=512, stride=512, level=0), 8):
 Tiles use `(i, j)` = `(row, column)` coordinates at the selected pyramid level.
 For OpenSlide, PathML maps them to level-0 coordinates internally. Record the
 level and downsample; convert to `(x, y)` or micrometres explicitly downstream.
+
+Before comparing tile features, cell distances, or areas across scanners, validate
+level-0 MPP separately for X and Y. Equal pixel tile sizes need not cover equal
+physical areas, and OpenSlide MPP may be absent or inaccurate. Keep results in
+pixel units when calibration is unknown, or document a validated calibration;
+do not infer it from objective magnification alone. See [OpenSlide properties](https://openslide.org/docs/properties/).
 
 ## Research workflow
 

@@ -67,6 +67,13 @@ def synthesize(cluster, top_k_skills, backend):
     if verdict == "reuse":
         result["target"] = payload.get("target")
     else:
-        result["name"] = payload.get("name")
-        result["skill_body"] = payload.get("skill_body")
+        name = payload.get("name")
+        body = payload.get("skill_body")
+        if (not isinstance(name, str) or not 1 <= len(name) <= 64
+                or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) is None):
+            raise SynthesisError("draft name must be a valid skill name, not a path")
+        if not isinstance(body, str) or not body.strip():
+            raise SynthesisError("draft skill_body must be a non-empty string")
+        result["name"] = name
+        result["skill_body"] = body
     return result

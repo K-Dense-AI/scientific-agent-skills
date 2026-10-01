@@ -25,12 +25,14 @@ which is not what you get by applying the AUC substitution naively.
 
 ## 2. How lambda_z was selected
 
-The dominant convention: fit `ln C` on time over the last three quantifiable points, extend the
-window backwards one point at a time, and keep the longer window only when **adjusted** r-squared
-improves by more than 0.0001.
+The bundled helper fits `ln C` on time over the last three quantifiable points, extends
+the window backwards, and retains a longer window only when adjusted r-squared improves
+by more than 0.0001. This differs from Phoenix Best Fit, which favors the longer window
+when it is within 0.0001 of the maximum adjusted r-squared. Document which convention
+was used when comparing software outputs.
 
-- Plain r-squared is monotone in the number of points, so it always selects the longest window.
-  Adjusted r-squared is the only version of this rule that discriminates.
+- Neither plain nor adjusted r-squared is monotonic as observations are added. Inspect
+  the terminal fit and its sampling window rather than relying on either statistic alone.
 - Points at or before Tmax are never eligible. Including Tmax fits the tail of absorption, which
   biases lambda_z upward and therefore half-life, Vz and AUCinf downward.
 - Trailing BLQ samples are excluded from the regression, not set to zero — a zero cannot be

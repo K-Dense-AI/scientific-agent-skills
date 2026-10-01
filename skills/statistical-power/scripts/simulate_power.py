@@ -18,6 +18,7 @@ Requires: numpy, scipy, statsmodels. The survival example also needs lifelines.
 from __future__ import annotations
 
 import math
+from numbers import Integral
 from dataclasses import dataclass
 
 import numpy as np
@@ -59,10 +60,18 @@ def simulate_power(gen_and_test, n, n_sims=2000, alpha=0.05, seed=0):
     Returns a PowerEstimate including a Wilson confidence interval, so you can
     tell whether 0.81 vs 0.79 is real or just simulation noise.
     """
+    if any(isinstance(value, bool) or not isinstance(value, Integral) or value < 1
+           for value in (n, n_sims)):
+        raise ValueError("n and n_sims must be positive integers")
+    if not 0 < alpha < 1:
+        raise ValueError("alpha must lie strictly between 0 and 1")
     rng = np.random.default_rng(seed)
     hits = 0
     for _ in range(n_sims):
-        if gen_and_test(n, rng):
+        rejected = gen_and_test(n, rng)
+        if not isinstance(rejected, (bool, np.bool_)):
+            raise TypeError("gen_and_test must return a boolean rejection decision, not a p-value")
+        if rejected:
             hits += 1
     lo, hi = _wilson_ci(hits, n_sims)
     return PowerEstimate(power=hits / n_sims, n_sims=n_sims, n=n,
@@ -77,12 +86,19 @@ def find_sample_size(gen_and_test, target_power=0.80, n_sims=2000, alpha=0.05,
     real designs. Uses a fixed seed per n so the search is stable; widen n_sims
     near the boundary if the curve is noisy. Returns (n, PowerEstimate).
     """
+    if any(isinstance(value, bool) or not isinstance(value, Integral)
+           for value in (lo, hi)) or not 1 <= lo <= hi <= 1_000_000:
+        raise ValueError("bounds must be integers with 1 <= lo <= hi <= 1000000")
+    if not 0 < target_power <= 1:
+        raise ValueError("target_power must lie in (0, 1]")
     # expand hi until it clears target (guards against too-small upper bound)
     while True:
         est_hi = simulate_power(gen_and_test, hi, n_sims, alpha, seed)
-        if est_hi.power >= target_power or hi >= 1_000_000:
+        if est_hi.power >= target_power:
             break
-        lo, hi = hi, hi * 2
+        if hi >= 1_000_000:
+            raise ValueError("target power not reached by the sample-size cap of 1000000")
+        lo, hi = hi, min(hi * 2, 1_000_000)
 
     best = est_hi
     while lo < hi:

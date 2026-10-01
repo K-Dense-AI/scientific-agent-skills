@@ -2,6 +2,8 @@
 
 Use this guide to pick the right tool in the scientific-agent-skills repo (or LlamaParse for cloud escalation).
 
+The LiteParse column and routing below describe this skill's pinned **2.0.0 text/JSON workflows**. [Current upstream documentation](https://developers.llamaindex.ai/liteparse/) also offers Markdown; for a newer installed release, check its supported formats before routing away from LiteParse solely for Markdown.
+
 ```mermaid
 flowchart TD
   start[User has a document task]

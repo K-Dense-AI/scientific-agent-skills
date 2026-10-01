@@ -131,7 +131,7 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertIn("nothing billed", completed.stdout)
 
     def test_size_flag_is_gone(self):
-        """No catalogue model accepts `size`; offering the flag only invites a 400."""
+        """The bundled CLI rejects unsupported flags before making a request."""
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "a cat", "--size", "2048x2048",
              "--no-preflight", "--dry-run"],
@@ -528,8 +528,11 @@ class SkillDocumentTests(unittest.TestCase):
 
     def test_documentation_does_not_promise_a_size_parameter(self):
         for name in ("SKILL.md", "references/models.md"):
-            text = (SKILL_ROOT / name).read_text(encoding="utf-8")
-            self.assertNotIn("--size", text.replace("There is no `--size`", ""))
+            with self.subTest(document=name):
+                text = (SKILL_ROOT / name).read_text(encoding="utf-8")
+                for disclaimer in ("There is no `--size`", "has no `--size`"):
+                    text = text.replace(disclaimer, "")
+                self.assertNotIn("--size", text)
 
     def test_transparent_background_is_not_offered_on_models_that_refuse_it(self):
         """gpt-image-2 allows only auto and opaque; recommending it wastes a call."""

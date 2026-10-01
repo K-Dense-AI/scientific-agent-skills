@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.10+ and uv. Guidance targets geniml 0.8.4 with gtars 0.9.2; ML workflows need the pinned ml extra and compatible native wheels. Bundled planners and inspectors are dependency-free, local-only, and make no network requests.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: "K-Dense Inc."
   upstream-version: "0.8.4"
   last-reviewed: "2026-07-23"
@@ -156,7 +156,12 @@ model.train(dataset, epochs=10, window_size=5, num_cpus=4, seed=42)
 ```
 
 The Parquet input must contain one list-valued `tokens` column, one document
-per row. See [references/region2vec.md](references/region2vec.md) for export,
+per row. Record token frequencies and `min_count`: in the
+[0.8.4 training implementation](https://github.com/databio/geniml/blob/v0.8.4/geniml/region2vec/main.py),
+only Gensim-retained token IDs receive trained weights. Universe membership
+alone therefore does not prove a token has a learned embedding. Report the
+fraction of inference tokens excluded by training-frequency filtering and
+exclude or explicitly flag their embeddings in downstream comparisons. See [references/region2vec.md](references/region2vec.md) for export,
 encoding, legacy CLI, and evaluation details.
 
 ### scEmbed

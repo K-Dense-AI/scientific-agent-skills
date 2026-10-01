@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import csv
 import json
 import sys
 import subprocess
@@ -92,6 +93,90 @@ class PairAnalysisTests(unittest.TestCase):
         self.assertEqual(len(contacts), 1)
         self.assertEqual(contacts[0]["ligand_chain"], "A")
         self.assertEqual(contacts[0]["min_distance_A"], 3.0)
+
+    def test_contacts_exclude_nearby_ligand_conformer_b(self) -> None:
+        atom = analyze_pair.Atom
+        atoms = [
+            atom(0, "ATOM", "CA", "A", "ALA", "A", 1, "", "C",
+                 np.array([0.0, 0.0, 0.0])),
+            atom(1, "HETATM", "C1", "A", "LIG", "A", 50, "", "C",
+                 np.array([20.0, 0.0, 0.0])),
+            atom(2, "HETATM", "C1", "B", "LIG", "A", 50, "", "C",
+                 np.array([1.0, 0.0, 0.0])),
+        ]
+
+        self.assertEqual(analyze_pair.ligand_contacts(atoms, "A", {"LIG"}, 4.0), [])
+        contacts = analyze_pair.ligand_contacts(atoms, "A", {"LIG"}, 25.0)
+        self.assertEqual(contacts[0]["min_distance_A"], 20.0)
+        self.assertEqual(contacts[0]["receptor_altloc"], "A")
+        self.assertEqual(contacts[0]["ligand_altloc"], "A")
+
+    def test_contacts_accept_blank_and_a_but_not_receptor_b(self) -> None:
+        atom = analyze_pair.Atom
+        for altloc in ("", "A"):
+            with self.subTest(altloc=altloc):
+                atoms = [
+                    atom(0, "ATOM", "CA", altloc, "ALA", "A", 1, "", "C",
+                         np.array([0.0, 0.0, 0.0])),
+                    atom(1, "ATOM", "CA", "B", "ALA", "A", 1, "", "C",
+                         np.array([2.5, 0.0, 0.0])),
+                    atom(2, "HETATM", "C1", altloc, "LIG", "A", 50, "", "C",
+                         np.array([3.0, 0.0, 0.0])),
+                ]
+                contacts = analyze_pair.ligand_contacts(atoms, "A", {"LIG"}, 4.0)
+                self.assertEqual(contacts[0]["min_distance_A"], 3.0)
+                self.assertEqual(contacts[0]["receptor_altloc"], altloc)
+                self.assertEqual(contacts[0]["ligand_altloc"], altloc)
+
+    def test_contacts_do_not_fall_back_to_b_only_ligand(self) -> None:
+        atom = analyze_pair.Atom
+        atoms = [
+            atom(0, "ATOM", "CA", "", "ALA", "A", 1, "", "C",
+                 np.zeros(3)),
+            atom(1, "HETATM", "C1", "B", "LIG", "A", 50, "", "C",
+                 np.array([1.0, 0.0, 0.0])),
+        ]
+
+        with self.assertRaisesRegex(ValueError, "no blank/A.*without fallback"):
+            analyze_pair.ligand_contacts(atoms, "A", {"LIG"}, 4.0)
+
+    def test_blank_atom_sites_take_precedence_over_a_in_either_order(self) -> None:
+        atom = analyze_pair.Atom
+        atoms = [
+            atom(0, "ATOM", "CA", "", "ALA", "A", 1, "", "C",
+                 np.array([0.0, 0.0, 0.0])),
+            atom(1, "ATOM", "CA", "A", "ALA", "A", 1, "", "C",
+                 np.array([19.0, 0.0, 0.0])),
+            atom(2, "HETATM", "C1", "", "LIG", "A", 50, "", "C",
+                 np.array([20.0, 0.0, 0.0])),
+            atom(3, "HETATM", "C1", "A", "LIG", "A", 50, "", "C",
+                 np.array([1.0, 0.0, 0.0])),
+        ]
+
+        for ordered in (atoms, list(reversed(atoms))):
+            self.assertEqual(
+                analyze_pair.ligand_contacts(ordered, "A", {"LIG"}, 4.0), []
+            )
+            selected = analyze_pair.residue_ca(ordered, "A")
+            self.assertEqual(selected[(1, "")].altloc, "")
+
+    def test_b_atoms_cannot_complete_a_modified_polymer_backbone(self) -> None:
+        atom = analyze_pair.Atom
+        atoms = [
+            atom(i, "HETATM", name, "B" if name == "O" else "A",
+                 "MSE", "A", 2, "", name[0], np.array([float(i), 0.0, 0.0]))
+            for i, name in enumerate(("N", "CA", "C", "O"))
+        ]
+        atoms.append(
+            atom(4, "HETATM", "C1", "A", "LIG", "A", 50, "", "C",
+                 np.array([1.0, 1.0, 0.0]))
+        )
+
+        selected, excluded = analyze_pair.residue_ca_report(atoms, "A")
+        self.assertNotIn((2, ""), selected)
+        self.assertEqual(excluded[0]["missing_backbone_atoms"], ["O"])
+        self.assertEqual(analyze_pair.modified_polymer_residue_report(atoms, "A"), [])
+        self.assertEqual(analyze_pair.ligand_contacts(atoms, "A", {"LIG"}, 4.0), [])
 
     def test_explicit_ligand_chain_can_select_another_chain(self) -> None:
         atom = analyze_pair.Atom
@@ -337,9 +422,10 @@ class PairCliMetricsTests(unittest.TestCase):
         y: float,
         z: float,
         element: str,
+        altloc: str = "",
     ) -> str:
         return (
-            f"{record:<6}{serial:5d} {atom_name:^4} {resname:>3} A{resseq:4d}    "
+            f"{record:<6}{serial:5d} {atom_name:^4}{altloc:1}{resname:>3} A{resseq:4d}    "
             f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 20.00           {element:>2}\n"
         )
 
@@ -392,6 +478,60 @@ class PairCliMetricsTests(unittest.TestCase):
             4,
         )
         self.assertEqual(metrics["comparison"]["missing_in_reference"]["count"], 1)
+
+    def test_cli_records_conformer_policy_and_preserves_alternate_coordinates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reference, mobile, output = root / "ref.pdb", root / "mob.pdb", root / "out"
+            backbone = "".join(
+                self._atom_line(i, i, *coords)
+                for i, coords in enumerate([(0, 0, 0), (0, 10, 0), (0, 0, 10)], 1)
+            )
+            reference.write_text(backbone + "END\n")
+            mobile.write_text(
+                backbone
+                + self._custom_atom_line(4, "HETATM", "C1", "LIG", 50,
+                                         20.0, 0.0, 0.0, "C", "A")
+                + self._custom_atom_line(5, "HETATM", "C1", "LIG", 50,
+                                         1.0, 0.0, 0.0, "C", "B")
+                + "END\n"
+            )
+            argv = [
+                "analyze_pair.py", str(reference), str(mobile),
+                "--reference-chain", "A", "--mobile-chain", "A",
+                "--align-range", "1:3", "--mobile-ligand-resname", "LIG",
+                "--output-dir", str(output),
+            ]
+            with patch.object(sys, "argv", argv):
+                analyze_pair.main()
+            metrics = json.loads((output / "comparison_metrics.json").read_text())
+            self.assertEqual(metrics["ligand_contacts"]["count"], 0)
+            self.assertFalse((output / "ligand_contacts.tsv").exists())
+            self.assertEqual(
+                metrics["alternate_conformer_policy"]["allowed_altlocs"], ["", "A"]
+            )
+            self.assertIn("without occupancy ranking or fallback",
+                          metrics["alternate_conformer_policy"]["rule"])
+
+            with patch.object(sys, "argv", argv + ["--contact-cutoff", "25"]):
+                analyze_pair.main()
+            metrics = json.loads((output / "comparison_metrics.json").read_text())
+            contacts = metrics["ligand_contacts"]["contacts"]
+            self.assertEqual(contacts[0]["min_distance_A"], 20.0)
+            self.assertTrue(all(row["ligand_altloc"] == "A" for row in contacts))
+            with (output / "ligand_contacts.tsv").open(newline="") as handle:
+                rows = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual(rows[0]["receptor_altloc"], "")
+            self.assertEqual(rows[0]["ligand_altloc"], "A")
+            _, aligned_atoms = analyze_pair.parse_pdb(output / "mobile_aligned.pdb")
+            self.assertEqual(len(aligned_atoms), 5)
+            self.assertEqual([atom.altloc for atom in aligned_atoms[-2:]], ["A", "B"])
+            np.testing.assert_allclose(aligned_atoms[-1].coord, [1.0, 0.0, 0.0])
+
+            # Reusing an output directory must not leave contacts from the old cutoff.
+            with patch.object(sys, "argv", argv):
+                analyze_pair.main()
+            self.assertFalse((output / "ligand_contacts.tsv").exists())
 
     def test_metrics_record_accepted_modified_polymer_residues(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

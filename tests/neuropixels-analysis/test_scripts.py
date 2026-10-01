@@ -264,6 +264,85 @@ class SorterDefaultTests(unittest.TestCase):
         self.assertEqual(run_sorting.SORTER_DEFAULTS.get("tridesclous2", {}), {})
 
 
+class MotionRoutingTests(unittest.TestCase):
+    def test_corrected_input_disables_the_relevant_sorter_motion_stage(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        flags = {
+            "kilosort2_5": "do_correction",
+            "kilosort3": "do_correction",
+            "kilosort4": "do_correction",
+            "spykingcircus2": "apply_motion_correction",
+            "mountainsort5": None,
+        }
+        for sorter, flag in flags.items():
+            for corrected in (True, False):
+                with self.subTest(sorter=sorter, corrected=corrected):
+                    with patch.object(neuropixels_pipeline.si, "run_sorter") as run:
+                        neuropixels_pipeline.run_spike_sorting(
+                            MagicMock(), "output", sorter, motion_corrected=corrected
+                        )
+                    kwargs = run.call_args.kwargs
+                    expected = {flag: False} if corrected and flag else {}
+                    actual = {key: kwargs[key] for key in set(flags.values()) - {None}
+                              if key in kwargs}
+                    self.assertEqual(actual, expected)
+
+    def test_template_disables_motion_for_corrected_sorter_inputs(self) -> None:
+        import ast
+        from unittest.mock import MagicMock
+
+        source = (SKILL_ROOT / "assets" / "analysis_template.py").read_text()
+        main = next(node for node in ast.parse(source).body
+                    if isinstance(node, ast.FunctionDef) and node.name == "main")
+        start = next(i for i, node in enumerate(main.body)
+                     if isinstance(node, ast.Assign)
+                     and any(isinstance(target, ast.Name) and target.id == "sorter_params"
+                             for target in node.targets))
+        routing = ast.Module(body=main.body[start:start + 3], type_ignores=[])
+        flags = {"kilosort3": "do_correction", "kilosort4": "do_correction",
+                 "spykingcircus2": "apply_motion_correction", "mountainsort5": None}
+        for sorter, flag in flags.items():
+            for enabled in (True, False):
+                with self.subTest(sorter=sorter, enabled=enabled):
+                    user_params = {flag: True} if flag else {}
+                    namespace = dict(SORTER=sorter, CORRECT_MOTION=enabled,
+                                     SORTER_PARAMS=user_params, rec=MagicMock(),
+                                     output_path=Path("output"), si=MagicMock())
+                    exec(compile(routing, "analysis_template.py", "exec"), namespace)
+                    kwargs = namespace["si"].run_sorter.call_args.kwargs
+                    expected = {flag: not enabled} if flag else {}
+                    actual = {key: kwargs[key] for key in set(flags.values()) - {None}
+                              if key in kwargs}
+                    self.assertEqual(actual, expected)
+                    self.assertEqual(user_params, {flag: True} if flag else {})
+
+    def test_pipeline_routes_the_actual_correction_state_without_depth_threshold(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as output:
+                rec = MagicMock()
+                preprocessed = rec.save.return_value
+                corrected = MagicMock()
+                with patch.multiple(
+                    neuropixels_pipeline,
+                    load_recording=MagicMock(return_value=rec),
+                    preprocess=MagicMock(return_value=(rec, [])),
+                    check_drift=MagicMock(return_value={"peaks": [], "peak_locations": []}),
+                    correct_motion=MagicMock(return_value=corrected),
+                    run_spike_sorting=MagicMock(),
+                    postprocess=MagicMock(return_value=(MagicMock(), metrics_table({}))),
+                    curate_units=MagicMock(return_value={}),
+                    export_results=MagicMock(),
+                ):
+                    neuropixels_pipeline.run_pipeline("input", output, apply_motion_correction=enabled)
+                    run = neuropixels_pipeline.run_spike_sorting
+                    self.assertIs(run.call_args.args[0], corrected if enabled else preprocessed)
+                    self.assertIs(run.call_args.kwargs["motion_corrected"], enabled)
+                    self.assertEqual(neuropixels_pipeline.correct_motion.call_count, int(enabled))
+
+
 class TracePlotTests(unittest.TestCase):
     """`plot_traces` must stay readable on a full 384-channel Neuropixels probe."""
 

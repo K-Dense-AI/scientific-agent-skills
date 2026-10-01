@@ -4,7 +4,7 @@ description: Prepare and validate research-only clinical decision-support evalua
 license: MIT
 compatibility: Python 3.11+; local files only; bundled scripts use the standard library and require no network, credentials, API keys, LLMs, or image services.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -146,6 +146,7 @@ The evaluator accepts only aggregate confusion counts and calibration bins. It r
 - locked model/assay/version and pre-specified threshold provenance;
 - representative internal validation and independent external validation;
 - calibration and discrimination appropriate to the target;
+- sampling design and prevalence: predictive values and calibration from an enriched or case-control sample describe that sample, not automatically the intended-use population. Document any independently justified weighting or prevalence adjustment supplied by the statistician; do not infer population predictive values from raw selected-sample counts;
 - subgroup performance with uncertainty and sample sizes;
 - missingness, spectrum/selection bias, dataset shift, and assay variability;
 - human-factors and prospective evaluation where relevant;
@@ -210,13 +211,13 @@ Use `references/regulatory_and_governance.md` for dated context. Obtain qualifie
 
 ## Verification
 
-From this skill directory:
+Run the test suite from the repository root:
 
 ```bash
 python3 -m unittest discover -s tests/clinical-decision-support -p 'test_*.py'
 ```
 
-Run AST compilation without bytecode:
+From the skill directory, run AST compilation without bytecode:
 
 ```bash
 python3 -c "import ast,pathlib; [ast.parse(p.read_text()) for p in pathlib.Path('scripts').glob('*.py')]"

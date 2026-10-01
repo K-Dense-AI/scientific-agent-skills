@@ -156,7 +156,7 @@ echo "Results are in: $OUTPUT_DIR"
     with open(output_file, 'w') as f:
         f.write(script)
 
-    return f"✓ Generated ChIP-seq QC workflow: {output_file}"
+    return f"[OK] Generated ChIP-seq QC workflow: {output_file}"
 
 
 def generate_chipseq_analysis_workflow(output_file, params):
@@ -277,7 +277,7 @@ echo "Results are in: $OUTPUT_DIR"
     with open(output_file, 'w') as f:
         f.write(script)
 
-    return f"✓ Generated ChIP-seq analysis workflow: {output_file}"
+    return f"[OK] Generated ChIP-seq analysis workflow: {output_file}"
 
 
 def generate_rnaseq_coverage_workflow(output_file, params):
@@ -328,7 +328,7 @@ echo "for strand-specific visualization of RNA-seq data."
     with open(output_file, 'w') as f:
         f.write(script)
 
-    return f"✓ Generated RNA-seq coverage workflow: {output_file}"
+    return f"[OK] Generated RNA-seq coverage workflow: {output_file}"
 
 
 def generate_atacseq_workflow(output_file, params):
@@ -416,7 +416,7 @@ echo "  ~400bp: di-nucleosome"
     with open(output_file, 'w') as f:
         f.write(script)
 
-    return f"✓ Generated ATAC-seq workflow: {output_file}"
+    return f"[OK] Generated ATAC-seq workflow: {output_file}"
 
 
 def main():

@@ -14,7 +14,7 @@ databases deduplicate against each other.
 
 ### search_openalex.py
 
-Search OpenAlex. No API key; ~250 million works across every discipline.
+Search OpenAlex across disciplines. Casual keyless use is supported; an optional account key raises the available budget.
 
 **Features**:
 - Keyless REST API with cursor pagination
@@ -45,8 +45,7 @@ python scripts/search_openalex.py "CRISPR gene editing" \
   --output crispr_reviews.bib
 ```
 
-Set `OPENALEX_EMAIL` (or pass `--email`) to join OpenAlex's polite pool, which
-is faster and more reliably available.
+Set `OPENALEX_API_KEY` for your account budget; it is sent in the Authorization header. `OPENALEX_EMAIL`/`--email` supplies optional contact information. The client uses the supported 100-record page limit and exits with an error if any requested page fails, preventing a partial bibliography from being reported as complete.
 
 ### search_google_scholar.py
 

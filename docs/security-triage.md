@@ -1,19 +1,74 @@
 # Security Scan Triage
 
-Verdicts on findings from [`docs/security-report.md`](security-report.md). The report is published
-automatically with no pre-publication plausibility check, so a finding there is a prompt to review a
-skill, not a determination about it. This file records which findings were verified, what was fixed,
-and which classes are systematic false positives — so the same 40 CRITICAL/HIGH items are not
-re-investigated from scratch every week.
+Review notes for the [security report](security-report.md) and its
+[machine-readable companion](security-report.json). Automated findings require code review;
+neither a finding nor the scanner's `is_safe` field is a security certification.
 
-**Triaged against:** scan of 2026-07-27 10:38 UTC (scanner 2.0.12, model claude-opus-5, 154 skills,
-817 findings: 33 CRITICAL, 8 HIGH, 222 MEDIUM, 554 LOW).
+## Current report: 2026-09-13
 
-Re-run any check below yourself; each one is cheap and decides the finding on its own.
+**Report generated:** 2026-09-13 14:32 UTC, scanner 2.1.0, model `claude-opus-5`.
+The report covers all **165 skills**: **661 findings** (28 CRITICAL, 4 HIGH,
+188 MEDIUM, 440 LOW, 1 INFO). Of these, **155 are per-skill findings** and
+**506 are cross-skill findings**. Cross-skill details are in the JSON; the generated
+Markdown summary does not show them individually. The reported 154/165 safe skills
+is the scanner's per-skill severity classification, not a count of fully verified skills.
+
+The refresh scanned 18 new or changed skills and reused 147 unchanged results from
+September 7. A second pass retried incomplete LLM analyses for `geomaster` and
+`labarchive-integration`; both completed. The report's final-run metadata therefore
+says **2 rescanned / 163 reused**. Per-skill `last_scanned` dates and `content_hash`
+values identify the underlying evidence; the last full scan remains September 7.
+
+### Current high-severity review
+
+| Findings | Evidence checked | Assessment |
+|---|---|---|
+| 28 CRITICAL `BEHAVIOR_*EXFILTRATION*` findings across eight skills | Named credential reads and API destinations in `autoskill`, `citation-management`, `infographics`, `latex-posters`, `literature-review`, `research-lookup`, `scientific-schematics`, and `scientific-slides` | These repeat the service-authentication pattern documented below. The cited reads use service-specific credentials. Configurable destinations, especially Autoskill's foundry endpoint, still require trust and authorization; HTTPS validation alone does not establish either. |
+| 3 HIGH `MDBLOCK_PYTHON_EVAL_EXEC` findings | `histolab/references/filters_preprocessing.md`, `modal/references/functions.md`, `waypoint-bio/references/python-api.md` | False positives for the stated `eval`/`exec` claim: the first uses the OpenCV constant `cv2.CV_64F`; the other two call a model's `.eval()` method. This verdict does not audit model loading or remote tokenizer code. |
+| 1 HIGH `CROSS_SKILL_DATA_RELAY` finding | Cross-skill JSON entry, which groups possible collectors and network-capable skills | An overlap heuristic, without an executed relay or demonstrated transfer between those skills. Keep it visible for composition review; it is not evidence of a confirmed attack and is not cleared by the per-skill safe count. |
+
+### Remaining scanner limitations
+
+Eight skills still record behavioral `FindingContract` errors for
+`BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` and
+`BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` (`UNKNOWN_BUNDLED_PYTHON_RULE`). They are
+the same eight skills in the first row above. These errors remain in
+`analyzers_failed`; no incomplete analyzer is silently treated as a successful pass.
+There are no remaining recorded LLM analyzer failures after the retry.
+
+The checks above cover the named high-severity patterns. They do not reclassify every
+MEDIUM/LOW finding or establish that every possible workflow is safe. Inspect the
+upstream [scanner documentation](https://github.com/cisco-ai-defense/skill-scanner)
+when interpreting an unfamiliar rule.
+
+### Reproduce the report
+
+Run from the repository root with `SKILL_SCANNER_LLM_API_KEY` available. The wrapper
+loads `.env` and writes the Markdown and JSON together:
+
+```bash
+# Match the scanner version used for this report without changing uv.lock.
+uv run --frozen --with cisco-ai-skill-scanner==2.1.0 python scan_skills.py
+
+# Force every skill through the analyzers, including unchanged skills.
+uv run --frozen --with cisco-ai-skill-scanner==2.1.0 python scan_skills.py --full
+```
+
+The [weekly workflow](../.github/workflows/security-scan.yml) runs Mondays at
+09:00 UTC and supports manual dispatch. The wrapper invalidates its cache on a
+scanner/model change or after 30 days without a full scan. Review `skills_skipped`
+and `analyzers_failed` as well as severity totals after every run.
+
+## Historical review: 2026-07-27
+
+The notes below preserve the earlier review against the July 27 10:38 UTC scan
+(scanner 2.0.12, model `claude-opus-5`, 154 skills). Counts, line numbers, file
+inventories, and package-release observations in this section describe that snapshot;
+they are not current scan totals or blanket verdicts on later findings.
 
 ---
 
-## Fixed
+### Historical fixes
 
 These were real. Each fix keeps the skill's documented behavior intact.
 
@@ -29,16 +84,16 @@ These were real. Each fix keeps the skill's documented behavior intact.
 
 ---
 
-## False positives
+### Historical false-positive patterns
 
-### All 40 CRITICAL and HIGH findings
+#### Previously reviewed CRITICAL and HIGH finding classes
 
-Every CRITICAL and HIGH in the 2026-07-27 report falls into one of four classes below. None
-survived verification.
+The July review documented the following classes. Use their evidence to guide a new
+review, not to dismiss all later CRITICAL or HIGH findings automatically.
 
 **`BEHAVIOR_EVAL_SUBPROCESS` (CRITICAL ×4)** — claims `eval`/`exec` combined with `subprocess` in
-`pacsomatic`, `research-lookup`, `scientific-slides`, `xlsx`. There are **zero** `eval`/`exec`/
-`compile` call sites in the entire repository. The rule matches the *substring* `eval`/`exec` inside
+`pacsomatic`, `research-lookup`, `scientific-slides`, `xlsx`. The July AST check found no built-in `eval`/`exec`/
+`compile` call sites in the scanned skill scripts. The rule matches the *substring* `eval`/`exec` inside
 ordinary identifiers that co-occur with `import subprocess` — `retrieval`, `evaluate`, `executor`,
 `executable`. `scientific-slides/scripts/validate_presentation.py` and `xlsx/scripts/recalc.py`
 contain neither substring at all.
@@ -99,7 +154,7 @@ results that appear nowhere in that skill's own findings list, i.e. the LLM anal
 skill's static output. (The separate consent concern in the same finding was real and is fixed
 above.)
 
-### Confabulated file inventories
+#### Confabulated file inventories
 
 The scanner reported Python and shell files in skills that ship only Markdown. Any finding whose
 premise is "undisclosed bundled code" in these skills is void:
@@ -125,7 +180,7 @@ Note the arithmetic: `seaborn`'s "7 Python files" and `dhdna-profiler`'s "8 Pyth
 track those skills' Markdown counts, so the analyzer appears to be mis-typing files rather than
 inventing them wholesale.
 
-### Other
+#### Other
 
 **`liteparse` — `LLM_SUPPLY_CHAIN_ATTACK`**, "possibly non-existent version `liteparse==2.0.0`,
 cites a future PyPI release dated May 2026." The package is real, published by Logan Markewich

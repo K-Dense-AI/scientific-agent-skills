@@ -535,7 +535,7 @@ def main() -> None:
         f.write(html_content)
 
     size_kb = OUTPUT_FILE.stat().st_size / 1024
-    print(f"\n✅ Generated: {OUTPUT_FILE}")
+    print(f"\n[OK] Generated: {OUTPUT_FILE}")
     print(f"   File size: {size_kb:.1f} KB")
     print(f"   Fully self-contained — no external dependencies")
 

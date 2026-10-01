@@ -4,7 +4,7 @@ description: Build slide decks and presentations for research talks. Use this fo
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.8"
+  version: "1.10"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -163,6 +163,8 @@ Include these elements in every prompt (customize as needed):
 CITATIONS: Include at bottom: (Author1 et al., Year; Author2 et al., Year)
 FORMATTING GOAL: [Background color], [text color], [accent color], minimal professional design, no decorative elements, consistent with attached slide style.
 ```
+
+**Accessibility handoff:** Full-slide PNGs produce an image-only deck; their titles, equations, references, and data labels are not semantic text. Supply a transcript with slide numbers and descriptions of results figures. When the audience needs accessible slides, use the editable PowerPoint workflow with real title/text placeholders, reviewed alt text, and verified reading order; run PowerPoint's Accessibility Checker. Visual inspection alone cannot establish screen-reader usability. See [Microsoft's reading-order guidance](https://support.microsoft.com/en-us/powerpoint/make-slides-easier-to-read-by-using-the-reading-order-pane).
 
 **Step 3: Combine to PDF**
 

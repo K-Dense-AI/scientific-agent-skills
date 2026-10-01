@@ -112,13 +112,13 @@ def main():
         epilog="""
 Examples:
   %(prog)s presentation.pdf slides
-    → Creates slides-001.jpg, slides-002.jpg, ...
+    -> Creates slides-001.jpg, slides-002.jpg, ...
   
   %(prog)s presentation.pdf output/slide --dpi 300 --format png
-    → Creates output/slide-001.png, slide-002.png, ... at high resolution
+    -> Creates output/slide-001.png, slide-002.png, ... at high resolution
   
   %(prog)s presentation.pdf review/s --first 5 --last 10
-    → Converts only slides 5-10
+    -> Converts only slides 5-10
 
 Output:
   Images are named: PREFIX-001.FORMAT, PREFIX-002.FORMAT, etc.
@@ -192,7 +192,7 @@ Requirements:
         
         print()
         print("=" * 60)
-        print(f"✅ Success! Created {len(output_files)} image(s)")
+        print(f"[OK] Success! Created {len(output_files)} image(s)")
         print("=" * 60)
         
         if output_files:
@@ -213,7 +213,7 @@ Requirements:
         sys.exit(0)
         
     except Exception as e:
-        print(f"\n❌ Error: {str(e)}", file=sys.stderr)
+        print(f"\n[FAIL] Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 

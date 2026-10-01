@@ -4,7 +4,7 @@ description: Autonomously improve a real artifact (code, training recipe, agent 
 allowed-tools: Read Write Edit Bash Agent
 license: MIT license
 metadata:
-  version: "1.2"
+  version: "1.5"
   skill-author: K-Dense Inc.
 ---
 
@@ -37,6 +37,12 @@ Before any experiments, establish the task tuple `(M_0, O, E_dev, E_test)`. Gett
 - **O — objective**: the natural-language goal and the metric *direction* (maximize accuracy? minimize loss/steps?).
 - **E_dev — development evaluator**: a command you can run freely during search to score a candidate. Fast, repeatable.
 - **E_test — held-out test evaluator**: a *separate* evaluator (different seeds, different split, or a larger run) used only at the merge gate. It must not be used as a search oracle — that's the whole point.
+
+Freeze the evaluator, dataset split, and metric before search, and record their
+versions with each score. Repeated merge decisions on the same held-out set can
+still adapt the search to that set; a fresh worktree prevents file contamination,
+not statistical leakage. Keep a final untouched evaluation set for the final claim,
+or disclose that the reported result was selected using repeated gate feedback.
 
 If the user hasn't given you a clean dev/test split, **construct one and say so**. The dev/test separation is the mechanism that catches overfitting: a candidate that wins on dev but not on test isn't a success, it's a warning that you're exploiting the feedback signal. Without it, autonomous search reliably overfits.
 

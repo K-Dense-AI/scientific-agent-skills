@@ -52,9 +52,7 @@ functions = estimator.predict_cumulative_hazard_function(X_test)
 risk_by_time = np.vstack([fn(times) for fn in functions])
 ```
 
-Cumulative hazard is risk-oriented. Survival probability is not accepted by
-`cumulative_dynamic_auc`; do not pass it without an explicitly justified
-transformation.
+Cumulative hazard is risk-oriented. Untransformed survival probabilities have the opposite direction and are not valid risk inputs to `cumulative_dynamic_auc`. Numeric shape validation does not detect that semantic error; check output direction explicitly before using a transformed probability or hazard score.
 
 ### Survival probability
 

@@ -145,6 +145,15 @@ Validate:
 - Date/number interpretation
 - Charts, images, comments, and conditional formatting
 
+The 0.1.6 XLSX converter reads **all worksheets** (`sheet_name=None`); hiding a
+sheet in Excel is not an extraction filter. Inventory sheet visibility before
+sharing the Markdown and use an explicitly selected workbook copy if only certain
+sheets belong in the output.
+
+Formula results depend on values cached in the workbook; MarkItDown does not
+recalculate formulas. Missing or stale caches can yield blank or outdated cells.
+For trusted workbooks, recalculate and save with a compatible spreadsheet engine
+when current formula results are required, then compare key cells with the source.
 For numeric analysis, read the workbook directly with a dataframe or spreadsheet library after using MarkItDown for orientation.
 
 ## Images

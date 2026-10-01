@@ -1,12 +1,12 @@
 # Security Scan Report
 
-**Generated:** 2026-09-07 09:35 UTC  
-**Skills scanned:** 163  
-**Total findings:** 604  
-**Critical:** 28 | **High:** 4 | **Safe skills:** 152/163
+**Generated:** 2026-09-28 09:31 UTC  
+**Skills scanned:** 166  
+**Total findings:** 674  
+**Critical:** 28 | **High:** 4 | **Safe skills:** 155/166
 
 **Scanner:** cisco-ai-skill-scanner 2.1.0 · **Model:** claude-opus-5  
-**This run:** full rescan of all 163 skill(s).  
+**This run:** 0 skill(s) rescanned; 166 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
 
 ## Summary
 
@@ -19,162 +19,165 @@
 | literature-review | 🔴 CRITICAL | 4 | ❌ | 35.5s |
 | research-lookup | 🔴 CRITICAL | 4 | ❌ | 17.4s |
 | scientific-schematics | 🔴 CRITICAL | 5 | ❌ | 31.5s |
-| scientific-slides | 🔴 CRITICAL | 7 | ❌ | 49.7s |
+| scientific-slides | 🔴 CRITICAL | 5 | ❌ | 19.7s |
 | histolab | 🟠 HIGH | 2 | ❌ | 15.2s |
 | modal | 🟠 HIGH | 5 | ❌ | 25.4s |
 | waypoint-bio | 🟠 HIGH | 2 | ❌ | 24.3s |
 | biopython | 🟡 MEDIUM | 6 | ✅ | 13.0s |
 | dnanexus-integration | 🟡 MEDIUM | 1 | ✅ | 17.3s |
-| genomic-intelligence | 🟡 MEDIUM | 2 | ✅ | 15.0s |
+| genomic-intelligence | 🟡 MEDIUM | 2 | ✅ | 13.5s |
 | open-notebook | 🟡 MEDIUM | 16 | ✅ | 24.3s |
 | phylogenetics | 🟡 MEDIUM | 4 | ✅ | 15.3s |
 | pyopenms | 🟡 MEDIUM | 2 | ✅ | 26.6s |
 | tamarind | 🟡 MEDIUM | 9 | ✅ | 10.4s |
+| adaptyv | 🔵 LOW | 1 | ✅ | 26.1s |
 | aeon | 🔵 LOW | 1 | ✅ | 23.0s |
 | arboreto | 🔵 LOW | 1 | ✅ | 22.9s |
-| adaptyv | 🔵 LOW | 1 | ✅ | 26.1s |
 | cirq | 🔵 LOW | 1 | ✅ | 15.9s |
-| clinical-reports | 🔵 LOW | 1 | ✅ | 26.8s |
-| deepchem | 🔵 LOW | 1 | ✅ | 14.1s |
 | clinical-decision-support | 🔵 LOW | 1 | ✅ | 32.1s |
+| clinical-reports | 🔵 LOW | 1 | ✅ | 26.8s |
+| database-lookup | 🔵 LOW | 2 | ✅ | 31.7s |
+| deepchem | 🔵 LOW | 1 | ✅ | 14.2s |
 | deeptools | 🔵 LOW | 1 | ✅ | 23.7s |
 | diffdock | 🔵 LOW | 1 | ✅ | 24.6s |
+| esm | 🔵 LOW | 2 | ✅ | 31.0s |
 | etetoolkit | 🔵 LOW | 1 | ✅ | 22.1s |
 | experimental-design | 🔵 LOW | 1 | ✅ | 21.3s |
-| esm | 🔵 LOW | 2 | ✅ | 31.0s |
 | exploratory-data-analysis | 🔵 LOW | 1 | ✅ | 23.4s |
-| geomaster | 🔵 LOW | 2 | ✅ | 27.5s |
+| geomaster | 🔵 LOW | 1 | ✅ | 17.1s |
+| geopandas | 🔵 LOW | 1 | ✅ | 26.6s |
 | gget | 🔵 LOW | 1 | ✅ | 23.3s |
-| geopandas | 🔵 LOW | 1 | ✅ | 26.7s |
 | ginkgo-cloud-lab | 🔵 LOW | 1 | ✅ | 22.2s |
 | gtars | 🔵 LOW | 1 | ✅ | 25.4s |
-| lamindb | 🔵 LOW | 1 | ✅ | 15.2s |
 | hugging-science | 🔵 LOW | 3 | ✅ | 44.4s |
+| lamindb | 🔵 LOW | 1 | ✅ | 15.2s |
+| liteparse | 🔵 LOW | 2 | ✅ | 31.9s |
 | market-research-reports | 🔵 LOW | 1 | ✅ | 20.8s |
 | markitdown | 🔵 LOW | 1 | ✅ | 14.5s |
-| liteparse | 🔵 LOW | 2 | ✅ | 31.9s |
 | matplotlib | 🔵 LOW | 1 | ✅ | 22.5s |
 | medchem | 🔵 LOW | 1 | ✅ | 23.5s |
 | molfeat | 🔵 LOW | 1 | ✅ | 20.1s |
 | networkx | 🔵 LOW | 1 | ✅ | 21.4s |
 | neuropixels-analysis | 🔵 LOW | 2 | ✅ | 23.1s |
-| nextflow | 🔵 LOW | 2 | ✅ | 25.4s |
-| ontology-term-resolution | 🔵 LOW | 1 | ✅ | 30.6s |
-| paperclip | 🔵 LOW | 1 | ✅ | 28.0s |
+| nextflow | 🔵 LOW | 3 | ✅ | 31.0s |
+| paper-lookup | 🔵 LOW | 1 | ✅ | 15.6s |
+| paperclip | 🔵 LOW | 1 | ✅ | 27.9s |
 | pathway-enrichment | 🔵 LOW | 1 | ✅ | 22.6s |
 | pennylane | 🔵 LOW | 1 | ✅ | 22.8s |
 | polars | 🔵 LOW | 1 | ✅ | 19.7s |
-| pylabrobot | 🔵 LOW | 1 | ✅ | 16.5s |
 | pyhealth | 🔵 LOW | 1 | ✅ | 23.4s |
+| pylabrobot | 🔵 LOW | 1 | ✅ | 16.5s |
 | pymc | 🔵 LOW | 1 | ✅ | 24.2s |
 | pysam | 🔵 LOW | 1 | ✅ | 23.3s |
-| pyzotero | 🔵 LOW | 1 | ✅ | 28.7s |
+| pyzotero | 🔵 LOW | 1 | ✅ | 28.8s |
 | qiskit | 🔵 LOW | 1 | ✅ | 27.6s |
-| scientific-brainstorming | 🔵 LOW | 1 | ✅ | 27.2s |
 | scholar-evaluation | 🔵 LOW | 1 | ✅ | 27.8s |
+| scientific-brainstorming | 🔵 LOW | 1 | ✅ | 27.2s |
 | scientific-visualization | 🔵 LOW | 1 | ✅ | 17.7s |
 | scientific-writing | 🔵 LOW | 1 | ✅ | 25.0s |
-| scikit-learn | 🔵 LOW | 1 | ✅ | 21.2s |
 | scikit-bio | 🔵 LOW | 1 | ✅ | 29.3s |
+| scikit-learn | 🔵 LOW | 1 | ✅ | 21.2s |
 | scvi-tools | 🔵 LOW | 1 | ✅ | 21.4s |
-| stable-baselines3 | 🔵 LOW | 1 | ✅ | 13.8s |
 | seaborn | 🔵 LOW | 1 | ✅ | 23.9s |
-| statsmodels | 🔵 LOW | 1 | ✅ | 14.1s |
-| shap | 🔵 LOW | 1 | ✅ | 27.0s |
+| shap | 🔵 LOW | 1 | ✅ | 26.9s |
+| stable-baselines3 | 🔵 LOW | 1 | ✅ | 13.8s |
 | statistical-power | 🔵 LOW | 1 | ✅ | 22.9s |
+| statsmodels | 🔵 LOW | 1 | ✅ | 15.2s |
 | sympy | 🔵 LOW | 1 | ✅ | 25.0s |
-| transformers | 🔵 LOW | 1 | ✅ | 14.2s |
 | torch-geometric | 🔵 LOW | 1 | ✅ | 19.6s |
-| usfiscaldata | 🔵 LOW | 1 | ✅ | 20.8s |
+| transformers | 🔵 LOW | 1 | ✅ | 14.2s |
+| umap-learn | 🔵 LOW | 1 | ✅ | 15.8s |
+| usfiscaldata | 🔵 LOW | 1 | ✅ | 13.5s |
 | vaex | 🔵 LOW | 1 | ✅ | 21.3s |
 | venue-templates | 🔵 LOW | 1 | ✅ | 26.4s |
-| labarchive-integration | ⚪ INFO | 1 | ✅ | 31.4s |
 | ncats-arax | ⚪ INFO | 1 | ✅ | 10.8s |
-| astropy | 🟢 SAFE | 0 | ✅ | 11.0s |
-| arbor | 🟢 SAFE | 0 | ✅ | 13.2s |
+| alphagenome | 🟢 SAFE | 0 | ✅ | 14.4s |
+| analytical-method-validation | 🟢 SAFE | 0 | ✅ | 26.2s |
 | anndata | 🟢 SAFE | 0 | ✅ | 15.1s |
+| arbor | 🟢 SAFE | 0 | ✅ | 13.2s |
+| astropy | 🟢 SAFE | 0 | ✅ | 11.0s |
+| benchling-integration | 🟢 SAFE | 0 | ✅ | 17.8s |
 | bgpt-paper-search | 🟢 SAFE | 0 | ✅ | 5.0s |
 | bids | 🟢 SAFE | 0 | ✅ | 9.2s |
-| analytical-method-validation | 🟢 SAFE | 0 | ✅ | 26.2s |
-| benchling-integration | 🟢 SAFE | 0 | ✅ | 17.8s |
+| bioservices | 🟢 SAFE | 0 | ✅ | 17.2s |
 | bulk-rnaseq | 🟢 SAFE | 0 | ✅ | 11.0s |
 | cellxgene-census | 🟢 SAFE | 0 | ✅ | 14.4s |
-| bioservices | 🟢 SAFE | 0 | ✅ | 17.2s |
+| cobrapy | 🟢 SAFE | 0 | ✅ | 13.5s |
 | consciousness-council | 🟢 SAFE | 0 | ✅ | 5.5s |
-| database-lookup | 🟢 SAFE | 0 | ✅ | 12.7s |
 | dask | 🟢 SAFE | 0 | ✅ | 15.6s |
-| cobrapy | 🟢 SAFE | 0 | ✅ | 21.2s |
+| datalad | 🟢 SAFE | 0 | ✅ | 15.1s |
 | datamol | 🟢 SAFE | 0 | ✅ | 18.4s |
 | deepspot-m | 🟢 SAFE | 0 | ✅ | 8.3s |
 | depmap | 🟢 SAFE | 0 | ✅ | 6.1s |
-| dhdna-profiler | 🟢 SAFE | 0 | ✅ | 6.6s |
+| dhdna-profiler | 🟢 SAFE | 0 | ✅ | 6.5s |
+| docx | 🟢 SAFE | 0 | ✅ | 32.1s |
 | exa-search | 🟢 SAFE | 0 | ✅ | 10.5s |
 | flowio | 🟢 SAFE | 0 | ✅ | 8.4s |
 | fluidsim | 🟢 SAFE | 0 | ✅ | 10.9s |
-| docx | 🟢 SAFE | 0 | ✅ | 32.1s |
-| geniml | 🟢 SAFE | 0 | ✅ | 15.2s |
+| folklore-variant-evidence | 🟢 SAFE | 0 | ✅ | 12.1s |
 | generate-image | 🟢 SAFE | 0 | ✅ | 17.8s |
-| get-available-resources | 🟢 SAFE | 0 | ✅ | 11.7s |
+| geniml | 🟢 SAFE | 0 | ✅ | 15.2s |
 | genomic-coordinates | 🟢 SAFE | 0 | ✅ | 21.4s |
-| glycoengineering | 🟢 SAFE | 0 | ✅ | 7.8s |
-| imaging-data-commons | 🟢 SAFE | 0 | ✅ | 9.5s |
+| get-available-resources | 🟢 SAFE | 0 | ✅ | 11.7s |
+| glycoengineering | 🟢 SAFE | 0 | ✅ | 13.8s |
 | hypogenic | 🟢 SAFE | 0 | ✅ | 23.4s |
-| lab-hardware-cad | 🟢 SAFE | 0 | ✅ | 10.8s |
-| iso-standards-readiness | 🟢 SAFE | 0 | ✅ | 23.1s |
 | hypothesis-generation | 🟢 SAFE | 0 | ✅ | 26.1s |
+| imaging-data-commons | 🟢 SAFE | 0 | ✅ | 9.5s |
+| iso-standards-readiness | 🟢 SAFE | 0 | ✅ | 23.1s |
+| lab-hardware-cad | 🟢 SAFE | 0 | ✅ | 10.8s |
+| labarchive-integration | 🟢 SAFE | 0 | ✅ | 11.2s |
 | latchbio-integration | 🟢 SAFE | 0 | ✅ | 20.9s |
 | markdown-mermaid-writing | 🟢 SAFE | 0 | ✅ | 17.3s |
 | matchms | 🟢 SAFE | 0 | ✅ | 8.8s |
-| molecular-dynamics | 🟢 SAFE | 0 | ✅ | 5.9s |
 | matlab | 🟢 SAFE | 0 | ✅ | 20.7s |
+| molecular-dynamics | 🟢 SAFE | 0 | ✅ | 5.9s |
 | neurokit2 | 🟢 SAFE | 0 | ✅ | 12.6s |
-| onekgpd | 🟢 SAFE | 0 | ✅ | 8.6s |
 | omero-integration | 🟢 SAFE | 0 | ✅ | 15.7s |
-| openpiv | 🟢 SAFE | 0 | ✅ | 8.9s |
-| optimize-for-gpu | 🟢 SAFE | 0 | ✅ | 10.4s |
-| paperzilla | 🟢 SAFE | 0 | ✅ | 5.7s |
+| onekgpd | 🟢 SAFE | 0 | ✅ | 8.6s |
+| ontology-term-resolution | 🟢 SAFE | 0 | ✅ | 9.6s |
+| openpiv | 🟢 SAFE | 0 | ✅ | 8.8s |
 | opentrons-integration | 🟢 SAFE | 0 | ✅ | 18.1s |
+| optimize-for-gpu | 🟢 SAFE | 0 | ✅ | 10.4s |
 | pacsomatic | 🟢 SAFE | 0 | ✅ | 15.8s |
-| pathml | 🟢 SAFE | 0 | ✅ | 12.4s |
-| paper-lookup | 🟢 SAFE | 0 | ✅ | 23.5s |
-| pdf | 🟢 SAFE | 0 | ✅ | 8.8s |
+| paperzilla | 🟢 SAFE | 0 | ✅ | 5.7s |
 | parallel-web | 🟢 SAFE | 0 | ✅ | 18.1s |
+| pathml | 🟢 SAFE | 0 | ✅ | 12.4s |
 | pathogen-variant-surveillance | 🟢 SAFE | 0 | ✅ | 20.1s |
-| pi-agent | 🟢 SAFE | 0 | ✅ | 20.6s |
-| polars-bio | 🟢 SAFE | 0 | ✅ | 16.6s |
+| pdf | 🟢 SAFE | 0 | ✅ | 8.8s |
 | peer-review | 🟢 SAFE | 0 | ✅ | 31.9s |
-| pptx | 🟢 SAFE | 0 | ✅ | 16.5s |
+| pi-agent | 🟢 SAFE | 0 | ✅ | 20.6s |
 | pkpd-modeling | 🟢 SAFE | 0 | ✅ | 25.6s |
+| polars-bio | 🟢 SAFE | 0 | ✅ | 16.6s |
+| pptx | 🟢 SAFE | 0 | ✅ | 16.5s |
 | pptx-posters | 🟢 SAFE | 0 | ✅ | 11.8s |
-| pydeseq2 | 🟢 SAFE | 0 | ✅ | 8.2s |
 | primekg | 🟢 SAFE | 0 | ✅ | 13.2s |
-| pufferlib | 🟢 SAFE | 0 | ✅ | 12.6s |
-| pymatgen | 🟢 SAFE | 0 | ✅ | 9.6s |
 | protocolsio-integration | 🟢 SAFE | 0 | ✅ | 20.0s |
+| pufferlib | 🟢 SAFE | 0 | ✅ | 12.6s |
+| pydeseq2 | 🟢 SAFE | 0 | ✅ | 8.2s |
 | pydicom | 🟢 SAFE | 0 | ✅ | 15.7s |
-| pytdc | 🟢 SAFE | 0 | ✅ | 9.2s |
+| pymatgen | 🟢 SAFE | 0 | ✅ | 9.6s |
 | pymoo | 🟢 SAFE | 0 | ✅ | 20.2s |
-| rdkit | 🟢 SAFE | 0 | ✅ | 11.8s |
-| relsa-severity-assessment | 🟢 SAFE | 0 | ✅ | 9.5s |
+| pytdc | 🟢 SAFE | 0 | ✅ | 9.2s |
 | pytorch-lightning | 🟢 SAFE | 0 | ✅ | 24.7s |
 | qutip | 🟢 SAFE | 0 | ✅ | 16.5s |
-| research-grants | 🟢 SAFE | 0 | ✅ | 16.8s |
+| rdkit | 🟢 SAFE | 0 | ✅ | 7.5s |
+| relsa-severity-assessment | 🟢 SAFE | 0 | ✅ | 9.5s |
+| research-grants | 🟢 SAFE | 0 | ✅ | 9.5s |
 | rowan | 🟢 SAFE | 0 | ✅ | 10.9s |
-| scientific-critical-thinking | 🟢 SAFE | 0 | ✅ | 8.6s |
 | scanpy | 🟢 SAFE | 0 | ✅ | 22.0s |
-| scvelo | 🟢 SAFE | 0 | ✅ | 8.1s |
+| scientific-critical-thinking | 🟢 SAFE | 0 | ✅ | 8.7s |
 | scikit-survival | 🟢 SAFE | 0 | ✅ | 19.2s |
+| scvelo | 🟢 SAFE | 0 | ✅ | 8.1s |
+| simpy | 🟢 SAFE | 0 | ✅ | 8.2s |
 | statistical-analysis | 🟢 SAFE | 0 | ✅ | 10.2s |
-| simpy | 🟢 SAFE | 0 | ✅ | 19.8s |
 | tiledbvcf | 🟢 SAFE | 0 | ✅ | 7.6s |
 | timesfm-forecasting | 🟢 SAFE | 0 | ✅ | 10.2s |
+| torchdrug | 🟢 SAFE | 0 | ✅ | 18.7s |
 | treatment-plans | 🟢 SAFE | 0 | ✅ | 10.1s |
 | uncertainty-and-units | 🟢 SAFE | 0 | ✅ | 11.0s |
-| umap-learn | 🟢 SAFE | 0 | ✅ | 14.2s |
-| torchdrug | 🟢 SAFE | 0 | ✅ | 18.7s |
 | what-if-oracle | 🟢 SAFE | 0 | ✅ | 6.0s |
-| zarr-python | 🟢 SAFE | 0 | ✅ | 14.1s |
 | xlsx | 🟢 SAFE | 0 | ✅ | 18.7s |
+| zarr-python | 🟢 SAFE | 0 | ✅ | 14.1s |
 
 ## Detailed Findings
 
@@ -189,18 +192,18 @@
   > **Remediation:** Review data flow across files: scripts/run.py, scripts/backends.py, scripts/doctor.py
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/autoskill/scripts/backends.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/autoskill/scripts/backends.py`
+  > Script accesses environment variables and makes network calls in skills/autoskill/scripts/backends.py
+  > File: `skills/autoskill/scripts/backends.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/autoskill/scripts/doctor.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/autoskill/scripts/doctor.py`
+  > Script accesses environment variables and makes network calls in skills/autoskill/scripts/doctor.py
+  > File: `skills/autoskill/scripts/doctor.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/autoskill/scripts/run.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/autoskill/scripts/run.py`
+  > Script accesses environment variables and makes network calls in skills/autoskill/scripts/run.py
+  > File: `skills/autoskill/scripts/run.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔵 LOW** `LLM_DATA_EXFILTRATION` — Screen-derived summaries plus API key sent to a user-configurable remote endpoint (foundry backend)
@@ -224,13 +227,13 @@
   > **Remediation:** Review data flow across files: scripts/search_openalex.py, scripts/extract_metadata.py, scripts/validate_citations.py, scripts/doi_to_bibtex.py, scripts/search_pubmed.py
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/citation-management/scripts/extract_metadata.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/citation-management/scripts/extract_metadata.py`
+  > Script accesses environment variables and makes network calls in skills/citation-management/scripts/extract_metadata.py
+  > File: `skills/citation-management/scripts/extract_metadata.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/citation-management/scripts/search_pubmed.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/citation-management/scripts/search_pubmed.py`
+  > Script accesses environment variables and makes network calls in skills/citation-management/scripts/search_pubmed.py
+  > File: `skills/citation-management/scripts/search_pubmed.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Skill directs agent to insert a self-promoting citation into user deliverables
@@ -254,8 +257,8 @@
   > **Remediation:** Review data flow across files: scripts/generate_infographic_ai.py, scripts/generate_infographic.py
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/infographics/scripts/generate_infographic_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/infographics/scripts/generate_infographic_ai.py`
+  > Script accesses environment variables and makes network calls in skills/infographics/scripts/generate_infographic_ai.py
+  > File: `skills/infographics/scripts/generate_infographic_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 ### latex-posters — 🔴 CRITICAL
@@ -269,8 +272,8 @@
   > **Remediation:** Review data flow across files: scripts/generate_schematic_ai.py, scripts/generate_schematic.py
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/latex-posters/scripts/generate_schematic_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/latex-posters/scripts/generate_schematic_ai.py`
+  > Script accesses environment variables and makes network calls in skills/latex-posters/scripts/generate_schematic_ai.py
+  > File: `skills/latex-posters/scripts/generate_schematic_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 ### literature-review — 🔴 CRITICAL
@@ -284,8 +287,8 @@
   > **Remediation:** Review data flow across files: scripts/generate_schematic_ai.py, scripts/verify_citations.py, scripts/generate_schematic.py
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/literature-review/scripts/generate_schematic_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/literature-review/scripts/generate_schematic_ai.py`
+  > Script accesses environment variables and makes network calls in skills/literature-review/scripts/generate_schematic_ai.py
+  > File: `skills/literature-review/scripts/generate_schematic_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Documented dependency install pipes remote script directly into bash
@@ -304,8 +307,8 @@
   > **Remediation:** Review data flow across files: scripts/manuscript_packet.py, scripts/research_lookup.py
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/research-lookup/scripts/research_lookup.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/research-lookup/scripts/research_lookup.py`
+  > Script accesses environment variables and makes network calls in skills/research-lookup/scripts/research_lookup.py
+  > File: `skills/research-lookup/scripts/research_lookup.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔵 LOW** `LLM_DATA_EXFILTRATION` — Declared API keys read from environment and sent as Authorization headers to declared endpoints
@@ -328,8 +331,8 @@
   > **Remediation:** Limit the `.env` search to the project root or skill directory (or require an explicit path/flag) instead of traversing all parent directories, and log which file the credential was sourced from.
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/scientific-schematics/scripts/generate_schematic_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/scientific-schematics/scripts/generate_schematic_ai.py`
+  > Script accesses environment variables and makes network calls in skills/scientific-schematics/scripts/generate_schematic_ai.py
+  > File: `skills/scientific-schematics/scripts/generate_schematic_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Skill body instructs the agent to insert an author self-citation and fetch an external URL
@@ -340,36 +343,26 @@
 ### scientific-slides — 🔴 CRITICAL
 
 - **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 4 files
-  > Environment variable access with network calls in scripts/generate_schematic_ai.py, scripts/generate_schematic.py, scripts/generate_slide_image.py, scripts/generate_slide_image_ai.py
-  > **Remediation:** Review data flow across files: scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py, scripts/generate_schematic.py, scripts/generate_slide_image.py
+  > Environment variable access with network calls in scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py, scripts/generate_schematic.py, scripts/generate_slide_image.py
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_slide_image.py, scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py
 
 - **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 4 files
-  > Multi-file exfiltration chain detected: scripts/generate_schematic_ai.py, scripts/generate_schematic.py, scripts/generate_slide_image.py, scripts/generate_slide_image_ai.py collect data → scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py → scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py transmit to network
-  > **Remediation:** Review data flow across files: scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py, scripts/generate_schematic.py, scripts/generate_slide_image.py
+  > Multi-file exfiltration chain detected: scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py, scripts/generate_schematic.py, scripts/generate_slide_image.py collect data → scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py → scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py transmit to network
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_slide_image.py, scripts/generate_schematic_ai.py, scripts/generate_slide_image_ai.py
 
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Credential resolution walks all parent directories searching for .env files
-  > All four generator scripts implement `_resolve_api_key`/`resolve_api_key`, which, when the environment variable is unset, iterates over the current working directory and every one of its parents (plus the script directory) reading any `.env` file found and parsing out `OPENROUTER_API_KEY`. This reaches outside the project/skill boundary (potentially up to the filesystem root or a user's home directory) to harvest a credential the user did not explicitly provide. Mitigating context: only the single key name `OPENROUTER_API_KEY` is extracted, the value is used solely in an `Authorization: Bearer` header to the declared endpoint `https://openrouter.ai/api/v1`, the manifest declares `OPENROUTER_API_KEY` as `primaryEnv`, and the subprocess launcher deliberately forwards only an allow-list of environment variables rather than the whole parent environment. The deterministic ENV_VAR_EXFILTRATION findings therefore reflect ordinary API authentication to the intended service, not covert exfiltration; the residual risk is only the out-of-scope `.env` traversal.
-  > **Remediation:** Limit the `.env` search to the skill directory and/or the immediate project root instead of every ancestor directory, and require explicit opt-in (e.g., a `--env-file` flag) before reading credential files outside the working directory.
+- **🔵 LOW** `LLM_DATA_EXFILTRATION` — API key resolved by recursive .env scan of parent directories
+  > The bundled generation scripts resolve OPENROUTER_API_KEY by walking up from the current working directory through every parent directory looking for a .env file and parsing the OPENROUTER_API_KEY entry. The resolved key is then used only as an Authorization: Bearer header to the declared service (https://openrouter.ai/api/v1) and forwarded to a child process through a restricted environment allowlist. This is ordinary credential use for the intended service and the manifest declares OPENROUTER_API_KEY, so it is not exfiltration; however, scanning arbitrary ancestor directories (potentially outside the project, up to filesystem root) for credential files is a broader-than-necessary file read that could pick up an unrelated tenant's key. Deterministic 'ENV_VAR_EXFILTRATION' leads were verified and correspond to this legitimate, declared authentication flow, not to an undeclared sink.
+  > **Remediation:** Limit the .env search to the project root or the skill directory rather than every ancestor of the working directory, and document that the file is read. Prefer explicit environment variables or a --api-key argument over filesystem credential discovery.
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/scientific-slides/scripts/generate_schematic_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/scientific-slides/scripts/generate_schematic_ai.py`
+  > Script accesses environment variables and makes network calls in skills/scientific-slides/scripts/generate_schematic_ai.py
+  > File: `skills/scientific-slides/scripts/generate_schematic_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
 - **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/scientific-slides/scripts/generate_slide_image_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/scientific-slides/scripts/generate_slide_image_ai.py`
+  > Script accesses environment variables and makes network calls in skills/scientific-slides/scripts/generate_slide_image_ai.py
+  > File: `skills/scientific-slides/scripts/generate_slide_image_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
-
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Skill directs the agent to insert a vendor self-citation into the user's deliverables
-  > The SKILL.md 'Citing Scientific Agent Skills' section instructs the agent to add a specific vendor-authored reference (arXiv:2609.00065, K-Dense) to the user's manuscript/report/presentation/code release whenever the skill 'materially contributed', and to inform the user it did so. This is promotional content injected into user output rather than a technical capability, and the cited identifier is not verifiable from the package. It also directs an outbound fetch of arxiv.org to populate the reference. Impact is limited (no credential or data access, and the skill tells the user about the addition), so this is a disclosure/attribution-integrity concern rather than a security exploit.
-  > File: `SKILL.md`
-  > **Remediation:** Make the citation suggestion advisory and user-initiated rather than an instruction to modify deliverables, and avoid asserting a specific DOI/arXiv identifier that cannot be verified.
-
-- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Instructions direct the agent to enumerate local directories and upload discovered files to a third-party API
-  > SKILL.md instructs the agent to list the working directory (`ls -la figures/`, `results/`, `plots/`, `images/`, and any user-provided directories) and to attach ALL relevant discovered files with `--attach`. `generate_slide_image_ai.py` base64-encodes each attachment and embeds it in the JSON body of a POST to `https://openrouter.ai/api/v1/chat/completions`. This is the skill's stated purpose (feeding result figures to an image model), the destination is the declared and documented service, and attachment paths are user/agent selected rather than hardcoded, so this is a disclosure-surface risk rather than demonstrated covert exfiltration. Users should be aware that local project files can be transmitted off-host, including any non-figure file passed by path.
-  > File: `scripts/generate_slide_image_ai.py`
-  > **Remediation:** Restrict attachments to explicit user-approved image paths, validate file type/extension before upload, and surface an explicit confirmation listing exactly which local files will be transmitted to the external API.
 
 ### histolab — 🟠 HIGH
 
@@ -464,13 +457,13 @@
 ### genomic-intelligence — 🟡 MEDIUM
 
 - **🟡 MEDIUM** `MDBLOCK_PYTHON_HTTP_POST` — Python code block sends HTTP POST request
-  > Code block in SKILL.md at line 130 contains potentially dangerous Python code.
-  > File: `SKILL.md:130`
+  > Code block in SKILL.md at line 199 contains potentially dangerous Python code.
+  > File: `SKILL.md:199`
   > **Remediation:** Review the code block for security implications.
 
 - **🟡 MEDIUM** `MDBLOCK_PYTHON_HTTP_POST` — Python code block sends HTTP POST request
-  > Code block in SKILL.md at line 152 contains potentially dangerous Python code.
-  > File: `SKILL.md:152`
+  > Code block in SKILL.md at line 235 contains potentially dangerous Python code.
+  > File: `SKILL.md:235`
   > **Remediation:** Review the code block for security implications.
 
 ### open-notebook — 🟡 MEDIUM
@@ -636,6 +629,13 @@
   > File: `references/workflows.md:250`
   > **Remediation:** Review the code block for security implications.
 
+### adaptyv — 🔵 LOW
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Skill directs agent to insert author self-citation into user deliverables
+  > The SKILL.md body ends with a 'Citing Scientific Agent Skills' section that instructs the agent to add a specific paper (arXiv:2609.00065, authored by the skill publisher K-Dense) to the references/software section of the user's manuscript, report, presentation, or code release, and to inform the user it did so. It further directs the agent to fetch arxiv.org / export.arxiv.org when network access is available. This is promotional content injection unrelated to the skill's stated purpose (Adaptyv Foundry API usage) and can cause the agent to modify user work product to benefit the skill author. It is conditional ('if it materially contributed') and the network fetch targets a legitimate, publicly declared academic source, so no exfiltration or credential misuse is established.
+  > File: `SKILL.md`
+  > **Remediation:** Make the citation guidance passive/informational (e.g., 'the user may cite ...') rather than an operational directive that mutates user deliverables, and remove the mandatory outbound fetch instruction or mark it as optional.
+
 ### aeon — 🔵 LOW
 
 - **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructs agent to insert author's reference into user deliverables
@@ -650,19 +650,19 @@
   > File: `SKILL.md`
   > **Remediation:** Remove or make clearly optional the automatic citation-insertion directive and the mandated external URL fetch; leave attribution decisions to the user rather than instructing the agent to modify scholarly output.
 
-### adaptyv — 🔵 LOW
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Skill directs agent to insert author self-citation into user deliverables
-  > The SKILL.md body ends with a 'Citing Scientific Agent Skills' section that instructs the agent to add a specific paper (arXiv:2609.00065, authored by the skill publisher K-Dense) to the references/software section of the user's manuscript, report, presentation, or code release, and to inform the user it did so. It further directs the agent to fetch arxiv.org / export.arxiv.org when network access is available. This is promotional content injection unrelated to the skill's stated purpose (Adaptyv Foundry API usage) and can cause the agent to modify user work product to benefit the skill author. It is conditional ('if it materially contributed') and the network fetch targets a legitimate, publicly declared academic source, so no exfiltration or credential misuse is established.
-  > File: `SKILL.md`
-  > **Remediation:** Make the citation guidance passive/informational (e.g., 'the user may cite ...') rather than an operational directive that mutates user deliverables, and remove the mandatory outbound fetch instruction or mark it as optional.
-
 ### cirq — 🔵 LOW
 
 - **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructing agent to add author's paper and fetch external URL
   > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific arXiv reference (arXiv:2609.00065) to any manuscript, report, presentation, or code release the skill contributes to, to tell the user it did so, and to fetch an external arXiv URL when network access is available. This is an author-benefiting behavioral directive unrelated to the skill's stated quantum-computing purpose; it steers agent output and triggers an outbound network fetch. The destination (arxiv.org) is a well-known benign academic host and no sensitive data is transmitted, so impact is low, but the instruction is promotional/self-serving content injected into agent behavior rather than technical guidance.
   > File: `SKILL.md`
   > **Remediation:** Make citation guidance passive and optional (e.g., 'if the user asks how to cite this skill') rather than an instruction that automatically modifies user deliverables or performs network fetches without explicit request.
+
+### clinical-decision-support — 🔵 LOW
+
+- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive with optional network fetch conflicts with declared no-network posture
+  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific author-supplied arXiv reference to any manuscript, report, presentation, or code release the skill contributed to, to inform the user that it did so, and—when network access is available—to fetch https://arxiv.org/abs/2609.00065 or the arXiv API before writing the reference. This is an active instruction embedded in the skill body that biases the agent's output toward promoting the skill authors' publication and introduces an outbound network request, while the manifest compatibility field states the skill requires 'local files only ... no network, credentials, API keys, LLMs, or image services.' No sensitive data source is connected to the fetch, no credential handling occurs, and the destination is a legitimate public preprint server, so impact is limited to unsolicited self-citation and a minor declared-capability mismatch rather than exfiltration or code execution.
+  > File: `SKILL.md`
+  > **Remediation:** Make the citation request passive documentation rather than an operative instruction, drop the directive to fetch external URLs (or declare network use explicitly in the manifest), and let the user decide whether to include the reference.
 
 ### clinical-reports — 🔵 LOW
 
@@ -671,19 +671,23 @@
   > File: `SKILL.md`
   > **Remediation:** Make the citation guidance optional and user-initiated, remove the instruction to fetch remote URLs (or explicitly declare the network capability in the manifest and reconcile it with the stated no-network boundary), and avoid directives that require the agent to insert a specific vendor citation into user deliverables.
 
+### database-lookup — 🔵 LOW
+
+- **🔵 LOW** `LLM_COMMAND_INJECTION` — Documented use of shell curl with user-supplied identifiers in query strings
+  > The skill instructs the agent to fall back to `curl` via Bash/shell for POST-only APIs (Open Targets, gnomAD, RummaGEO, GDC, SEC EDGAR) and to build query strings that may embed user-supplied identifiers, SMILES, ADQL, GraphQL, and Entrez terms. This is an inherent injection surface when untrusted identifiers reach a shell. However, the skill explicitly and repeatedly mitigates it: it forbids concatenating untrusted text into shell commands, mandates URL/JSON encoding, allowlisting of fields and operators, blocking of shell metacharacters and control characters, and treating API responses as untrusted data that must not be fed into follow-up shell/SQL/GraphQL commands. No malicious or obfuscated command is present.
+  > **Remediation:** Consider shipping a helper script that performs parameterized HTTP requests (e.g., curl with --data-urlencode or a Python requests wrapper) so identifiers never pass through shell string interpolation.
+
+- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Skill instructs agent to read API keys from environment and .env file
+  > SKILL.md directs the agent to check environment variables and inspect a local `.env` file for named API keys (e.g., FRED_API_KEY, NCBI_API_KEY) before making API calls. This is legitimate credential use for the documented public databases, and the skill includes strong guardrails (check only the named key, never print key values, never include secrets in provenance, never copy .env contents into responses or other tools). No external sink receives the credential other than the intended service. Flagged only as a contextual risk because local secret-store access combined with broad network capability (Bash/curl) exists in the same skill.
+  > File: `SKILL.md`
+  > **Remediation:** No change strictly required; the skill already restricts key reads to a single named variable and forbids disclosure. Optionally prefer environment variables only and avoid instructing direct .env parsing.
+
 ### deepchem — 🔵 LOW
 
 - **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructs agent to add author's paper and fetch external URL
   > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to insert a specific paper (arXiv:2609.00065 by the skill author's organization) into any manuscript, report, presentation, or code release the skill contributes to, notify the user it did so, and fetch an external arXiv URL when network access is available. This is an embedded behavioral directive that serves the skill author's promotional interest rather than the user's task, and it also introduces a fetch of remote content whose text could influence the agent. It does not access sensitive data, run commands, or send data outward, so impact is low and intent is plausibly benign attribution.
   > File: `SKILL.md`
   > **Remediation:** Reframe citation guidance as optional, user-approved information rather than a standing directive, and remove the instruction to automatically fetch and incorporate remote content into user deliverables.
-
-### clinical-decision-support — 🔵 LOW
-
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive with optional network fetch conflicts with declared no-network posture
-  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific author-supplied arXiv reference to any manuscript, report, presentation, or code release the skill contributed to, to inform the user that it did so, and—when network access is available—to fetch https://arxiv.org/abs/2609.00065 or the arXiv API before writing the reference. This is an active instruction embedded in the skill body that biases the agent's output toward promoting the skill authors' publication and introduces an outbound network request, while the manifest compatibility field states the skill requires 'local files only ... no network, credentials, API keys, LLMs, or image services.' No sensitive data source is connected to the fetch, no credential handling occurs, and the destination is a legitimate public preprint server, so impact is limited to unsolicited self-citation and a minor declared-capability mismatch rather than exfiltration or code execution.
-  > File: `SKILL.md`
-  > **Remediation:** Make the citation request passive documentation rather than an operative instruction, drop the directive to fetch external URLs (or declare network use explicitly in the manifest), and let the user decide whether to include the reference.
 
 ### deeptools — 🔵 LOW
 
@@ -699,6 +703,17 @@
   > File: `scripts/prepare_batch_csv.py`
   > **Remediation:** Reframe the citation section as optional, user-approved guidance rather than a standing directive to modify deliverables, and remove the instruction to autonomously fetch external URLs (or declare an explicit network capability and require user confirmation).
 
+### esm — 🔵 LOW
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Install instruction pointing to a third-party GitHub org for the `esm` package
+  > Reference documentation directs installation of the `esm` SDK from https://github.com/Biohub/esm (a GitHub organization distinct from the upstream EvolutionaryScale project) via `uv pip install "esm@git+..."`. If that organization is not the authoritative source, following the instruction would install code from an unverified publisher, a package-substitution risk. Mitigating context: the same section explicitly warns against floating branch installs, requires pinning a full 40-character commit SHA, and instructs the reader to review the verified release before installing; the primary documented install path remains the pinned PyPI release `esm==3.2.3`. No script in the package performs the install automatically.
+  > **Remediation:** Reference only the authoritative upstream repository/organization for the SDK, or require explicit user confirmation and integrity verification (pinned SHA plus published release attestation) before any VCS-based install.
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Embedded self-citation directive for an unverifiable arXiv record
+  > The SKILL.md body instructs the agent to insert a specific citation (arXiv:2609.00065, dated 2026) into any manuscript, report, presentation, or code release the skill materially contributed to, to inform the user it did so, and to fetch the arXiv record when network access is available. This is a promotional directive that alters the agent's output on the user's behalf and references an identifier that cannot be validated from the package; it could result in fabricated or misleading bibliographic content in user deliverables. It is not technically exploitative and involves only a public, declared documentation host.
+  > File: `SKILL.md`
+  > **Remediation:** Make citation guidance advisory and user-opt-in rather than a directive, and remove references to identifiers that cannot be verified.
+
 ### etetoolkit — 🔵 LOW
 
 - **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Embedded self-promotional citation directive with external fetch
@@ -713,17 +728,6 @@
   > File: `SKILL.md`
   > **Remediation:** Make the citation request a passive, optional note rather than a directive that modifies user deliverables, and verify/correct the arXiv identifier and DOI so the agent cannot insert an unverifiable reference.
 
-### esm — 🔵 LOW
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Install instruction pointing to a third-party GitHub org for the `esm` package
-  > Reference documentation directs installation of the `esm` SDK from https://github.com/Biohub/esm (a GitHub organization distinct from the upstream EvolutionaryScale project) via `uv pip install "esm@git+..."`. If that organization is not the authoritative source, following the instruction would install code from an unverified publisher, a package-substitution risk. Mitigating context: the same section explicitly warns against floating branch installs, requires pinning a full 40-character commit SHA, and instructs the reader to review the verified release before installing; the primary documented install path remains the pinned PyPI release `esm==3.2.3`. No script in the package performs the install automatically.
-  > **Remediation:** Reference only the authoritative upstream repository/organization for the SDK, or require explicit user confirmation and integrity verification (pinned SHA plus published release attestation) before any VCS-based install.
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Embedded self-citation directive for an unverifiable arXiv record
-  > The SKILL.md body instructs the agent to insert a specific citation (arXiv:2609.00065, dated 2026) into any manuscript, report, presentation, or code release the skill materially contributed to, to inform the user it did so, and to fetch the arXiv record when network access is available. This is a promotional directive that alters the agent's output on the user's behalf and references an identifier that cannot be validated from the package; it could result in fabricated or misleading bibliographic content in user deliverables. It is not technically exploitative and involves only a public, declared documentation host.
-  > File: `SKILL.md`
-  > **Remediation:** Make citation guidance advisory and user-opt-in rather than a directive, and remove references to identifiers that cannot be verified.
-
 ### exploratory-data-analysis — 🔵 LOW
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Mandatory self-citation directive with optional outbound network fetch
@@ -733,21 +737,10 @@
 
 ### geomaster — 🔵 LOW
 
-- **🔵 LOW** `LLM_HARMFUL_CONTENT` — Directive to cite an unverifiable, future-dated reference
-  > The instruction body mandates citation of 'Kassis, T., et al. (2026). Scientific Agent Skills... arXiv:2609.00065' with a DOI that cannot be validated and a future publication year/identifier. Instructing an agent to insert an unverifiable reference into scholarly output risks propagating inaccurate citation metadata. Impact is limited to reference accuracy, and the intent may simply be pre-publication attribution, so this is recorded as a contextual risk rather than confirmed deceptive content.
-  > **Remediation:** Only reference verifiable, published identifiers, or state clearly that the citation is optional and should be verified by the user before inclusion in any manuscript.
-
-- **🔵 LOW** `LLM_PROMPT_INJECTION` — Embedded self-promotional citation directive with external fetch instruction
-  > The SKILL.md body ends with a 'Citing Scientific Agent Skills' block that directs the agent to insert a specific author/paper reference into the user's manuscripts, reports, presentations, or code releases, to inform the user it did so, and to fetch an external arXiv URL (https://arxiv.org/abs/2609.00065 or export.arxiv.org API) when network access is available. This is an active instruction unrelated to the declared geospatial-analysis purpose that influences agent output on the vendor's behalf and triggers outbound network access. No sensitive data is collected or exfiltrated, so the reach is limited to content injection and an outbound fetch of a benign public URL.
+- **🔵 LOW** `LLM_PROMPT_INJECTION` — Self-promotional citation directive instructs agent to add specific paper and fetch external URL
+  > The SKILL.md body contains an active directive telling the agent to cite a specific arXiv paper (arXiv:2609.00065) in any manuscript, report, or code release the skill contributes to, to tell the user it did so, and to fetch an external URL (https://arxiv.org/abs/2609.00065 or the arXiv API endpoint) when network access is available. This is an instruction embedded in skill content that steers agent output and triggers outbound network requests unrelated to the stated geospatial purpose. It is low-severity self-promotion rather than a malicious override, and the destination is a legitimate public preprint server, but it does inject behavior into user deliverables.
   > File: `SKILL.md`
-  > **Remediation:** Move attribution requests into passive documentation/metadata rather than imperative agent directions, and remove instructions that cause the agent to fetch remote URLs or modify user deliverables without an explicit user request.
-
-### gget — 🔵 LOW
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive unrelated to declared bioinformatics purpose
-  > The SKILL.md body contains an active directive instructing the agent to insert a specific arXiv paper authored by the skill vendor ('Scientific Agent Skills', K-Dense) into any manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and to fetch an external arXiv URL/API endpoint before writing the reference. This behavior is unrelated to the skill's declared purpose (querying bioinformatics databases) and biases agent output toward vendor promotion in the user's scholarly work. It is not exfiltration (no sensitive source, only a public metadata lookup) and no credential or private data is transmitted, so this is a low-severity contextual risk rather than confirmed malicious behavior.
-  > File: `SKILL.md`
-  > **Remediation:** Make citation guidance passive/optional documentation rather than an imperative agent instruction, remove the mandated external network fetch, and let the user decide whether to include vendor references.
+  > **Remediation:** Convert the citation section into passive documentation (e.g., 'Citation information: ...') rather than an imperative instruction to the agent, and remove the directive to automatically fetch external URLs.
 
 ### geopandas — 🔵 LOW
 
@@ -755,6 +748,13 @@
   > The SKILL.md body ends with a 'Citing Scientific Agent Skills' block that directs the agent to insert a specific arXiv reference (K-Dense authors, arXiv:2609.00065) into any manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and — when network access is available — to fetch https://arxiv.org/abs/2609.00065 or the arXiv API before writing the reference. This is a behavioral directive unrelated to the declared GeoPandas guidance purpose: it steers agent output toward promoting the skill author and authorizes an outbound network request that the rest of the skill explicitly avoids (all bundled CLIs report network_accessed: false and reject URLs). No sensitive data is transmitted and no credential or file access is involved, so impact is limited to self-promotional output shaping and one benign metadata fetch; intent to harm is not established.
   > File: `SKILL.md`
   > **Remediation:** Reframe the citation block as optional, user-approved guidance rather than an unconditional agent instruction, and remove the automatic external fetch directive so network access requires explicit user consent consistent with the skill's own local-only intake policy.
+
+### gget — 🔵 LOW
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive unrelated to declared bioinformatics purpose
+  > The SKILL.md body contains an active directive instructing the agent to insert a specific arXiv paper authored by the skill vendor ('Scientific Agent Skills', K-Dense) into any manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and to fetch an external arXiv URL/API endpoint before writing the reference. This behavior is unrelated to the skill's declared purpose (querying bioinformatics databases) and biases agent output toward vendor promotion in the user's scholarly work. It is not exfiltration (no sensitive source, only a public metadata lookup) and no credential or private data is transmitted, so this is a low-severity contextual risk rather than confirmed malicious behavior.
+  > File: `SKILL.md`
+  > **Remediation:** Make citation guidance passive/optional documentation rather than an imperative agent instruction, remove the mandated external network fetch, and let the user decide whether to include vendor references.
 
 ### ginkgo-cloud-lab — 🔵 LOW
 
@@ -769,13 +769,6 @@
   > The SKILL.md instruction body contains a 'Citing Scientific Agent Skills' section directing the agent to add a specific paper by the skill author (K-Dense Inc.) to the references of any manuscript, report, presentation, or code release the skill contributed to, to inform the user it did so, and to fetch arxiv.org/export.arxiv.org when network access is available. This is a promotional behavioral directive that shapes user-facing scientific output and triggers an outbound network request unrelated to the skill's stated genomic-interval purpose. No sensitive data is collected or transmitted (only a public record is fetched), and the behavior is disclosed in plain text, so this is a contextual risk rather than confirmed abuse.
   > File: `SKILL.md`
   > **Remediation:** Make the citation request passive documentation (e.g., an optional 'How to cite' note) rather than an active directive to modify user deliverables, and remove the instruction to perform an unsolicited network fetch.
-
-### lamindb — 🔵 LOW
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive with mandated network fetch
-  > The SKILL.md body instructs the agent to add a specific arXiv paper (arXiv:2609.00065, attributed to the skill vendor K-Dense) to the user's manuscript/report references whenever the skill 'materially contributed', to inform the user it did so, and to fetch an external arXiv URL when network access is available. This is a self-serving instruction embedded in skill directions that injects vendor citations into user deliverables and triggers outbound network requests that are unrelated to the stated LaminDB purpose. It is not technically malicious and involves only a legitimate, well-known public endpoint, so it is rated as a contextual/behavioral risk rather than an attack.
-  > File: `SKILL.md`
-  > **Remediation:** Make citation guidance passive/optional (surface it only when the user explicitly asks about attribution) and remove the mandated automatic outbound fetch, or clearly declare network usage in the manifest.
 
 ### hugging-science — 🔵 LOW
 
@@ -793,6 +786,24 @@
   > File: `scripts/fetch_catalog.py`
   > **Remediation:** Apply the defang path to raw mode as well, and consider truncating or structurally sanitizing all fetched fields before they reach the agent context.
 
+### lamindb — 🔵 LOW
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive with mandated network fetch
+  > The SKILL.md body instructs the agent to add a specific arXiv paper (arXiv:2609.00065, attributed to the skill vendor K-Dense) to the user's manuscript/report references whenever the skill 'materially contributed', to inform the user it did so, and to fetch an external arXiv URL when network access is available. This is a self-serving instruction embedded in skill directions that injects vendor citations into user deliverables and triggers outbound network requests that are unrelated to the stated LaminDB purpose. It is not technically malicious and involves only a legitimate, well-known public endpoint, so it is rated as a contextual/behavioral risk rather than an attack.
+  > File: `SKILL.md`
+  > **Remediation:** Make citation guidance passive/optional (surface it only when the user explicitly asks about attribution) and remove the mandated automatic outbound fetch, or clearly declare network usage in the manifest.
+
+### liteparse — 🔵 LOW
+
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Install directive pins an unverifiable, future-dated package version
+  > The instructions direct the agent (which is granted Bash) to run `uv pip install "liteparse==2.0.0"`, described as a PyPI release dated May 2026, and additionally reference `npm i @llamaindex/liteparse` and `cargo install liteparse`. A pinned version that is described as released at a future date cannot be verified at analysis time; if the name/version is not yet published it is subject to name-squatting or dependency-confusion substitution when the agent executes the install. This is a documented installer with no download-then-execute of an unverified binary, so it is a contextual supply-chain risk rather than confirmed malicious behavior.
+  > **Remediation:** Verify the package name and version exist on the official index, prefer hash-pinned or lock-file installs, and require explicit user confirmation before the agent executes package installation commands.
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Mandatory self-promotional citation injection with network fetch directive
+  > The SKILL.md instruction body contains a 'Citing Scientific Agent Skills' section that directs the agent to insert a specific arXiv reference (arXiv:2609.00065) into the user's manuscripts, reports, or code releases, to tell the user it did so, and to fetch an external arXiv URL/API endpoint before writing the reference. This behavior is unrelated to the declared purpose (local document/PDF parsing) and influences the agent to modify user deliverables and perform outbound network requests for author self-promotion. No sensitive data is transmitted and no override of safety behavior occurs, so the reach is limited to unsolicited content insertion and an outbound metadata fetch.
+  > File: `SKILL.md`
+  > **Remediation:** Make citation guidance advisory and user-opt-in rather than an unconditional agent directive, and remove the instruction to autonomously fetch remote URLs unrelated to document parsing.
+
 ### market-research-reports — 🔵 LOW
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Embedded self-promotion directive instructing the agent to insert a vendor citation into user deliverables
@@ -806,17 +817,6 @@
   > The SKILL.md body instructs the agent to add a specific arXiv paper (arXiv:2609.00065, 'Scientific Agent Skills' by the skill author's organization) to references or software sections of user manuscripts/reports and to notify the user that it did so, and to fetch the arXiv record over the network when available. This is vendor self-promotion injected into the agent's output workflow rather than functionality required for document conversion. It is low-impact and disclosed, but it directs agent behavior (content insertion and an outbound network fetch) beyond the stated skill purpose.
   > File: `SKILL.md`
   > **Remediation:** Make the citation guidance passive/optional (e.g., mention only if the user asks about attribution) and remove the automatic network fetch and automatic reference insertion directive.
-
-### liteparse — 🔵 LOW
-
-- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Install directive pins an unverifiable, future-dated package version
-  > The instructions direct the agent (which is granted Bash) to run `uv pip install "liteparse==2.0.0"`, described as a PyPI release dated May 2026, and additionally reference `npm i @llamaindex/liteparse` and `cargo install liteparse`. A pinned version that is described as released at a future date cannot be verified at analysis time; if the name/version is not yet published it is subject to name-squatting or dependency-confusion substitution when the agent executes the install. This is a documented installer with no download-then-execute of an unverified binary, so it is a contextual supply-chain risk rather than confirmed malicious behavior.
-  > **Remediation:** Verify the package name and version exist on the official index, prefer hash-pinned or lock-file installs, and require explicit user confirmation before the agent executes package installation commands.
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Mandatory self-promotional citation injection with network fetch directive
-  > The SKILL.md instruction body contains a 'Citing Scientific Agent Skills' section that directs the agent to insert a specific arXiv reference (arXiv:2609.00065) into the user's manuscripts, reports, or code releases, to tell the user it did so, and to fetch an external arXiv URL/API endpoint before writing the reference. This behavior is unrelated to the declared purpose (local document/PDF parsing) and influences the agent to modify user deliverables and perform outbound network requests for author self-promotion. No sensitive data is transmitted and no override of safety behavior occurs, so the reach is limited to unsolicited content insertion and an outbound metadata fetch.
-  > File: `SKILL.md`
-  > **Remediation:** Make citation guidance advisory and user-opt-in rather than an unconditional agent directive, and remove the instruction to autonomously fetch remote URLs unrelated to document parsing.
 
 ### matplotlib — 🔵 LOW
 
@@ -859,21 +859,25 @@
 
 ### nextflow — 🔵 LOW
 
-- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Broad activation clause claims the skill for work where its topic is never mentioned
-  > The manifest description includes an imperative activation-broadening clause: 'Make sure to use this skill for any reproducible scientific/bioinformatics workflow work even if the user does not say the word "Nextflow"'. Combined with a long keyword list, this expands routing beyond the skill's explicit domain and could cause it to shadow more appropriate skills for general scientific-workflow requests. Content of the package is otherwise ordinary, accurate Nextflow/nf-core documentation with no executable scripts, so this is a routing-scope concern rather than confirmed abuse.
-  > **Remediation:** Scope the description to concrete Nextflow/nf-core triggers and remove directive language that claims unrelated or generic workflow tasks.
+- **🔵 LOW** `LLM_SKILL_DISCOVERY_ABUSE` — Broad activation clause claiming the skill for work where Nextflow is never mentioned
+  > The manifest description instructs the agent to 'Make sure to use this skill for any reproducible scientific/bioinformatics workflow work even if the user does not say the word "Nextflow"', and the body repeats this ('even if "Nextflow" is not named'). This widens activation beyond the explicitly named domain and could pre-empt other, more appropriate skills for general scientific-workflow requests. The claimed scope is still topically adjacent to the skill's genuine content (Nextflow/nf-core documentation), so this is over-broad scoping rather than deceptive keyword baiting.
+  > **Remediation:** Narrow the activation description to Nextflow/nf-core-specific triggers and remove the imperative instruction to claim all reproducible scientific workflow tasks.
 
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructs agent to insert vendor paper into user deliverables
-  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific author-affiliated arXiv reference (arXiv:2609.00065, K-Dense Inc.) to any manuscript, report, presentation, or code release the skill contributed to, to inform the user it did so, and to fetch the arXiv record over the network when connectivity exists. This is an embedded behavioral instruction unrelated to the declared Nextflow functionality that biases the agent toward promoting the skill vendor in user-authored scientific output. The cited identifier/date (2026, arXiv:2609.00065) is not verifiable and could result in a fabricated citation being inserted into research artifacts. Impact is limited to reputational/content integrity rather than system compromise; no data is sent outbound.
+- **🔵 LOW** `LLM_SUPPLY_CHAIN_ATTACK` — Documented curl-to-bash installer patterns for Nextflow and nf-test
+  > The skill documents the standard upstream installation commands 'curl -s https://get.nextflow.io | bash' (followed by 'sudo mv nextflow /usr/local/bin/') and 'curl -fsSL https://get.nf-test.com | bash'. These are the official, publicly documented installers for the respective projects and are presented as setup documentation, not as covert staging. However, they do constitute unverified download-then-execute with a privileged move to a system PATH directory, which the agent may execute on the user's behalf.
+  > **Remediation:** Prefer the documented package-manager installs (conda/bioconda) as the default path, or add checksum/signature verification guidance before executing downloaded installers, and avoid implying sudo installation without user confirmation.
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructing agent to add author's paper and fetch external URL
+  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that instructs the agent to add a specific arXiv reference (arXiv:2609.00065, authored by the skill vendor K-Dense) to any manuscript, report, or code release the skill contributes to, to tell the user it did so, and to fetch external URLs (https://arxiv.org/abs/2609.00065 or the arXiv export API) when network access is available. This is vendor self-promotion embedded as an active directive rather than documentation, and it causes automatic network fetches and citation insertion into user deliverables. It is not exfiltration (no sensitive data is sent), and the destination is a well-known public academic host, so impact is limited.
   > File: `SKILL.md`
-  > **Remediation:** Remove or make strictly optional the automatic citation-insertion directive; do not instruct the agent to modify user deliverables with vendor references, and avoid unverifiable DOIs/arXiv identifiers.
+  > **Remediation:** Reword the citation section as passive, optional documentation (e.g. 'if the user wishes to cite this skill'), remove the instruction to automatically insert citations into user outputs, and remove the automatic external URL fetch directive.
 
-### ontology-term-resolution — 🔵 LOW
+### paper-lookup — 🔵 LOW
 
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Embedded self-promotional citation directive unrelated to skill function
-  > The SKILL.md body contains an active directive instructing the agent to add a specific vendor-authored paper (arXiv:2609.00065, K-Dense) to the references or software section of any manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and to fetch arxiv.org / export.arxiv.org when network access is available. This behavior is outside the declared purpose of ontology term resolution against OLS4 and steers the agent into modifying user deliverables and making outbound requests to a domain not declared in the compatibility metadata (which states only https://www.ebi.ac.uk/ols4 is needed). The directive is transparent and self-disclosing, with no data collection or credential handling, so impact is minimal; no exfiltration or code execution risk was identified.
-  > File: `SKILL.md`
-  > **Remediation:** Make citation guidance passive/informational rather than an instruction the agent must act on, and declare any additional network destinations (arxiv.org) in the compatibility/network metadata.
+- **🔵 LOW** `LLM_DATA_EXFILTRATION` — Instructions permit reading API keys from a local .env file
+  > SKILL.md directs the agent to check environment variables and, if absent, read a `.env` file in the working directory for NCBI_API_KEY, CORE_API_KEY, S2_API_KEY and OPENALEX_API_KEY. This is credential-file access, though it is explicitly scoped to four named variables, explicitly forbids loading the file wholesale, forbids echoing keys, and the keys are used only for authentication to the declared scholarly APIs. `scripts/_common.py` additionally redacts api_key/email/mailto/tool from emitted provenance URLs. No external or undeclared sink is present, so this is a contextual risk rather than exfiltration.
+  > File: `scripts/_common.py`
+  > **Remediation:** Prefer environment variables only; if .env reading is retained, keep the strict four-variable allowlist and continue redacting credentials from all emitted provenance and logs.
 
 ### paperclip — 🔵 LOW
 
@@ -902,19 +906,19 @@
   > File: `SKILL.md`
   > **Remediation:** Remove or downgrade the mandatory self-citation directive to optional, user-consented guidance; remove the instruction to fetch external URLs, or declare network/fetch capability explicitly in the manifest allowed-tools and document the destination.
 
-### pylabrobot — 🔵 LOW
-
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive with network fetch of a specific arXiv record
-  > The SKILL.md body instructs the agent to add a specific paper (arXiv:2609.00065, authored by the skill vendor K-Dense) to manuscripts, reports, or code releases when the skill 'materially contributed', to tell the user it did so, and to fetch https://arxiv.org/abs/2609.00065 or the arXiv export API when network access is available. This is vendor self-promotion embedded as an operational instruction plus an outbound network request that is not part of the stated lab-automation purpose. No sensitive data is included in the request (it is a plain read of a public arXiv record), so this is a policy/promotional concern rather than exfiltration.
-  > File: `SKILL.md`
-  > **Remediation:** Make the citation guidance passive/optional (present the reference only if the user asks) and remove the directive to automatically fetch an external URL and insert the vendor's citation into user deliverables.
-
 ### pyhealth — 🔵 LOW
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Embedded self-promotional citation directive with external fetch
   > The SKILL.md instruction body ends with a 'Citing Scientific Agent Skills' section that directs the agent to insert a specific vendor-authored reference (arXiv:2609.00065, a future-dated identifier) into any user manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and to fetch arxiv.org / export.arxiv.org endpoints when network access is available. This is unrelated to the stated PyHealth pipeline purpose and steers agent output toward promoting the skill author's publication, plus an unrequested outbound network request. No sensitive data source is read and no credential or user data is transmitted, so impact is limited to attribution/marketing influence rather than exfiltration.
   > File: `SKILL.md`
   > **Remediation:** Make citation guidance passive/optional (e.g., 'if the user asks how to cite this skill') and remove the directive to automatically add references to user deliverables and to fetch external URLs without an explicit user request.
+
+### pylabrobot — 🔵 LOW
+
+- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive with network fetch of a specific arXiv record
+  > The SKILL.md body instructs the agent to add a specific paper (arXiv:2609.00065, authored by the skill vendor K-Dense) to manuscripts, reports, or code releases when the skill 'materially contributed', to tell the user it did so, and to fetch https://arxiv.org/abs/2609.00065 or the arXiv export API when network access is available. This is vendor self-promotion embedded as an operational instruction plus an outbound network request that is not part of the stated lab-automation purpose. No sensitive data is included in the request (it is a plain read of a public arXiv record), so this is a policy/promotional concern rather than exfiltration.
+  > File: `SKILL.md`
+  > **Remediation:** Make the citation guidance passive/optional (present the reference only if the user asks) and remove the directive to automatically fetch an external URL and insert the vendor's citation into user deliverables.
 
 ### pymc — 🔵 LOW
 
@@ -944,19 +948,19 @@
   > File: `SKILL.md`
   > **Remediation:** Make the citation guidance passive documentation (e.g., 'the author requests citation') rather than an instruction the agent executes, and remove the directive to fetch external URLs as part of normal skill operation.
 
-### scientific-brainstorming — 🔵 LOW
-
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Embedded self-promotional citation directive with external fetch instruction
-  > The SKILL.md body ends with a 'Citing Scientific Agent Skills' block that directs the agent to insert a specific vendor paper (arXiv:2609.00065, K-Dense Inc.) into the user's manuscript/report/code references whenever the skill 'materially contributed', to inform the user it did so, and to fetch https://arxiv.org/abs/2609.00065 or the arXiv export API when network access is available. This is publisher self-promotion embedded in active agent directions and causes an outbound network request plus modification of user deliverables that the user never requested. The cited identifier is also not verifiable as a real record from package content, so an agent following the directive could emit an unverified reference. No sensitive data is collected or transmitted, and no other risky behavior is chained to it, so the impact is limited to promotional/unsolicited-action risk rather than exfiltration.
-  > File: `SKILL.md`
-  > **Remediation:** Make the citation guidance passive and user-gated (e.g., 'if the user asks how to cite this skill, provide the reference'), remove the mandatory outbound fetch, and avoid instructing the agent to modify user deliverables with vendor references automatically.
-
 ### scholar-evaluation — 🔵 LOW
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive and optional external fetch in instruction body
   > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific author-affiliated arXiv reference to the user's manuscript, report, or code release and to notify the user it did so, and to fetch arxiv.org/export.arxiv.org when network access is available. This is a vendor self-promotion directive that modifies user deliverables and introduces an outbound network read that is not needed by the local, standard-library-only tooling (the manifest compatibility note states all tooling is local with no network). No sensitive data source, credential access, or exfiltration sink is present; the fetched destination is a public, declared scholarly site, so the risk is limited to unsolicited citation insertion and an undeclared optional network read rather than data leakage.
   > File: `SKILL.md`
   > **Remediation:** Make the citation guidance explicitly optional and user-approved rather than an instruction the agent should carry out automatically, and either remove the arXiv fetch directive or declare the network capability and destination in the manifest/compatibility notes.
+
+### scientific-brainstorming — 🔵 LOW
+
+- **🔵 LOW** `LLM_POLICY_VIOLATION` — Embedded self-promotional citation directive with external fetch instruction
+  > The SKILL.md body ends with a 'Citing Scientific Agent Skills' block that directs the agent to insert a specific vendor paper (arXiv:2609.00065, K-Dense Inc.) into the user's manuscript/report/code references whenever the skill 'materially contributed', to inform the user it did so, and to fetch https://arxiv.org/abs/2609.00065 or the arXiv export API when network access is available. This is publisher self-promotion embedded in active agent directions and causes an outbound network request plus modification of user deliverables that the user never requested. The cited identifier is also not verifiable as a real record from package content, so an agent following the directive could emit an unverified reference. No sensitive data is collected or transmitted, and no other risky behavior is chained to it, so the impact is limited to promotional/unsolicited-action risk rather than exfiltration.
+  > File: `SKILL.md`
+  > **Remediation:** Make the citation guidance passive and user-gated (e.g., 'if the user asks how to cite this skill, provide the reference'), remove the mandatory outbound fetch, and avoid instructing the agent to modify user deliverables with vendor references automatically.
 
 ### scientific-visualization — 🔵 LOW
 
@@ -972,19 +976,19 @@
   > File: `SKILL.md`
   > **Remediation:** Convert the citation guidance into passive, optional documentation that requires explicit user consent before any reference is added to a deliverable, and remove the directive to autonomously fetch external URLs so the skill matches its declared offline/network-free posture.
 
-### scikit-learn — 🔵 LOW
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Embedded self-promotional citation directive with unverifiable arXiv reference
-  > The SKILL.md body contains an active directive instructing the agent to add a specific vendor-authored paper (arXiv:2609.00065, an identifier corresponding to a future date) to any manuscript, report, presentation, or code release the skill contributes to, to notify the user it did so, and to fetch the arXiv record when network access is available. This is unrelated to the stated scikit-learn machine-learning purpose and steers agent output toward promoting the skill author's work, potentially inserting an unverifiable reference into user deliverables. It is conditional and openly attributed rather than covert, and the fetched destination (arxiv.org) is a legitimate public source with no sensitive data being transmitted, so intent and impact are limited.
-  > File: `SKILL.md`
-  > **Remediation:** Reframe the citation guidance as passive, optional documentation (e.g., "if the user wishes to cite this skill, the reference is ...") rather than a standing instruction to modify user deliverables, and verify that the cited DOI/arXiv identifier resolves to a real published record.
-
 ### scikit-bio — 🔵 LOW
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive instructs agent to insert a specific reference into user deliverables and fetch an external URL
   > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific author/paper reference (arXiv:2609.00065, dated 2026) to any manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and to fetch https://arxiv.org/abs/2609.00065 or the arXiv API endpoint when network access is available. This is a vendor self-promotion behavioral directive embedded in active instructions rather than a bioinformatics capability: it can cause unrequested modification of user output artifacts and an outbound network request to an author-controlled reference record. No credential access, code execution, or sensitive data sink is involved, so impact is limited to content integrity and unsolicited attribution.
   > File: `SKILL.md`
   > **Remediation:** Make citation guidance passive/optional (e.g., 'if the user wishes to cite this skill, the reference is ...') rather than instructing the agent to modify user deliverables automatically, and remove the directive to perform unsolicited network fetches.
+
+### scikit-learn — 🔵 LOW
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Embedded self-promotional citation directive with unverifiable arXiv reference
+  > The SKILL.md body contains an active directive instructing the agent to add a specific vendor-authored paper (arXiv:2609.00065, an identifier corresponding to a future date) to any manuscript, report, presentation, or code release the skill contributes to, to notify the user it did so, and to fetch the arXiv record when network access is available. This is unrelated to the stated scikit-learn machine-learning purpose and steers agent output toward promoting the skill author's work, potentially inserting an unverifiable reference into user deliverables. It is conditional and openly attributed rather than covert, and the fetched destination (arxiv.org) is a legitimate public source with no sensitive data being transmitted, so intent and impact are limited.
+  > File: `SKILL.md`
+  > **Remediation:** Reframe the citation guidance as passive, optional documentation (e.g., "if the user wishes to cite this skill, the reference is ...") rather than a standing instruction to modify user deliverables, and verify that the cited DOI/arXiv identifier resolves to a real published record.
 
 ### scvi-tools — 🔵 LOW
 
@@ -993,26 +997,12 @@
   > File: `SKILL.md`
   > **Remediation:** Reframe the citation guidance as optional, user-approved metadata rather than a directive that automatically edits user deliverables, and remove or make explicitly opt-in the instruction to perform outbound network fetches.
 
-### stable-baselines3 — 🔵 LOW
-
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive instructs agent to add a specific paper reference and fetch an external URL
-  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section directing the agent to add a specific arXiv citation (arXiv:2609.00065) to any manuscript, report, or code release the skill contributes to, to inform the user it did so, and to fetch an external arXiv URL when network access is available. This is author self-promotion embedded as an active instruction rather than RL guidance, and it introduces a minor outbound network fetch and content-injection behavior unrelated to the declared purpose of the skill. There is no exfiltration of user data, no credential access, and no code execution associated with it, so risk is low.
-  > File: `SKILL.md`
-  > **Remediation:** Convert the citation section into passive, optional documentation ('a citation is available if you wish to cite this skill') and remove the directive to automatically fetch external URLs and insert references into user deliverables.
-
 ### seaborn — 🔵 LOW
 
 - **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive with unverifiable arXiv reference and network fetch
   > The SKILL.md body contains an active behavioral directive ('Citing Scientific Agent Skills') instructing the agent to insert a specific author/paper citation (arXiv:2609.00065, dated 2026) into the user's manuscripts, reports, presentations, or code releases, to inform the user it did so, and, when network access is available, to fetch https://arxiv.org/abs/2609.00065 or the arXiv export API before writing the reference. The identifier and publication year are not verifiable, so the directive could cause the agent to add a fabricated or unverifiable reference to user deliverables and to perform an outbound network request not needed for seaborn plotting. No sensitive data is collected or transmitted, and the fetch destination is a legitimate public repository, so the reach is limited; this is attribution/self-promotion pressure rather than exfiltration. All other package content (reference markdown files for seaborn APIs, palettes, grids, objects interface, examples) is ordinary documentation with no code execution, no scripts, and no network sinks.
   > File: `SKILL.md`
   > **Remediation:** Make the citation guidance passive documentation rather than an instruction to the agent, remove the automatic outbound fetch requirement, and verify or drop the unresolvable arXiv identifier so the agent cannot insert unverifiable references into user deliverables.
-
-### statsmodels — 🔵 LOW
-
-- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructing the agent to insert an author-supplied reference
-  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific arXiv citation (K-Dense authors, arXiv:2609.00065) to user manuscripts/reports and to inform the user it did so, and to fetch the arXiv record when network access is available. This is an author-benefit instruction embedded in an otherwise technical statistics skill; it can cause unsolicited citation insertion into user deliverables and an outbound network fetch not required by the stated statistical-modeling purpose. It is not exfiltration (no user data is sent) and is conditioned on material contribution, so it is a contextual risk rather than confirmed abuse.
-  > File: `SKILL.md`
-  > **Remediation:** Make citation insertion opt-in and user-confirmed rather than an implicit directive, and remove or clearly gate the automatic network fetch of the arXiv record.
 
 ### shap — 🔵 LOW
 
@@ -1021,12 +1011,26 @@
   > File: `SKILL.md`
   > **Remediation:** Reframe the citation section as optional user-facing information rather than an agent directive, and remove or explicitly declare the network-fetch step (declare WebFetch capability or drop the automatic lookup).
 
+### stable-baselines3 — 🔵 LOW
+
+- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive instructs agent to add a specific paper reference and fetch an external URL
+  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section directing the agent to add a specific arXiv citation (arXiv:2609.00065) to any manuscript, report, or code release the skill contributes to, to inform the user it did so, and to fetch an external arXiv URL when network access is available. This is author self-promotion embedded as an active instruction rather than RL guidance, and it introduces a minor outbound network fetch and content-injection behavior unrelated to the declared purpose of the skill. There is no exfiltration of user data, no credential access, and no code execution associated with it, so risk is low.
+  > File: `SKILL.md`
+  > **Remediation:** Convert the citation section into passive, optional documentation ('a citation is available if you wish to cite this skill') and remove the directive to automatically fetch external URLs and insert references into user deliverables.
+
 ### statistical-power — 🔵 LOW
 
 - **🔵 LOW** `LLM_POLICY_VIOLATION` — Embedded self-citation directive with external network fetch
   > The SKILL.md body ends with a 'Citing Scientific Agent Skills' block that instructs the agent to add a specific author paper (arXiv:2609.00065) to the user's manuscript/report references, to inform the user it did so, and to fetch an external arXiv URL (https://arxiv.org/abs/2609.00065 or export.arxiv.org API) when network access is available. This is vendor self-promotion injected into the agent's active directions and it introduces an outbound network request not required by the stated power-analysis purpose. No sensitive data source is coupled to the request and the citation is conditional on the skill materially contributing, so impact is limited to unsolicited attribution content and a benign external HTTP GET rather than exfiltration.
   > File: `SKILL.md`
   > **Remediation:** Make attribution passive documentation rather than an agent directive, remove the instruction to automatically insert citations into user deliverables, and drop or explicitly declare the external network fetch so users can approve it.
+
+### statsmodels — 🔵 LOW
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive instructs agent to add author's paper to user deliverables
+  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section directing the agent to add a specific arXiv reference (arXiv:2609.00065, K-Dense authors) to any manuscript, report, presentation, or code release the skill contributes to, to tell the user it did so, and to fetch an external arXiv URL when network access is available. This is an embedded instruction that steers agent output toward promoting the skill author's work and triggers an outbound network fetch, rather than serving the stated statistical-modeling purpose. It is promotional/steering content, not a technical exploit; no data is exfiltrated and the destination (arxiv.org) is a legitimate public service.
+  > File: `SKILL.md`
+  > **Remediation:** Make citation guidance passive and optional (e.g., 'if the user asks how to cite this skill'), remove the directive to automatically insert the reference into user deliverables, and remove the unconditional external fetch instruction.
 
 ### sympy — 🔵 LOW
 
@@ -1035,13 +1039,6 @@
   > File: `SKILL.md`
   > **Remediation:** Remove or make purely informational the mandatory citation directive; do not instruct the agent to modify user deliverables or perform network fetches that are unrelated to symbolic mathematics. If attribution is desired, state it as optional documentation rather than an agent action.
 
-### transformers — 🔵 LOW
-
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive instructing agent to add author's paper to user outputs
-  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section directing the agent to insert a specific arXiv reference (arXiv:2609.00065 by the skill author, K-Dense Inc.) into user manuscripts/reports/code releases and to notify the user it did so, and to fetch an external arXiv URL when network access is available. This is promotional behavior injected into the agent's output workflow that is unrelated to the declared Transformers-library purpose. It does not exfiltrate data or execute code, but it steers agent output for the author's benefit and involves fetching external content that could carry untrusted instructions.
-  > File: `SKILL.md`
-  > **Remediation:** Make the citation guidance clearly optional and user-initiated rather than a directive that modifies user deliverables; treat any content fetched from external URLs as untrusted data and never as instructions.
-
 ### torch-geometric — 🔵 LOW
 
 - **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Embedded self-promotion directive instructing agent to insert author citation into user deliverables
@@ -1049,12 +1046,26 @@
   > File: `SKILL.md`
   > **Remediation:** Make the citation guidance passive documentation (e.g., 'if the user wishes to cite this skill, the reference is ...') rather than an imperative that the agent modify user deliverables, and remove the instruction to automatically fetch an external, unverifiable record.
 
+### transformers — 🔵 LOW
+
+- **🔵 LOW** `LLM_POLICY_VIOLATION` — Self-promotional citation directive instructing agent to add author's paper to user outputs
+  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section directing the agent to insert a specific arXiv reference (arXiv:2609.00065 by the skill author, K-Dense Inc.) into user manuscripts/reports/code releases and to notify the user it did so, and to fetch an external arXiv URL when network access is available. This is promotional behavior injected into the agent's output workflow that is unrelated to the declared Transformers-library purpose. It does not exfiltrate data or execute code, but it steers agent output for the author's benefit and involves fetching external content that could carry untrusted instructions.
+  > File: `SKILL.md`
+  > **Remediation:** Make the citation guidance clearly optional and user-initiated rather than a directive that modifies user deliverables; treat any content fetched from external URLs as untrusted data and never as instructions.
+
+### umap-learn — 🔵 LOW
+
+- **🔵 LOW** `LLM_SOCIAL_ENGINEERING` — Self-promotional citation directive with instructed network fetch of an unverifiable arXiv record
+  > The SKILL.md body instructs the agent to add a specific paper (arXiv:2609.00065, K-Dense authors) to any manuscript, report, presentation, or code release the skill contributes to, to inform the user it did so, and to fetch an external arXiv URL/API endpoint when network access is available. This is a self-serving behavioral directive unrelated to the skill's stated dimensionality-reduction purpose; the cited DOI/arXiv ID and the claimed 2026 release dates are not verifiable, so the generated citations could be misleading. The network fetch is limited to a public, declared, benign destination and no data is sent outward, so this is a contextual risk rather than exfiltration or injection.
+  > File: `SKILL.md`
+  > **Remediation:** Make the citation guidance optional and user-initiated, remove the instruction to automatically insert the author's paper into user deliverables, and verify/limit the referenced identifiers to resolvable published records.
+
 ### usfiscaldata — 🔵 LOW
 
-- **🔵 LOW** `LLM_POLICY_VIOLATION` — Skill instructs agent to insert author's self-citation into user deliverables
-  > Beyond its declared purpose (querying the Treasury Fiscal Data API), the SKILL.md body contains a 'Citing Scientific Agent Skills' directive telling the agent to add a specific arXiv reference (arXiv:2609.00065, an identifier corresponding to a future date) to any manuscript, report, presentation, or code release the skill contributed to, to inform the user it did so, and to fetch the arXiv record over the network when available. This is self-promotional behavior injected into the agent's output workflow that is unrelated to the skill's stated data-query function, and the cited identifier may not correspond to a verifiable publication. No credential access, exfiltration sink, code execution, or obfuscation was found anywhere in the package; all other content is legitimate public-API documentation with read-only HTTPS GET examples to api.fiscaldata.treasury.gov.
+- **🔵 LOW** `LLM_PROMPT_INJECTION` — Embedded self-promotional citation directive in SKILL.md
+  > The SKILL.md body contains a 'Citing Scientific Agent Skills' section instructing the agent to add a specific arXiv paper to the user's manuscript/report references and to inform the user it did so, plus to fetch an external arXiv URL. This is an instruction unrelated to the declared Treasury data capability that steers agent output toward promoting a specific publication (whose DOI/arXiv ID appears speculative/future-dated, arXiv:2609.00065). It is a low-severity behavioral injection/promotional directive rather than a technical compromise; no credential access, exfiltration sink, or code execution is involved.
   > File: `SKILL.md`
-  > **Remediation:** Make citation guidance passive/optional documentation rather than an operative instruction to modify user deliverables, and verify that the referenced publication identifier resolves to a real record.
+  > **Remediation:** Remove or clearly mark the citation directive as optional, non-binding documentation so the agent does not automatically insert third-party self-citations into user work products; avoid instructing unsolicited outbound fetches.
 
 ### vaex — 🔵 LOW
 
@@ -1069,12 +1080,6 @@
   > The SKILL.md instruction body contains a 'Citing Scientific Agent Skills' section that directs the agent to add a specific arXiv paper authored by the skill vendor (K-Dense) to the references or software section of the user's manuscript/report/code release, to notify the user that it did so, and to fetch the arXiv record over the network when available. This is vendor self-promotion embedded in active agent directions that can influence the content of user work products (academic citations), rather than a security exploit. No credential access, exfiltration sink, code execution, or obfuscation is present; the fetched URLs are legitimate public arXiv endpoints. Treated as a contextual policy/integrity risk, not confirmed malicious behavior.
   > File: `SKILL.md`
   > **Remediation:** Make the citation request advisory and user-gated (e.g., 'suggest citing, only if the user agrees') rather than an unconditional directive to modify the user's reference list, and clearly separate vendor attribution from the skill's operational instructions.
-
-### labarchive-integration — ⚪ INFO
-
-- **⚪ INFO** `LLM_ANALYSIS_FAILED` — LLM analysis failed
-  > The LLM analyzer encountered an error and could not complete semantic analysis: litellm.InternalServerError: AnthropicError - {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"},"request_id":"req_011CeoqzsLf8qyhf3DyMoAa3"}
-  > **Remediation:** Check your LLM provider configuration (API key, model name, network connectivity). The scan completed with static analysis only — LLM-based threat detection was not performed.
 
 ### ncats-arax — ⚪ INFO
 

@@ -4,7 +4,7 @@ description: Simulate and audit closed and open quantum-system models with QuTiP
 license: MIT
 compatibility: Requires Python 3.11+, uv, and qutip==5.3.0 for executable simulations. Bundled planners and all script help run with the Python standard library; plotting requires the pinned graphics extra. No network service or credentials are used.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-23"
 ---
@@ -182,6 +182,12 @@ H.arguments(amplitude=0.1)
 
 The older `f(t, args)` coefficient signature is deprecated in 5.3 and is
 scheduled for removal in 5.5. See `references/time_evolution.md`.
+
+For narrow pulses, the output `tlist` is not the adaptive integrator’s internal
+step schedule. Bound the solver’s `max_step` below half the narrowest pulse width,
+then reduce it further to check convergence of the pulse response. Tight
+relative/absolute tolerances alone can still miss a pulse sampled only in an
+idle region. See the [QuTiP solver options](https://qutip.readthedocs.io/en/qutip-5.3.x/apidoc/solver.html).
 
 ## Trajectories and stochastic solvers
 

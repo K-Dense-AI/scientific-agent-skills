@@ -4,7 +4,7 @@ description: "Web toolkit powered by Exa, tuned for scientific and technical con
 compatibility: Requires exa-py Python SDK, an EXA_API_KEY, and internet access.
 license: MIT
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Exa
   website: https://exa.ai
   docs: https://exa.ai/docs
@@ -85,7 +85,18 @@ If there's no `.env`, export the key for the session:
 export EXA_API_KEY="your-key"
 ```
 
-Verify by running any script with `--help` — it will exit cleanly if the key is set and auth-check runs only when a real query is made.
+Use `--help` to verify installation and CLI parsing; it does not require an API key or validate authentication. Authentication is checked only when a real query is made.
+
+### Extraction limits and freshness
+
+For `/contents`, split requests into batches of at most 100 URLs. The bundled
+extractor makes one call and does not split oversized batches. Its JSON preserves
+requested URLs and returned results, but drops the API's per-URL status details;
+compare requested and returned URLs and report missing content without guessing
+the failure cause. Cached content is possible: `published_date` is not retrieval
+time, and this CLI exposes no freshness control. If current-page verification is
+required, use the documented API freshness option or a direct page fetch and
+record when it was retrieved. See the [Contents API](https://exa.ai/docs/reference/get-contents).
 
 ### Tracking header
 

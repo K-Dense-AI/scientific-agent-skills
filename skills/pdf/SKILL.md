@@ -3,7 +3,7 @@ name: pdf
 description: Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.
 license: Proprietary. LICENSE.txt has complete terms
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Anthropic, PBC
   source: https://github.com/anthropics/skills/tree/main/skills/pdf
 ---
@@ -235,6 +235,15 @@ pdftk input.pdf rotate 1east output rotated.pdf
 ## Common Tasks
 
 ### Extract Text from Scanned PDFs
+
+Install the native tools as well as the Python packages: `pdf2image` requires
+Poppler (`pdftoppm`/`pdftocairo`), and `pytesseract` requires the Tesseract
+executable plus language data for the document. Python package installation alone
+does not provide these dependencies. For long PDFs, render bounded page ranges
+or use an output directory to avoid holding every page image in RAM. Check a
+representative page for reading order, symbols, and numeric accuracy before
+using OCR text as research data. See the [pdf2image installation guide](https://pdf2image.readthedocs.io/en/latest/installation.html)
+and [pytesseract prerequisites](https://github.com/madmaze/pytesseract).
 ```python
 # Requires: uv pip install pytesseract pdf2image
 import pytesseract
@@ -319,4 +328,4 @@ with open("encrypted.pdf", "wb") as output:
 
 ---
 
-*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/pdf). Vendored here unmodified except for frontmatter metadata and the case of the `reference.md`/`forms.md` links, which upstream writes uppercase; see LICENSE.txt for terms.*
+*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/pdf). Adapted here with frontmatter metadata, lowercase `reference.md`/`forms.md` links, and local workflow clarifications; see LICENSE.txt for terms.*

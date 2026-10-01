@@ -4,7 +4,7 @@ description: Build and operate reproducible genomics workloads on DNAnexus with 
 license: MIT
 compatibility: Requires a DNAnexus account, network access, Python 3.11+, and dx-toolkit/dxpy; some workflow and infrastructure features require organization licenses or policies.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 

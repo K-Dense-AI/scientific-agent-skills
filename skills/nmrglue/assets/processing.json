@@ -1,0 +1,15 @@
+{
+  "spectral_width_hz": 4000.0,
+  "observation_mhz": 400.0,
+  "carrier_ppm": 5.0,
+  "nucleus": "1H",
+  "fid_sign": "-i",
+  "line_broadening_hz": 1.0,
+  "zero_fill_points": 32768,
+  "first_point_scale": 0.5,
+  "phase0_deg": 0.0,
+  "phase1_deg": 0.0,
+  "baseline": "none",
+  "integration_regions_ppm": [[2.7, 3.3], [6.7, 7.3]],
+  "peak_prominence_fraction": 0.05
+}

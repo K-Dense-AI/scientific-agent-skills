@@ -464,15 +464,15 @@ IMPORTANT - NO FIGURE NUMBERS:
                 if isinstance(error_msg, dict):
                     error_msg = error_msg.get("message", str(error_msg))
                 self._last_error = f"API Error: {error_msg}"
-                print(f"✗ {self._last_error}")
+                print(f"[FAIL] {self._last_error}")
                 return None
             
             image_data = self._extract_image_from_response(response)
             if image_data:
-                self._log(f"✓ Generated image ({len(image_data)} bytes)")
+                self._log(f"[OK] Generated image ({len(image_data)} bytes)")
             else:
                 self._last_error = "No image data in API response - model may not support image generation"
-                self._log(f"✗ {self._last_error}")
+                self._log(f"[FAIL] {self._last_error}")
                 # Additional debug info when image extraction fails
                 if self.verbose and "choices" in response:
                     msg = response["choices"][0].get("message", {})
@@ -481,11 +481,11 @@ IMPORTANT - NO FIGURE NUMBERS:
             return image_data
         except RuntimeError as e:
             self._last_error = str(e)
-            self._log(f"✗ Generation failed: {self._last_error}")
+            self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
         except Exception as e:
             self._last_error = f"Unexpected error: {str(e)}"
-            self._log(f"✗ Generation failed: {self._last_error}")
+            self._log(f"[FAIL] Generation failed: {self._last_error}")
             import traceback
             if self.verbose:
                 traceback.print_exc()
@@ -598,7 +598,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
                 # provider hiccup. The diagram itself is fine; only its review
                 # is missing, and saying so beats inventing a score.
                 reason = "the review model returned no choices"
-                self._log(f"⚠ Review unavailable: {reason}")
+                self._log(f"[WARN] Review unavailable: {reason}")
                 return ReviewResult(
                     f"Review unavailable: {reason}.",
                     None, False, reviewed=False, error=reason,
@@ -625,7 +625,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
 
             if score is None and verdict is None:
                 reason = "no score or verdict found in the review"
-                self._log(f"⚠ Review unusable: {reason}")
+                self._log(f"[WARN] Review unusable: {reason}")
                 return ReviewResult(
                     content if content else f"Review unusable: {reason}.",
                     None, False, reviewed=True, error=reason,
@@ -636,7 +636,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
             )
 
             shown = f"{score}/10" if score is not None else "not stated"
-            self._log(f"✓ Review complete (Score: {shown}, Threshold: {threshold}/10)")
+            self._log(f"[OK] Review complete (Score: {shown}, Threshold: {threshold}/10)")
             self._log(f"  Verdict: {'Needs improvement' if needs_improvement else 'Acceptable'}")
 
             return ReviewResult(
@@ -649,7 +649,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
         except Exception as e:
             # A failed review must not fail the run -- the image is already
             # generated and saved -- but it must not read as a pass either.
-            self._log(f"⚠ Review failed: {str(e)}")
+            self._log(f"[WARN] Review failed: {str(e)}")
             return ReviewResult(
                 f"Review failed: {str(e)}",
                 None, False, reviewed=False, error=str(e),
@@ -750,7 +750,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
             
             if not image_data:
                 error_msg = getattr(self, '_last_error', 'Image generation failed - no image data returned')
-                print(f"✗ Generation failed: {error_msg}")
+                print(f"[FAIL] Generation failed: {error_msg}")
                 results["iterations"].append({
                     "iteration": i,
                     "success": False,
@@ -762,7 +762,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
             iter_path = output_dir / f"{base_name}_v{i}{extension}"
             with open(iter_path, "wb") as f:
                 f.write(image_data)
-            print(f"✓ Saved: {iter_path}")
+            print(f"[OK] Saved: {iter_path}")
             
             # Review the image with the vision review model
             print(f"Reviewing image with {self.review_model}...")
@@ -770,9 +770,9 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                 str(iter_path), user_prompt, i, doc_type, iterations
             )
             if review.score is not None:
-                print(f"✓ Score: {review.score}/10 (threshold: {threshold}/10)")
+                print(f"[OK] Score: {review.score}/10 (threshold: {threshold}/10)")
             else:
-                print(f"⚠ Review unavailable — image kept, quality not verified")
+                print(f"[WARN] Review unavailable — image kept, quality not verified")
                 print(f"  Reason: {review.error}")
 
             # Save iteration results
@@ -792,13 +792,13 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
             # Check if quality is acceptable - STOP EARLY if so
             if not review.needs_improvement:
                 if review.score is not None:
-                    print(f"\n✓ Quality meets {doc_type} threshold ({review.score} >= {threshold})")
+                    print(f"\n[OK] Quality meets {doc_type} threshold ({review.score} >= {threshold})")
                     print(f"  No further iterations needed!")
                     reason = (f"Quality score {review.score} meets threshold "
                               f"{threshold} for {doc_type}")
                 else:
                     # Regenerating cannot fix a reviewer that did not answer.
-                    print(f"\n⚠ Stopping without a verified score — review the image yourself")
+                    print(f"\n[WARN] Stopping without a verified score — review the image yourself")
                     reason = f"Review did not produce a score: {review.error}"
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
@@ -810,7 +810,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
 
             # If this is the last iteration, we're done regardless
             if i == iterations:
-                print(f"\n⚠ Maximum iterations reached")
+                print(f"\n[WARN] Maximum iterations reached")
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
                 results["final_reviewed"] = review.reviewed and review.score is not None
@@ -818,7 +818,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                 break
 
             # Quality below threshold - improve prompt for next iteration
-            print(f"\n⚠ Quality below threshold ({review.score} < {threshold})")
+            print(f"\n[WARN] Quality below threshold ({review.score} < {threshold})")
             print(f"Improving prompt based on feedback...")
             current_prompt = self.improve_prompt(user_prompt, review.critique, i + 1)
         
@@ -828,13 +828,13 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
             if final_iter_path != output_path:
                 import shutil
                 shutil.copy(final_iter_path, output_path)
-                print(f"\n✓ Final image: {output_path}")
+                print(f"\n[OK] Final image: {output_path}")
         
         # Save review log
         log_path = output_dir / f"{base_name}_review_log.json"
         with open(log_path, "w") as f:
             json.dump(results, f, indent=2)
-        print(f"✓ Review log: {log_path}")
+        print(f"[OK] Review log: {log_path}")
         
         print(f"\n{'='*60}")
         print(f"Generation Complete!")
@@ -927,7 +927,7 @@ Environment:
         )
         
         if results["success"]:
-            print(f"\n✓ Success! Image saved to: {args.output}")
+            print(f"\n[OK] Success! Image saved to: {args.output}")
             used = len([r for r in results['iterations'] if r.get('success')])
             if results.get("final_reviewed"):
                 if results.get("early_stop"):
@@ -938,10 +938,10 @@ Environment:
                       f" the review produced no score. Check the image yourself.)")
             sys.exit(0)
         else:
-            print(f"\n✗ Generation failed. Check review log for details.")
+            print(f"\n[FAIL] Generation failed. Check review log for details.")
             sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Error: {str(e)}")
+        print(f"\n[FAIL] Error: {str(e)}")
         sys.exit(1)
 
 

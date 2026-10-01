@@ -3,7 +3,7 @@ name: paperzilla
 description: Chat with your agent about projects, recommendations, and canonical papers in Paperzilla. Use when users ask for recent project recommendations, canonical paper details, markdown-based summaries, recommendation feedback, feed export, or Atom feed URLs.
 license: MIT
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: Paperzilla Inc
 ---
 
@@ -138,6 +138,18 @@ pz feedback <project-paper-id> star
 pz feedback <project-paper-id> downvote --reason not_relevant
 pz feedback clear <project-paper-id>
 ```
+
+## Keep paper and recommendation identities separate
+
+A canonical `paper-id` identifies the paper; a `project-paper-id` identifies its
+recommendation within a project. Take both from returned records and retain the
+project association when exporting results. Use the recommendation ID for `rec`
+and feedback operations, even if the same paper appears in several projects.
+Do not infer recommendation IDs from a DOI or canonical paper ID. See the
+[official CLI documentation](https://github.com/paperzilla-ai/pz).
+
+When markdown is still being prepared, report that state and summarize only the
+metadata or abstract actually returned. A retry message is not full-text evidence.
 
 ## Output and automation
 

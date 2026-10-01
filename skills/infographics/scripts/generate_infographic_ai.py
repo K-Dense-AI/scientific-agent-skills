@@ -859,24 +859,24 @@ Incorporate specific numbers, percentages, and dates from the research."""
                 if isinstance(error_msg, dict):
                     error_msg = error_msg.get("message", str(error_msg))
                 self._last_error = f"API Error: {error_msg}"
-                print(f"✗ {self._last_error}")
+                print(f"[FAIL] {self._last_error}")
                 return None
             
             image_data = self._extract_image_from_response(response)
             if image_data:
-                self._log(f"✓ Generated image ({len(image_data)} bytes)")
+                self._log(f"[OK] Generated image ({len(image_data)} bytes)")
             else:
                 self._last_error = "No image data in API response"
-                self._log(f"✗ {self._last_error}")
+                self._log(f"[FAIL] {self._last_error}")
             
             return image_data
         except RuntimeError as e:
             self._last_error = str(e)
-            self._log(f"✗ Generation failed: {self._last_error}")
+            self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
         except Exception as e:
             self._last_error = f"Unexpected error: {str(e)}"
-            self._log(f"✗ Generation failed: {self._last_error}")
+            self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
     
     def review_image(self, image_path: str, original_prompt: str,
@@ -988,7 +988,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
                 # provider hiccup. The image itself is fine; only its review is
                 # missing, and saying so beats inventing a score.
                 reason = "the review model returned no choices"
-                self._log(f"⚠ Review unavailable: {reason}")
+                self._log(f"[WARN] Review unavailable: {reason}")
                 return ReviewResult(
                     f"Review unavailable: {reason}.",
                     None, False, reviewed=False, error=reason,
@@ -1013,7 +1013,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
 
             if score is None and verdict is None:
                 reason = "no score or verdict found in the review"
-                self._log(f"⚠ Review unusable: {reason}")
+                self._log(f"[WARN] Review unusable: {reason}")
                 return ReviewResult(
                     content if content else f"Review unusable: {reason}.",
                     None, False, reviewed=True, error=reason,
@@ -1024,7 +1024,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
             )
 
             shown = f"{score}/10" if score is not None else "not stated"
-            self._log(f"✓ Review complete (Score: {shown}, Threshold: {threshold}/10)")
+            self._log(f"[OK] Review complete (Score: {shown}, Threshold: {threshold}/10)")
             self._log(f"  Verdict: {'Needs improvement' if needs_improvement else 'Acceptable'}")
 
             return ReviewResult(
@@ -1037,7 +1037,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
         except Exception as e:
             # A failed review must not fail the run -- the image is already
             # generated and saved -- but it must not read as a pass either.
-            self._log(f"⚠ Review failed: {str(e)}")
+            self._log(f"[WARN] Review failed: {str(e)}")
             return ReviewResult(
                 f"Review failed: {str(e)}",
                 None, False, reviewed=False, error=str(e),
@@ -1187,7 +1187,7 @@ Generate an improved version that:
             research_result = self.research_topic(user_prompt, infographic_type)
             
             if research_result.get("success"):
-                print(f"✓ Research complete - gathered facts and statistics")
+                print(f"[OK] Research complete - gathered facts and statistics")
                 results["research_data"] = research_result
                 
                 # Enhance the prompt with researched data
@@ -1197,9 +1197,9 @@ Generate an improved version that:
                 research_path = output_dir / f"{base_name}_research.json"
                 with open(research_path, "w") as f:
                     json.dump(research_result, f, indent=2)
-                print(f"✓ Research saved: {research_path}")
+                print(f"[OK] Research saved: {research_path}")
             else:
-                print(f"⚠ Research failed: {research_result.get('error', 'Unknown error')}")
+                print(f"[WARN] Research failed: {research_result.get('error', 'Unknown error')}")
                 print(f"  Proceeding with original prompt...")
         
         # Build initial prompt (using enhanced prompt if research was done)
@@ -1217,7 +1217,7 @@ Generate an improved version that:
             
             if not image_data:
                 error_msg = getattr(self, '_last_error', 'Generation failed')
-                print(f"✗ Generation failed: {error_msg}")
+                print(f"[FAIL] Generation failed: {error_msg}")
                 results["iterations"].append({
                     "iteration": i,
                     "success": False,
@@ -1229,7 +1229,7 @@ Generate an improved version that:
             iter_path = output_dir / f"{base_name}_v{i}{extension}"
             with open(iter_path, "wb") as f:
                 f.write(image_data)
-            print(f"✓ Saved: {iter_path}")
+            print(f"[OK] Saved: {iter_path}")
             
             # Review the image with the vision review model
             print(f"Reviewing with {self.review_model}...")
@@ -1237,9 +1237,9 @@ Generate an improved version that:
                 str(iter_path), user_prompt, infographic_type, i, doc_type, iterations
             )
             if review.score is not None:
-                print(f"✓ Score: {review.score}/10 (threshold: {threshold}/10)")
+                print(f"[OK] Score: {review.score}/10 (threshold: {threshold}/10)")
             else:
-                print(f"⚠ Review unavailable — image kept, quality not verified")
+                print(f"[WARN] Review unavailable — image kept, quality not verified")
                 print(f"  Reason: {review.error}")
 
             # Save iteration results
@@ -1259,12 +1259,12 @@ Generate an improved version that:
             # Check if quality is acceptable
             if not review.needs_improvement:
                 if review.score is not None:
-                    print(f"\n✓ Quality meets threshold ({review.score} >= {threshold})")
+                    print(f"\n[OK] Quality meets threshold ({review.score} >= {threshold})")
                     print(f"  No further iterations needed!")
                     reason = f"Quality score {review.score} meets threshold {threshold}"
                 else:
                     # Regenerating cannot fix a reviewer that did not answer.
-                    print(f"\n⚠ Stopping without a verified score — review the image yourself")
+                    print(f"\n[WARN] Stopping without a verified score — review the image yourself")
                     reason = f"Review did not produce a score: {review.error}"
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
@@ -1276,7 +1276,7 @@ Generate an improved version that:
 
             # If this is the last iteration, we're done
             if i == iterations:
-                print(f"\n⚠ Maximum iterations reached")
+                print(f"\n[WARN] Maximum iterations reached")
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
                 results["final_reviewed"] = review.reviewed and review.score is not None
@@ -1284,7 +1284,7 @@ Generate an improved version that:
                 break
 
             # Quality below threshold - improve prompt
-            print(f"\n⚠ Quality below threshold ({review.score} < {threshold})")
+            print(f"\n[WARN] Quality below threshold ({review.score} < {threshold})")
             print(f"Improving prompt based on feedback...")
             current_prompt = self.improve_prompt(
                 user_prompt, review.critique, infographic_type, style, palette, background, i + 1,
@@ -1297,13 +1297,13 @@ Generate an improved version that:
             if final_iter_path != output_path:
                 import shutil
                 shutil.copy(final_iter_path, output_path)
-                print(f"\n✓ Final image: {output_path}")
+                print(f"\n[OK] Final image: {output_path}")
         
         # Save review log
         log_path = output_dir / f"{base_name}_review_log.json"
         with open(log_path, "w") as f:
             json.dump(results, f, indent=2)
-        print(f"✓ Review log: {log_path}")
+        print(f"[OK] Review log: {log_path}")
         
         print(f"\n{'='*60}")
         print(f"Generation Complete!")
@@ -1429,16 +1429,16 @@ Environment:
         )
         
         if results["success"]:
-            print(f"\n✓ Success! Infographic saved to: {args.output}")
+            print(f"\n[OK] Success! Infographic saved to: {args.output}")
             if results.get("early_stop"):
                 iterations_used = len([r for r in results['iterations'] if r.get('success')])
                 print(f"  (Completed in {iterations_used} iteration(s) - quality threshold met)")
             sys.exit(0)
         else:
-            print(f"\n✗ Generation failed. Check review log for details.")
+            print(f"\n[FAIL] Generation failed. Check review log for details.")
             sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Error: {str(e)}")
+        print(f"\n[FAIL] Error: {str(e)}")
         sys.exit(1)
 
 

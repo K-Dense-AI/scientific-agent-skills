@@ -295,7 +295,7 @@ def main():
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(output)
-        print(f"✓ Results saved to: {output_file}")
+        print(f"[OK] Results saved to: {output_file}")
     else:
         print(output)
 

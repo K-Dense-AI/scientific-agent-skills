@@ -148,27 +148,27 @@ print(summary)
 # Check convergence
 bad_rhat = summary[summary['r_hat'] > 1.01]
 if len(bad_rhat) > 0:
-    print(f"\n⚠️  WARNING: {len(bad_rhat)} parameters with R-hat > 1.01")
+    print(f"\n[WARN]  WARNING: {len(bad_rhat)} parameters with R-hat > 1.01")
     print(bad_rhat[['r_hat']])
 else:
-    print("\n✓ All R-hat values < 1.01 (good convergence)")
+    print("\n[OK] All R-hat values < 1.01 (good convergence)")
 
 # Check effective sample size
 low_ess = summary[summary['ess_bulk'] < 400]
 if len(low_ess) > 0:
-    print(f"\n⚠️  WARNING: {len(low_ess)} parameters with ESS < 400")
+    print(f"\n[WARN]  WARNING: {len(low_ess)} parameters with ESS < 400")
     print(low_ess[['ess_bulk']].head(10))
 else:
-    print("\n✓ All ESS values > 400 (sufficient samples)")
+    print("\n[OK] All ESS values > 400 (sufficient samples)")
 
 # Check divergences
 divergences = idata.sample_stats.diverging.sum().item()
 if divergences > 0:
-    print(f"\n⚠️  WARNING: {divergences} divergent transitions")
+    print(f"\n[WARN]  WARNING: {divergences} divergent transitions")
     print("   This is common in hierarchical models - non-centered parameterization already applied")
     print("   Consider even higher target_accept or stronger hyperpriors")
 else:
-    print("\n✓ No divergences")
+    print("\n[OK] No divergences")
 
 # Trace plots for hyperparameters
 az.plot_trace_dist(

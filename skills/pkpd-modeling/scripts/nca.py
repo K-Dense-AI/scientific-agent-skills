@@ -243,11 +243,11 @@ def estimate_lambda_z(
 ) -> LambdaZ:
     """Select the terminal window by best adjusted r-squared.
 
-    The rule implemented is the widely used one: start from the last three
-    quantifiable points, extend backwards one point at a time, and keep the
-    longer window only when adjusted r-squared improves by more than 0.0001.
-    Adjusted r-squared, not r-squared, is essential — plain r-squared can only
-    rise as points are added, so it would always select the longest window.
+    This helper starts from the last three quantifiable points, extends
+    backwards, and retains a longer window only when adjusted r-squared
+    improves by more than 0.0001. Unlike Phoenix Best Fit, it does not favor
+    the longer window when scores are within that tolerance. Neither plain
+    nor adjusted r-squared is monotonic as observations are added.
 
     Points at or before Tmax are never eligible. Including Tmax makes the fit
     describe the tail of absorption rather than elimination, which biases

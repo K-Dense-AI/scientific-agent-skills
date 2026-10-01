@@ -124,14 +124,6 @@ Maximum recommended depth: 3 rounds.
 
 ## Probability Calibration Guide
 
-When assigning probabilities to branches:
+Separate event likelihood from confidence in its estimate. A rare event can have a precisely estimated probability; a likely event can have weak evidence. Record the forecast horizon, operational outcome definition, base rate, evidence, estimation method, and uncertainty range. Use qualitative plausibility or "not estimated" when numerical probabilities are unsupported.
 
-| Confidence Level | Probability Range | Evidence Required                                          |
-| ---------------- | ----------------- | ---------------------------------------------------------- |
-| **Very High**    | >80%              | Strong historical precedent + current data alignment       |
-| **High**         | 60-80%            | Multiple converging signals, some historical support       |
-| **Medium**       | 30-60%            | Mixed signals, could go either way                         |
-| **Low**          | 10-30%            | Plausible but requires several things to go a specific way |
-| **Very Low**     | <10%              | Black swan territory — possible but unlikely               |
-
-**Rule:** All branch probabilities in a single analysis should sum to approximately 100%. If they don't, there's a missing branch.
+Only probabilities for mutually exclusive, collectively exhaustive outcomes sum to 100%. The six branch prompts can overlap, especially second-order and wild-card scenarios; do not normalize their labels as if they formed an outcome partition. Keep resource allocation separate from probability estimation.

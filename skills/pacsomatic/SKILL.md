@@ -3,7 +3,7 @@ name: pacsomatic
 description: Operator toolkit for nf-core/pacsomatic matched tumor-normal workflows from BAM inputs. Use this skill when the user needs to validate run inputs, generate pacsomatic-compliant samplesheets, prepare reproducible Nextflow launch artifacts, run locally or submit to schedulers (LSF/Slurm/PBS/SGE), and triage execution failures. Triggers on requests to run pacsomatic, prepare launch commands/scripts, perform dry-run checks, or troubleshoot pipeline startup and scheduler submission errors.
 license: MIT
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Beifang Niu
   contributors: Haidong, Wenchao
   upstream-pipeline: https://github.com/nf-core/pacsomatic
@@ -68,7 +68,10 @@ Required:
 
 Optional:
 - profile, resources, scheduler account/queue
-- pipeline version (`-r`)
+- pipeline revision via the helper's `--pipeline-version` option (forwarded to
+  Nextflow as `-r`); choose and record an explicit release tag or commit for
+  reproducible runs, as recommended in the
+  [pipeline usage documentation](https://nf-co.re/pacsomatic/latest/docs/usage/)
 - params file, resume/report/dag flags
 - `--dry-run` and/or `--run`
 
@@ -136,7 +139,7 @@ Use `config.yaml` as the baseline for profile/executor/runtime defaults. Overrid
 
 ## Testing
 
-Run unit tests from skill root:
+Run unit tests from the repository root (the suite is outside the skill):
 
 ```bash
 python -m unittest discover -s tests/pacsomatic -v

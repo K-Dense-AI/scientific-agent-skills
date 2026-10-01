@@ -189,7 +189,14 @@ rec_corrected = interpolate_motion(
 
 ## Integration with Spike Sorting
 
-### Option 1: Pre-correction (Recommended)
+### Option 1: Pre-correction
+
+Illustrative recording-dependent examples: validate on the target recording. Use one
+drift-correction stage. With externally corrected input, Kilosort 2.5/3/4 needs
+`do_correction=False`; Spykingcircus2 needs `apply_motion_correction=False`.
+These defaults and parameter names were inspected in SpikeInterface 0.105.0;
+recheck them when changing versions. Setting `apply_preprocessing=False` for
+Spykingcircus2 does not disable its separate motion-correction stage.
 
 ```python
 # Correct before sorting
@@ -200,7 +207,7 @@ rec_corrected = rec_corrected.save(folder='preprocessed_motion_corrected/',
                                     format='binary', n_jobs=8)
 
 # Run spike sorting on corrected data
-sorting = si.run_sorter('kilosort4', rec_corrected, folder='ks4/')
+sorting = si.run_sorter('kilosort4', rec_corrected, folder='ks4/', do_correction=False)
 ```
 
 ### Option 2: Let Kilosort Handle It

@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: Apache-2.0
 compatibility: Requires Python >=3.10,<3.15, uv, and matchms 0.33.1. Local file workflows need no credentials; metabolomics-USI loading requires network access.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -64,8 +64,10 @@ package metadata.
    Modified and neutral-loss scores require valid `precursor_mz`.
 6. **Estimate `len(references) * len(queries)` before scoring.** A sparse result
    container does not automatically avoid computing every requested pair.
-7. **Report score settings and evidence.** Include tolerance, preprocessing,
+7. **Report score settings and evidence.** Include tolerance **and units**, preprocessing,
    score name, number of matched peaks when available, and candidate metadata.
+   The cosine-family `tolerance` is an absolute m/z window in Da, not ppm;
+   a precursor filter with `tolerance_type="ppm"` does not change fragment tolerance.
 8. **Validate top hits visually and chemically.** Use mirror plots, precursor
    agreement, ion/adduct compatibility, and orthogonal evidence.
 
@@ -191,7 +193,9 @@ or interpreting structured outputs.
 
 ## Large Comparisons
 
-For all-vs-all scoring of one collection, set `is_symmetric=True`:
+For all-vs-all scoring, set `is_symmetric=True` only when references and queries
+are the same spectra in the same order **and the metric is symmetric**. Equal
+list lengths or matching IDs alone are insufficient:
 
 ```python
 scores = calculate_scores(

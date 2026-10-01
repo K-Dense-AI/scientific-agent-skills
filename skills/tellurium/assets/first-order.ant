@@ -1,0 +1,17 @@
+// Synthetic closed, constant-volume first-order conversion; concentrations in mol/L.
+model first_order()
+  compartment cell = 1;
+  cell has litre;
+  species A in cell, B in cell;
+  A = 1; A has molar;
+  B = 0; B has molar;
+  k = 0.2; k has per_second;
+  conversion: A -> B; k*A*cell;
+  const cell, k;
+  unit molar = mole / litre;
+  unit per_second = 1 / second;
+  unit substance = mole;
+  unit extent = mole;
+  unit volume = litre;
+  unit time_unit = second;
+end

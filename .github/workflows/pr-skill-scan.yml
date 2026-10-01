@@ -12,17 +12,39 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 concurrency:
   group: pr-skill-scan-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
+  scan-unavailable:
+    name: Security scan skipped (restricted PR)
+    if: github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Explain why the security scan did not run
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Skill security scan skipped
+
+          Fork and Dependabot pull requests do not receive the Actions secret used
+          by this scanner and have a read-only token. No security scan ran, and no
+          PR comment was attempted. This is not a passing security assessment.
+
+          A maintainer can review the changes and run `scan_pr_skills.py` in a
+          trusted environment before merging.
+          EOF
+
   scan:
     name: Scan changed skills
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout PR
@@ -73,8 +95,8 @@ jobs:
         if: steps.changed.outputs.skill_dirs != ''
         run: uv sync --python 3.13
 
-      # Fork PRs do not receive SKILL_SCANNER_LLM_API_KEY. scan_pr_skills.py
-      # detects the missing key, writes an explanatory sticky comment, and exits 0.
+      # Same-repository runs can still lack a configured key. The wrapper writes
+      # an explicit skipped report, which is published in the summary and comment.
       - name: Run scanner on changed skills
         if: steps.changed.outputs.skill_dirs != ''
         id: scan
@@ -96,6 +118,10 @@ jobs:
 
           No skill directories (with a `SKILL.md`) were changed in this PR — nothing to scan.
           EOF
+
+      - name: Publish scan report in the job summary
+        if: always() && hashFiles('pr_scan_comment.md') != ''
+        run: cat pr_scan_comment.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload scan comment as artifact
         if: always()

@@ -76,9 +76,9 @@ def validate_csv(csv_path, base_dir=None):
     # Read CSV
     try:
         df = pd.read_csv(csv_path)
-        messages.append(f"✓ Successfully read CSV with {len(df)} rows")
+        messages.append(f"[OK] Successfully read CSV with {len(df)} rows")
     except Exception as e:
-        messages.append(f"✗ Error reading CSV: {e}")
+        messages.append(f"[FAIL] Error reading CSV: {e}")
         return False, messages
 
     # Check required columns
@@ -86,10 +86,10 @@ def validate_csv(csv_path, base_dir=None):
     missing_cols = [col for col in required_cols if col not in df.columns]
 
     if missing_cols:
-        messages.append(f"✗ Missing required columns: {', '.join(missing_cols)}")
+        messages.append(f"[FAIL] Missing required columns: {', '.join(missing_cols)}")
         valid = False
     else:
-        messages.append("✓ All required columns present")
+        messages.append("[OK] All required columns present")
 
     # Set base directory
     if base_dir is None:
@@ -152,9 +152,9 @@ def validate_csv(csv_path, base_dir=None):
     # Summary
     messages.append(f"\n{'='*60}")
     if valid:
-        messages.append("✓ CSV validation PASSED - ready for DiffDock")
+        messages.append("[OK] CSV validation PASSED - ready for DiffDock")
     else:
-        messages.append("✗ CSV validation FAILED - please fix issues above")
+        messages.append("[FAIL] CSV validation FAILED - please fix issues above")
 
     return valid, messages
 
@@ -219,7 +219,7 @@ Examples:
     if args.create:
         output_path = args.output or 'diffdock_batch_template.csv'
         df = create_template_csv(output_path, args.num_examples)
-        print(f"✓ Created template CSV: {output_path}")
+        print(f"[OK] Created template CSV: {output_path}")
         print(f"\nTemplate contents:")
         print(df.to_string(index=False))
         print(f"\nEdit this file with your protein-ligand pairs and run with:")

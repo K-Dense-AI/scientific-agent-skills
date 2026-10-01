@@ -1,0 +1,21 @@
+{
+  "skill_name": "13c-metabolic-flux",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Analyze the supplied steady-state 13C tracing experiment. Estimate flux v3 and assess whether flux v7 can be determined from the measurements. Fit the complete model using the stated measurement covariance and constraints, perform a nuisance-reoptimized profile for each target, and distinguish data-supported limits from imposed bounds. Return fit.json with numerical evidence and assessment.json with estimates, identifiability conclusions, assumptions, and limitations. Inputs are synthetic tracer-only MDVs; do not invent biological validation. An isolated Python 3.11 environment with mfapy 0.6.3, NumPy and SciPy is available; shell and internet access are available. Work only in your output directory; do not modify the repository. Spend at most six minutes on this task, and report any incomplete steps honestly.",
+      "expected_output": "Numerical fit and scientifically qualified flux-identifiability assessment",
+      "files": [
+        "assets/tca-model.json",
+        "assets/tca-reference-mdv.json"
+      ],
+      "assertions": [
+        "Recover v3 near 50 within 0.1 relative flux units.",
+        "Recognize that v7 is not determined by the isotope measurements, with numerical supporting evidence.",
+        "Preserve mass balance and the fixed reference flux.",
+        "Use the declared compositional covariance without counting all six bins as independent.",
+        "Reoptimize nuisance fluxes at each profile point and distinguish bounds from measurement information."
+      ]
+    }
+  ]
+}

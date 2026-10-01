@@ -5,7 +5,7 @@ license: Apache-2.0
 allowed-tools: Read Write Edit Bash
 compatibility: Python 3.10+. Optional LibreOffice (Office formats) and ImageMagick (images). Bundled Tesseract for OCR. All processing is local — no cloud API required.
 metadata:
-  version: "1.2"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -13,7 +13,9 @@ metadata:
 
 ## Overview
 
-LiteParse is a fast, open-source document parser (Rust core, Python/Node bindings) focused on **local, layout-aware text extraction** with bounding boxes. It does not produce Markdown and does not call cloud LLMs. Outputs are **plain text** (layout-preserved) or **structured JSON** with per-page `text_items` (position, font metadata, optional confidence).
+LiteParse is a fast, open-source document parser (Rust core, Python/Node bindings) focused on **local, layout-aware text extraction** with bounding boxes. The pinned workflows here use **plain text** (layout-preserved) or **structured JSON** with per-page `text_items` (position, font metadata, optional confidence) and do not call cloud LLMs.
+
+**Capability drift:** [current upstream releases also document Markdown output](https://developers.llamaindex.ai/liteparse/). Do not treat that as unavailable across the project or copy current flags into the pinned 2.0.0 environment without checking its CLI/API. Review and test a version upgrade separately.
 
 **Version note:** Examples target **liteparse 2.0.0** (PyPI, May 2026). The upstream V1 branch is legacy; this skill documents **V2 / main** only.
 

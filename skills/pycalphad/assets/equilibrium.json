@@ -1,0 +1,14 @@
+{
+  "components": ["CU", "NI", "VA"],
+  "phases": ["FCC_A1", "LIQUID"],
+  "composition_basis": "mole_fraction",
+  "dependent_component": "CU",
+  "independent_mole_fractions": {"NI": 0.5},
+  "temperatures_k": [900.0, 1100.0, 1300.0],
+  "pressure_pa": 101325.0,
+  "database_temperature_range_k": [298.15, 2000.0],
+  "pdens": 500,
+  "mass_balance_tolerance": 1e-7,
+  "phase_fraction_tolerance": 1e-6,
+  "gibbs_energy_tolerance_j_per_mol": 0.01
+}

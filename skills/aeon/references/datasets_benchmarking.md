@@ -145,16 +145,17 @@ print(metadata)
 Access pre-computed benchmark results:
 
 ```python
-from aeon.benchmarking import get_estimator_results
+from aeon.benchmarking.results_loaders import get_estimator_results
 
 # Get results for specific algorithm on dataset
 results = get_estimator_results(
-    estimator_name="ROCKET",
-    dataset_name="GunPoint"
+    estimators="ROCKET",
+    datasets=["GunPoint"]
 )
 
-# Get all available estimators for a dataset
-estimators = get_available_estimators("GunPoint")
+# Get estimators available for this task
+from aeon.benchmarking.results_loaders import get_available_estimators
+estimators = get_available_estimators(task="classification")
 ```
 
 ### Resampling Strategies
@@ -266,7 +267,7 @@ Complete benchmarking workflow:
 ```python
 from aeon.datasets import load_classification
 from aeon.classification.convolution_based import RocketClassifier
-from aeon.benchmarking import get_estimator_results
+from aeon.benchmarking.results_loaders import get_estimator_results
 from sklearn.metrics import accuracy_score
 import numpy as np
 
@@ -285,8 +286,8 @@ accuracy = accuracy_score(y_test, y_pred)
 print(f"Accuracy: {accuracy:.4f}")
 
 # Compare with published results
-published = get_estimator_results("ROCKET", dataset_name)
-print(f"Published ROCKET accuracy: {published['accuracy']:.4f}")
+published = get_estimator_results("ROCKET", [dataset_name])
+print("Published ROCKET results:", published)
 ```
 
 ## Best Practices

@@ -464,6 +464,11 @@ packages = []
 [skills.biopython]
 packages = ["biopython", "matplotlib", "numpy", "reportlab"]
 
+# Primer design and nearest-neighbor thermodynamics; BLAST+ is an optional system tool.
+[skills.primer-design]
+python = "3.13"
+packages = ["primer3-py==2.3.1"]
+
 [skills.pysam]
 packages = ["pysam"]
 
@@ -501,6 +506,10 @@ packages = ["deeptools"]
 [skills.flowio]
 packages = ["flowio", "numpy", "pandas"]
 
+[skills.flowkit]
+python = "3.13"
+packages = ["flowkit==1.3.2"]
+
 [skills.etetoolkit]
 packages = ["ete4"]
 
@@ -513,6 +522,9 @@ packages = ["dnaerys"]
 
 [skills.genomic-intelligence]
 packages = ["requests"]
+
+[skills.alphagenome]
+packages = ["alphagenome"]
 
 [skills.dhdna-profiler]
 packages = []
@@ -577,6 +589,16 @@ packages = ["pytdc", "setuptools"]
 
 [skills.cobrapy]
 packages = ["cobra", "matplotlib", "pandas", "seaborn"]
+
+[skills.13c-metabolic-flux]
+python = "3.11"
+# mfapy is GitHub-only; pin the reviewed source, not a moving branch.
+packages = [
+    "mfapy @ git+https://github.com/fumiomatsuda/mfapy.git@a10433af16682386548b360297e2476152d46ede",
+    "numpy==2.4.6",
+    "scipy==1.17.1",
+    "nlopt==2.11.0",
+]
 
 # --- medical imaging and clinical data ------------------------------------
 
@@ -675,7 +697,7 @@ packages = [
 ]
 
 [skills.qutip]
-packages = ["qutip", "qutip-qip", "qutip-qtrl", "qutip-jax", "matplotlib", "numpy"]
+packages = ["qutip==5.3.0", "qutip-qip==0.4.2", "qutip-qtrl==0.2.0", "qutip-jax==0.1.1", "matplotlib", "numpy"]
 
 # --- physics, astronomy, and simulation -----------------------------------
 
@@ -697,10 +719,33 @@ packages = ["openpiv", "numpy", "scipy", "scikit-image", "matplotlib"]
 python = "3.12"
 packages = ["build123d", "matplotlib"]
 
+[skills.fictiv]
+# check_cad_file.py is standard library only; the STEP fixtures are committed
+# build123d exports, so the suite needs no CAD kernel. The browser scripts are
+# syntax-checked with node when it is on PATH.
+packages = []
+
+# --- chemical oceanography ------------------------------------------------
+
+[skills.marine-carbonate-chemistry]
+python = "3.13"
+packages = ["PyCO2SYS==1.8.3.4", "numpy==2.5.1"]
+
 # --- geospatial -----------------------------------------------------------
 
 [skills.geopandas]
-packages = ["geopandas", "pyogrio", "pyproj", "shapely", "pyarrow", "matplotlib", "sqlalchemy"]
+packages = [
+    "geopandas==1.1.4",
+    "numpy==2.5.1",
+    "packaging==26.2",
+    "pandas==3.0.5",
+    "pyarrow==25.0.0",
+    "pyogrio==0.13.0",
+    "pyproj==3.7.2",
+    "shapely==2.1.2",
+    "matplotlib",
+    "sqlalchemy",
+]
 
 [skills.geomaster]
 packages = [
@@ -789,12 +834,69 @@ packages = []
 python = "3.10"
 packages = ["torch"]
 
+# --- additional executable scientific workflows --------------------------
+
+[skills.nmrglue]
+python = "3.12"
+packages = ["nmrglue==0.12", "numpy==2.5.3", "scipy==1.18.1"]
+
+[skills.mageck]
+python = "3.11"
+packages = []
+
+[skills.cantera]
+python = "3.12"
+packages = ["cantera==3.2.0", "numpy==2.5.3"]
+
+[skills.cellprofiler]
+python = "3.12"
+packages = ["numpy==2.5.3", "tifffile==2026.9.20"]
+
+[skills.nwb-conversion]
+python = "3.12"
+packages = [
+    "neuroconv[tiff]==0.10.2",
+    "pynwb==4.2.0",
+    "nwbinspector==0.7.2",
+    "roiextractors==0.10.0",
+    "tifffile==2026.9.20",
+    "zarr==2.18.7",
+    "hdmf-zarr==0.11.3",
+]
+
+[skills.pycalphad]
+python = "3.12"
+packages = ["pycalphad==0.11.2", "numpy==2.5.3"]
+
+[skills.pybamm]
+python = "3.12"
+packages = ["pybamm==26.9.0.0", "pybammsolvers==0.10.0"]
+
+[skills.qiime2-amplicon]
+python = "3.12"
+packages = []
+
+[skills.relion]
+python = "3.12"
+packages = ["numpy==2.5.3", "mrcfile==1.5.4", "starfile==0.5.13"]
+
+[skills.tellurium]
+python = "3.11"
+packages = [
+    "tellurium==2.2.13.1", "libroadrunner==2.10.0", "antimony==3.2.0",
+    "python-libsbml==5.21.2", "python-libsedml==2.0.34", "python-libcombine==0.2.20",
+]
+
 # --- packages a skill documents that cannot be installed here -------------
 #
 # The runner prints these when it sets up the skill, so the gap is visible in
 # the test output rather than rediscovered each time.
 
 [unavailable]
+qiime2-amplicon = "qiime2-amplicon skill: QIIME 2 2026.7 requires the full conda/container distribution including R and DADA2, rather than a pip installation. The portable helper suite is standard-library only."
+relion = "relion skill: RELION 5.0.1 C++/MPI executables require a native build with FFTW, OpenMP, and MPI; the Python validators are tested separately."
+cellprofiler = "cellprofiler skill: CellProfiler 4.2.8 needs Java and native system dependencies. Real integration was tested in the official linux/amd64 Docker image; the portable helper suite needs NumPy and tifffile only."
+mageck = "mageck skill: MAGeCK 0.5.9.5 requires a source or Bioconda installation with its compiled RRA binary. Put the executable on PATH to run real integration tests; the bundled validation helpers use only the standard library."
 adaptyv-sdk = "adaptyv skill: distributed from GitHub only, not on PyPI"
 tiledbvcf = "tiledbvcf skill: not published to PyPI; conda-forge or a source build only"
 matlabengine = "matlab skill: requires a local MATLAB installation to build against"

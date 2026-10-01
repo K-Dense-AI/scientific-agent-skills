@@ -114,7 +114,7 @@ def main() -> None:
 
     # Save
     fig.savefig(OUTPUT_FILE, dpi=150, bbox_inches="tight")
-    print(f"✅ Saved visualization to: {OUTPUT_FILE}")
+    print(f"[OK] Saved visualization to: {OUTPUT_FILE}")
 
     plt.close()
 

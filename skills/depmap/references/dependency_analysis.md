@@ -2,19 +2,23 @@
 
 ## Understanding Chronos Scores
 
-Chronos is the current (v5+) algorithm for computing gene dependency scores from CRISPR screen data. It addresses systematic biases including:
+Chronos is the algorithm for computing gene dependency scores from CRISPR screen data. It addresses systematic biases including:
 - Copy number effects (high-copy genes appear essential due to DNA cutting)
 - Guide RNA efficiency variation
 - Cell line growth rates
 
 ### Score Interpretation
 
+The ranges below are descriptive effect-size heuristics, not calibrated statistical
+calls. Compare control distributions and the release-specific hit-calling outputs;
+use probability/FDR only with its documented scale and direction.
+
 | Score Range | Interpretation |
 |------------|----------------|
 | > 0 | Likely growth-promoting when knocked out (some noise) |
 | 0 to −0.3 | Non-essential: minimal fitness effect |
 | −0.3 to −0.5 | Mild dependency |
-| −0.5 to −1.0 | Significant dependency |
+| −0.5 to −1.0 | Larger negative fitness effect; significance assessed separately |
 | < −1.0 | Strong dependency (common essential range) |
 | ≈ −1.0 | Median of pan-essential genes (e.g., proteasome subunits) |
 

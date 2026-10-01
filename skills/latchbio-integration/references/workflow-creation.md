@@ -232,6 +232,12 @@ def build_index(reference: LatchFile) -> LatchFile:
     ...
 ```
 
+- **Resume versus new execution:** Console **Retry from failed task** reuses
+  completed upstream outputs. Before resuming, verify those outputs still match
+  the intended inputs, reference data, and code. If an upstream scientific step
+  changed, launch an execution that recomputes that step and invalidate its cache
+  explicitly; a downstream retry cannot repair stale upstream results. See the
+  [official caching guide](https://wiki.latch.bio/workflows/sdk/python/caching).
 - Change `cache_version` whenever output-affecting logic or dependencies change.
 - Cache only deterministic tasks.
 - Retries should cover transient failures, not malformed inputs.

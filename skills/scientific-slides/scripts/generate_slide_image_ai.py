@@ -456,24 +456,24 @@ STYLE:
                 if isinstance(error_msg, dict):
                     error_msg = error_msg.get("message", str(error_msg))
                 self._last_error = f"API Error: {error_msg}"
-                print(f"✗ {self._last_error}")
+                print(f"[FAIL] {self._last_error}")
                 return None
             
             image_data = self._extract_image_from_response(response)
             if image_data:
-                self._log(f"✓ Generated image ({len(image_data)} bytes)")
+                self._log(f"[OK] Generated image ({len(image_data)} bytes)")
             else:
                 self._last_error = "No image data in API response"
-                self._log(f"✗ {self._last_error}")
+                self._log(f"[FAIL] {self._last_error}")
             
             return image_data
         except RuntimeError as e:
             self._last_error = str(e)
-            self._log(f"✗ Generation failed: {self._last_error}")
+            self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
         except Exception as e:
             self._last_error = f"Unexpected error: {str(e)}"
-            self._log(f"✗ Generation failed: {self._last_error}")
+            self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
     
     def review_image(self, image_path: str, original_prompt: str, 
@@ -554,7 +554,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
                 # provider hiccup. The image itself is fine; only its review is
                 # missing, and saying so beats inventing a score.
                 reason = "the review model returned no choices"
-                self._log(f"⚠ Review unavailable: {reason}")
+                self._log(f"[WARN] Review unavailable: {reason}")
                 return ReviewResult(
                     f"Review unavailable: {reason}.",
                     None, False, reviewed=False, error=reason,
@@ -579,7 +579,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
 
             if score is None and verdict is None:
                 reason = "no score or verdict found in the review"
-                self._log(f"⚠ Review unusable: {reason}")
+                self._log(f"[WARN] Review unusable: {reason}")
                 return ReviewResult(
                     content if content else f"Review unusable: {reason}.",
                     None, False, reviewed=True, error=reason,
@@ -590,7 +590,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
             )
 
             shown = f"{score}/10" if score is not None else "not stated"
-            self._log(f"✓ Review complete (Score: {shown}, Threshold: {threshold}/10)")
+            self._log(f"[OK] Review complete (Score: {shown}, Threshold: {threshold}/10)")
 
             return ReviewResult(
                 content if content else "Review returned no text",
@@ -602,7 +602,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
         except Exception as e:
             # A failed review must not fail the run -- the image is already
             # generated -- but it must not read as a pass either.
-            self._log(f"⚠ Review failed: {str(e)}")
+            self._log(f"[WARN] Review failed: {str(e)}")
             return ReviewResult(
                 f"Review failed: {str(e)}",
                 None, False, reviewed=False, error=str(e),
@@ -697,7 +697,7 @@ Generate a high-quality {'visual/figure' if visual_only else 'presentation slide
             
             if not image_data:
                 error_msg = self._last_error or 'Image generation failed'
-                print(f"✗ Generation failed: {error_msg}")
+                print(f"[FAIL] Generation failed: {error_msg}")
                 results["iterations"].append({
                     "iteration": i,
                     "success": False,
@@ -714,16 +714,16 @@ Generate a high-quality {'visual/figure' if visual_only else 'presentation slide
             
             with open(temp_path, "wb") as f:
                 f.write(image_data)
-            print(f"✓ Generated image (iteration {i})")
+            print(f"[OK] Generated image (iteration {i})")
             
             print(f"Reviewing image with {self.review_model}...")
             review = self.review_image(
                 str(temp_path), user_prompt, i, visual_only, iterations
             )
             if review.score is not None:
-                print(f"✓ Score: {review.score}/10 (threshold: {self.QUALITY_THRESHOLD}/10)")
+                print(f"[OK] Score: {review.score}/10 (threshold: {self.QUALITY_THRESHOLD}/10)")
             else:
-                print(f"⚠ Review unavailable — image kept, quality not verified")
+                print(f"[WARN] Review unavailable — image kept, quality not verified")
                 print(f"  Reason: {review.error}")
 
             results["iterations"].append({
@@ -738,10 +738,10 @@ Generate a high-quality {'visual/figure' if visual_only else 'presentation slide
 
             if not review.needs_improvement:
                 if review.score is not None:
-                    print(f"\n✓ Quality meets threshold ({review.score} >= {self.QUALITY_THRESHOLD})")
+                    print(f"\n[OK] Quality meets threshold ({review.score} >= {self.QUALITY_THRESHOLD})")
                 else:
                     # Regenerating cannot fix a reviewer that did not answer.
-                    print(f"\n⚠ Stopping without a verified score — review the image yourself")
+                    print(f"\n[WARN] Stopping without a verified score — review the image yourself")
                 final_image_data = image_data
                 results["final_score"] = review.score
                 results["final_reviewed"] = review.reviewed and review.score is not None
@@ -750,14 +750,14 @@ Generate a high-quality {'visual/figure' if visual_only else 'presentation slide
                 break
 
             if i == iterations:
-                print(f"\n⚠ Maximum iterations reached")
+                print(f"\n[WARN] Maximum iterations reached")
                 final_image_data = image_data
                 results["final_score"] = review.score
                 results["final_reviewed"] = review.reviewed and review.score is not None
                 results["success"] = True
                 break
 
-            print(f"\n⚠ Quality below threshold ({review.score} < {self.QUALITY_THRESHOLD})")
+            print(f"\n[WARN] Quality below threshold ({review.score} < {self.QUALITY_THRESHOLD})")
             print(f"Improving prompt...")
             current_prompt = self.improve_prompt(user_prompt, review.critique, i + 1, visual_only)
         
@@ -774,7 +774,7 @@ Generate a high-quality {'visual/figure' if visual_only else 'presentation slide
             with open(output_path, "wb") as f:
                 f.write(final_image_data)
             results["final_image"] = str(output_path)
-            print(f"\n✓ Final image: {output_path}")
+            print(f"\n[OK] Final image: {output_path}")
         
         print(f"\n{'='*60}")
         print(f"Generation Complete!")
@@ -863,13 +863,13 @@ Environment:
         )
         
         if results["success"]:
-            print(f"\n✓ Success! Image saved to: {args.output}")
+            print(f"\n[OK] Success! Image saved to: {args.output}")
             sys.exit(0)
         else:
-            print(f"\n✗ Generation failed. Check review log for details.")
+            print(f"\n[FAIL] Generation failed. Check review log for details.")
             sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Error: {str(e)}")
+        print(f"\n[FAIL] Error: {str(e)}")
         sys.exit(1)
 
 

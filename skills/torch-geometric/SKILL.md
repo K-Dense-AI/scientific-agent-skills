@@ -4,7 +4,7 @@ description: PyTorch Geometric (PyG) for graph neural networks — node/link/gra
 license: MIT license
 compatibility: Requires Python 3.10+, PyTorch 2.6+, and torch-geometric 2.7.x. Optional extension wheels (pyg-lib, torch-scatter, torch-sparse, torch-cluster) must match your PyTorch/CUDA build from https://data.pyg.org/whl.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -72,6 +72,8 @@ edge_index = edge_pairs.t().contiguous()
 ```
 
 For undirected graphs, include both directions: edge (0,1) needs both `[0,1]` and `[1,0]` in edge_index.
+
+If node features are absent, set `data.num_nodes` explicitly from the node table. Inferring it from `edge_index.max() + 1` misses isolated nodes, which can corrupt batching offsets and outputs. Check `data.validate(raise_on_error=True)` after construction, including an edge-free or isolated-node case.
 
 For heterogeneous graphs, use `HeteroData` — see the Heterogeneous Graphs section below.
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides complete, end-to-end examples of common workflows using ESM3 and ESM C. Each workflow includes setup, execution, and analysis code.
+This document provides illustrative end-to-end examples of common workflows using the legacy `esm==3.2.3` ESM3 and ESM C APIs. Each workflow includes setup, execution, and analysis code. Model inference was not rerun for this refresh; PDB export signatures were checked against the pinned release.
 
 ## Workflow 1: Novel GFP Design with Chain-of-Thought
 
@@ -90,7 +90,7 @@ protein = model.generate(protein, config)
 
 # Save results
 with open("novel_gfp.pdb", "w") as f:
-    f.write(protein.to_pdb())
+    f.write(protein.to_pdb_string())
 
 with open("novel_gfp_sequence.txt", "w") as f:
     f.write(f">Novel_GFP\n{protein.sequence}\n")

@@ -256,7 +256,7 @@ sampler = ACHRSampler(model, thinning=100)
 samples = sampler.sample(n)
 
 # Validate samples
-validation = sampler.validate(sampler.samples)
+validation = sampler.validate(samples)
 # Returns array of 'v' (valid), 'l' (lower bound violation),
 # 'u' (upper bound violation), 'e' (equality violation)
 

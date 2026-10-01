@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: Apache-2.0 license
 compatibility: Requires Python 3.10+ and lightning 2.6+ (or pytorch-lightning 2.6+). GPU training needs CUDA-capable PyTorch. Optional loggers (wandb, mlflow, comet-ml) and DeepSpeed require separate installs.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -128,7 +128,7 @@ Configure with: `Trainer(strategy="ddp", accelerator="gpu", devices=4)`
 
 - Device agnostic code - Use `self.device` instead of `.cuda()`
 - Hyperparameter saving - Use `self.save_hyperparameters()` in `__init__()`
-- Metric logging - Use `self.log()` for automatic aggregation across devices
+- Metric logging - For scalar tensors, cross-device reduction requires `self.log(..., sync_dist=True)`; the default is `False`. Have all ranks participate in synchronized calls. For non-additive metrics such as AUROC, use a stateful TorchMetrics object with its own distributed synchronization instead of averaging per-rank AUROCs. See the [Lightning logging contract](https://lightning.ai/docs/pytorch/stable/extensions/logging.html) and [TorchMetrics integration](https://lightning.ai/docs/torchmetrics/stable/pages/lightning.html).
 - Reproducibility - Use `seed_everything()` and `Trainer(deterministic=True)`
 - Debugging - Use `Trainer(fast_dev_run=True)` to test with 1 batch
 

@@ -25,6 +25,14 @@ except ImportError as exc:  # pragma: no cover - depends on the caller's runtime
 
 RANGE_RE = re.compile(r"^(-?\d+):(-?\d+)$")
 BACKBONE_ATOMS = {"N", "CA", "C", "O"}
+ALLOWED_ALTLOCS = frozenset({"", "A"})
+ALTLOC_POLICY = (
+    "Use blank/A altlocs for alignment, modified-polymer detection, and both "
+    "sides of ligand contacts; prefer blank over A for the same atom site "
+    "(chain, author residue number, insertion code, residue name, atom name). "
+    "Exclude all other altlocs without occupancy ranking or fallback. "
+    "Preserve all coordinate records in the aligned PDB."
+)
 MODIFIED_POLYMER_RULE = (
     "HETATM residues are grouped by author residue number, insertion code, and "
     "residue name; a group is treated as modified polymer only when it contains "
@@ -166,13 +174,26 @@ def in_ranges(resseq: int, ranges: list[tuple[int, int]]) -> bool:
     return any(start <= resseq <= end for start, end in ranges)
 
 
+def selected_altloc_atoms(atoms: list[Atom]) -> list[Atom]:
+    """Select one blank/A coordinate per atom site without mixing alternatives."""
+    selected: dict[tuple[str, int, str, str, str], Atom] = {}
+    for atom in atoms:
+        if atom.altloc not in ALLOWED_ALTLOCS:
+            continue
+        key = (atom.chain, atom.resseq, atom.icode, atom.resname, atom.name)
+        previous = selected.get(key)
+        if previous is None or (previous.altloc != "" and atom.altloc == ""):
+            selected[key] = atom
+    return list(selected.values())
+
+
 def _group_residue_atoms(
     atoms: list[Atom], chain: str
 ) -> dict[tuple[int, str, str], list[Atom]]:
     """Group atoms by the complete author residue identity."""
     grouped: dict[tuple[int, str, str], list[Atom]] = {}
-    for atom in atoms:
-        if atom.chain != chain or atom.altloc not in {"", "A"}:
+    for atom in selected_altloc_atoms(atoms):
+        if atom.chain != chain:
             continue
         grouped.setdefault((atom.resseq, atom.icode, atom.resname), []).append(atom)
     return grouped
@@ -401,9 +422,10 @@ def ligand_contacts(
         return []
     if ligand_chains is None:
         ligand_chains = {receptor_chain}
+    selected_atoms = selected_altloc_atoms(atoms)
     ligand = [
         atom
-        for atom in atoms
+        for atom in selected_atoms
         if atom.record == "HETATM"
         and atom.chain in ligand_chains
         and atom.resname.upper() in normalized_resnames
@@ -411,10 +433,12 @@ def ligand_contacts(
     ]
     if not ligand:
         raise ValueError(
-            "no heavy-atom HETATM records matched mobile ligand residue names: "
+            "no blank/A heavy-atom HETATM records matched mobile ligand residue names: "
             + ", ".join(sorted(normalized_resnames))
             + " on chains "
             + ", ".join(sorted(ligand_chains))
+            + "; other altlocs are excluded without fallback; prepare an explicitly "
+            "selected conformer with blank/A labels before analysis"
         )
     modified_polymer_keys = modified_polymer_residue_keys(atoms, receptor_chain)
     ligand_keys = {
@@ -423,7 +447,7 @@ def ligand_contacts(
     }
     receptor = [
         atom
-        for atom in atoms
+        for atom in selected_atoms
         if atom.chain == receptor_chain
         and (
             atom.record == "ATOM"
@@ -434,7 +458,6 @@ def ligand_contacts(
         )
         and (atom.chain, atom.resseq, atom.icode, atom.resname) not in ligand_keys
         and atom.element not in {"H", "D"}
-        and atom.altloc in {"", "A"}
     ]
     best: dict[tuple[int, str, str], tuple[float, Atom, Atom]] = {}
     for receptor_atom in receptor:
@@ -458,11 +481,13 @@ def ligand_contacts(
                 "icode": key[1],
                 "receptor_resname": key[2],
                 "receptor_atom": receptor_atom.name,
+                "receptor_altloc": receptor_atom.altloc,
                 "ligand_chain": ligand_atom.chain,
                 "ligand_auth_seq_id": ligand_atom.resseq,
                 "ligand_icode": ligand_atom.icode,
                 "ligand_resname": ligand_atom.resname,
                 "ligand_atom": ligand_atom.name,
+                "ligand_altloc": ligand_atom.altloc,
                 "min_distance_A": round_float(distance),
             }
         )
@@ -626,6 +651,10 @@ def main() -> int:
             "C-alpha atoms matched by identical author residue number and insertion code; "
             "no sequence alignment or renumbering"
         ),
+        "alternate_conformer_policy": {
+            "allowed_altlocs": sorted(ALLOWED_ALTLOCS),
+            "rule": ALTLOC_POLICY,
+        },
         "modified_polymer_detection": {
             "rule": MODIFIED_POLYMER_RULE,
             "reference": {

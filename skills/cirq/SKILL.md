@@ -4,7 +4,7 @@ description: Google quantum computing framework. Use when targeting Google Quant
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -24,7 +24,7 @@ For IBM hardware use **qiskit**; for quantum ML with autodiff use **pennylane**;
 
 ## Installation
 
-Requires Python 3.11+. Current stable release: **1.6.1** (August 2025). Vendor packages share the same version number.
+Examples target **Cirq 1.6.1** on Python 3.11+. Keep Cirq vendor packages on the matching release; independently versioned integrations such as Azure Quantum need their own compatibility check.
 
 ```bash
 uv pip install "cirq==1.6.1"
@@ -221,14 +221,17 @@ def my_ansatz(params):
 # Define cost function
 def my_cost(result):
     state = result.final_state_vector
-    # Calculate cost based on state
-    return np.real(state[0])
+    # Single-qubit Pauli-Z expectation; invariant to global phase.
+    return float(abs(state[0])**2 - abs(state[1])**2)
 
 # Run optimization
 result = variational_algorithm(my_ansatz, my_cost, [0.0, 0.0])
 ```
 
 ### Hardware Execution Template
+
+Illustrative: requires provider credentials, assigned processor IDs, and current
+provider target names. The local simulation examples do not validate QPU access.
 
 ```python
 import os
@@ -294,7 +297,10 @@ def noise_comparison_study(circuit, noise_levels):
 
     return results
 
-# Run study
+# Run study on a Bell circuit with the measurement key expected above.
+q0, q1 = cirq.LineQubit.range(2)
+circuit = cirq.Circuit(cirq.H(q0), cirq.CNOT(q0, q1),
+                       cirq.measure(q0, q1, key="result"))
 noise_levels = [0.0, 0.001, 0.01, 0.05, 0.1]
 results = noise_comparison_study(circuit, noise_levels)
 ```

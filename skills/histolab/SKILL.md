@@ -4,7 +4,7 @@ description: Lightweight WSI tile extraction and preprocessing. Use for basic sl
 license: Apache-2.0 license
 compatibility: Requires Python 3.8–3.11 (histolab 0.7.0), OpenSlide system libraries, and Linux or macOS. Sample data via histolab.data requires pooch.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -32,7 +32,7 @@ Histolab 0.7.0 (latest stable) supports Python 3.8–3.11 on Linux and macOS. Wi
 
 ## Quick Start
 
-Basic workflow for extracting tiles from a whole slide image:
+Illustrative workflow for a user-provided WSI; extraction was not run in this review:
 
 ```python
 from histolab.slide import Slide
@@ -50,7 +50,7 @@ tiler = RandomTiler(
 )
 
 # Preview tile locations
-tiler.locate_tiles(slide, n_tiles=20)
+tiler.locate_tiles(slide)
 
 # Extract tiles
 tiler.extract(slide)
@@ -122,7 +122,11 @@ in [references/slide_management.md](references/slide_management.md),
 ### Training Deep Learning Models
 - Extract balanced datasets using RandomTiler across multiple slides
 - Use ScoreTiler with NucleiScorer to focus on cell-rich regions
-- Extract at consistent resolution (level 0 or level 1)
+- Match physical resolution in microns per pixel, not merely pyramid level:
+  scanners can assign different physical scales to level 0/1. Inspect slide MPP
+  metadata and use the tiler's [documented `mpp` parameter](https://histolab.readthedocs.io/en/latest/api/tiler.html)
+  when appropriate; it takes precedence over `level`. Record target MPP, tile
+  pixel dimensions, and resampling so physical field of view is reproducible.
 - Generate CSV reports for tracking tile metadata
 
 ### Whole Slide Analysis

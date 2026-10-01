@@ -14,7 +14,7 @@ license: MIT
 compatibility: Requires Python >=3.11. Variant and sample queries require outbound network access to the public 1000 Genomes query endpoint over TLS; the sample/population metadata commands run fully offline over a data file bundled in the skill. No credentials, API keys, or environment variables are used.
 allowed-tools: Write Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Dnaerys
 ---
 
@@ -145,6 +145,16 @@ precede their selection counterpart.
     `kinship`
 -   Dataset totals (sample count, sex split, variant total, assembly) →
     `dataset-info`
+
+## Cohort interpretation
+
+The 3,202-sample cohort includes relatives: the additional 698 high-coverage
+samples extend the original 2,504-sample panel. Carrier counts therefore are
+not counts of independent observations, and cohort AF is not a population
+prevalence estimate. For association or frequency comparisons, document the
+selected populations and relatedness policy; use the bundled pedigree metadata
+and `kinship` when choosing or auditing the analysis set. See the
+[IGSR cohort announcement](https://www.internationalgenome.org/announcements/3202-samples-at-high-coverage-from-NYGC/).
 
 ## Annotation filters (shared across variant and sample selection/counting)
 

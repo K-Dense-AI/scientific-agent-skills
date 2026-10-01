@@ -185,7 +185,7 @@ Scikit-learn compatible transformer for batch molecular featurization.
 - `n_jobs` (int) - Number of parallel jobs (-1 for all cores)
 - `dtype` - Output data type (numpy float32/64, torch tensors)
 - `verbose` (bool) - Enable verbose logging
-- `ignore_errors` (bool) - Continue on failures (returns None for failed molecules)
+- `ignore_errors` is a call/method argument, not a constructor setting: `transform(..., ignore_errors=True)` preserves `None` failures; `__call__(..., ignore_errors=True)` returns filtered features plus valid input positions.
 
 **Essential Methods:**
 - `transform(mols)` - Processes batches and returns representations
@@ -323,16 +323,10 @@ transformer = store.load("ChemBERTa-77M-MLM")
 ### Error Handling
 
 ```python
-# Enable error tolerance
-featurizer = MoleculeTransformer(
-    calc,
-    n_jobs=-1,
-    verbose=True,
-    ignore_errors=True
-)
-
-# Failed molecules return None
-features = featurizer(smiles_with_errors)
+# Illustrative: calc and smiles_with_errors are supplied by the caller.
+featurizer = MoleculeTransformer(calc, n_jobs=-1, verbose=True)
+features, valid_ids = featurizer(smiles_with_errors, ignore_errors=True)
+# Align labels/identifiers using valid_ids, not the filtered row number.
 ```
 
 ### Data Type Control
@@ -426,4 +420,4 @@ loader = DataLoader(dataset, batch_size=32)
 2. **Batch Processing**: Process multiple molecules at once instead of loops
 3. **Caching**: Leverage built-in caching for pretrained models
 4. **Data Types**: Use float32 instead of float64 when precision allows
-5. **Error Handling**: Set `ignore_errors=True` for large datasets with potential invalid molecules
+5. **Error Handling**: Pass `ignore_errors=True` at call time and preserve returned valid input positions

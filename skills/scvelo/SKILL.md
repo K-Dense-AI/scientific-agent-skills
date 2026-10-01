@@ -4,7 +4,7 @@ description: RNA velocity analysis with scVelo. Estimate cell state transitions 
 license: BSD-3-Clause
 compatibility: Requires Python 3.10+ with scvelo, scanpy, and anndata. Verified against scvelo 0.3.4, whose dynamical model and pl.scatter need pandas<3 and whose stochastic estimator needs numpy<2; the deterministic estimator works on current releases.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Kuan-lin Huang
 ---
 
@@ -287,7 +287,7 @@ After running the workflow, the following fields are added:
 | `adata.var` | `fit_alpha` | Transcription rate |
 | `adata.var` | `fit_beta` | Splicing rate |
 | `adata.var` | `fit_gamma` | Degradation rate |
-| `adata.uns` | `velocity_graph` | Cell-cell transition probability matrix |
+| `adata.uns` | `velocity_graph` | Sparse cosine similarities between velocities and candidate cell-state changes; not a normalized transition matrix |
 
 ## Velocity Models Comparison
 

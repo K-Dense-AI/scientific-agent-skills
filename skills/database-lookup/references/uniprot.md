@@ -6,6 +6,10 @@
 https://rest.uniprot.org
 ```
 
+## Identifier handling
+
+UniProtKB accessions contain 6 or 10 alphanumeric characters under the official accession patterns; do not restrict them to `P`/`Q` plus five digits. Preserve the submitted accession and record the resolved primary accession when a secondary accession redirects. Isoform identifiers such as `P04637-2` add a suffix and require an endpoint that supports isoforms; do not silently strip it and return the canonical sequence.
+
 ## Authentication
 
 No API key required. All endpoints are public.

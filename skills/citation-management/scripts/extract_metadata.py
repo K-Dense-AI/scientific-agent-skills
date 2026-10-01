@@ -225,7 +225,7 @@ class MetadataExtractor:
                 return None
                 
         except Exception as e:
-            print(f'Error extracting metadata from PMID {pmid}: {e}', file=sys.stderr)
+            print(f'Error extracting metadata from PMID {pmid} ({type(e).__name__}); request details omitted', file=sys.stderr)
             return None
     
     @staticmethod

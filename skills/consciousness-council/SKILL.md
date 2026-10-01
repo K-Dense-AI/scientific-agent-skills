@@ -4,17 +4,17 @@ description: Run a multi-perspective Mind Council deliberation on any question, 
 allowed-tools: Read Write
 license: MIT license
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: AHK Strategies (ashrafkahoush-ux)
 ---
 
 # Consciousness Council
 
-A structured multi-perspective deliberation system that generates genuine cognitive diversity on any question. Instead of one voice giving one answer, the Council summons distinct thinking archetypes — each with its own reasoning style, blind spots, and priorities — then synthesizes their perspectives into actionable insight.
+A structured exercise that simulates several thinking archetypes, each emphasizing different assumptions and priorities, then synthesizes their perspectives. These are generated viewpoints from one system, not independent experts or independent evidence. Label factual claims, assumptions, and value judgments separately; verify consequential factual claims against external sources.
 
 ## Why This Exists
 
-Single-perspective thinking has a ceiling. When you ask one mind for an answer, you get one frame. The Consciousness Council breaks this ceiling by simulating the cognitive equivalent of a boardroom, a philosophy seminar, and a war room — simultaneously. It's not roleplay. It's structured epistemic diversity.
+Single-perspective thinking has a ceiling. When you ask one mind for an answer, you get one frame. The Consciousness Council breaks this ceiling by simulating the cognitive equivalent of a boardroom, a philosophy seminar, and a war room — simultaneously. It is a simulated perspective exercise; distinct voices do not establish independent expertise.
 
 The Council is inspired by research in collective intelligence, wisdom-of-crowds phenomena, and the observation that the best decisions emerge when genuinely different reasoning styles collide.
 
@@ -72,7 +72,7 @@ Surprising Insight: [Something non-obvious that emerges from their frame]
 
 **Critical rules for deliberation:**
 
-- Each member MUST disagree with at least one other member on something substantive. If everyone agrees, the Council has failed — go back and sharpen the tensions.
+- Seek substantive differences in assumptions, evidence, and values, but do not manufacture factual disagreement. When evidence supports agreement, record it and examine remaining uncertainty or decision trade-offs.
 - Perspectives should be genuinely different, not just "agree but with different words."
 - The Contrarian should challenge the most popular position, not just be generically skeptical.
 - Keep each member's contribution focused and sharp. Depth over breadth.
@@ -84,7 +84,7 @@ After all members speak, deliver:
 ```
 ⚖️ COUNCIL SYNTHESIS
 
-Points of Convergence: [Where 3+ members agreed — these are high-confidence signals]
+Points of Convergence: [Shared conclusions, with their evidence and assumptions; agreement alone is not a confidence signal]
 
 Core Tension: [The central disagreement that won't resolve easily — this IS the insight]
 
@@ -92,7 +92,7 @@ The Blind Spot: [What NO member addressed — the question behind the question]
 
 Recommended Path: [Actionable recommendation that respects the tension rather than ignoring it]
 
-Confidence Level: [High / Medium / Low — based on how much convergence vs. divergence emerged]
+Confidence Level: [High / Medium / Low — based on source quality, independent corroboration, and sensitivity to assumptions]
 
 One Question to Sit With: [The question the user should keep thinking about after this session]
 ```

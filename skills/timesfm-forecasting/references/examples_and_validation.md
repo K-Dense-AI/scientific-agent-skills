@@ -5,11 +5,11 @@ produce wrong forecasts, and the regression checks that confirm the skill still 
 
 ## Examples
 
-Three fully-working reference examples live in `examples/`. Use them as ground truth for correct API usage and expected output shape.
+Three historical reference examples live in `examples/`. Validate their API and output mapping against the pinned release before reuse. The global-temperature example has incorrect quantile indexing and interval labels; its scripts and generated outputs are not correctness baselines.
 
 | Example | Directory | What It Demonstrates | When To Use It |
 | ------- | --------- | -------------------- | -------------- |
-| **Global Temperature Forecast** | `examples/global-temperature/` | Basic `model.forecast()` call, CSV -> PNG -> GIF pipeline, 36-month NOAA context | Starting point; copy-paste baseline for any univariate series |
+| **Global Temperature Forecast** | `examples/global-temperature/` | Historical v1 pipeline with incorrect quantile labels | Do not copy or cite its bands; repair and regenerate before reuse |
 | **Anomaly Detection** | `examples/anomaly-detection/` | Two-phase detection: linear detrend + Z-score on context, quantile PI on forecast; 2-panel viz | Any task requiring outlier detection on historical + forecasted data |
 | **Covariates (XReg)** | `examples/covariates-forecasting/` | `forecast_with_covariates()` API (TimesFM 2.5), covariate decomposition, 2x2 shared-axis viz | Retail, energy, or any series with known exogenous drivers |
 
@@ -79,7 +79,7 @@ These bugs have appeared in this skill's examples. Learn from them:
 
 ## Validation & Verification
 
-Use the example outputs as regression baselines. If you change forecasting logic, verify:
+The checks below only inspect archived fixture properties; they do not run forecasting or establish calibration. Exclude the global-temperature outputs from correctness baselines until regenerated with verified quantile mapping. If you change forecasting logic, also run fresh synthetic and held-out-data checks:
 
 ```bash
 # Anomaly detection regression check:

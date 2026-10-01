@@ -3,7 +3,7 @@ name: what-if-oracle
 description: Run structured What-If scenario analysis with 4–6 branch possibility exploration (best, likely, worst, wild card, contrarian, second-order). Use when the user asks speculative what-if questions about uncertain futures, strategic forks, contingency planning, or stress-testing a decision before committing.
 license: CC BY-NC-SA 4.0
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: AHK Strategies (ashrafkahoush-ux)
   upstream: https://github.com/ashrafkahoush-ux/claude-consciousness-skills
   research-doi: 10.5281/zenodo.18736841, 10.5281/zenodo.18807387
@@ -117,7 +117,9 @@ For each scenario branch, provide:
 
 After analyzing all branches, provide:
 
-**Probability Distribution:**
+**Probability display (illustrative only):**
+
+Use a normalized display only for an explicitly exclusive and exhaustive outcome partition. The branch labels below overlap by default; the example numbers are not calibrated estimates and must not be copied into a real analysis.
 
 ```
 Ω Best Case ····· [██████░░░░] 15%
@@ -136,14 +138,11 @@ After analyzing all branches, provide:
 
 **The 1% Insight:** What is the one thing about this situation that almost everyone analyzing it would miss? The non-obvious pattern, the hidden assumption, the overlooked variable.
 
-## Golden Ratio Weighting
+## Evidence and allocation
 
-When evidence exists, weight primary scenarios using the golden ratio:
+Treat branch labels as exploration prompts, not a calibrated probability model. Wild-card, contrarian, and second-order effects can coexist with the best, likely, or worst case. Only normalize probabilities to 100% after defining mutually exclusive, collectively exhaustive outcomes over one stated horizon. Otherwise report overlapping event probabilities or qualitative plausibility separately. Record evidence and estimation method; use "not estimated" when unsupported.
 
-- **Primary future (most likely):** 61.8% of attention/resources
-- **Alternative future:** 38.2% of attention/resources
-
-This prevents both overcommitment to a single path and dilution across too many contingencies. Nature uses this ratio for branching (trees, rivers, blood vessels). Strategic planning can too.
+Allocate attention and resources from consequences, reversibility, exposure, and evidence. A 61.8/38.2 golden-ratio split has no established forecasting or decision-theoretic justification and must not be presented as one. Distinguish confidence in an estimate from the likelihood of the event.
 
 ## Modes
 

@@ -4,7 +4,7 @@ description: Core Python library for astronomy and astrophysics workflows that n
 license: BSD-3-Clause license
 compatibility: Requires Python 3.11+ with astropy installed (uv for package installation). Some features (object name resolution, site lookups, remote FITS reads, IERS updates) need network access.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -163,6 +163,11 @@ Transform between pixel coordinates in images and world coordinates.
 - Create custom WCS objects
 
 **See:** `references/wcs_and_other_modules.md` for WCS operations and transformations.
+High-level WCS pixel methods use zero-based `(x, y)` coordinates, while NumPy
+images index `[row, column]`, or `[y, x]`. Use `world_to_array_index` for array
+indexing, check bounds, and verify a pixel → world → pixel round trip before
+extracting sources. FITS header `CRPIX` values retain the FITS one-based convention.
+See the [WCS interface guide](https://docs.astropy.org/en/stable/wcs/wcsapi.html).
 
 ## Additional Capabilities
 
@@ -321,11 +326,11 @@ print(f"Found {len(cat1_matched)} matches")
 11. **Be explicit about network access**: `SkyCoord.from_name()`, `EarthLocation.of_site(refresh_cache=True)`, `EarthLocation.of_address()`, `download_file()`, remote FITS reads, and some IERS time/coordinate transforms can contact external services or update local caches. Avoid sending sensitive target names, addresses, URLs, or proprietary file locations to third-party services. When working with potentially sensitive targets or data locations, confirm with the user before making these network calls.
 12. **Pin for reproducibility**: Use pinned versions such as `astropy==7.2.0` for shared environments; update pins intentionally after reviewing release notes.
 
-## Current-Version Notes
+## Version and migration notes
 
-- Current stable release researched: Astropy 7.2.0 (released 2025-11-25; verified current as of 2026-06-10)
+- The examples remain pinned to Astropy 7.2.0. The stable upstream documentation now covers 8.0.1; this review does not claim execution of all examples on 8.x.
 - Python requirement: 3.11+
-- **Astropy 8.0 is at release-candidate stage** (8.0.0rc1, 2026-05-26). Key changes to anticipate:
+- When migrating to **Astropy 8.x**, review these compatibility changes:
   - The deprecated `astropy.cosmology` submodule shims (`astropy.cosmology.flrw`, `.core`, `.funcs`, `.connect`, `.parameter`) are removed — import everything directly from `astropy.cosmology` (e.g., `from astropy.cosmology import FlatLambdaCDM, z_at_value`)
   - `astropy.constants` defaults change from CODATA 2018 to CODATA 2022; pin a constants version via the `astropyconst` science states if reproducibility matters
   - NumPy 2.0 becomes the minimum supported version; the 7.2.x LTS branch retains NumPy 1.x support for six months after the 8.0 release

@@ -3,7 +3,7 @@ name: phylogenetics
 description: Build and analyze phylogenetic trees using MAFFT (multiple alignment), IQ-TREE 2 (maximum likelihood), and FastTree (fast NJ/ML). Visualize with ETE3 or FigTree. For evolutionary analysis, microbial genomics, viral phylodynamics, protein family analysis, and molecular clock studies.
 license: Unknown
 metadata:
-  version: "1.2"
+  version: "1.4"
   skill-author: Kuan-lin Huang
 ---
 
@@ -238,7 +238,7 @@ def basic_tree_stats(t: Tree) -> dict:
 
     stats = {
         "n_leaves": len(leaves),
-        "n_internal_nodes": len(t) - len(leaves),
+        "n_internal_nodes": sum(not node.is_leaf() for node in t.traverse()),
         "total_branch_length": sum(n.dist for n in t.traverse()),
         "max_leaf_distance": max(distances) if distances else 0,
         "mean_leaf_distance": sum(distances)/len(distances) if distances else 0,

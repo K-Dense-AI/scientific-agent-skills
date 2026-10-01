@@ -70,16 +70,16 @@ def customize_template(template_path, output_path, **kwargs):
                 if re.search(pattern, content):
                     content = re.sub(pattern, replacement, content, count=1)
                     modified = True
-                    print(f"✓ Replaced {key}")
+                    print(f"[OK] Replaced {key}")
     
     # Write output
     with open(output_path, 'w') as f:
         f.write(content)
     
     if modified:
-        print(f"\n✓ Customized template saved to: {output_path}")
+        print(f"\n[OK] Customized template saved to: {output_path}")
     else:
-        print(f"\n⚠️  Template copied to: {output_path}")
+        print(f"\n[WARN]  Template copied to: {output_path}")
         print("   No customizations applied (no matching placeholders found or no values provided)")
     
     print(f"\nNext steps:")

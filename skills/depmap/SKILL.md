@@ -3,7 +3,7 @@ name: depmap
 description: Query the Cancer Dependency Map (DepMap) for cancer cell line gene dependency scores (CRISPR Chronos), drug sensitivity data, and gene effect profiles. Use for identifying cancer-specific vulnerabilities, synthetic lethal interactions, and validating oncology drug targets.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: Kuan-lin Huang
 ---
 
@@ -40,13 +40,17 @@ Use DepMap when:
 
 | Score | Range | Meaning |
 |-------|-------|---------|
-| **Chronos** (CRISPR) | ~ -3 to 0+ | More negative = more essential. Common essential threshold: −1. Pan-essential genes ~−1 to −2 |
+| **Chronos** (CRISPR) | Continuous, not bounded | More negative = larger loss of fitness; in normalized releases, −1 anchors the common-essential control median |
 | **RNAi DEMETER2** | ~ -3 to 0+ | Similar scale to Chronos |
 | **Gene Effect** | normalized | Normalized Chronos; −1 = median effect of common essential genes |
 
-**Key thresholds:**
-- Chronos ≤ −0.5: likely dependent
-- Chronos ≤ −1: strongly dependent (common essential range)
+**Effect-size heuristics, not significance thresholds:**
+- Chronos ≤ −0.5 is a common exploratory filter; its error rate depends on screen quality.
+- Chronos ≈ −1 is a normalization anchor, not a universal dependency boundary.
+
+Use the selected release's documented dependency probability/FDR or hit-calling
+statistics when making binary calls; record their direction and cutoff separately from
+gene effect. Do not interpret a gene-effect value as a probability or p-value.
 
 ### Cell Line Annotations
 
@@ -258,8 +262,8 @@ def co_essentiality(gene_effect_df, target_gene, top_n=20):
 
 1. Identify cell lines with mutation/deletion in gene of interest (e.g., BRCA1-mutant)
 2. Compute gene effect scores for all genes in mutant vs. WT lines
-3. Identify genes significantly more essential in mutant lines (synthetic lethal partners)
-4. Filter by selectivity and effect size
+3. Identify candidate associations with more negative effect in mutant lines; control lineage/confounding and multiple testing before calling significance
+4. Filter by selectivity and effect size; validate candidate synthetic lethality with controlled perturbation experiments
 
 ### Workflow 3: Compound Sensitivity Analysis
 

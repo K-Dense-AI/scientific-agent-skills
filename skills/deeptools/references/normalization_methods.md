@@ -23,7 +23,7 @@ Without normalization, a sample with 100 million reads will appear to have highe
 **When to use:**
 - Comparing different genomic regions within the same sample
 - Adjusting for both sequencing depth AND region length
-- RNA-seq gene expression analysis
+- Length-scaled coverage visualization; not annotation-aware gene quantification
 
 **Available in:** `bamCoverage`
 
@@ -33,7 +33,7 @@ bamCoverage --bam input.bam --outFileName output.bw \
     --normalizeUsing RPKM
 ```
 
-**Interpretation:** RPKM of 10 means 10 reads per kilobase of feature per million mapped reads.
+**Interpretation:** bamCoverage RPKM uses the output **bin** length, not a gene or transcript length. A track value of 10 is 10 reads per kb of bin per million mapped reads; aggregating it over a gene does not perform transcript quantification.
 
 **Pros:**
 - Accounts for both region length and library size
@@ -260,12 +260,12 @@ bamCoverage --bam rnaseq.bam --outFileName forward.bw \
     --normalizeUsing CPM \
     --filterRNAstrand forward
 
-# For gene-level: RPKM accounts for gene length
+# Alternative coverage track: RPKM scales by bin length
 bamCoverage --bam rnaseq.bam --outFileName output.bw \
     --normalizeUsing RPKM
 ```
 
-**Reasoning:** CPM for comparing fixed-width bins; RPKM for genes (accounts for length).
+**Reasoning:** Both commands generate binned coverage tracks. The RPKM denominator uses bin length. Use annotation-aware counting/quantification for gene expression and count-based differential-expression workflows.
 
 ---
 
@@ -389,7 +389,7 @@ bamCoverage --bam input.bam --outFileName output.bw \
 ## Normalization for Different Comparisons
 
 ### Within-sample comparisons (different regions)
-**Use:** RPKM (accounts for region length)
+**Use:** Define the regional summary explicitly. bamCoverage RPKM adjusts bin length, not the length of an arbitrary downstream gene/region; preserve annotation, overlap policy, and denominators.
 
 ### Between-sample comparisons (same regions)
 **Use:** CPM, RPGC, or BPM (accounts for library size)
@@ -406,7 +406,7 @@ bamCoverage --bam input.bam --outFileName output.bw \
 
 | Method | Accounts for Depth | Accounts for Length | Best For | Command |
 |--------|-------------------|---------------------|----------|---------|
-| RPKM | ✓ | ✓ | RNA-seq genes | `--normalizeUsing RPKM` |
+| RPKM | ✓ | Bin length | Binned coverage | `--normalizeUsing RPKM` |
 | CPM | ✓ | ✗ | Fixed-size bins | `--normalizeUsing CPM` |
 | BPM | ✓ | ✗ | Specific regions | `--normalizeUsing BPM` |
 | RPGC | ✓ | ✗ | Interpretable coverage | `--normalizeUsing RPGC --effectiveGenomeSize X` |

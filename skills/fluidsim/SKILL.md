@@ -5,7 +5,7 @@ license: MIT
 compatibility: Bundled CLIs require Python 3.11+ and use the standard library; HDF5/netCDF4 metadata tools lazily use h5py when available. Simulation examples target fluidsim 0.9.0, fluidfft 0.4.5, and pyFFTW 0.15.1. MPI/native FFT use requires a site-compatible MPI implementation, development headers, FFTW/PFFT/P3DFFT libraries, compilers, and an approved scheduler workflow. No GPU backend is assumed.
 allowed-tools: Read Write Bash Glob Python
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: "K-Dense Inc."
   last-reviewed: "2026-07-23"
 ---
@@ -233,6 +233,11 @@ Before interpreting results, require:
   observables.
 - Comparison to an analytical solution, manufactured solution, benchmark, or
   independently reproduced result where appropriate.
+- For temporal averages, record the stationary window and actual saved timestamps.
+  [Spatial-means averaging](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.base.output.spatial_means.html)
+  averages saved samples; check cadence and duplicate restart times. If spacing
+  is irregular, compute and document a time-weighted average instead of treating
+  every output record as equal elapsed time.
 - Complete provenance and restart lineage.
 
 Never label a run “DNS,” “converged,” “validated,” “steady,” or “physically

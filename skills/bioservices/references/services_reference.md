@@ -214,18 +214,10 @@ from bioservices import UniChem
 u = UniChem()
 ```
 
-**Key Methods:**
-- `get_compound_id_from_kegg(kegg_id)`: KEGG → ChEMBL
-- `get_all_compound_ids(src_compound_id, src_id)`: Get all IDs
-- `get_src_compound_ids(src_compound_id, from_src_id, to_src_id)`: Convert IDs
-
-**Source IDs:**
-- 1: ChEMBL
-- 2: DrugBank
-- 3: PDB
-- 6: KEGG
-- 7: ChEBI
-- 22: PubChem
+**Key methods and response:**
+- `get_compounds(compound, source_type)`: query a supported source or InChIKey.
+- `source_ids`: inspect accepted source names. KEGG is not supported.
+- Traverse `response["compounds"][*]["sources"]`; preserve multiple mappings.
 
 **Use cases:**
 - Cross-database compound ID mapping

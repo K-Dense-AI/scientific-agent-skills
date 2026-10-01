@@ -4,7 +4,7 @@ description: Use this skill for processing and analyzing large tabular datasets 
 allowed-tools: Read Write Edit Bash Grep Glob
 license: MIT license
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 compatibility: Requires Python 3.10+ (3.12+ recommended with vaex 4.19.0). Install with uv pip install vaex. Optional s3fs/gcsfs/adlfs for cloud I/O.
 ---
@@ -173,6 +173,7 @@ df = vaex.open('large_file.hdf5')
 ```
 
 ### Pattern: Efficient Aggregations
+Illustrative pattern: use an existing numeric DataFrame `df`.
 ```python
 # Use delay=True to batch multiple operations
 mean_x = df.x.mean(delay=True)
@@ -180,7 +181,8 @@ std_y = df.y.std(delay=True)
 sum_z = df.z.sum(delay=True)
 
 # Execute all at once
-results = vaex.execute([mean_x, std_y, sum_z])
+df.execute()  # Execute the queued operations on this DataFrame
+results = [task.get() for task in (mean_x, std_y, sum_z)]
 ```
 
 ### Pattern: Virtual Columns for Feature Engineering

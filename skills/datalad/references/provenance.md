@@ -3,8 +3,7 @@
 ## Why this is the interesting half
 
 Version control tells you that a file changed. Provenance tells you what produced it, from
-what, and with which software. `datalad run` captures all three in the same commit that
-carries the change, which means the evidence cannot drift away from the result. `datalad
+what, and with which software. `datalad run` records the command and tracked inputs/outputs in the same commit as the change. Capturing software versions additionally requires a versioned environment specification or a tracked container; an executable name alone does not identify its installed build. `datalad
 rerun` then reads that record back and re-executes it, so "is this reproducible" becomes a
 command rather than an argument.
 

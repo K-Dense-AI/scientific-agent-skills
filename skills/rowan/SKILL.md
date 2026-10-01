@@ -4,7 +4,7 @@ description: Rowan is a cloud-native molecular modeling and medicinal-chemistry 
 license: Proprietary (API key required)
 compatibility: Python 3.12+, API key required
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: Rowan Science
   trigger-keywords: pKa prediction, molecular docking, conformer search, chemistry workflow, drug discovery, SMILES, protein structure, batch molecular modeling, cloud chemistry
   openclaw:
@@ -317,6 +317,8 @@ conf_wf = rowan.submit_conformer_search_workflow(
 
 ### Upload proteins
 
+Illustrative API calls below require an authenticated account and the named local file; they have not been re-run against the service for this documentation correction. Verify each PDB accession against its target before building a docking campaign: [1M17 is EGFR bound to erlotinib](https://www.rcsb.org/structure/1M17).
+
 ```python
 # From local PDB file
 protein = rowan.upload_protein(
@@ -326,7 +328,7 @@ protein = rowan.upload_protein(
 
 # From PDB database
 protein_from_pdb = rowan.create_protein_from_pdb_id(
-    name="CDK2 (1M17)",
+    name="EGFR (1M17)",
     code="1M17",
 )
 

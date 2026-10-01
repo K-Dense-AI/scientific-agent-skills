@@ -5,7 +5,7 @@ license: BSD license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python >3.8 and deepTools 3.5.6-compatible dependencies. The upstream project recommends conda/bioconda for full dependency resolution; repo examples use uv with pinned PyPI installs for reproducible command-line workflows.
 metadata:
-  version: "1.3"
+  version: "1.6"
   skill-author: K-Dense Inc.
 ---
 
@@ -100,7 +100,7 @@ Choosing the correct normalization is critical for valid comparisons. Consult `r
 - **ChIP-seq coverage**: Use RPGC or CPM
 - **ChIP-seq comparison**: Use bamCompare with log2 and readCount
 - **RNA-seq bins**: Use CPM
-- **RNA-seq genes**: Use RPKM (accounts for gene length)
+- **RNA-seq genes**: Quantify with an annotation-aware gene/transcript workflow; bamCoverage RPKM scales genomic bins, not genes
 - **ATAC-seq**: Use RPGC or CPM
 
 **Normalization methods:**
@@ -175,7 +175,7 @@ Many deepTools commands share these options:
 
 - **Never extend reads** for RNA-seq (would span splice junctions)
 - **Strand-specific**: Use `--filterRNAstrand forward/reverse` for common dUTP-style stranded libraries; confirm library orientation before interpreting strand labels
-- **Normalization**: CPM for bins, RPKM for genes
+- **Normalization**: CPM or per-bin RPKM for coverage tracks; these are not annotation-aware gene expression estimates
 
 ### ATAC-seq Specific
 

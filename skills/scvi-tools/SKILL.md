@@ -3,7 +3,7 @@ name: scvi-tools
 description: Deep generative models for single-cell omics. Use when you need probabilistic batch correction (scVI), transfer learning, differential expression with uncertainty, or multi-modal integration (TOTALVI, MultiVI). Best for advanced modeling, batch effects, multimodal data. For standard analysis pipelines use scanpy.
 license: BSD-3-Clause license
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -113,6 +113,7 @@ sc.tl.leiden(adata)
 - **AnnData-centric**: Seamless integration with the scanpy ecosystem
 - **GPU acceleration**: Automatic utilization of available GPUs
 - **Batch correction**: Handle technical variation through covariate registration
+- **Registration is tied to the data**: Finish filtering, gene ordering, layer selection, and covariate edits before `setup_anndata`/`setup_mudata`. If the registered object changes, rerun setup and initialize a new model before training; do not reuse a stale registry after subsetting or overwriting counts. See the [official data-loading guidance](https://docs.scvi-tools.org/en/stable/tutorials/notebooks/quick_start/data_loading.html).
 
 ## Common Analysis Tasks
 

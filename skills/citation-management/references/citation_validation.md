@@ -793,7 +793,7 @@ title = {Study of H\textsubscript{2}O}  % H₂O
    note = {Complete pagination not yet assigned — online-first publication}
    ```
 
-**CRITICAL**: Never leave an `@article` entry without `volume`, `pages`, and `doi` unless you have exhausted all search options and documented the reason.
+Verify applicable fields against the publisher record. Online-first volume/pages, DOI-less articles, and article-number journals are valid cases; log the reason for absence and use the style-appropriate locator without fabricating metadata.
 
 ### Issue 4: Cannot Find Duplicate
 

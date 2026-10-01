@@ -4,7 +4,7 @@ description: Query the U.S. Treasury Fiscal Data REST API for federal financial 
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -97,6 +97,8 @@ None required. The API is fully open and free.
 | Average Interest Rates on Treasury Securities | `/v2/accounting/od/avg_interest_rates` | Monthly |
 | Treasury Reporting Rates of Exchange | `/v1/accounting/od/rates_of_exchange` | Quarterly |
 | Interest Expense on Public Debt | `/v2/accounting/od/interest_expense` | Monthly |
+
+**Exchange-rate interpretation:** Treasury Reporting Rates are foreign-currency units per USD, so divide a foreign-currency amount by the rate to obtain USD (and multiply USD to obtain foreign currency). These are government reporting rates, not live trading quotes. Preserve both `record_date` and `effective_date`, and check amendments before applying a rate to a reporting period.
 
 ### Securities & Auctions
 

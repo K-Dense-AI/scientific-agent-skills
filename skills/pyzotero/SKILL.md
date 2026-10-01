@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: MIT License
 compatibility: Requires Python 3.10+ and pyzotero 1.13+. Web API access needs a Zotero API key. Optional CLI and MCP extras require Zotero 7 with local API access enabled.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: ZOTERO_API_KEY
@@ -80,7 +80,7 @@ all_items = zot.everything(zot.items())
 - A `Zotero` instance is bound to a single library (user or group). All methods operate on that library.
 - Item data lives in `item['data']`. Access fields like `item['data']['title']`, `item['data']['creators']`.
 - Pyzotero returns 100 items by default (API default is 25). Use `zot.everything(zot.items())` to get all items.
-- Write methods return `True` on success or raise a `ZoteroError`.
+- Return types are method-specific: `update_item()` reports Boolean success, while `create_items()` returns per-item creation status. Inspect its `failed`, `success`, and `unchanged` mappings and retain the input-index-to-key mapping. A truthy response dictionary does not establish that every item was created; report partial failures and retry only the failed inputs after reconciliation. See the [write-method contracts](https://pyzotero.readthedocs.io/en/latest/#creating-and-updating-items).
 
 ## Reference Files
 

@@ -60,15 +60,15 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
     bad_rhat = summary[summary['r_hat'] > rhat_threshold]
 
     if len(bad_rhat) > 0:
-        print(f"⚠️  WARNING: {len(bad_rhat)} parameters have R-hat > {rhat_threshold}")
+        print(f"[WARN]  WARNING: {len(bad_rhat)} parameters have R-hat > {rhat_threshold}")
         print("\nTop 10 worst R-hat values:")
         print(bad_rhat[['r_hat']].sort_values('r_hat', ascending=False).head(10))
-        print("\n⚠️  Chains may not have converged!")
-        print("   → Run longer chains or check for multimodality")
+        print("\n[WARN]  Chains may not have converged!")
+        print("   -> Run longer chains or check for multimodality")
         results['has_issues'] = True
         results['issues'].append('convergence')
     else:
-        print(f"✓ All R-hat values ≤ {rhat_threshold}")
+        print(f"[OK] All R-hat values <= {rhat_threshold}")
         print("  Chains have converged successfully")
 
     # 2. Check Effective Sample Size
@@ -78,7 +78,7 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
     low_ess_tail = summary[summary['ess_tail'] < ess_threshold]
 
     if len(low_ess_bulk) > 0 or len(low_ess_tail) > 0:
-        print(f"⚠️  WARNING: Some parameters have ESS < {ess_threshold}")
+        print(f"[WARN]  WARNING: Some parameters have ESS < {ess_threshold}")
 
         if len(low_ess_bulk) > 0:
             print(f"\n   Bulk ESS issues ({len(low_ess_bulk)} parameters):")
@@ -88,12 +88,12 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
             print(f"\n   Tail ESS issues ({len(low_ess_tail)} parameters):")
             print(low_ess_tail[['ess_tail']].sort_values('ess_tail').head(10))
 
-        print("\n⚠️  High autocorrelation detected!")
-        print("   → Sample more draws or reparameterize to reduce correlation")
+        print("\n[WARN]  High autocorrelation detected!")
+        print("   -> Sample more draws or reparameterize to reduce correlation")
         results['has_issues'] = True
         results['issues'].append('low_ess')
     else:
-        print(f"✓ All ESS values ≥ {ess_threshold}")
+        print(f"[OK] All ESS values >= {ess_threshold}")
         print("  Sufficient effective samples")
 
     # 3. Check Divergences
@@ -105,18 +105,18 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
         total_samples = len(idata.posterior.draw) * len(idata.posterior.chain)
         divergence_rate = divergences / total_samples * 100
 
-        print(f"⚠️  WARNING: {divergences} divergent transitions ({divergence_rate:.2f}% of samples)")
+        print(f"[WARN]  WARNING: {divergences} divergent transitions ({divergence_rate:.2f}% of samples)")
         print("\n   Divergences indicate biased sampling in difficult posterior regions")
         print("   Solutions:")
-        print("   → Increase target_accept (e.g., target_accept=0.95 or 0.99)")
-        print("   → Use non-centered parameterization for hierarchical models")
-        print("   → Add stronger/more informative priors")
-        print("   → Check for model misspecification")
+        print("   -> Increase target_accept (e.g., target_accept=0.95 or 0.99)")
+        print("   -> Use non-centered parameterization for hierarchical models")
+        print("   -> Add stronger/more informative priors")
+        print("   -> Check for model misspecification")
         results['has_issues'] = True
         results['issues'].append('divergences')
         results['n_divergences'] = divergences
     else:
-        print("✓ No divergences detected")
+        print("[OK] No divergences detected")
         print("  NUTS explored the posterior successfully")
 
     # 4. Check Tree Depth
@@ -132,21 +132,21 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
         total_samples = len(idata.posterior.draw) * len(idata.posterior.chain)
         hit_rate = hits_max / total_samples * 100
 
-        print(f"⚠️  WARNING: Hit maximum tree depth {hits_max} times ({hit_rate:.2f}% of samples)")
+        print(f"[WARN]  WARNING: Hit maximum tree depth {hits_max} times ({hit_rate:.2f}% of samples)")
         print("\n   Model may be difficult to explore efficiently")
         print("   Solutions:")
-        print("   → Reparameterize model to improve geometry")
-        print("   → Increase max_treedepth (if necessary)")
+        print("   -> Reparameterize model to improve geometry")
+        print("   -> Increase max_treedepth (if necessary)")
         results['issues'].append('max_treedepth')
     else:
-        print(f"✓ No maximum tree depth issues")
+        print(f"[OK] No maximum tree depth issues")
         print(f"  Maximum tree depth reached: {max_tree_depth}")
 
     # 5. Check Energy (if available)
     if hasattr(idata.sample_stats, 'energy'):
         print("\n5. ENERGY DIAGNOSTICS")
         print("-" * 70)
-        print("✓ Energy statistics available")
+        print("[OK] Energy statistics available")
         print("  Use az.plot_energy(idata) to visualize energy transitions")
         print("  Good separation indicates healthy HMC sampling")
 
@@ -156,11 +156,11 @@ def check_diagnostics(idata, var_names=None, ess_threshold=400, rhat_threshold=1
     print("="*70)
 
     if not results['has_issues']:
-        print("✓ All diagnostics passed!")
+        print("[OK] All diagnostics passed!")
         print("  Your model has sampled successfully.")
         print("  Proceed with inference and interpretation.")
     else:
-        print("⚠️  Some diagnostics failed!")
+        print("[WARN]  Some diagnostics failed!")
         print(f"  Issues found: {', '.join(results['issues'])}")
         print("  Review warnings above and consider re-running with adjustments.")
 
@@ -205,7 +205,7 @@ def create_diagnostic_report(idata, var_names=None, output_dir='diagnostics/', s
         plot_collection.savefig(
             output_path / filename, dpi=300, bbox_inches='tight'
         )
-        print(f"  ✓ Saved {label}")
+        print(f"  [OK] Saved {label}")
         if show:
             plt.show()
         else:
@@ -246,7 +246,7 @@ def create_diagnostic_report(idata, var_names=None, output_dir='diagnostics/', s
 
     # Save summary to CSV
     results['summary'].to_csv(output_path / 'summary_statistics.csv')
-    print(f"  ✓ Saved summary statistics")
+    print(f"  [OK] Saved summary statistics")
 
     print(f"\nDiagnostic report complete! Files saved in '{output_dir}'")
 

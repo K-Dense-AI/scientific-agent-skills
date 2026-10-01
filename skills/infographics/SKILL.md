@@ -3,7 +3,7 @@ name: infographics
 description: "Create professional infographics using Nano Banana Pro AI with smart iterative refinement. Uses Gemini 3.6 Flash for quality review. Integrates research-lookup and web search for accurate data. Supports 10 infographic types, 8 industry styles, and colorblind-safe palettes."
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.7"
+  version: "1.9"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -309,6 +309,11 @@ Before generating:
 After generating:
 - [ ] Review the generated image
 - [ ] Check the review log for scores
+- [ ] Compare every number, unit, label, and source in the image against the
+  verified input; an AI quality score is not a factual check
+- [ ] Supply a short alt description plus a readable data table or long
+  description covering the key values and relationships, following
+  [W3C guidance for complex images](https://www.w3.org/WAI/tutorials/images/complex/)
 - [ ] Regenerate with more specific prompt if needed
 
 ---

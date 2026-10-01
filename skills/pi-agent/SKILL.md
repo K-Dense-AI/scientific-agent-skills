@@ -4,7 +4,7 @@ description: Build with and use Pi, the minimal terminal coding harness. Use for
 license: MIT
 compatibility: Requires Node.js >= 22.19 and npm for Pi CLI and SDK usage. Pi package name is @earendil-works/pi-coding-agent.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
 ---
 
@@ -49,6 +49,14 @@ Pick the reference before answering or coding:
 Prefer the SDK for Node/TypeScript apps that need type safety, direct state access, in-process custom tools/extensions, or custom resource loading. Use `createAgentSession()` for a single stable session; use `createAgentSessionRuntime()` when the app must replace sessions through new/resume/fork/clone/import flows. Auth and model lookup go through `ModelRuntime.create()`.
 
 Prefer RPC mode when the client is not Node.js, needs process isolation, or wants a language-agnostic JSONL protocol. Start with `pi --mode rpc --no-session` for stateless subprocess integration, then add session flags when persistence matters. Split records on `\n` only — Node `readline` is not protocol-compliant.
+
+For RPC clients, correlate responses by unique request `id`, not arrival order,
+and keep consuming events after a successful `prompt` response. Success means
+accepted, queued, or handled; it is not completion. Subscribe before sending the
+prompt, and wait for `agent_settled` for runs that actually start, because
+`agent_end` may precede retries or queued work. If the response reports
+`disposition: "handled"`, no run started and no settled event is owed. See the
+[upstream RPC lifecycle](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md).
 
 Prefer JSON mode for one-shot command-line pipelines that only need streamed events, not bidirectional control: `pi --mode json "prompt"`.
 

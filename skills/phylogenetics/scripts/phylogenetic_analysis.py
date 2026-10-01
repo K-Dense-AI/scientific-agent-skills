@@ -72,7 +72,7 @@ def run_mafft(input_fasta: str, output_fasta: str, n_threads: int = 4,
     if result.returncode != 0:
         raise RuntimeError(f"MAFFT failed:\n{result.stderr[:500]}")
 
-    print(f"  Alignment complete → {output_fasta}")
+    print(f"  Alignment complete -> {output_fasta}")
     return output_fasta
 
 
@@ -111,7 +111,7 @@ def run_iqtree(aligned_fasta: str, prefix: str, seq_type: str = "nt",
                 if "Best-fit model" in line:
                     print(f"  {line.strip()}")
 
-    print(f"  Tree saved → {tree_file}")
+    print(f"  Tree saved -> {tree_file}")
     return tree_file
 
 
@@ -130,7 +130,7 @@ def run_fasttree(aligned_fasta: str, output_tree: str, seq_type: str = "nt") -> 
     if result.returncode != 0:
         raise RuntimeError(f"FastTree failed:\n{result.stderr[:500]}")
 
-    print(f"  Tree saved → {output_tree}")
+    print(f"  Tree saved -> {output_tree}")
     return output_tree
 
 
@@ -164,13 +164,13 @@ def visualize_tree(tree_file: str, output_png: str, outgroup: str = None) -> Non
 
     try:
         t.render(output_png, tree_style=ts, w=800, units="px")
-        print(f"  Visualization saved → {output_png}")
+        print(f"  Visualization saved -> {output_png}")
     except Exception as e:
         print(f"  Visualization failed (display issue?): {e}")
         # Save tree in Newick format as fallback
         rooted_nwk = output_png.replace(".png", "_rooted.nwk")
         t.write(format=1, outfile=rooted_nwk)
-        print(f"  Rooted tree saved → {rooted_nwk}")
+        print(f"  Rooted tree saved -> {rooted_nwk}")
 
 
 def tree_summary(tree_file: str) -> dict:

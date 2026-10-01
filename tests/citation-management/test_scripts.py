@@ -602,9 +602,113 @@ class EntryRenderingTests(unittest.TestCase):
 
 
 @unittest.skipUnless(REQUESTS_AVAILABLE, "requests is not installed")
+class CredentialDiagnosticTests(unittest.TestCase):
+    def test_ncbi_request_failures_do_not_print_query_string_credentials(self):
+        import io
+        from contextlib import redirect_stderr
+        from unittest.mock import patch
+
+        fake_key = "dummy-test-key"
+        fake_email = "test@example.invalid"
+        with patch.dict("os.environ", {"NCBI_API_KEY": fake_key, "NCBI_EMAIL": fake_email}):
+            pubmed = search_pubmed.PubMedSearcher()
+            extractor = extract_metadata.MetadataExtractor()
+        cases = [
+            (pubmed, pubmed.search, ("example",)),
+            (pubmed, pubmed.fetch_metadata, (["1"],)),
+            (extractor, extractor.extract_from_pmid, ("1",)),
+        ]
+        for owner, method, arguments in cases:
+            with self.subTest(method=method.__name__):
+                diagnostic = io.StringIO()
+                error = search_pubmed.requests.exceptions.HTTPError(
+                    "503 for url: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+                    f"efetch.fcgi?api_key={fake_key}&email={fake_email}")
+                with patch.object(owner.session, "get", side_effect=error), redirect_stderr(diagnostic):
+                    method(*arguments)
+                self.assertIn("HTTPError", diagnostic.getvalue())
+                self.assertNotIn(fake_key, diagnostic.getvalue())
+                self.assertNotIn(fake_email, diagnostic.getvalue())
+                self.assertNotIn("https://", diagnostic.getvalue())
+
+
+@unittest.skipUnless(REQUESTS_AVAILABLE, "requests is not installed")
 class OpenAlexTests(unittest.TestCase):
     def setUp(self) -> None:
         self.searcher = search_openalex.OpenAlexSearcher()
+
+    def test_key_stays_in_header_and_page_size_uses_supported_maximum(self):
+        from unittest.mock import patch, Mock
+        with patch.dict("os.environ", {"OPENALEX_API_KEY": "unit-test-key"}):
+            searcher = search_openalex.OpenAlexSearcher()
+        response = Mock()
+        response.json.return_value = {"meta": {"count": 0}, "results": []}
+        with patch.object(searcher.session, "get", return_value=response) as get:
+            searcher.search("example", max_results=250)
+        self.assertEqual(searcher.session.headers["Authorization"], "Bearer unit-test-key")
+        self.assertEqual(get.call_args.kwargs["params"]["per-page"], "100")
+        self.assertNotIn("api_key", get.call_args.kwargs["params"])
+        self.assertEqual(get.call_args.args[0], "https://api.openalex.org/works")
+
+    def test_failed_second_page_does_not_masquerade_as_complete_search(self):
+        from unittest.mock import patch, Mock
+        response = Mock()
+        response.json.return_value = {"meta": {"count": 2, "next_cursor": "page2"},
+                                      "results": [{"id": "https://openalex.org/W1"}]}
+        with patch.object(self.searcher.session, "get", side_effect=[
+            response, search_openalex.requests.exceptions.Timeout("offline")
+        ]), patch.object(search_openalex.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "after 1 records"):
+                self.searcher.search("example", max_results=2)
+
+    def test_repeated_cursor_cannot_fill_limit_with_duplicate_pages(self):
+        from unittest.mock import patch, Mock
+        response = Mock()
+        response.json.return_value = {"meta": {"count": 3, "next_cursor": "page2"},
+                                      "results": [{"id": "https://openalex.org/W1"}]}
+        with patch.object(self.searcher.session, "get", return_value=response) as get, \
+                patch.object(search_openalex.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "repeated cursor"):
+                self.searcher.search("example", max_results=3)
+        self.assertEqual(get.call_count, 2)
+
+    def test_duplicate_work_with_a_fresh_cursor_is_rejected(self):
+        from unittest.mock import patch, Mock
+        first, second = Mock(), Mock()
+        first.json.return_value = {"meta": {"count": 3, "next_cursor": "page2"},
+                                   "results": [{"id": "https://openalex.org/W1"}]}
+        second.json.return_value = {"meta": {"count": 3, "next_cursor": "page3"},
+                                    "results": [{"id": "https://openalex.org/W1"}]}
+        with patch.object(self.searcher.session, "get", side_effect=[first, second]), \
+                patch.object(search_openalex.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "duplicate work ID"):
+                self.searcher.search("example", max_results=2)
+
+    def test_successful_cursor_pages_preserve_each_unique_work(self):
+        from unittest.mock import patch, Mock
+        first, second = Mock(), Mock()
+        first.json.return_value = {"meta": {"count": 2, "next_cursor": "page2"},
+                                   "results": [{"id": "https://openalex.org/W1"}]}
+        second.json.return_value = {"meta": {"count": 2, "next_cursor": "page3"},
+                                    "results": [{"id": "https://openalex.org/W2"}]}
+        cursors = []
+        responses = iter([first, second])
+        def get_page(url, *, params, timeout):
+            cursors.append(params["cursor"])
+            return next(responses)
+        with patch.object(self.searcher.session, "get", side_effect=get_page), \
+                patch.object(search_openalex.time, "sleep"):
+            result = self.searcher.search("example", max_results=2)
+        self.assertEqual(cursors, ["*", "page2"])
+        self.assertEqual([record["openalex_id"] for record in result],
+                         ["https://openalex.org/W1", "https://openalex.org/W2"])
+
+    def test_nonpositive_limit_fails_before_network_request(self):
+        from unittest.mock import patch
+        with patch.object(self.searcher.session, "get") as get:
+            with self.assertRaises(ValueError):
+                self.searcher.search("example", max_results=0)
+        get.assert_not_called()
 
     def test_an_abstract_is_rebuilt_from_its_inverted_index(self) -> None:
         self.assertEqual(

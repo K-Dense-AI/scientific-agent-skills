@@ -112,9 +112,9 @@ zarr.config.set({
 
 The old `synchronizer` argument (`ThreadSynchronizer`, `ProcessSynchronizer`) is **not available in Zarr-Python 3**. Use these patterns instead:
 
-- **Reads:** always safe across threads/processes.
-- **Writes:** safe when each worker writes to **non-overlapping chunks**; most stores support atomic chunk writes.
-- **Overlapping writes:** coordinate externally (file locks, workflow design) until synchronizers return.
+- **Reads:** concurrent reads of a stable store are supported; readers are not guaranteed a consistent snapshot during writes or metadata changes.
+- **Writes:** assign workers disjoint chunks for unsharded arrays or disjoint **shards** for sharded arrays, subject to the store's write semantics. Different inner chunks may share a shard.
+- **Shared stored objects and metadata:** coordinate externally; serialize resize/append and attribute updates.
 
 For Dask-heavy workloads, estimate total concurrent I/O as roughly `dask_threads × async.concurrency` and lower Zarr's concurrency settings if the store or memory becomes saturated.
 

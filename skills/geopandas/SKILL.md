@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.10+ and uv. Bundled CLIs are local-only; runtime analysis requires the pinned GeoPandas stack below.
 allowed-tools: Read Write Bash Glob Grep
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-23"
 ---
@@ -138,6 +138,11 @@ See [geometric operations](references/geometric-operations.md).
 
 ### Joins, overlay, clip, and dissolve
 
+- [Spatial joins ignore the third dimension](https://geopandas.org/en/stable/docs/reference/api/geopandas.sjoin.html).
+  Features at different elevations can still match in XY. For discrete floors,
+  strata, or survey dates, use a validated shared attribute restriction
+  (`on_attribute`) when scientifically appropriate; true 3D distance or
+  intersection requires a method that models Z.
 - `sjoin` predicates are directional: `left.within(right)` is not
   `left.contains(right)`. `intersects` includes boundary contact; `contains`
   excludes boundary-only points, while `covers` includes boundary points.

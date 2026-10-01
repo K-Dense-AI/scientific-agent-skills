@@ -3,15 +3,11 @@
 OpenAlex Search Tool
 Search OpenAlex and export results as JSON or BibTeX.
 
-OpenAlex indexes ~250 million scholarly works across every discipline, needs no
-API key, and has a documented REST API rather than a scraped HTML surface. It
-is the third leg of this skill's coverage: PubMed is authoritative for
-biomedicine, Google Scholar is broad but fragile and rate-limited, and OpenAlex
-is broad, stable, and machine-readable.
+OpenAlex provides a documented REST API. Casual keyless requests are supported;
+set OPENALEX_API_KEY for an account budget. The key is sent only in the OpenAlex
+Authorization header. OPENALEX_EMAIL / --email remains an optional contact
+identifier; it does not establish a higher API quota.
 
-Setting OPENALEX_EMAIL (or passing --email) joins OpenAlex's "polite pool",
-which is faster and more reliably available. The address is sent to
-api.openalex.org only, as a query parameter, exactly as OpenAlex documents.
 """
 
 from __future__ import annotations
@@ -59,10 +55,13 @@ class OpenAlexSearcher:
 
     def __init__(self, email: Optional[str] = None):
         self.email = email or os.getenv('OPENALEX_EMAIL', '')
+        api_key = os.getenv('OPENALEX_API_KEY', '')
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'OpenAlexSearcher/1.0 (Citation Management Tool)'
         })
+        if api_key:
+            self.session.headers['Authorization'] = f'Bearer {api_key}'
 
     def search(self, query: str, max_results: int = 50,
                year_start: Optional[int] = None, year_end: Optional[int] = None,
@@ -82,6 +81,8 @@ class OpenAlexSearcher:
         Returns:
             List of metadata dictionaries
         """
+        if max_results < 1:
+            raise ValueError("max_results must be positive")
         filters = []
         if year_start:
             filters.append(f'from_publication_date:{year_start}-01-01')
@@ -92,7 +93,7 @@ class OpenAlexSearcher:
 
         params = {
             'search': query,
-            'per-page': str(min(200, max_results)),
+            'per-page': str(min(100, max_results)),
             'cursor': '*',
         }
         if filters:
@@ -105,6 +106,8 @@ class OpenAlexSearcher:
         print(f'Searching OpenAlex: {query}', file=sys.stderr)
 
         results: List[Dict] = []
+        seen_cursors = {'*'}
+        seen_work_ids = set()
         reported_total = False
 
         while len(results) < max_results:
@@ -112,12 +115,13 @@ class OpenAlexSearcher:
                 response = self.session.get(API_URL, params=params, timeout=30)
                 response.raise_for_status()
                 payload = response.json()
-            except requests.exceptions.RequestException as e:
-                print(f'Error searching OpenAlex: {e}', file=sys.stderr)
-                break
-            except ValueError as e:
-                print(f'Error: OpenAlex returned invalid JSON: {e}', file=sys.stderr)
-                break
+            except (requests.exceptions.RequestException, ValueError) as error:
+                # Partial bibliographies must not look like a completed search.
+                # Avoid printing request URLs or headers in diagnostics.
+                raise RuntimeError(
+                    f'OpenAlex search failed after {len(results)} records '
+                    f'({type(error).__name__}); retry or narrow the query'
+                ) from None
 
             if not reported_total:
                 total = payload.get('meta', {}).get('count', 0)
@@ -125,20 +129,39 @@ class OpenAlexSearcher:
                 reported_total = True
 
             works = payload.get('results', [])
+            next_cursor = payload.get('meta', {}).get('next_cursor')
+            if next_cursor is not None and (
+                not isinstance(next_cursor, str) or next_cursor in seen_cursors
+            ):
+                raise RuntimeError(
+                    f'OpenAlex search failed after {len(results)} records '
+                    '(invalid or repeated cursor); retry or narrow the query'
+                )
             if not works:
+                if next_cursor is not None:
+                    raise RuntimeError(
+                        f'OpenAlex search failed after {len(results)} records '
+                        '(empty nonterminal page); retry or narrow the query'
+                    )
                 break
-
             for work in works:
+                work_id = work.get('id')
+                if not isinstance(work_id, str) or not work_id or work_id in seen_work_ids:
+                    raise RuntimeError(
+                        f'OpenAlex search failed after {len(results)} records '
+                        '(missing or duplicate work ID); retry or narrow the query'
+                    )
+                seen_work_ids.add(work_id)
                 results.append(self._normalise(work))
                 if len(results) >= max_results:
                     break
 
-            next_cursor = payload.get('meta', {}).get('next_cursor')
-            if not next_cursor or len(results) >= max_results:
+            if next_cursor is None or len(results) >= max_results:
                 break
+            seen_cursors.add(next_cursor)
             params['cursor'] = next_cursor
 
-            # OpenAlex asks for courteous pacing even in the polite pool.
+            # Pace requests; quota exhaustion remains an explicit error.
             time.sleep(0.1)
 
         print(f'Retrieved {len(results)} results', file=sys.stderr)
@@ -241,7 +264,7 @@ class OpenAlexSearcher:
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
-        description='Search OpenAlex (no API key required)',
+        description='Search OpenAlex (optional OPENALEX_API_KEY for account quota)',
         epilog='Example: python search_openalex.py "CRISPR gene editing" --limit 50 --format bibtex'
     )
 
@@ -258,19 +281,23 @@ def main():
     parser.add_argument('--format', choices=['json', 'bibtex'], default='json',
                         help='Output format (default: json)')
     parser.add_argument('--email',
-                        help='Contact email for the OpenAlex polite pool (or set OPENALEX_EMAIL)')
+                        help='Optional contact email (or set OPENALEX_EMAIL)')
 
     args = parser.parse_args()
 
     searcher = OpenAlexSearcher(email=args.email)
-    results = searcher.search(
-        args.query,
-        max_results=args.limit,
-        year_start=args.year_start,
-        year_end=args.year_end,
-        work_type=args.work_type,
-        sort_by=args.sort_by,
-    )
+    try:
+        results = searcher.search(
+            args.query,
+            max_results=args.limit,
+            year_start=args.year_start,
+            year_end=args.year_end,
+            work_type=args.work_type,
+            sort_by=args.sort_by,
+        )
+    except (RuntimeError, ValueError) as error:
+        print(f'Error: {error}', file=sys.stderr)
+        sys.exit(2)
 
     if not results:
         print('No results found', file=sys.stderr)

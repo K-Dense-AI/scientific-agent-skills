@@ -5,9 +5,11 @@ staging). Live contract: <https://api.genomicintelligence.ai/v1/openapi.json>.
 
 ## Authentication
 
-Every `/v1/*` REST call needs a partner bearer key, sent as
+Prediction and job REST calls need a partner bearer key, sent as
 `Authorization: Bearer <key>`. Public routes needing no key: `/health`, `/docs`,
-`/redoc`, `/v1/openapi.json`.
+`/redoc`, `/v1/openapi.json`, and `GET /v1/tasks/{task}/models`. The
+[official overview](https://docs.genomicintelligence.ai/) documents capability
+discovery as public and rate-limited per source IP.
 
 ```bash
 export GI_API_KEY="gi_yourkeyhere"
@@ -19,8 +21,8 @@ commit it.
 
 > The hosted **MCP** server (`mcp.genomicintelligence.ai/mcp`) is different: it
 > runs **keyless** against a rate- and concurrency-limited public demo tier, with
-> the key optional for higher limits. Only the **REST** path strictly requires a
-> key. See `mcp.md`.
+> the key optional for higher limits. REST prediction requires a key, but
+> public model discovery does not. See `mcp.md`.
 
 ## Endpoints
 

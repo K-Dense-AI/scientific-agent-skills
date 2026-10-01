@@ -1,0 +1,8 @@
+{
+  "type": "synthetic numerical regression reference, not experimental data",
+  "source": "PyBaMM 26.9.0.0 Chen2020 SPM, isothermal 298.15 K, initial SOC 0.8, 0.5C discharge",
+  "solver": "IDAKLUSolver rtol=1e-8 atol=1e-10",
+  "mesh": "40 points for x_n, x_s, x_p, r_n, r_p",
+  "nominal_capacity_Ah": 5.0,
+  "reference_file": "chen2020-reference.csv"
+}

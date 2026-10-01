@@ -5,7 +5,7 @@ license: PolyForm-Noncommercial-1.0.0
 compatibility: Needs deepspotm 1.0.0 from PyPI (Python 3.10 to 3.13) plus PyTorch. Weights at ratschlab/DeepSpotM on Hugging Face are gated and licensed CC-BY-NC-SA-4.0, so request access on the model page and then run huggingface-cli login. A CUDA GPU speeds up batched inference.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: Ratschlab, ETH Zurich
 ---
 
@@ -144,7 +144,13 @@ inference:
    coordinates.
 2. Process and stack tiles into batches with `torch.stack`.
 3. Call `predict_genes` once per batch with the same gene list.
-4. Concatenate the batches into a tiles-by-genes matrix and attach the coordinates.
+4. Concatenate batches in a recorded tile-ID order; join coordinates by those IDs,
+   checking uniqueness and missing tiles rather than assuming file/report row order.
+
+Keep outputs labeled as model predictions, not measured transcript counts. Validate
+on held-out slides/patients with paired assays for the intended tissue and processing
+conditions; tiles from one slide are not independent biological replicates. The
+released base model also differs from cancer-specific fine-tuned TCGA atlas models.
 
 That matrix is the virtual spatial transcriptomics map for the slide, and it drops
 straight into `AnnData` for downstream spatial analysis. `references/whole_slide.md` has a

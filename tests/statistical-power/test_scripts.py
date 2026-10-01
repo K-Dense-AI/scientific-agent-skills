@@ -253,6 +253,25 @@ class PowerCurveTests(unittest.TestCase):
 
 
 class SimulationTests(unittest.TestCase):
+    def test_invalid_simulation_inputs_and_nonboolean_decisions_are_rejected(self):
+        for kwargs in ({"n": 0}, {"n": -1}, {"n": 2, "n_sims": 0},
+                       {"n": 2.5}, {"n": 2, "alpha": 1}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                simulate_power.simulate_power(lambda n, rng: True, **kwargs)
+        with self.assertRaisesRegex(TypeError, "boolean"):
+            simulate_power.simulate_power(lambda n, rng: 0.03, n=2, n_sims=1)
+
+    def test_invalid_search_bounds_never_enter_the_expansion_loop(self):
+        for kwargs in ({"hi": 0}, {"lo": 0}, {"lo": 20, "hi": 10},
+                       {"target_power": 0}, {"hi": 1_000_001}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                simulate_power.find_sample_size(lambda n, rng: False, **kwargs)
+
+    def test_unreachable_target_is_reported_without_a_false_sample_size(self):
+        with self.assertRaisesRegex(ValueError, "not reached"):
+            simulate_power.find_sample_size(lambda n, rng: False,
+                                            n_sims=1, hi=1_000_000, verbose=False)
+
     def test_wilson_intervals_bracket_the_estimate_and_stay_in_range(self) -> None:
         for successes, trials in ((0, 100), (50, 100), (100, 100), (1, 10)):
             with self.subTest(successes=successes, trials=trials):

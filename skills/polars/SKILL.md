@@ -5,7 +5,7 @@ license: https://github.com/pola-rs/polars/blob/main/LICENSE
 allowed-tools: Read
 compatibility: Requires Python 3.10+ for polars 1.41.x. Install with uv pip install; optional extras enable Excel, database, cloud, pandas/NumPy, and GPU integrations.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -148,8 +148,8 @@ df.with_columns(
 
 # Parallel computation (all columns computed in parallel)
 df.with_columns(
-    pl.col("value") * 10,
-    pl.col("value") * 100,
+    (pl.col("value") * 10).alias("value_times_10"),
+    (pl.col("value") * 100).alias("value_times_100"),
 )
 ```
 
@@ -300,7 +300,7 @@ Polars offers significant performance improvements over pandas with a cleaner AP
 | Filter | `df[df["col"] > 10]` | `df.filter(pl.col("col") > 10)` |
 | Add column | `df.assign(x=...)` | `df.with_columns(x=...)` |
 | Group by | `df.groupby("col").agg(...)` | `df.group_by("col").agg(...)` |
-| Window | `df.groupby("col").transform(...)` | `df.with_columns(...).over("col")` |
+| Window | `df.groupby("col").transform(...)` | `df.with_columns(pl.col("x").mean().over("col"))` |
 
 ### Key Syntax Patterns
 

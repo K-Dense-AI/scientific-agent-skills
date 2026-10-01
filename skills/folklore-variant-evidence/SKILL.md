@@ -4,7 +4,7 @@ description: "Retrieve ClinGen gene-disease validity assertions for a public gen
 license: MIT
 compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
@@ -146,6 +146,10 @@ For a resolved result:
 - Preserve the automated variant-level ACMG/AMP decision-support result exactly
   as returned.
 - Cite the returned public sources and provenance.
+- Keep submitted ClinVar assertions separate from Folklore's automated result,
+  as required by the [upstream interpretation guidance](https://github.com/helena-bioinformatics/folklore-mcp).
+  If they disagree, report each assertion with its source/date and preserve
+  the disagreement; do not present a merged consensus classification.
 - Separate returned facts from the agent's synthesis.
 - State that qualified professional review is required.
 - Do not turn the result into a diagnosis, individual risk estimate, treatment

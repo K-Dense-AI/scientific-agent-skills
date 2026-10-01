@@ -1,5 +1,7 @@
 # TimesFM Forecast Report: Global Temperature Anomaly (2025)
 
+> **Historical, unvalidated output:** The scripts in this directory use an incorrect quantile-index mapping and label q10–q90/q20–q80 as 90%/80% intervals. The generated JSON, CSV, plots, HTML, GIF, and numerical coverage statements below must not be used as validated forecasts or interval examples. Regenerate after checking the checkpoint's output mapping; nominal coverage also needs held-out calibration.
+
 **Model:** TimesFM 1.0 (200M) PyTorch  
 **Generated:** 2026-02-21  
 **Source:** NOAA GISTEMP Global Land-Ocean Temperature Index

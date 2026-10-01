@@ -5,7 +5,7 @@ license: GPLv3 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9–3.12 and internet access to 40+ bioinformatics web APIs. NCBI BLAST requires a contact email (`NCBI_EMAIL` env var or explicit parameter).
 metadata:
-  version: "1.4"
+  version: "1.6"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:
@@ -117,22 +117,28 @@ results = k.find("compound", "Geldanamycin")  # Returns cpd:C11222
 # Get compound information with database links
 compound_info = k.get("cpd:C11222")  # Includes ChEBI links
 
-# Cross-reference KEGG → ChEMBL using UniChem
+# Query a supported source or a verified InChIKey (aspirin shown)
 u = UniChem()
-chembl_id = u.get_compound_id_from_kegg("C11222")  # Returns CHEMBL278315
+response = u.get_compounds("BSYNRYMUTXBXSQ-UHFFFAOYSA-N", "inchikey")
+chembl_ids = sorted({
+    source["compoundId"]
+    for match in response.get("compounds", [])
+    for source in match.get("sources", [])
+    if source.get("shortName") == "chembl"
+})
+print(chembl_ids)  # ['CHEMBL25'] in the live smoke test
 ```
 
-**Version caveat:** the per-source `get_compound_id_from_*` helpers are gone from
-bioservices 1.16.0 — check `hasattr(u, "get_compound_id_from_kegg")` first, and
-otherwise use the current UniChem API (`u.get_compounds(compound, source_type)`
-and read `res["compounds"][0]["sources"]`). ChEMBL lookups follow the same rule:
-`get_molecule`, not the pre-1.6 `get_compound_by_chemblId`.
+**UniChem 2:** bioservices 1.16.0 uses `get_compounds`; KEGG is not a supported
+source. Use the KEGG entry's ChEBI cross-reference (`"CHEBI:…"`, `"chebi"`) or a
+verified InChIKey, preserve all mappings, and inspect ambiguous structures.
+An empty response or service failure does not establish that a mapping is absent.
 
 **Common workflow:**
 1. Search compound by name in KEGG
 2. Extract KEGG compound ID
-3. Use UniChem for KEGG → ChEMBL mapping
-4. ChEBI IDs are often provided in KEGG entries
+3. Extract and verify a ChEBI ID from the selected KEGG entry
+4. Query UniChem using ChEBI; report missing or ambiguous mappings
 
 Reference: `references/identifier_mapping.md` for complete cross-database mapping guide.
 
@@ -184,7 +190,7 @@ kegg_to_uniprot = u.mapping(fr="KEGG", to="UniProtKB_AC-ID", query="hsa:7535")
 # For compounds, use UniChem
 from bioservices import UniChem
 u = UniChem()
-chembl_from_kegg = u.get_compound_id_from_kegg("C11222")
+compound_mappings = u.get_compounds("CHEBI:15365", "chebi")
 ```
 
 **Supported mappings (UniProt):**

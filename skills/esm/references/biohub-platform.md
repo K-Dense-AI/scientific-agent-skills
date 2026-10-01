@@ -20,7 +20,7 @@ Never commit API keys or paste them into notebooks checked into git.
 
 ## Installation
 
-For ESM3/ESMC workflows on PyPI, `uv pip install "esm==3.2.3"` remains the standard reproducible path.
+The legacy ESM3/ESMC examples in this skill target `esm==3.2.3`. Do not assume that pin includes the newer Biohub/ESMFold2 classes shown below; match those examples to the SDK release or commit specified by their current upstream documentation.
 
 For ESMFold2 and the newest Biohub SDK features, upstream may recommend installing from the Biohub GitHub repo. Avoid floating branch installs in automated or production instructions. Pin a trusted release or a full 40-character commit SHA from the official Biohub repository, and review the verified GitHub release/commit before installing:
 

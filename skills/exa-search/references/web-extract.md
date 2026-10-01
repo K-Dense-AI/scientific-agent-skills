@@ -12,7 +12,7 @@ uv run --with exa-py python "$SKILL_PATH/scripts/exa_extract.py" "$ARGUMENTS" \
   -o "$FILENAME.json"
 ```
 
-You can pass multiple URLs as positional arguments — the script batches them in a single `/contents` call, which is faster and cheaper than looping.
+You can pass up to 100 URLs as positional arguments in one `/contents` call. Split larger lists into separate invocations; the wrapper does not batch them automatically.
 
 Content modes:
 

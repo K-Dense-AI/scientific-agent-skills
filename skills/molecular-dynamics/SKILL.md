@@ -3,7 +3,7 @@ name: molecular-dynamics
 description: Run and analyze molecular dynamics simulations with OpenMM and MDAnalysis. Set up protein/small molecule systems, define force fields, run energy minimization and production MD, analyze trajectories (RMSD, RMSF, contact maps, free energy surfaces). For structural biology, drug binding, and biophysics.
 license: MIT
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: Kuan-lin Huang
 ---
 
@@ -38,6 +38,10 @@ Use molecular dynamics when:
 
 ## Core Workflow: OpenMM Simulation
 
+Examples are illustrative and require system-specific preparation and validation.
+Synthetic checks cover the corrected timestep, thermostat, RMSF indexing, and
+periodic contact calculations; they do not establish protein/ligand equilibration.
+
 ### 1. System Preparation
 
 ```python
@@ -57,7 +61,7 @@ def prepare_system_from_pdb(pdb_file, forcefield_name="amber14-all.xml",
         water_model: Water model XML file
 
     Returns:
-        pdb, forcefield, system, topology
+        modeller, system
     """
     # Load PDB
     pdb = PDBFile(pdb_file)
@@ -115,8 +119,8 @@ def minimize_energy(modeller, system, output_pdb="minimized.pdb",
     Returns:
         simulation object with minimized positions
     """
-    # Set up integrator (doesn't matter for minimization)
-    integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+    # Keep the integrator at 2 fs for the subsequent NVT/NPT examples.
+    integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.002*picoseconds)
 
     # Create simulation
     # Use GPU if available (CUDA or OpenCL), fall back to CPU
@@ -180,7 +184,8 @@ def run_nvt_equilibration(simulation, n_steps=50000, temperature=300,
     # Add position restraints for backbone during NVT
     # (Optional: restraint heavy atoms)
 
-    # Set temperature
+    # Set both the thermostat target and initial velocities.
+    simulation.integrator.setTemperature(temperature*kelvin)
     simulation.context.setVelocitiesToTemperature(temperature*kelvin)
 
     # Add reporters
@@ -226,7 +231,9 @@ def run_npt_production(simulation, n_steps=500000, temperature=300, pressure=1.0
         pressure: Pressure in bar
         report_interval: Steps between reports
     """
-    # Add Monte Carlo barostat for pressure control
+    # Keep the Langevin thermostat and barostat at the same temperature.
+    simulation.integrator.setTemperature(temperature*kelvin)
+    # Add once to a simulation that does not already contain a barostat.
     system = simulation.context.getSystem()
     system.addForce(MonteCarloBarostat(pressure*bar, temperature*kelvin, 25))
     simulation.context.reinitialize(preserveState=True)
@@ -326,6 +333,10 @@ def plot_rmsd(rmsd_data, title="RMSD over time", output_file="rmsd.png"):
 
 ### 3. RMSF Analysis (Per-Residue Flexibility)
 
+Make molecules whole across periodic boundaries and align the trajectory to the
+chosen reference before calling RMSF; RMSF does not perform alignment. Preserve
+segment/chain identity with residue IDs when reporting systems with repeated IDs.
+
 ```python
 def compute_rmsf(u, selection="backbone", start_frame=0):
     """
@@ -348,7 +359,8 @@ def compute_rmsf(u, selection="backbone", start_frame=0):
         res_atoms = res.atoms.intersection(atoms)
         if len(res_atoms) > 0:
             resids.append(res.resid)
-            rmsf_per_res.append(R.results.rmsf[res_atoms.indices].mean())
+            # RMSF is indexed within the selected AtomGroup, not the Universe.
+            rmsf_per_res.append(R.results.rmsf[atoms.resindices == res.ix].mean())
 
     return np.array(resids), np.array(rmsf_per_res)
 ```
@@ -364,6 +376,8 @@ def analyze_contacts(u, protein_sel="protein", ligand_sel="resname LIG",
     Args:
         radius: Contact distance cutoff in Angstroms
     """
+    from MDAnalysis.lib.distances import distance_array
+
     protein = u.select_atoms(protein_sel)
     ligand = u.select_atoms(ligand_sel)
 
@@ -371,7 +385,8 @@ def analyze_contacts(u, protein_sel="protein", ligand_sel="resname LIG",
     for ts in u.trajectory[start_frame:]:
         # Find protein atoms within radius of ligand
         distances = contacts.contact_matrix(
-            protein.positions, ligand.positions, radius
+            distance_array(protein.positions, ligand.positions, box=ts.dimensions),
+            radius,
         )
         contact_residues = set()
         for i in range(distances.shape[0]):
@@ -406,7 +421,7 @@ def fix_pdb(input_pdb, output_pdb, ph=7.0):
     fixer.findMissingResidues()
     fixer.findNonstandardResidues()
     fixer.replaceNonstandardResidues()
-    fixer.removeHeterogens(True)    # Remove water/ligands
+    fixer.removeHeterogens(True)    # Keep water; remove other heterogens (including ligands)
     fixer.findMissingAtoms()
     fixer.addMissingAtoms()
     fixer.addMissingHydrogens(ph)
@@ -417,7 +432,7 @@ def fix_pdb(input_pdb, output_pdb, ph=7.0):
     return output_pdb
 ```
 
-### GAFF2 for Small Molecules (via OpenFF Toolkit)
+### OpenFF Parameters for Small Molecules
 
 ```python
 # For ligand parameterization, use OpenFF toolkit or ACPYPE
@@ -426,7 +441,7 @@ from openff.toolkit import Molecule, ForceField as OFFForceField
 from openff.interchange import Interchange
 
 def parameterize_ligand(smiles, ff_name="openff-2.0.0.offxml"):
-    """Generate GAFF2/OpenFF parameters for a small molecule."""
+    """Generate OpenFF parameters (not GAFF2) for a small molecule."""
     mol = Molecule.from_smiles(smiles)
     mol.generate_conformers(n_conformers=1)
 
@@ -441,7 +456,7 @@ def parameterize_ligand(smiles, ff_name="openff-2.0.0.offxml"):
 - **Equilibrate before production**: NVT (50–100 ps) → NPT (100–500 ps) → Production
 - **Use GPU**: Simulations are 10–100× faster on GPU (CUDA/OpenCL)
 - **2 fs timestep with HBonds constraints**: Standard; use 4 fs with HMR (hydrogen mass repartitioning)
-- **Analyze only equilibrated trajectory**: Discard first 20–50% as equilibration
+- **Analyze only equilibrated trajectory**: Choose burn-in from observables, stationarity, and replicate agreement; do not discard an arbitrary fixed percentage
 - **Save checkpoints**: MD runs can fail; checkpoints allow restart
 - **Periodic boundary conditions**: Required for solvated systems
 - **PME for electrostatics**: More accurate than cutoff methods for charged systems

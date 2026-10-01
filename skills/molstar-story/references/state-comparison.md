@@ -63,6 +63,24 @@ manually. The aligned PDB keeps coordinate records plus `TER`, `CONECT`,
 `LINK`, `SSBOND`, `HELIX`, `SHEET`, and `END`; retain the original PDB when other
 header metadata such as `REMARK` or `CRYST1` is needed downstream.
 
+The analysis uses one explicit alternate-conformer policy throughout: only
+blank and `A` altlocs are eligible for Cα alignment, modified-polymer detection,
+and both receptor and ligand contact atoms. If the same atom site (chain,
+author residue number, insertion code, residue name, atom name) has both blank
+and `A` records, blank wins regardless of input order. Other labels are excluded;
+there is no occupancy ranking or fallback to `B` when `A` is absent. A ligand
+selection with no eligible heavy atoms fails with an error. Blank-only ligands
+and `A`-only ligands are supported. This is a deterministic selection rule, not
+an occupancy-derived reconstruction or an ensemble analysis; review the exact
+ligand instances and any incomplete selected residues before interpreting a
+pocket. For another conformer, prepare and document a consistently selected
+input for both partners before running the analysis.
+
+`comparison_metrics.json` records this rule under `alternate_conformer_policy`,
+and contact rows in JSON/TSV identify `receptor_altloc` and `ligand_altloc`.
+The selection applies only to computed evidence: the aligned PDB retains and
+transforms every original coordinate record, including excluded conformers.
+
 ## Quantify Global And Local Change
 
 At minimum report:

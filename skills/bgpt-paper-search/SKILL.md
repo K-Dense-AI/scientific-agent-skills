@@ -4,7 +4,7 @@ description: Search scientific papers and retrieve structured experimental data 
 license: MIT
 compatibility: Requires the BGPT MCP server configured in the agent host (npx mcp-remote or npx bgpt-mcp), internet access to bgpt.pro, and an optional BGPT API key for paid usage.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: BGPT
   website: https://bgpt.pro/mcp
   github: https://github.com/connerlambden/bgpt-mcp
@@ -68,8 +68,17 @@ The server returns structured results including:
 - **Quality scores**: Study quality assessments
 - **Conclusions**: Author conclusions and implications
 
+## Evidence checks
+
+For each extracted result, retain the DOI and source section, table, or figure.
+Verify sample sizes, units, experimental arms, and uncertainty against the paper
+before using them in a synthesis. Treat provider quality scores as screening aids,
+not a substitute for a study-specific risk-of-bias assessment. Inspect extraction
+truncation and coverage; a missing result is not evidence that no study exists.
+
 ## Pricing
 
-- **Free tier**: 50 searches per network, no API key required
-- **Paid**: $0.01 per result with an API key from [bgpt.pro/mcp](https://bgpt.pro/mcp)
+At the 2026-09-30 review, the [provider page](https://bgpt.pro/mcp/) lists 50 free
+**results**, then $0.02 per returned result. This is not 50 free searches. Recheck
+the current allowance and pricing before a large query batch.
 

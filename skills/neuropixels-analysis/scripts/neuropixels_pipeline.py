@@ -137,15 +137,11 @@ def check_drift(recording: si.BaseRecording, output_folder: str) -> dict:
     plt.close()
     print(f"  Saved drift plot to {output_folder}/drift_check.png")
 
-    # Estimate drift magnitude
-    y_positions = peak_locations['y']
-    drift_estimate = np.percentile(y_positions, 95) - np.percentile(y_positions, 5)
-    print(f"  Estimated drift range: {drift_estimate:.1f} μm")
-
+    # Peak depth spread reflects the population's spatial extent, not displacement
+    # over time. Use a motion estimator (correct_motion below), not depth percentiles.
     return {
         'peaks': peaks,
         'peak_locations': peak_locations,
-        'drift_estimate': drift_estimate
     }
 
 
@@ -176,18 +172,27 @@ def correct_motion(
 def run_spike_sorting(
     recording: si.BaseRecording,
     output_folder: str,
-    sorter: str = 'kilosort4'
+    sorter: str = 'kilosort4',
+    motion_corrected: bool = False,
 ) -> si.BaseSorting:
     """Run spike sorting."""
     print(f"Running spike sorting with {sorter}...")
 
     sorter_folder = f'{output_folder}/sorting_{sorter}'
+    sorter_params = {}
+    if motion_corrected:
+        # SpikeInterface 0.105.0 uses different motion flags for these sorters.
+        if sorter in {'kilosort2_5', 'kilosort3', 'kilosort4'}:
+            sorter_params['do_correction'] = False
+        elif sorter == 'spykingcircus2':
+            sorter_params['apply_motion_correction'] = False
 
     sorting = si.run_sorter(
         sorter,
         recording,
         folder=sorter_folder,
-        verbose=True
+        verbose=True,
+        **sorter_params,
     )
 
     print(f"  Found {len(sorting.unit_ids)} units")
@@ -384,18 +389,20 @@ def run_pipeline(
     )
 
     # 3. Check drift
-    drift_info = check_drift(rec_preprocessed, str(output_path))
+    check_drift(rec_preprocessed, str(output_path))
 
-    # 4. Motion correction (if needed)
-    if apply_motion_correction and drift_info['drift_estimate'] > 20:
-        print(f"Drift > 20 μm detected, applying motion correction...")
+    # 4. Estimate and correct motion when explicitly enabled by pipeline settings.
+    if apply_motion_correction:
+        print("Estimating and applying motion correction...")
         rec_final = correct_motion(rec_preprocessed, str(output_path))
     else:
-        print("Skipping motion correction (low drift)")
+        print("Skipping external motion correction (disabled)")
         rec_final = rec_preprocessed
 
     # 5. Spike sorting
-    sorting = run_spike_sorting(rec_final, str(output_path), sorter)
+    sorting = run_spike_sorting(
+        rec_final, str(output_path), sorter, motion_corrected=apply_motion_correction
+    )
 
     # 6. Post-processing
     analyzer, qm = postprocess(sorting, rec_final, str(output_path))
@@ -425,7 +432,7 @@ if __name__ == '__main__':
                         help='Spike sorter to use')
     parser.add_argument('--stream', default='imec0.ap', help='Stream name')
     parser.add_argument('--no-motion-correction', action='store_true',
-                        help='Skip motion correction')
+                        help='Skip external motion correction; sorter defaults still apply')
     parser.add_argument('--curation', default='allen',
                         choices=['allen', 'ibl', 'strict'],
                         help='Curation method')

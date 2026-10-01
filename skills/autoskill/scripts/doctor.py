@@ -5,12 +5,17 @@ from pathlib import Path
 
 import httpx
 
+from backends import check_remote_endpoint
+
 _VALID_BACKENDS = {"local", "claude", "foundry"}
 
 
 def default_screenpipe_probe(config):
     sp = config.get("screenpipe", {})
-    url = sp.get("url", "http://localhost:3030")
+    try:
+        url = check_remote_endpoint(sp.get("url", "http://localhost:3030"), "screenpipe")
+    except ValueError as exc:
+        return ("error", str(exc))
     token = sp.get("token") or os.environ.get("SCREENPIPE_TOKEN")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:

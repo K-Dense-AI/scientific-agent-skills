@@ -379,41 +379,52 @@ if results:
 # Retrieve compound entry
 compound_entry = k.get(kegg_id)
 
-# Parse entry for database links
-chebi_id = None
+# Preserve all forms; a KEGG entry may link several distinct ChEBI entities.
+chebi_ids = []
 for line in compound_entry.split("\n"):
     if "ChEBI:" in line:
-        # Extract ChEBI ID
-        parts = line.split("ChEBI:")
-        if len(parts) > 1:
-            chebi_id = parts[1].strip().split()[0]
-            print(f"ChEBI ID: {chebi_id}")
-            break
+        for identifier in line.split("ChEBI:", 1)[1].split():
+            if identifier not in chebi_ids:
+                chebi_ids.append(identifier)
+chebi_id = chebi_ids[0] if len(chebi_ids) == 1 else None
+print(f"ChEBI candidates: {chebi_ids}")
+if len(chebi_ids) > 1:
+    print("Ambiguous ChEBI forms; mapping skipped pending structure review")
 
 # Display entry snippet
 print("\nKEGG Entry (first 500 chars):")
 print(compound_entry[:500])
 ```
 
-**Output:** ChEBI ID (e.g., 5292) and compound information
+**Output:** every ChEBI candidate and compound information; `chebi_id` is set only
+when there is one distinct candidate. Keep `chebi_ids` with the KEGG ID in exports.
 
 ### Step 3: Cross-Reference to ChEMBL via UniChem
+
+Before continuing, verify that the selected KEGG record and its single ChEBI
+candidate represent the intended stereochemistry, charge, and salt/parent form.
+Multiple candidates remain unresolved; never reduce `chebi_ids` to its first item.
+The parsing and mapping snippets were tested with mocked services; the full
+Geldanamycin workflow remains illustrative.
 
 ```python
 from bioservices import UniChem
 
-u = UniChem()
-
-# Convert KEGG → ChEMBL
-try:
-    chembl_id = u.get_compound_id_from_kegg(kegg_id_clean)
-    print(f"ChEMBL ID: {chembl_id}")
-except Exception as e:
-    print(f"UniChem lookup failed: {e}")
-    chembl_id = None
+# Continue only with the unique ChEBI candidate reviewed above.
+chembl_ids = []
+if chebi_id:
+    response = UniChem().get_compounds(f"CHEBI:{chebi_id}", "chebi")
+    chembl_ids = sorted({
+        source["compoundId"]
+        for match in response.get("compounds", [])
+        for source in match.get("sources", [])
+        if source.get("shortName") == "chembl"
+    })
+chembl_id = chembl_ids[0] if len(chembl_ids) == 1 else None
+print(f"ChEMBL candidates: {chembl_ids}; inspect ambiguous mappings")
 ```
 
-**Output:** ChEMBL ID (e.g., CHEMBL278315)
+**Output:** zero, one, or multiple ChEMBL IDs; no match is not proof of absence.
 
 ### Step 4: Retrieve Detailed Information
 
@@ -436,7 +447,7 @@ if chembl_id:
     chembl = ChEMBL()
 
     try:
-        chembl_compound = chembl.get_compound_by_chemblId(chembl_id)
+        chembl_compound = chembl.get_molecule(chembl_id)
         print(f"\nChEMBL Molecular Weight: {chembl_compound['molecule_properties']['full_mwt']}")
         print(f"ChEMBL SMILES: {chembl_compound['molecule_structures']['canonical_smiles']}")
     except Exception as e:

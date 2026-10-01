@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.9+ and network access to openrouter.ai. The bundled script uses only the standard library. Image generation requires the OPENROUTER_API_KEY credential and bills per request; listing models, inspecting a model, and --dry-run do not. Targets the OpenRouter Image API (POST /api/v1/images) as verified on 2026-07-31.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "3.1"
+  version: "3.2"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-31"
   openclaw:
@@ -218,8 +218,10 @@ python scripts/generate_image.py "A cat astronaut" --resolution 4K --dry-run
 | `--list-models` | Print the catalogue with allowed values, optionally filtered, then exit |
 | `--model-info` | Print one model's allowed values and pricing, then exit |
 
-There is no `--size`: no model in the catalogue accepts a `size` parameter. Shape output with
-`--aspect-ratio` and `--resolution`.
+The bundled CLI has no `--size`; use `--aspect-ratio` and `--resolution` with it.
+The [current Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
+also documents a `size` shorthand for direct requests. API support does not imply that
+this CLI exposes the parameter; check live model and endpoint capabilities.
 
 ## API shape
 

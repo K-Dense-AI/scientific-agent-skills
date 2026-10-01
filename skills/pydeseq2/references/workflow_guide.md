@@ -550,16 +550,7 @@ genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 5]
 
 **Problem:** Confounded design (e.g., all treated samples in one batch)
 
-**Solution:**
-```python
-# Check design confounding
-print(pd.crosstab(metadata.condition, metadata.batch))
-
-# Either remove confounded variable or add interaction term
-design = "~condition"  # Drop batch
-# OR
-design = "~condition + batch + condition:batch"  # Add interaction
-```
+**Solution:** Inspect the condition-by-batch contingency table and the design-matrix rank. If batch and condition are perfectly confounded, their effects cannot be separated from these data: adding an interaction does not restore identifiability, and dropping batch produces an unadjusted, confounded condition estimate. Obtain a balanced design or restrict conclusions to an estimable comparison. Remove a redundant term only when scientifically justified; distinguish this from unused factor levels or empty interaction cells. See the [DESeq2 full-rank guidance](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#model-matrix-not-full-rank).
 
 ### Issue: No significant genes found
 

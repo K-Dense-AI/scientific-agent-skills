@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "steady_state": {
+    "metabolic": true,
+    "isotopic": true
+  },
+  "shared_fluxes": true,
+  "mdv_basis": "tracer_only",
+  "correction_notes": "Synthetic tracer-only probabilities; no natural-abundance correction applied. Isotopomer mixtures explicitly include unlabeled material.",
+  "experiments": [
+    {
+      "id": "published",
+      "substrates": {
+        "AcCoA": {
+          "11": 0.25,
+          "00": 0.5,
+          "01": 0.25
+        },
+        "Asp": {
+          "0000": 1
+        }
+      },
+      "measurements": []
+    }
+  ]
+}

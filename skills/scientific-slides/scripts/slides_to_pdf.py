@@ -141,7 +141,7 @@ def combine_images_to_pdf(image_paths: List[Path], output_path: Path,
         )
         
         if verbose:
-            print(f"\n✓ PDF created: {output_path}")
+            print(f"\n[OK] PDF created: {output_path}")
             print(f"  Total slides: {len(images)}")
             file_size = output_path.stat().st_size
             if file_size > 1024 * 1024:
@@ -224,10 +224,10 @@ Tips:
     )
     
     if success:
-        print(f"\n✓ PDF created: {output_path}")
+        print(f"\n[OK] PDF created: {output_path}")
         sys.exit(0)
     else:
-        print(f"\n✗ Failed to create PDF")
+        print(f"\n[FAIL] Failed to create PDF")
         sys.exit(1)
 
 

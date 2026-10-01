@@ -1,0 +1,37 @@
+{
+  "identifier": "synthetic-demonstration-session",
+  "session_description": "Synthetic TIFF and position conversion demonstration; replace all experimental metadata",
+  "session_start_time": "2020-01-01T12:00:00+00:00",
+  "experimenter": [
+    "Synthetic Example"
+  ],
+  "institution": "Synthetic test institution",
+  "lab": "Synthetic test lab",
+  "subject": {
+    "subject_id": "synthetic",
+    "species": "Mus musculus",
+    "sex": "U",
+    "age": "P90D"
+  },
+  "tiff": "imaging.tif",
+  "frame_times_csv": "frames.csv",
+  "position_csv": "position.csv",
+  "position_unit": "cm",
+  "position_reference_frame": "Origin at lower-left arena corner, x right, y up",
+  "position_description": "Synthetic calibrated animal position",
+  "synchronization": {
+    "shared_clock_evidence": "Synthetic fixture: both timestamp vectors generated from one clock"
+  },
+  "imaging": {
+    "device": "SyntheticMicroscope",
+    "device_description": "Synthetic two-photon imaging source",
+    "description": "Synthetic single-plane single-channel frames",
+    "indicator": "synthetic fluorescence",
+    "location": "synthetic test plane",
+    "unit": "a.u.",
+    "excitation_nm": 920.0,
+    "emission_nm": 510.0,
+    "optical_channel_description": "Synthetic green channel",
+    "modality": "two-photon"
+  }
+}

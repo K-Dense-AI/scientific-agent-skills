@@ -4,7 +4,7 @@ description: Query documented public database APIs with explicit endpoints, filt
 allowed-tools: Read Bash
 license: MIT
 metadata:
-  version: "1.6"
+  version: "1.7"
   skill-author: "K-Dense Inc."
 ---
 
@@ -56,7 +56,7 @@ Different databases use different identifier systems. If a query fails, the iden
 
 | Identifier | Format | Example | Used by |
 |---|---|---|---|
-| UniProt accession | `P#####` or `Q#####` | `P04637` (TP53) | UniProt, STRING, AlphaFold, Reactome mapping |
+| UniProt accession | 6 or 10 alphanumeric characters | `P04637` (TP53), `A0A024RBG1` | UniProt, STRING, AlphaFold, Reactome mapping |
 | Ensembl gene ID | `ENSG###########` | `ENSG00000141510` | Ensembl, Open Targets, GTEx |
 | NCBI Gene ID | Integer | `7157` (TP53) | NCBI Gene, GEO, DisGeNET, HPO |
 | HGNC ID | `HGNC:#####` | `HGNC:11998` | Monarch |

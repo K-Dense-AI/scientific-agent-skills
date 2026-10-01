@@ -5,7 +5,7 @@ license: MIT
 allowed-tools: Read Write Edit Bash
 compatibility: Requires a Benchling account, tenant URL, and API key or OAuth app credentials. Install benchling-sdk with uv pip install.
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: BENCHLING_API_KEY
@@ -42,7 +42,7 @@ metadata:
 
 Benchling is a cloud platform for life sciences R&D. Access registry entities (DNA, RNA, proteins), inventory, electronic lab notebooks, and workflows programmatically via the Python SDK and REST API.
 
-**Version note:** Examples target **benchling-sdk 1.25.0** (latest stable on PyPI). Docs: [benchling.com/sdk-docs](https://benchling.com/sdk-docs/). Platform guide: [docs.benchling.com](https://docs.benchling.com/).
+**Version note:** Examples target **benchling-sdk 1.25.0** (the targeted SDK version). Docs: [benchling.com/sdk-docs](https://benchling.com/sdk-docs/). Platform guide: [docs.benchling.com](https://docs.benchling.com/).
 
 ## When to Use This Skill
 
@@ -104,7 +104,7 @@ for page in benchling.dna_sequences.list():
         process(sequence)
 
 # Check estimated count without loading all pages
-total = benchling.dna_sequences.list().estimated_count()
+total = benchling.dna_sequences.list().estimated_count  # property; may be unavailable
 ```
 
 ### Schema Fields Helper
@@ -215,8 +215,8 @@ for page in sequences:
 
 # Save to CSV or database
 import csv
-with open("sequences.csv", "w") as f:
-    writer = csv.DictWriter(f, fieldnames=export_data[0].keys())
+with open("sequences.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.DictWriter(f, fieldnames=["id", "name", "bases", "length"])
     writer.writeheader()
     writer.writerows(export_data)
 ```

@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "name": "Published EMU TCA demonstration",
+  "flux_unit": "relative units; citrate synthase v1 fixed to 100",
+  "provenance": "Carbon network adapted from mfapy Example_0/1_toymodel_model.txt at a10433af16682386548b360297e2476152d46ede (MIT; see mfapy-license.txt). Numerical reference in Antoniewicz et al. 2007, Metabolic Engineering 9:68-86, DOI 10.1016/j.ymben.2006.09.001. Demonstration network, not a complete organism model.",
+  "metabolites": [
+    {
+      "id": "CO2ex",
+      "carbons": 1,
+      "boundary": "sink",
+      "symmetric": false
+    },
+    {
+      "id": "AcCoA",
+      "carbons": 2,
+      "boundary": "source",
+      "symmetric": false
+    },
+    {
+      "id": "OAC",
+      "carbons": 4,
+      "boundary": "internal",
+      "symmetric": false
+    },
+    {
+      "id": "Cit",
+      "carbons": 6,
+      "boundary": "internal",
+      "symmetric": false
+    },
+    {
+      "id": "AKG",
+      "carbons": 5,
+      "boundary": "internal",
+      "symmetric": false
+    },
+    {
+      "id": "Suc",
+      "carbons": 4,
+      "boundary": "internal",
+      "symmetric": true
+    },
+    {
+      "id": "Fum",
+      "carbons": 4,
+      "boundary": "internal",
+      "symmetric": true
+    },
+    {
+      "id": "Glu",
+      "carbons": 5,
+      "boundary": "internal",
+      "symmetric": false
+    },
+    {
+      "id": "Gluex",
+      "carbons": 5,
+      "boundary": "sink",
+      "symmetric": false
+    },
+    {
+      "id": "Asp",
+      "carbons": 4,
+      "boundary": "source",
+      "symmetric": false
+    }
+  ],
+  "reactions": [
+    {
+      "id": "v1",
+      "substrates": [
+        [
+          "AcCoA",
+          "AB"
+        ],
+        [
+          "OAC",
+          "CDEF"
+        ]
+      ],
+      "products": [
+        [
+          "Cit",
+          "FEDBAC"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300,
+      "fixed": 100
+    },
+    {
+      "id": "v2",
+      "substrates": [
+        [
+          "Cit",
+          "ABCDEF"
+        ]
+      ],
+      "products": [
+        [
+          "AKG",
+          "ABCDE"
+        ],
+        [
+          "CO2ex",
+          "F"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v3",
+      "substrates": [
+        [
+          "AKG",
+          "ABCDE"
+        ]
+      ],
+      "products": [
+        [
+          "Glu",
+          "ABCDE"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v4",
+      "substrates": [
+        [
+          "AKG",
+          "ABCDE"
+        ]
+      ],
+      "products": [
+        [
+          "Suc",
+          "BCDE"
+        ],
+        [
+          "CO2ex",
+          "A"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v5",
+      "substrates": [
+        [
+          "Suc",
+          "ABCD"
+        ]
+      ],
+      "products": [
+        [
+          "Fum",
+          "ABCD"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v6",
+      "substrates": [
+        [
+          "Fum",
+          "ABCD"
+        ]
+      ],
+      "products": [
+        [
+          "OAC",
+          "ABCD"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v7",
+      "substrates": [
+        [
+          "OAC",
+          "ABCD"
+        ]
+      ],
+      "products": [
+        [
+          "Fum",
+          "ABCD"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v8",
+      "substrates": [
+        [
+          "Asp",
+          "ABCD"
+        ]
+      ],
+      "products": [
+        [
+          "OAC",
+          "ABCD"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "v9",
+      "substrates": [
+        [
+          "Glu",
+          "ABCDE"
+        ]
+      ],
+      "products": [
+        [
+          "Gluex",
+          "ABCDE"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    }
+  ],
+  "fragments": [
+    {
+      "id": "GluWhole",
+      "metabolite": "Glu",
+      "carbons": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "provenance": "All five glutamate carbons, matching the published EMU demonstration; not a derivatized GC-MS formula."
+    }
+  ]
+}

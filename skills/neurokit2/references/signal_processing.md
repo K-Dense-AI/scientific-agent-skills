@@ -98,7 +98,11 @@ resampled = nk.signal_resample(
 )
 ```
 
-Downsampling requires anti-alias filtering. Resampling cannot recover timing precision or
+Downsampling requires anti-alias filtering. In 0.2.13 the default `interpolation`
+method uses spline interpolation (`scipy.ndimage.zoom`), not an anti-alias low-pass
+filter. Use a suitable explicit filter before decimation or a validated filtered
+resampler such as `poly`; check attenuation above the new Nyquist frequency.
+Resampling cannot recover timing precision or
 bandwidth absent from the acquisition. For multimodal data, preserve native processing
 and timestamps first; choose a common grid only after clock alignment.
 

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.12+ and uv for SHAP 0.52.0; model-specific libraries are optional.
 allowed-tools: "Read Bash"
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -83,7 +83,7 @@ Use the detailed decision guide in [references/explainers.md](references/explain
 
 ### 3. Compute a modern `Explanation`
 
-This complete binary-classification example uses an explicit background and selects the positive-class output:
+This complete binary-classification example uses an explicit background and selects output index 1. In the breast-cancer dataset, class 1 means **benign**, so positive SHAP values below increase predicted benign probability, not cancer risk. For another dataset, resolve the requested label through `model.classes_` and record its meaning before selecting an output index; column 1 is not universally the clinically positive event.
 
 ```python
 import numpy as np

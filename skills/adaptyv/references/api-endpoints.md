@@ -1,6 +1,6 @@
 # Adaptyv Bio Foundry API — Complete Endpoint Reference
 
-Base URL: `https://foundry-api-public.adaptyvbio.com/api/v1`
+Base URL: `https://devs.adaptyvbio.com/api/v1`
 OpenAPI spec: `GET /openapi.json`
 
 ## Table of Contents
@@ -30,7 +30,7 @@ Creates a new experiment. Starts in `Draft` status by default.
 | `experiment_spec` | ExperimentSpec | Yes | Experiment definition (see below) |
 | `skip_draft` | boolean | No (default false) | Bypass Draft, go straight to WaitingForConfirmation |
 | `auto_accept_quote` | boolean | No (default false) | Auto-accept quote and create invoice |
-| `webhook_url` | string/null | No | URL for status-change POST notifications |
+| `webhook_url` | string/null | No | URL for customer-facing experiment_update POST notifications |
 
 **ExperimentSpec:**
 

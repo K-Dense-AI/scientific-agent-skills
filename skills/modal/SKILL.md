@@ -3,7 +3,7 @@ name: modal
 description: Modal is a serverless cloud platform for running Python on demand, including on-demand GPUs. Use when deploying or serving AI/ML models, running GPU-accelerated workloads (training, fine-tuning, inference), serving web endpoints, scheduling batch jobs, or scaling Python code to cloud containers with the Modal SDK.
 license: Apache-2.0
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:
@@ -189,6 +189,11 @@ def load_model():
 - Optimized for write-once, read-many workloads (model weights, datasets)
 - CLI access: `modal volume ls`, `modal volume put`, `modal volume get`
 - Background auto-commits every few seconds
+- For a producer/consumer handoff, close output files and explicitly `vol.commit()`
+  before signaling completion; an already mounted consumer must close its open
+  volume handles and `vol.reload()` before reading the new state. A successful
+  function return or background commit timer is not a freshness check. Give
+  concurrent runs distinct output paths. See the [commit/reload contract](https://modal.com/docs/guide/volumes).
 - Mount read-only or limit to a subdirectory with `vol.with_mount_options(read_only=True, sub_path="subset")`
 
 **Reference**: See `references/volumes.md` for v2 volumes, concurrent writes, and best practices.

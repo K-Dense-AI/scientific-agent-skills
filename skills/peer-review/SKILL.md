@@ -4,7 +4,7 @@ description: Prepare evidence-bounded, constructive peer-review drafts and struc
 license: MIT
 compatibility: Python 3.11+ standard library. Bundled CLIs are deterministic and local-only; they accept bounded JSON, CSV, or Markdown and make no network, model, image, or external-service calls.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -158,6 +158,13 @@ Assess in this order:
 9. Interpretation, causality, and generalizability
 
 Use `references/common_issues.md` and `references/statistical_reproducibility.md`.
+
+When authors claim "no effect", "equivalent", or "no difference", check whether
+the interval rules out scientifically important effects. A nonsignificant test
+alone does not establish equivalence; an equivalence or non-inferiority claim
+needs its stated margin and corresponding analysis. Request a narrower claim
+when precision is inadequate rather than retrospective observed-power
+calculations. See the [ASA statement on p-values](https://doi.org/10.1080/00031305.2016.1154108).
 
 For a structured local audit:
 

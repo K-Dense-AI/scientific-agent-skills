@@ -3,7 +3,7 @@
 Neuropixels Analysis Template
 
 Complete analysis workflow from raw data to curated units.
-Copy and customize this template for your analysis.
+Illustrative template: copy, customize, and validate on your own recording and sorter.
 
 Usage:
     1. Copy this file to your analysis directory
@@ -36,7 +36,7 @@ MOTION_PRESET = 'nonrigid_accurate'  # 'kilosort_like', 'nonrigid_fast_and_accur
 SORTER = 'kilosort4'     # 'kilosort4', 'spykingcircus2', 'mountainsort5'
 SORTER_PARAMS = {
     'batch_size': 30000,
-    'nblocks': 1,        # Increase for long recordings with drift
+    'nblocks': 1,        # Internal Kilosort correction only when CORRECT_MOTION=False
 }
 
 # Quality metrics and curation
@@ -140,12 +140,19 @@ def main():
     print("=" * 60)
 
     print(f"Running {SORTER}...")
+    sorter_params = SORTER_PARAMS.copy()
+    if CORRECT_MOTION:
+        # Disable the sorter's own motion stage after external interpolation.
+        if SORTER in {"kilosort2_5", "kilosort3", "kilosort4"}:
+            sorter_params["do_correction"] = False
+        elif SORTER == "spykingcircus2":
+            sorter_params["apply_motion_correction"] = False
     sorting = si.run_sorter(
         SORTER,
         rec,
         folder=output_path / f'{SORTER}_output',
         verbose=True,
-        **SORTER_PARAMS,
+        **sorter_params,
     )
 
     print(f"Found {len(sorting.unit_ids)} units")

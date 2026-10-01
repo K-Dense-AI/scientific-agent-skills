@@ -116,7 +116,7 @@ def run_deseq2(counts_df, metadata, design, n_cpus=1):
 
     dds.deseq2()
 
-    print("\n✓ DESeq2 fitting complete")
+    print("\n[OK] DESeq2 fitting complete")
 
     return dds, inference
 
@@ -157,14 +157,14 @@ def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True, inference=
 
     ds.summary()
 
-    print("\n✓ Statistical testing complete")
+    print("\n[OK] Statistical testing complete")
 
     # Optional LFC shrinkage
     if shrink_lfc:
         print("\nApplying LFC shrinkage for visualization...")
         coeff = shrink_coeff or infer_shrink_coeff(dds, contrast)
         ds.lfc_shrink(coeff=coeff)
-        print("✓ LFC shrinkage complete")
+        print("[OK] LFC shrinkage complete")
 
     return ds
 
@@ -381,7 +381,7 @@ Examples:
     if args.plots:
         create_plots(ds, args.output)
 
-    print(f"\n✓ Analysis complete! Results saved to {args.output}/")
+    print(f"\n[OK] Analysis complete! Results saved to {args.output}/")
 
 
 if __name__ == "__main__":

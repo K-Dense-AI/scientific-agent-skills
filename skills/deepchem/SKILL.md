@@ -5,7 +5,7 @@ license: MIT license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.7–3.11 (PyPI 2.8.0 caps at <3.12). Install PyTorch, TensorFlow, or JAX before the matching deepchem extra. RDKit is a core dependency.
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: K-Dense Inc.
 ---
 
@@ -50,7 +50,8 @@ Three end-to-end workflows are in
 
 ## Example Scripts
 
-This skill includes three production-ready scripts in the `scripts/` directory:
+This skill includes three example scripts in `scripts/`; validate their selected
+backend, split, task labels, and metrics on your data before relying on a result:
 
 ### 1. `predict_solubility.py`
 Train and evaluate solubility prediction models. Works with Delaney benchmark or custom CSV data.
@@ -112,7 +113,10 @@ splitter = dc.splits.RandomSplitter()
 train, test = splitter.train_test_split(dataset)
 ```
 
-### Pattern 2: Normalize Features and Targets
+### Pattern 2: Normalize Regression Targets
+Fit target transformations on training data only and pass them to evaluation/prediction
+to recover the original units. This `transform_y=True` example does not normalize X;
+do not apply it to binary class labels.
 ```python
 transformers = [
     dc.trans.NormalizationTransformer(
@@ -132,7 +136,15 @@ for transformer in transformers:
 4. Try GNNs if you have >10K samples
 5. Use transfer learning for small datasets or novel scaffolds
 
-### Pattern 4: Handle Imbalanced Data
+### Pattern 4: Preserve Missing-Label Masks and Handle Imbalance
+For multitask data, keep `dataset.w` aligned with `X`, `y`, and `ids`: a zero weight
+can mark an unmeasured task, not an inactive compound. DeepChem CSV loading masks
+empty labels and drops unfeaturizable rows. Inspect per-task observed/positive counts
+and rejected IDs after loading; preserve masks in custom losses and metrics instead
+of treating placeholder zeros as negative assay results. Verify the loader behavior
+for your missing-value representation. See the [2.8.0 loader source](https://github.com/deepchem/deepchem/blob/2.8.0/deepchem/data/data_loader.py).
+
+For observed classification labels:
 ```python
 # Option 1: Balancing transformer
 transformer = dc.trans.BalancingTransformer(dataset=train)

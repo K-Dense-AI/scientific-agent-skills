@@ -150,10 +150,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         if success:
             ok += 1
             if not args.quiet:
-                print(f"✓ {path}: {msg}")
+                print(f"[OK] {path}: {msg}")
         else:
             fail += 1
-            print(f"✗ {path}: {msg}", file=sys.stderr)
+            print(f"[FAIL] {path}: {msg}", file=sys.stderr)
 
     print(f"Done: {ok} succeeded, {fail} failed, {len(files)} total")
     return 0 if fail == 0 else 1

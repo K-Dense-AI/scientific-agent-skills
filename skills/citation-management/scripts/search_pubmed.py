@@ -113,7 +113,7 @@ class PubMedSearcher:
             return pmids
             
         except Exception as e:
-            print(f'Error searching PubMed: {e}', file=sys.stderr)
+            print(f'Error searching PubMed ({type(e).__name__}); request details omitted', file=sys.stderr)
             return []
     
     def fetch_metadata(self, pmids: List[str]) -> List[Dict]:
@@ -167,7 +167,7 @@ class PubMedSearcher:
                 time.sleep(self.delay)
                 
             except Exception as e:
-                print(f'Error fetching metadata for batch: {e}', file=sys.stderr)
+                print(f'Error fetching metadata for batch ({type(e).__name__}); request details omitted', file=sys.stderr)
                 continue
         
         return metadata_list

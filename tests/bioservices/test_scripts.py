@@ -383,6 +383,23 @@ class KeggEntryParsingTests(unittest.TestCase):
         # ATP is CHEBI:15422.
         self.assertEqual(self.info["chebi_id"], "15422")
 
+    def test_multiple_chebi_forms_are_preserved_without_selecting_one(self) -> None:
+        # KEGG C00022 links charged pyruvate and neutral pyruvic acid.
+        entry = ATP_ENTRY.replace("ChEBI: 15422", "ChEBI: 15361 32816 15361")
+        info = quietly(compound.get_kegg_info,
+                       FakeKegg(entries={"cpd:C00022": entry}), "C00022")
+        self.assertEqual(info["chebi_ids"], ["15361", "32816"])
+        self.assertIsNone(info["chebi_id"])
+        with patch.object(compound, "UniChem") as api:
+            self.assertIsNone(quietly(compound.get_chembl_id, "C00022", info["chebi_id"]))
+        api.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "report.txt"
+            quietly(compound.save_results, "pyruvate", info, None, output)
+            report = output.read_text()
+        self.assertIn("ChEBI candidates (unresolved): 15361, 32816", report)
+        self.assertNotIn("ChEMBL:", report)
+
     def test_only_the_pathway_block_becomes_pathways(self) -> None:
         # Three PATHWAY lines. The indented DBLINKS lines that follow must not
         # be collected, or the pathway count is inflated by database links.
@@ -406,6 +423,30 @@ class KeggEntryParsingTests(unittest.TestCase):
 
     def test_an_empty_response_is_reported_as_no_information(self) -> None:
         self.assertIsNone(quietly(compound.get_kegg_info, FakeKegg(), "C00002"))
+
+
+class UniChemMappingTests(unittest.TestCase):
+    def test_missing_cross_reference_does_not_request_an_unsupported_source(self):
+        with patch.object(compound, "UniChem") as api:
+            self.assertIsNone(quietly(compound.get_chembl_id, "C00999"))
+        api.assert_not_called()
+
+    def test_current_api_deduplicates_matches_and_preserves_ambiguity(self):
+        for values, expected in [([], None), (["CHEMBL25", "CHEMBL25"], "CHEMBL25"),
+                                 (["CHEMBL25", "CHEMBL99"], None)]:
+            with self.subTest(values=values), patch.object(compound, "UniChem") as api:
+                api.return_value.get_compounds.return_value = {"compounds": [
+                    {"sources": [{"shortName": "chembl", "compoundId": value}]}
+                    for value in values
+                ]}
+                self.assertEqual(quietly(compound.get_chembl_id, "C00999", "15365"), expected)
+                api.return_value.get_compounds.assert_called_once_with("CHEBI:15365", "chebi")
+
+    def test_prefixed_identifier_and_service_failure(self):
+        with patch.object(compound, "UniChem") as api:
+            api.return_value.get_compounds.side_effect = RuntimeError("offline")
+            self.assertIsNone(quietly(compound.get_chembl_id, "C00999", "CHEBI:15365"))
+            api.return_value.get_compounds.assert_called_once_with("CHEBI:15365", "chebi")
 
 
 class ChebiAndChemblTests(unittest.TestCase):

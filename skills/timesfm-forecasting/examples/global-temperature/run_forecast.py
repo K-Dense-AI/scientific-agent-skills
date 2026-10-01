@@ -22,7 +22,7 @@ data_path = Path(__file__).parent / "temperature_anomaly.csv"
 df = pd.read_csv(data_path, parse_dates=["date"])
 df = df.sort_values("date").reset_index(drop=True)
 
-print(f"\n📊 Input Data: {len(df)} months of temperature anomalies")
+print(f"\nInput Data: {len(df)} months of temperature anomalies")
 print(
     f"   Date range: {df['date'].min().strftime('%Y-%m')} to {df['date'].max().strftime('%Y-%m')}"
 )
@@ -39,7 +39,7 @@ input_series = df["anomaly_c"].values.astype(np.float32)
 # NOTE: TimesFM 2.5 PyTorch checkpoint has a file format issue at time of writing.
 # The model.safetensors file is not loadable via torch.load().
 # Using TimesFM 1.0 PyTorch which works correctly.
-print("\n🤖 Loading TimesFM 1.0 (200M) PyTorch...")
+print("\nModel: Loading TimesFM 1.0 (200M) PyTorch...")
 import timesfm
 
 hparams = timesfm.TimesFmHparams(horizon_len=12)
@@ -49,7 +49,7 @@ checkpoint = timesfm.TimesFmCheckpoint(
 model = timesfm.TimesFm(hparams=hparams, checkpoint=checkpoint)
 
 # Forecast
-print("\n📈 Running forecast (12 months ahead)...")
+print("\nForecast: Running forecast (12 months ahead)...")
 forecast_input = [input_series]
 frequency_input = [0]  # Monthly data
 
@@ -133,9 +133,9 @@ print("\n" + "=" * 60)
 print("  FORECAST RESULTS")
 print("=" * 60)
 print(
-    f"\n📅 Forecast period: {forecast_dates[0].strftime('%Y-%m')} to {forecast_dates[-1].strftime('%Y-%m')}"
+    f"\nDates: Forecast period: {forecast_dates[0].strftime('%Y-%m')} to {forecast_dates[-1].strftime('%Y-%m')}"
 )
-print(f"\n🌡️  Temperature Anomaly Forecast (°C above 1951-1980 baseline):")
+print(f"\nTemperature Anomaly Forecast (°C above 1951-1980 baseline):")
 print(f"\n   {'Month':<10} {'Point':>8} {'80% CI':>15} {'90% CI':>15}")
 print(f"   {'-' * 10} {'-' * 8} {'-' * 15} {'-' * 15}")
 for i, (date, pt, q10, q90, q05, q95) in enumerate(
@@ -152,7 +152,7 @@ for i, (date, pt, q10, q90, q05, q95) in enumerate(
         f"   {date:<10} {pt:>8.3f} [{q10:>6.3f}, {q90:>6.3f}] [{q05:>6.3f}, {q95:>6.3f}]"
     )
 
-print(f"\n📊 Summary Statistics:")
+print(f"\nData: Summary Statistics:")
 print(f"   Mean forecast:  {point.mean():.3f}°C")
 print(
     f"   Max forecast:   {point.max():.3f}°C (Month: {forecast_dates[point.argmax()].strftime('%Y-%m')})"
@@ -162,6 +162,6 @@ print(
 )
 print(f"   vs 2024 mean:   {point.mean() - df['anomaly_c'].iloc[-12:].mean():+.3f}°C")
 
-print(f"\n✅ Output saved to:")
+print(f"\n[OK] Output saved to:")
 print(f"   {output_dir / 'forecast_output.csv'}")
 print(f"   {output_dir / 'forecast_output.json'}")

@@ -4,7 +4,7 @@ description: Use when working with Outpost Bio's open microbiome foundation mode
 license: MIT
 compatibility: Requires Python 3.10+ with `waypoint-bio` (pulls torch, transformers, datasets, peft, scikit-learn). Needs network access and a Hugging Face token with access granted to the gated outpost-bio repos. A GPU is strongly recommended for pretraining and benchmarking.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
   upstream-version: "waypoint-bio 1.0.2 (PyPI); GitHub main 1.0.4"
   last-reviewed: "2026-08-17"
@@ -155,6 +155,8 @@ waypoint embed \
 Output is indexed by sample ID with columns `dim_0 … dim_{H-1}` (`H` = 256 for 6m, 512 for 45m,
 768 for 170m). Defaults: `--pooling last_token`, `--batch_size 32`, `--max_length 512`, device
 auto-detected (`cuda` → `mps` → `cpu`).
+
+Record the fraction of samples truncated at the chosen `max_length`, separately from vocabulary coverage. Samples can have excellent vocabulary coverage and still lose lower-ranked taxa after abundance/z-score sorting. Keep this limit consistent across embedding comparisons and report any sensitivity analysis.
 
 Keep `--pooling last_token` unless you have a reason to change it: it matches how the checkpoints
 were pretrained and how `benchmark` and `finetune` pool. `mean` is a reasonable alternative for

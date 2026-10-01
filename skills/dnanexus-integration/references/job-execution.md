@@ -228,9 +228,11 @@ failure, termination, **and local wait timeout**. Classify the exception by
 re-describing the remote state. A local timeout does not terminate the remote
 execution.
 
-`DXAnalysis.wait_on_done()` follows the same pattern. Treat `failed`,
-`partially_failed`, and `terminated` as remote terminal outcomes; otherwise the
-exception may be a local wait timeout while the analysis continues.
+`DXAnalysis.wait_on_done()` also requires re-describing the analysis after an
+exception. Only `done`, `failed`, and `terminated` are terminal analysis states.
+`partially_failed` reports a stage failure while other stages are still nonterminal:
+inspect those stages and continue monitoring before cleanup or a replacement launch.
+Do not equate a locally ended wait with completion or termination of the analysis.
 
 ## Outputs
 

@@ -5,7 +5,7 @@ allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: "K-Dense Inc."
 ---
 
@@ -177,6 +177,14 @@ For exhaustive retrievals or any result that feeds downstream analysis:
 `scripts/paginate.py` does all four for the APIs it covers, and distinguishes "you set a bound" from "records went missing."
 
 For a targeted lookup, still record the endpoint, parameters, and access date so the single result can be repeated.
+
+For retraction or correction checks, distinguish the original article from its notice.
+A Crossref `update-type:retraction` search can return the retraction notice, whose
+`update-to` metadata identifies the affected DOI; inspect that relationship before
+labeling a paper. Check the publisher record when status is material, and report
+"no notice found in the sources checked" when evidence is absent. An empty OA or
+Crossref response does not establish that a paper has never been retracted. See
+[Crossref post-publication updates](https://community.crossref.org/t/ticket-of-the-month-june-2026-post-publication-updates-in-metadata-manager/16253).
 
 ## Bundled Scripts
 

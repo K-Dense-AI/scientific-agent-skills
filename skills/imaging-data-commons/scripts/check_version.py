@@ -112,12 +112,12 @@ def notify_updates(installed):
     if installed:
         pkg = fetch_json("https://pypi.org/pypi/idc-index/json", "info", "version")
         if pkg and parse_version(pkg) > parse_version(installed):
-            print(f"ℹ️ idc-index {pkg} available — to update: "
+            print(f"[INFO] idc-index {pkg} available — to update: "
                   f"{install_commands('idc-index', upgrade=True)[0]}")
 
     tag = fetch_json(f"https://api.github.com/repos/{REPO}/releases/latest", "tag_name")
     if tag and parse_version(tag) > parse_version(SKILL_VERSION):
-        print(f"ℹ️ Skill {tag.lstrip('v')} available (you have {SKILL_VERSION}): "
+        print(f"[INFO] Skill {tag.lstrip('v')} available (you have {SKILL_VERSION}): "
               f"https://github.com/{REPO}/releases/latest")
 
 

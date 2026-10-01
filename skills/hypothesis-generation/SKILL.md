@@ -4,7 +4,7 @@ description: Formulate evidence-bounded scientific questions, candidate hypothes
 license: MIT
 compatibility: Python 3.11+ standard library. Bundled CLIs are deterministic and local-only; they accept bounded JSON, CSV, or Markdown and require no network, credentials, models, image services, or external packages.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-23"
 ---
@@ -200,6 +200,13 @@ For intervention trials, use the current SPIRIT 2025 protocol guidance and CONSO
 ### 10. Prevent HARKing and expose deviations
 
 Before accessing the target outcomes, timestamp the question, candidates, predictions, outcomes, exclusions, transformations, analysis, multiplicity, missing-data plan, and stopping rule when feasible.
+
+For existing datasets, record exactly what each analyst already saw (raw outcomes,
+summary statistics, or prior exploratory results). A later
+[preregistration](https://www.cos.io/initiatives/prereg) cannot make those
+observations prospective. Name the untouched holdout or new replication that
+will test data-informed predictions, and keep the original exploratory analysis
+clearly identified.
 
 Afterward:
 

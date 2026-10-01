@@ -87,6 +87,13 @@ def _next_id(tree):
     return f"n{n}"
 
 
+def _id_sort_key(node_id):
+    """Order generated ids numerically, then any manually assigned ids by name."""
+    if isinstance(node_id, str) and node_id.startswith("n") and node_id[1:].isdecimal():
+        return (0, int(node_id[1:]), node_id)
+    return (1, 0, str(node_id))
+
+
 def _node(tree, node_id):
     node = tree["nodes"].get(node_id)
     if node is None:
@@ -211,6 +218,8 @@ def cmd_set_evidence(args):
     leaf part). Insight propagation upward is a separate, deliberate call."""
     tree = _load_tree(args.run_dir)
     node = _node(tree, args.node)
+    if args.status is not None and args.status not in VALID_STATUS:
+        sys.exit(f"error: status must be one of {sorted(VALID_STATUS)}")
     meta = node["metadata"]
     if args.dev_score is not None:
         meta["dev_score"] = args.dev_score
@@ -391,7 +400,7 @@ def cmd_observe(args):
     print("\n-- Active frontier (selectable hypotheses) --")
     if not frontier:
         print("  (empty — ideate new children under a promising node)")
-    for n in sorted(frontier, key=lambda x: x["id"]):
+    for n in sorted(frontier, key=lambda x: _id_sort_key(x["id"])):
         anc = _ancestors(tree, n["id"])
         anc_ins = " | ".join(
             nodes[a]["insight"].replace("\n", " ")[:80] for a in anc if nodes[a]["insight"].strip()
@@ -405,7 +414,7 @@ def cmd_observe(args):
     print("\n-- Executed / merged nodes (evidence) --")
     if not executed:
         print("  (none yet)")
-    for n in sorted(executed, key=lambda x: x["id"]):
+    for n in sorted(executed, key=lambda x: _id_sort_key(x["id"])):
         print(f"  {n['id']} [{n['status']}]{_fmt_score(n, run)}: {n['hypothesis']}")
         if n["insight"].strip():
             print(f"      insight: {n['insight'].splitlines()[0][:120]}")
@@ -415,7 +424,7 @@ def cmd_observe(args):
     print("\n-- Pruned lessons (negative constraints — avoid these) --")
     if not pruned:
         print("  (none yet)")
-    for n in sorted(pruned, key=lambda x: x["id"]):
+    for n in sorted(pruned, key=lambda x: _id_sort_key(x["id"])):
         reason = n["metadata"].get("prune_reason", "")
         print(f"  {n['id']}: {n['hypothesis']}" + (f" — {reason}" if reason else ""))
 
@@ -446,7 +455,7 @@ def cmd_status(args):
         sym = symbol.get(n["status"], "?")
         best = " <== M_best" if nid == run["best_node"] else ""
         print(f"{prefix}[{sym}] {nid} {n['hypothesis'][:70]}{_fmt_score(n, run)}{best}")
-        kids = sorted(_children(tree, nid))
+        kids = sorted(_children(tree, nid), key=_id_sort_key)
         for i, c in enumerate(kids):
             render(c, prefix + "    ")
 
@@ -523,7 +532,7 @@ def build_parser():
     s.add_argument("--result", default=None, help="Factual result summary")
     s.add_argument("--insight", default=None, help="Distilled, reusable lesson from this experiment")
     s.add_argument("--branch-ref", default=None, help="Git branch/commit/worktree path of the artifact")
-    s.add_argument("--status", default=None, help="Override status (default: executed)")
+    s.add_argument("--status", default=None, help=f"Override status (default: executed), one of {sorted(VALID_STATUS)}")
     s.set_defaults(func=cmd_set_evidence)
 
     s = sub.add_parser("propagate", help="Abstract a leaf insight up to ancestors (Backpropagate, upward)")

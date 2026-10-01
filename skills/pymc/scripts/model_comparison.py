@@ -97,7 +97,7 @@ def compare_models(models_dict: Dict[str, Any],
         print("="*70)
 
         best_model = comparison.index[0]
-        print(f"\n✓ Best model: {best_model}")
+        print(f"\n[OK] Best model: {best_model}")
 
         # Check for a clear winner. Vehtari et al. recommend treating an ELPD
         # difference below 4 as small, and otherwise judging it against the
@@ -107,16 +107,16 @@ def compare_models(models_dict: Dict[str, Any],
             delta_se = comparison.iloc[1]['dse']
 
             if delta < 4:
-                print(f"  → Models are SIMILAR (ELPD difference {delta:.1f} < 4)")
+                print(f"  -> Models are SIMILAR (ELPD difference {delta:.1f} < 4)")
                 print("    Consider model averaging or choose based on simplicity")
             elif delta > 2 * delta_se:
                 print(
-                    f"  → STRONG evidence for {best_model} "
+                    f"  -> STRONG evidence for {best_model} "
                     f"(ELPD difference {delta:.1f} > 2 SE)"
                 )
             else:
                 print(
-                    f"  → MODERATE evidence for {best_model} "
+                    f"  -> MODERATE evidence for {best_model} "
                     f"(ELPD difference {delta:.1f}, within 2 SE)"
                 )
 
@@ -128,9 +128,9 @@ def compare_models(models_dict: Dict[str, Any],
             if isinstance(diagnostic, str) and diagnostic.strip() not in ('', 'ok')
         ]
         if flagged:
-            print("\n⚠️  WARNING: Some models have reliability issues")
+            print("\n[WARN]  WARNING: Some models have reliability issues")
             print(f"   Models with warnings: {', '.join(flagged)}")
-            print("   → Check Pareto-k diagnostics with check_loo_reliability()")
+            print("   -> Check Pareto-k diagnostics with check_loo_reliability()")
 
     return comparison
 
@@ -186,25 +186,25 @@ def check_loo_reliability(models_dict: Dict[str, Any],
         if verbose:
             print(f"Pareto-k diagnostics:")
             print(f"  • Good (k < 0.5):       {(pareto_k < 0.5).sum()} observations")
-            print(f"  • OK (0.5 ≤ k < 0.7):    {((pareto_k >= 0.5) & (pareto_k < 0.7)).sum()} observations")
-            print(f"  • Bad (0.7 ≤ k < 1.0):   {((pareto_k >= 0.7) & (pareto_k < 1.0)).sum()} observations")
-            print(f"  • Very bad (k ≥ 1.0):    {(pareto_k >= 1.0).sum()} observations")
+            print(f"  • OK (0.5 <= k < 0.7):    {((pareto_k >= 0.5) & (pareto_k < 0.7)).sum()} observations")
+            print(f"  • Bad (0.7 <= k < 1.0):   {((pareto_k >= 0.7) & (pareto_k < 1.0)).sum()} observations")
+            print(f"  • Very bad (k >= 1.0):    {(pareto_k >= 1.0).sum()} observations")
             print(f"  • Maximum k: {pareto_k.max():.3f}")
 
             if n_high > 0:
-                print(f"\n⚠️  {n_high} observations with k > {threshold}")
+                print(f"\n[WARN]  {n_high} observations with k > {threshold}")
                 print("  LOO approximation may be unreliable for these points")
                 print("  Solutions:")
-                print("  → Use WAIC instead (less sensitive to outliers)")
-                print("  → Investigate influential observations")
-                print("  → Consider more flexible model")
+                print("  -> Use WAIC instead (less sensitive to outliers)")
+                print("  -> Investigate influential observations")
+                print("  -> Consider more flexible model")
 
                 if n_very_high > 0:
-                    print(f"\n⚠️  {n_very_high} observations with k > 1.0")
+                    print(f"\n[WARN]  {n_very_high} observations with k > 1.0")
                     print("  These points have very high influence")
-                    print("  → Strongly consider K-fold CV or other validation")
+                    print("  -> Strongly consider K-fold CV or other validation")
             else:
-                print(f"✓ All Pareto-k values < {threshold}")
+                print(f"[OK] All Pareto-k values < {threshold}")
                 print("  LOO estimates are reliable")
 
     return results
@@ -304,7 +304,7 @@ def model_averaging(models_dict: Dict[str, Any],
     # Weighted average
     averaged = sum(w * p for w, p in zip(weights, predictions))
 
-    print(f"\n✓ Model averaging complete")
+    print(f"\n[OK] Model averaging complete")
     print(f"  Combined predictions using {len(predictions)} models")
 
     return averaged, weights

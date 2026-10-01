@@ -43,8 +43,9 @@ mislead.
 
 ## Multiple-testing correction
 
-- **Benjamini–Hochberg (FDR)** — default for Enrichr/gseapy (`Adjusted P-value`,
-  `FDR q-val`). Controls expected false-discovery proportion. Use `< 0.05`.
+- **Benjamini–Hochberg (FDR)** — used for Enrichr/gseapy ORA `Adjusted P-value`.
+  GSEA `FDR q-val` is instead estimated from normalized enrichment-score
+  permutation distributions; report the permutation type and do not label it BH.
 - **g:SCS** — g:Profiler's default; accounts for the correlated structure of GO
   and overlapping terms; generally stricter and more appropriate than BH for
   ontology hierarchies.
@@ -59,8 +60,9 @@ that produced a hit.
 - **NES (normalized enrichment score)** — the headline metric; normalized for set
   size so it is comparable across sets. Sign = direction (positive = enriched at
   the top of your ranking, e.g., up in the test condition).
-- **FDR q-val** — significance; filter on this (`< 0.05`, or `< 0.25` for
-  exploratory hypothesis generation, the GSEA convention).
+- **FDR q-val** — significance; filter on this. GSEA recommends `< 0.05` for
+  gene-set permutations (including preranked analyses); the exploratory `< 0.25`
+  convention applies to phenotype permutations. State the chosen threshold.
 - **Leading-edge genes** (`Lead_genes`) — the subset of genes that drive the
   signal (those before the running-sum peak). Report these; they are the concrete
   biology and are useful for overlap/redundancy analysis.

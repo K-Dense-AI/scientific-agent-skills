@@ -17,9 +17,6 @@ research/
 # Local agent tooling
 .claude/
 .agents/
-# Anchored: an unanchored "scripts/" also matches skills/<name>/scripts/,
-# which silently drops every new skill's bundled tooling from git.
-/scripts/
 
 skills-lock.json
 

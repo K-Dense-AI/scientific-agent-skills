@@ -17,7 +17,10 @@ Participation in this project is governed by our [Code of Conduct](CODE_OF_CONDU
 All repository skills live under `skills/`. The repository root is also an
 [Agent Plugins](https://agent-plugins.org/) package: keep root `plugin.json` schema-valid, do not
 add non-portable top-level fields, and keep its `version` in sync with `pyproject.toml` whenever
-you bump the collection version.
+you bump the collection version. After `uv sync`, run
+`uv run python -m pytest tests/_meta -q` to check the manifest against the bundled official
+1.0.0 JSON Schema, version synchronization, package-path containment, and skill structure.
+These checks run in CI on manifest-only changes as well as skill changes.
 
 ```text
 plugin.json
@@ -333,7 +336,7 @@ Nothing is installed into the project environment, so `uv sync` is unaffected. E
 
 A new skill that ships `scripts/` needs a `[skills.<name>]` entry — `tests/_meta` fails without one. Use `packages = []` when its bundled tooling is standard-library only — the skill still gets a clean environment with just pytest. uv caches wheels globally, so repeat runs create each environment in milliseconds.
 
-`.github/workflows/skill-tests.yml` runs `tests/_meta` plus every `packages = []` suite on each pull request, which is fast and needs no wheels beyond pytest. The full `--isolated` sweep is not run in CI: it builds an environment per skill, and several of them need a CUDA toolchain, a JDK, or a local MATLAB install that a runner does not have. Run it locally before a release, and whenever you change anything under `tests/_contract/`.
+`.github/workflows/skill-tests.yml` runs `tests/_meta` in the project environment (including the `jsonschema` dev dependency) plus every `packages = []` suite on each relevant pull request. Those isolated skill suites need no wheels beyond pytest. The full `--isolated` sweep is not run in CI: it builds an environment per skill, and several of them need a CUDA toolchain, a JDK, or a local MATLAB install that a runner does not have. Run it locally before a release, and whenever you change anything under `tests/_contract/`.
 
 ## Pull Request Checklist
 

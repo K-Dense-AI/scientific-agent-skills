@@ -90,6 +90,21 @@ def test_raises_on_unparseable_response():
         synthesize(_cluster(), _top_k(), backend=backend)
 
 
+@pytest.mark.parametrize("name", ["../escape", "/tmp/escape", "a/b", "a\\b", ".", "..", "", None, 42, "-x", "x-", "x--y", "a" * 65])
+@pytest.mark.parametrize("verdict", ["compose", "novel"])
+def test_rejects_untrusted_draft_paths(name, verdict):
+    backend = StubBackend(json.dumps({"verdict": verdict, "name": name, "skill_body": "body"}))
+    with pytest.raises(SynthesisError, match="valid skill name"):
+        synthesize(_cluster(), _top_k(), backend=backend)
+
+
+@pytest.mark.parametrize("body", [None, "", " ", {}, 42])
+def test_rejects_missing_or_nontext_draft_body(body):
+    backend = StubBackend(json.dumps({"verdict": "novel", "name": "valid-name", "skill_body": body}))
+    with pytest.raises(SynthesisError, match="non-empty string"):
+        synthesize(_cluster(), _top_k(), backend=backend)
+
+
 def test_raises_on_unknown_verdict():
     backend = StubBackend(json.dumps({"verdict": "weird"}))
     with pytest.raises(SynthesisError):

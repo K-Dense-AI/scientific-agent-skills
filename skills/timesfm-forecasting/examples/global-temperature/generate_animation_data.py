@@ -40,14 +40,14 @@ def main() -> None:
     all_dates = df["date"].tolist()
     all_values = df["anomaly_c"].values.astype(np.float32)
 
-    print(f"\n📊 Total data: {len(all_values)} months")
+    print(f"\nData: Total data: {len(all_values)} months")
     print(
         f"   Date range: {all_dates[0].strftime('%Y-%m')} to {all_dates[-1].strftime('%Y-%m')}"
     )
     print(f"   Animation steps: {len(all_values) - MIN_CONTEXT + 1}")
 
     # Load TimesFM with max horizon (will truncate output for shorter forecasts)
-    print(f"\n🤖 Loading TimesFM 1.0 (200M) PyTorch (horizon={MAX_HORIZON})...")
+    print(f"\nModel: Loading TimesFM 1.0 (200M) PyTorch (horizon={MAX_HORIZON})...")
     hparams = timesfm.TimesFmHparams(horizon_len=MAX_HORIZON)
     checkpoint = timesfm.TimesFmCheckpoint(
         huggingface_repo_id="google/timesfm-1.0-200m-pytorch"
@@ -65,7 +65,7 @@ def main() -> None:
         horizon = TOTAL_MONTHS - n_points
 
         print(
-            f"\n📈 Step {step_num}/{total_steps}: Using {n_points} points, forecasting {horizon} months..."
+            f"\nForecast: Step {step_num}/{total_steps}: Using {n_points} points, forecasting {horizon} months..."
         )
 
         # Get historical data up to this point
@@ -136,9 +136,9 @@ def main() -> None:
         json.dump(output, f, indent=2)
 
     print(f"\n" + "=" * 60)
-    print("  ✅ ANIMATION DATA COMPLETE")
+    print("  [OK] ANIMATION DATA COMPLETE")
     print("=" * 60)
-    print(f"\n📁 Output: {OUTPUT_FILE}")
+    print(f"\nFiles: Output: {OUTPUT_FILE}")
     print(f"   Total steps: {len(animation_steps)}")
     print(f"   Each forecast extends to 2025-12")
 

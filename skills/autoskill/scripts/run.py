@@ -139,7 +139,7 @@ def main(argv=None):
     import httpx
     import yaml
 
-    from backends import make_backend
+    from backends import check_remote_endpoint, make_backend
 
     parser = argparse.ArgumentParser(prog="autoskill")
     parser.add_argument("--start", required=True, help="ISO start time, e.g. 2026-04-17T00:00:00Z")
@@ -161,7 +161,9 @@ def main(argv=None):
 
     import os
     screenpipe_cfg = config.get("screenpipe", {})
-    screenpipe_url = screenpipe_cfg.get("url", "http://localhost:3030")
+    screenpipe_url = check_remote_endpoint(
+        screenpipe_cfg.get("url", "http://localhost:3030"), "screenpipe"
+    )
     screenpipe_token = (screenpipe_cfg.get("token")
                         or os.environ.get("SCREENPIPE_TOKEN"))
     screenpipe_client = httpx.Client(base_url=screenpipe_url, timeout=60.0)

@@ -4,7 +4,7 @@ description: Create safety-bounded draft structures and run local deterministic 
 license: MIT
 compatibility: Requires Python 3.11+ only for optional dependency-free local scripts; no network access, credentials, external models, or image services.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -185,6 +185,7 @@ Read `references/clinical_trial_reporting.md` and `references/safety_reporting.m
 - ICH E3 remains the CSR basis; its 2012 Q&A explicitly permits justified adaptation.
 - ICH E6(R3) consolidated Principles, Annex 1, and Annex 2 were adopted on 16 June 2026; regional implementation can differ.
 - Distinguish seriousness from severity and an adverse event from a suspected adverse reaction.
+- Preserve the verified harms counting rule: participants with at least one event, total/recurrent events, and exposure-time rates are different quantities. Label the denominator and observation window for each, and never apply the subject-proportion bound `n <= N` to recurrent event counts.
 - ICH E2B(R3) defines electronic ICSR data/message structure; it is not an aggregate-table format or a reportability decision rule.
 - ICH E2D(R1), adopted 15 September 2025, addresses post-approval individual case safety reporting; aggregate periodic reporting is addressed separately.
 - FDA requirements and electronic submission routes are role-, product-, study-, and date-specific. This skill never files or transmits.

@@ -4,7 +4,7 @@ description: "Create, edit, analyze, or convert Excel spreadsheets (.xlsx, .xlsm
 allowed-tools: Read Write Edit Bash Grep Glob
 license: Proprietary. LICENSE.txt has complete terms
 metadata:
-  version: "2.2"
+  version: "2.4"
   skill-author: Anthropic, PBC
   adapted-by: K-Dense Inc.
   source: https://github.com/anthropics/skills/tree/main/skills/xlsx
@@ -81,7 +81,7 @@ literal `#NAME?` baked into the file you deliver.
 - **`data_only=True` is destructive if you save.** That workbook has no formulas left, so saving replaces every one with a literal — permanently.
 - **`data_only=True` on a file openpyxl just wrote returns `None` everywhere** — run `recalc.py` first. (A formula whose result is `""` also reads back as `None`.)
 - **Merged cells: write the top-left anchor only.** Every other cell in the range is a `MergedCell` whose `.value` is read-only.
-- **`.xlsm` loses its macros unless you pass `keep_vba=True`** to `load_workbook`.
+- **`.xlsm` loses its macros unless you pass `keep_vba=True`** to `load_workbook`. This preserves VBA data, not every Excel feature. Before editing a feature-rich workbook, inventory shapes, controls, drawings, and other embedded objects; openpyxl does not preserve all of them. Save a working copy and compare those objects after saving and recalculation. If required objects cannot survive the round trip, use a compatible Excel workflow instead of delivering a stripped workbook.
 - **A sheet name containing a space must be quoted** in a cross-sheet reference: `='Assumptions Inputs'!$B$5`. Unquoted, it evaluates to `#VALUE!`.
 
 ## Financial models
@@ -107,4 +107,4 @@ lone edited cell mid-row is the commonest silent error · guard denominators tha
 
 ---
 
-*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/xlsx). Vendored here unmodified except for frontmatter metadata; see LICENSE.txt for terms.*
+*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/xlsx). Adapted here with repository metadata and additional preservation guidance; see LICENSE.txt for terms.*

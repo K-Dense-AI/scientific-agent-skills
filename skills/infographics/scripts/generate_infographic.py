@@ -101,12 +101,12 @@ def build_subprocess_env(api_key):
 def list_options():
     """Print available types, styles, and palettes."""
     print("""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                    INFOGRAPHIC GENERATION OPTIONS                             ║
-╚══════════════════════════════════════════════════════════════════════════════╝
++==============================================================================+
+|                    INFOGRAPHIC GENERATION OPTIONS                             |
++==============================================================================+
 
-📊 INFOGRAPHIC TYPES (--type):
-──────────────────────────────────────────────────────────────────────────────
+INFOGRAPHIC TYPES (--type):
+------------------------------------------------------------------------------
   statistical   Data-driven infographic with charts, numbers, and statistics
   timeline      Chronological events or milestones
   process       Step-by-step instructions or workflow
@@ -118,8 +118,8 @@ def list_options():
   resume        Professional skills and experience visualization
   social        Social media optimized content
 
-🎨 STYLE PRESETS (--style):
-──────────────────────────────────────────────────────────────────────────────
+STYLE PRESETS (--style):
+------------------------------------------------------------------------------
   corporate     Navy/gold, professional business style
   healthcare    Blue/cyan, trust-inducing medical style
   technology    Blue/violet, modern tech style
@@ -129,14 +129,14 @@ def list_options():
   finance       Navy/gold, conservative professional style
   nonprofit     Orange/sage/sand, warm human-centered style
 
-🎨 COLORBLIND-SAFE PALETTES (--palette):
-──────────────────────────────────────────────────────────────────────────────
+COLORBLIND-SAFE PALETTES (--palette):
+------------------------------------------------------------------------------
   wong          Wong's palette (7 colors) - most widely recommended
   ibm           IBM colorblind-safe (8 colors)
   tol           Tol's qualitative (12 colors)
 
-📄 DOCUMENT TYPES (--doc-type):
-──────────────────────────────────────────────────────────────────────────────
+DOCUMENT TYPES (--doc-type):
+------------------------------------------------------------------------------
   marketing     8.5/10 threshold - Marketing materials (highest quality)
   report        8.0/10 threshold - Business reports
   presentation  7.5/10 threshold - Slides and talks
@@ -145,7 +145,7 @@ def list_options():
   draft         6.5/10 threshold - Working drafts (lowest quality)
   default       7.5/10 threshold - General purpose
 
-──────────────────────────────────────────────────────────────────────────────
+------------------------------------------------------------------------------
 Examples:
   python generate_infographic.py "5 benefits of exercise" -o benefits.png --type list
   python generate_infographic.py "AI adoption 2020-2025" -o timeline.png --type timeline --style technology

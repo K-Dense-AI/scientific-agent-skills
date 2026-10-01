@@ -98,7 +98,7 @@ Once shaped correctly, scientific datasets feed `Trainer`/`SFTTrainer` like any 
 - Proteins: `AutoTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")`.
 - SMILES: usually a character-level or BPE tokenizer; check the model card.
 
-If a model and dataset come from the same org, their tokenizers/preprocessors are usually compatible by design — that's a strong signal to pair them.
+A shared organization is not evidence of tokenizer or preprocessing compatibility. Verify the model card's vocabulary, alphabet, special tokens, normalization, and input-length contract against the selected dataset, and pin the model, tokenizer, and dataset revisions separately.
 
 ## Caveats specific to scientific data
 

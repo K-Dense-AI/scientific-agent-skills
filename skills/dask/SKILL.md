@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: BSD-3-Clause license
 compatibility: Requires Python 3.10+ and dask 2025.1+. DataFrame workflows need pandas 2+ and PyArrow 16+. Cloud paths (s3://, gcs://) need s3fs or gcsfs. Cluster deployment uses dask.distributed (included with dask[complete]).
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -454,9 +454,9 @@ result = computation.compute()
 ### Common Issues
 
 **Memory Errors**:
-- Decrease chunk sizes
-- Use `persist()` strategically and delete when done
-- Check for memory leaks in custom functions
+- Check where the result lands: collection `.compute()` and `client.gather()` materialize results in client memory; reduce first or write partitioned output when the full result cannot fit.
+- Distributed `persist()` retains partitions on workers; it does not make a later oversized gather safe. Budget worker memory and release persisted collections when done.
+- Tune chunk sizes for concurrent tasks and temporary arrays, and inspect custom functions for memory growth.
 
 **Slow Start**:
 - Task graph too large (increase chunk sizes)

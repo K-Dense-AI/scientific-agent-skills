@@ -96,9 +96,10 @@ Traps worth knowing, because each one is a wasted round trip:
 - `512` exists only on Gemini 3.1 Flash. `flash-lite` and the Krea models take `1K` and nothing else.
 - `output_compression` is offered only by the OpenAI models, and none of them accept
   `output_format` — the container is theirs to choose.
-- **No model accepts `size`.** Shape the output with `aspect_ratio` and `resolution`.
-- **No model accepts `output_format: svg`.** SVG comes from the Recraft vector models, which return
-  `media_type: image/svg+xml` regardless of that parameter.
+- This table is a dated snapshot. The [current Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
+  documents `size` and `output_format: svg`; availability depends on the live model/endpoint.
+  The bundled CLI still has no `--size` flag. For vector output, verify the returned
+  `media_type: image/svg+xml` instead of inferring the format from a filename.
 
 ### Aspect ratio enums
 

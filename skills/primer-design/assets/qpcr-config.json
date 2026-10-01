@@ -1,0 +1,19 @@
+{
+  "sequence_args": {
+    "SEQUENCE_TARGET": [
+      [
+        235,
+        30
+      ]
+    ]
+  },
+  "global_args": {
+    "PRIMER_PRODUCT_SIZE_RANGE": [
+      [
+        90,
+        180
+      ]
+    ],
+    "PRIMER_NUM_RETURN": 3
+  }
+}

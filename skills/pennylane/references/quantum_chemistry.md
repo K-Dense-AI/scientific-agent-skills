@@ -133,11 +133,9 @@ s_wires, d_wires = qchem.excitations_to_wires(singles, doubles)
 
 @qml.qnode(dev)
 def uccsd_circuit(params):
-    # Hartree-Fock reference
-    qml.BasisState(hf_state, wires=range(n_qubits))
-
-    # UCCSD ansatz
-    qml.UCCSD(params, wires=range(n_qubits), s_wires=s_wires, d_wires=d_wires)
+    # UCCSD prepares the Hartree-Fock reference internally.
+    qml.UCCSD(params, wires=range(n_qubits), s_wires=s_wires,
+              d_wires=d_wires, init_state=hf_state)
 
     return qml.expval(hamiltonian)
 

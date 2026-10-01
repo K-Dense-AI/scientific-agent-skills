@@ -5,7 +5,7 @@ license: Apache-2.0
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.11–3.14 and polars-bio (uv pip install). Cloud I/O uses standard AWS/GCS/Azure SDK env vars when paths use s3://, gs://, or az:// URIs.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -98,6 +98,8 @@ result = lf.collect()
 ### 1. Genomic Interval Operations
 
 polars-bio provides 8 core interval operations for genomic range arithmetic. All operations accept Polars DataFrames with `chrom`, `start`, `end` columns (configurable). All operations return a `LazyFrame` by default (use `output_type="polars.DataFrame"` for eager results).
+
+**Interpret overlap rows correctly:** The default `overlap` result contains interval pairs: one query interval may appear multiple times when it hits several targets. Preserve a stable query ID before joining and choose `count_overlaps` when the requested output is a count per query interval. Do not interpret the number of joined rows as the number of unique covered regions. See the [upstream operations overview](https://biodatageeks.org/polars-bio/features/operations/).
 
 **Operations:**
 - `overlap` / `count_overlaps` - Find or count overlapping intervals between two sets (`overlap_output="left"` returns df1-only hits since 0.30.0)

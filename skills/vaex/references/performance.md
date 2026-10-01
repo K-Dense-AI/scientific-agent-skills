@@ -2,6 +2,8 @@
 
 This reference covers Vaex's performance features including lazy evaluation, caching, memory management, async operations, and optimization strategies for processing massive datasets.
 
+Examples below are illustrative API patterns; validate on a small in-memory DataFrame before applying them to large files.
+
 ## Understanding Lazy Evaluation
 
 Lazy evaluation is the foundation of Vaex's performance:
@@ -16,10 +18,11 @@ df = vaex.open('large_file.hdf5')
 # No computation happens here - just defines what to compute
 df['total'] = df.price * df.quantity
 df['log_price'] = df.price.log()
-mean_expr = df.total.mean()
+mean_expr = df.total.mean(delay=True)
 
-# Computation happens here (when result is needed)
-result = mean_expr  # Now the mean is actually calculated
+# Trigger the queued work, then retrieve its value
+df.execute()
+result = mean_expr.get()
 ```
 
 **Key concepts:**
@@ -38,7 +41,7 @@ df.export_hdf5('output.hdf5')       # Exporting
 
 # These do NOT trigger evaluation:
 df['new_col'] = df.x + df.y          # Creating virtual column
-expr = df.x.mean()                    # Creating expression
+expr = df.x.mean(delay=True)          # Queue aggregation without executing
 df_filtered = df[df.x > 10]          # Creating filtered view
 ```
 
@@ -58,7 +61,8 @@ max_x = df.x.max()        # Pass 3 through data
 mean_x = df.x.mean(delay=True)
 std_x = df.x.std(delay=True)
 max_x = df.x.max(delay=True)
-results = vaex.execute([mean_x, std_x, max_x])  # Single pass!
+df.execute()  # Execute the queued aggregations together
+results = [task.get() for task in (mean_x, std_x, max_x)]
 
 print(results[0])  # mean
 print(results[1])  # std
@@ -78,7 +82,8 @@ for column in ['sales', 'quantity', 'profit', 'cost']:
     delayed_results.extend([mean, std])
 
 # Execute all at once
-results = vaex.execute(delayed_results)
+df.execute()
+results = [task.get() for task in delayed_results]
 
 # Process results
 for i, column in enumerate(['sales', 'quantity', 'profit', 'cost']):
@@ -104,12 +109,14 @@ mean3 = df.col3.mean()
 mean4 = df.col4.mean()
 
 # Good: 1 pass through dataset
-results = vaex.execute([
+tasks = [
     df.col1.mean(delay=True),
     df.col2.mean(delay=True),
     df.col3.mean(delay=True),
     df.col4.mean(delay=True)
-])
+]
+df.execute()
+results = [task.get() for task in tasks]
 ```
 
 ## Asynchronous Operations
@@ -128,7 +135,8 @@ async def compute_statistics(df):
     std_task = df.x.std(delay=True)
 
     # Execute asynchronously
-    results = await vaex.async_execute([mean_task, std_task])
+    await df.execute_async()
+    results = [mean_task.get(), std_task.get()]
 
     return {'mean': results[0], 'std': results[1]}
 
@@ -149,8 +157,9 @@ future = df.x.mean(delay=True)
 
 # Do other work...
 
-# Get result when ready
-result = future.get()  # Blocks until complete
+# Execute queued work before retrieving the result
+df.execute()
+result = future.get()
 ```
 
 ## Virtual Columns vs Materialized Columns
@@ -419,7 +428,8 @@ delayed = [
     df.x.min(delay=True),
     df.x.max(delay=True)
 ]
-results = vaex.execute(delayed)
+df.execute()
+results = [task.get() for task in delayed]
 stats = dict(zip(['mean', 'std', 'min', 'max'], results))
 ```
 
@@ -506,7 +516,8 @@ for col in df.column_names:
 
 # Solution: Batch with delay=True
 delayed = [df[col].mean(delay=True) for col in df.column_names]
-results = vaex.execute(delayed)
+df.execute()
+results = [task.get() for task in delayed]
 for col, result in zip(df.column_names, results):
     print(f"{col}: {result}")
 ```

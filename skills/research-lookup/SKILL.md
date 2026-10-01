@@ -4,7 +4,7 @@ description: "Compile current scholarly evidence for a scientific manuscript or 
 license: MIT license
 compatibility: Requires network access to api.parallel.ai through parallel-cli 0.7.1+ for Search, Extract, and Research; explicit Chat uses api.parallel.ai with PARALLEL_API_KEY; optional Perplexity requests use openrouter.ai and require OPENROUTER_API_KEY.
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: PARALLEL_API_KEY
@@ -140,7 +140,7 @@ requests source-supported:
 
 The default extraction limit equals `--target-references`. Use `--extract-limit N`
 to reduce cost or `--no-extract` only when unverified search results are acceptable.
-The coverage report will not count search-only records as verified.
+The coverage report will not count search-only records as verified. Successful extraction is still only a retrieval check: inspect each excerpt against the proposed claim, confirm bibliographic identity, and verify correction/retraction status at the publisher or authoritative index. For a batched Extract response, inspect per-URL errors as well as returned results; a successful request can leave individual sources unavailable. Record inaccessible sources as gaps rather than assuming every requested URL was reviewed.
 
 ### 4. Review the manuscript research packet
 

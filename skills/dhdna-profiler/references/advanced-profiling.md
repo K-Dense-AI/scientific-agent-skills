@@ -32,15 +32,13 @@
 **Look for:** Self-awareness language, temporal references, emotional vocabulary range, growth signals
 **Typical topology:** Spiral
 
-## Cognitive Entropy Score
+## Dispersion of Annotated Scores
 
-A meta-metric derived from the 12 dimension scores:
-
-**Cognitive Entropy = Standard Deviation of all 12 scores**
-
-- **Low entropy (SD < 1.5):** Balanced thinker — no extreme spikes or valleys. May lack distinctiveness.
-- **Medium entropy (SD 1.5-3.0):** Characteristic thinker — clear strengths and shadows. Most people fall here.
-- **High entropy (SD > 3.0):** Extreme specialist — profound strengths paired with significant blind spots. Often the most innovative and most vulnerable.
+Standard deviation describes dispersion on the chosen 1–10 rubric; it is not
+information-theoretic entropy or a validated measure of specialization, innovation,
+vulnerability, or blind spots. If reported, identify the rated dimensions, missing
+(N/A) dimensions, and scoring convention. Do not turn the old 1.5/3.0 cutoffs into
+person categories or compare dispersion across differently elicited samples.
 
 ## The 4D-DHDNA Extension
 
@@ -50,9 +48,9 @@ For longitudinal analysis (profiling the same person over time), add the tempora
 
 - How has this person's cognitive profile shifted over the analyzed time period?
 - Which dimensions are growing? Which are shrinking?
-- What future cognitive state is the current trajectory pointing toward?
+- Could changes in genre, task, sample length, editing, or rater explain the apparent trend?
 
-This is based on the 4D-DHDNA theory: the future doesn't just happen — it exerts pull on the present. A person's cognitive evolution has a direction, and that direction IS part of their identity.
+The temporal-attractor language belongs to the framework's theory, not an established forecasting mechanism. Report changes in observed samples; do not extrapolate a future psychological state from rubric scores.
 
 Reference: [IDNA Consolidation v2, Section 3: 4D-DHDNA (DOI: 10.5281/zenodo.18807387)](https://doi.org/10.5281/zenodo.18807387)
 
@@ -69,4 +67,4 @@ Et = Ethical, S = Strategic, M = Memory, So = Social
 D = Domain, I = Intuitive, T = Temporal, Mc = Metacognitive
 ```
 
-Example: `[A9 C4 E2 L7 Et3 S9 D8 I3 T8 Mc6]` = highly analytical-strategic mind with deep domain expertise and strong temporal awareness, but low emotional processing and intuitive reasoning. Likely an engineer or systems architect.
+Example: `[A9 C4 E2 L7 Et3 S9 M:NA So:NA D8 I3 T8 Mc6]` records 12 dimensions, including two unobserved dimensions. It describes sample annotations; it does not identify an occupation or establish deficits in emotional processing.

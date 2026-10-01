@@ -3,7 +3,7 @@ name: pathway-enrichment
 description: Run pathway and gene-set enrichment analysis on gene lists or ranked gene data, then interpret the results. Use whenever the user has a set of genes (differentially expressed genes from PyDESeq2/Scanpy, CRISPR-screen hits, cluster marker genes, proteomics hits) and wants to know which biological pathways, GO terms, or gene sets are over-represented or enriched. Covers over-representation analysis (ORA / Enrichr / Fisher / hypergeometric), ranked Gene Set Enrichment Analysis (GSEA / preranked), single-sample scoring (ssGSEA/GSVA), and functional profiling via gseapy, g:Profiler, Enrichr libraries, MSigDB, GO, KEGG, Reactome, and WikiPathways — plus gene-ID mapping, choosing the right background universe, multiple-testing correction, redundancy reduction, dotplots/enrichment maps, and publication-ready tables. Use this for "pathway analysis", "enrichment analysis", "GO enrichment", "KEGG/Reactome pathways", "GSEA", "over-representation", "functional annotation", or "what pathways are my genes in".
 license: MIT
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -127,7 +127,13 @@ The background must be the genes that *could* have been detected in your assay (
 Use the Quick Start patterns or the bundled `scripts/run_enrichment.py`. For GSEA always set a `seed` and report `permutation_num`.
 
 ### Step 6 — Filter on adjusted p-values
-Use `Adjusted P-value` (ORA, Benjamini–Hochberg) or `FDR q-val` (GSEA), not raw p-values. Typical cutoff 0.05; also check the overlap/gene count so a "hit" isn't 1 gene out of a 2000-gene set.
+Use the correction returned by the selected method: Enrichr ORA reports BH-adjusted
+p-values, g:Profiler defaults to g:SCS, and GSEA estimates `FDR q-val` from its
+permutation distributions. These are not interchangeable BH outputs. Report the
+method and permutation type with the cutoff; GSEA's exploratory 0.25 convention
+is for phenotype permutations, while its documentation recommends 0.05 for
+gene-set permutations such as preranked analyses. Also inspect overlap and
+gene-set size. See the [GSEA FAQ](https://docs.gsea-msigdb.org/GSEA/GSEA_FAQ/).
 
 ### Step 7 — Visualize
 Dotplots, bar plots, enrichment maps, and GSEA running-score plots are built into gseapy (`gp.dotplot`, `gp.barplot`, `gp.enrichment_map`, `gp.gseaplot`). See `references/gseapy.md`.

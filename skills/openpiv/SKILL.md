@@ -5,7 +5,7 @@ license: BSD-3-Clause
 compatibility: Requires Python 3.10+ with openpiv installed (uv pip install openpiv). numpy, scipy, scikit-image, and matplotlib arrive as dependencies. No network access needed after install.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: OpenPIV Team
   tested-against: "openpiv 0.25.4"
 ---
@@ -330,8 +330,12 @@ def compute_vorticity(u, v, dx=1.0, dy=None):
     return np.gradient(v, dx, axis=1) - np.gradient(u, dy, axis=0)
 ```
 
-The grid spacing is `(window_size - overlap) / scaling_factor` in physical units, so leaving `dx=1.0`
-yields vorticity per grid cell, not per unit length.
+For the single-pass extended-search grid, spacing is
+`(search_area_size - overlap) / scaling_factor` in physical units; it reduces to
+`(window_size - overlap) / scaling_factor` only when the two window sizes match.
+Prefer differences of the saved `x` and `y` coordinates, especially after multipass
+processing. Leaving `dx=1.0` yields vorticity per grid cell, not per unit length.
+See [OpenPIV coordinate generation](https://openpiv.readthedocs.io/en/stable/src/tutorial1.html).
 
 **Sign convention:** `runner.py` ends with `transform_coordinates`, which relabels the grid into a
 right-handed y-up frame but leaves the rows in image order, so the saved `y` *decreases* as the row

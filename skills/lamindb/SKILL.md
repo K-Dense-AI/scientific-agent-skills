@@ -3,7 +3,7 @@ name: lamindb
 description: Use when working with LaminDB, the open-source lineage-native lakehouse for biological datasets and models. Covers setup, artifact registration, query/search, lineage tracking, validation, ontology-backed annotation with Bionty, collections, branches, storage, and workflow integrations.
 license: Apache-2.0 license
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -240,8 +240,13 @@ ln.finish()
 
 ### Use Case 2: Building a Queryable Data Lakehouse
 
+Illustrative: requires a configured instance, registered feature definitions, and the
+user-provided file/annotation lists. Iterate the QuerySet to load artifacts; a
+`to_dataframe()` result is a metadata table whose iteration yields column names.
+
 ```python
 import lamindb as ln
+import anndata as ad
 
 # Register multiple experiments
 for i, file in enumerate(data_files):
@@ -263,7 +268,8 @@ immune_datasets = ln.Artifact.filter(
     key__startswith="scrna/",
     tissue="PBMC",
     condition="treated"
-).to_dataframe()
+)
+metadata_preview = immune_datasets.to_dataframe()
 
 # Load specific datasets
 for artifact in immune_datasets:

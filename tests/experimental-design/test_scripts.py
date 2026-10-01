@@ -70,6 +70,28 @@ class RatioTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "positive integers"):
                     randomization._normalize_ratio(["a", "b"], ratio)
 
+    def test_fractional_ratios_are_refused_by_every_allocation_method(self) -> None:
+        # A weight below one used to delete the treatment arm; a weight
+        # above one silently changed the requested allocation split.
+        methods = (
+            (randomization.simple_randomization, 500),
+            (randomization.block_randomization, 12),
+            (randomization.stratified_block_randomization, {"siteA": 12}),
+            (randomization.cluster_randomization, 12),
+        )
+        for ratio in ((0.5, 1), (1, 0.5), (1.5, 1), (1, 2.5)):
+            for method, units in methods:
+                with self.subTest(ratio=ratio, method=method.__name__):
+                    with self.assertRaisesRegex(ValueError, "positive integers"):
+                        method(units, ratio=ratio, seed=0)
+
+    def test_whole_number_floats_preserve_the_requested_block_ratio(self) -> None:
+        frame = randomization.block_randomization(12, ratio=(2.0, 1.0), seed=0)
+        for _, rows in frame.groupby("block"):
+            self.assertEqual(
+                rows["arm"].value_counts().to_dict(), {"treatment": 4, "control": 2}
+            )
+
 
 class SimpleRandomizationTests(unittest.TestCase):
     def test_every_unit_is_assigned_exactly_once(self) -> None:

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Upstream SimPy 4.1.2 supports Python 3.8+; bundled CLIs require Python 3.10+, uv, and SimPy 4.1.2. They use only SimPy and the standard library, operate on local bounded inputs, and make no network calls.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
 ---
 
@@ -57,6 +57,9 @@ unreleased development revision. Use the versioned 4.1.2 links in
    Register the generator object with `env.process(...)`.
 4. **Bound execution.** Give every production run explicit time, entity, event, and
    replication caps. Never call `env.run()` on a model containing an endless process.
+   A time horizon alone cannot stop an endless `yield env.timeout(0)` loop: events
+   keep running at the same simulation time. Add an event-count or no-time-progress
+   guard, and wait on state-change events instead of zero-delay busy polling.
 5. **Separate random streams.** Use local RNG instances for logically distinct
    stochastic sources; retain a seed manifest.
 6. **Instrument deliberately.** Observe state after the transition of interest,

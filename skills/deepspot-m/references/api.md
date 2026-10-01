@@ -137,9 +137,10 @@ Move results back with `.cpu()` before converting to NumPy.
 
 ## Output units
 
-Values are log1p-CPM, the same scale as `log1p` normalised counts per million in a
-single-cell or spatial expression matrix. It is the scale most downstream tools expect, so
-feed it straight into clustering, correlation or spatial statistics.
+Values are predicted log1p-CPM, not measured counts. Keep this provenance in the
+AnnData metadata; do not feed them into count-based likelihoods or normalize/log
+them a second time. For clustering or spatial statistics, assess held-out validity,
+slide effects, and dependence among neighboring tiles before making biological claims.
 
 To read values as CPM instead, invert the transform:
 

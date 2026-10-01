@@ -64,7 +64,7 @@ def search_protein(query):
             entry = u.retrieve(query, frmt="tab")
             if entry:
                 uniprot_id = query
-                print(f"✓ Found UniProt entry: {uniprot_id}")
+                print(f"[OK] Found UniProt entry: {uniprot_id}")
                 return u, uniprot_id
         except:
             pass
@@ -73,16 +73,16 @@ def search_protein(query):
     results = u.search(query, frmt="tab", columns="id,genes,organism,length,protein names", limit=5)
 
     if not results:
-        print("✗ No results found")
+        print("[FAIL] No results found")
         return u, None
 
     lines = results.strip().split("\n")
     if len(lines) < 2:
-        print("✗ No entries found")
+        print("[FAIL] No entries found")
         return u, None
 
     # Display results
-    print(f"\n✓ Found {len(lines)-1} result(s):")
+    print(f"\n[OK] Found {len(lines)-1} result(s):")
     for i, line in enumerate(lines[1:], 1):
         fields = line.split("\t")
         print(f"  {i}. {fields[0]} - {fields[1]} ({fields[2]})")
@@ -120,18 +120,18 @@ def retrieve_sequence(uniprot, uniprot_id):
             header = lines[0]
             seq_only = "".join(lines[1:])
 
-            print(f"✓ Retrieved sequence:")
+            print(f"[OK] Retrieved sequence:")
             print(f"  Header: {header}")
             print(f"  Length: {len(seq_only)} residues")
             print(f"  First 60 residues: {seq_only[:60]}...")
 
             return seq_only
         else:
-            print("✗ Failed to retrieve sequence")
+            print("[FAIL] Failed to retrieve sequence")
             return None
 
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return None
 
 
@@ -142,11 +142,11 @@ def run_blast(sequence, email, skip=False):
     print(f"{'='*70}")
 
     if skip:
-        print("⊘ Skipped (--skip-blast flag)")
+        print("[SKIP] Skipped (--skip-blast flag)")
         return None
 
     if not email:
-        print("⊘ Skipped (set NCBI_EMAIL or pass email for BLAST)")
+        print("[SKIP] Skipped (set NCBI_EMAIL or pass email for BLAST)")
         return None
 
     try:
@@ -164,7 +164,7 @@ def run_blast(sequence, email, skip=False):
             email=email
         )
 
-        print(f"✓ Job submitted: {jobid}")
+        print(f"[OK] Job submitted: {jobid}")
         print(f"  Waiting for completion...")
 
         # Poll for completion
@@ -177,7 +177,7 @@ def run_blast(sequence, email, skip=False):
             print(f"  Status: {status} (elapsed: {elapsed}s)", end="\r")
 
             if status == "FINISHED":
-                print(f"\n✓ BLAST completed in {elapsed}s")
+                print(f"\n[OK] BLAST completed in {elapsed}s")
 
                 # Retrieve results
                 results = s.getResult(jobid, "out")
@@ -192,16 +192,16 @@ def run_blast(sequence, email, skip=False):
                 return results
 
             elif status == "ERROR":
-                print(f"\n✗ BLAST job failed")
+                print(f"\n[FAIL] BLAST job failed")
                 return None
 
             time.sleep(5)
 
-        print(f"\n✗ Timeout after {max_wait}s")
+        print(f"\n[FAIL] Timeout after {max_wait}s")
         return None
 
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return None
 
 
@@ -217,11 +217,11 @@ def discover_pathways(uniprot, kegg, uniprot_id):
         kegg_mapping = uniprot.mapping(fr="UniProtKB_AC-ID", to="KEGG", query=uniprot_id)
 
         if not kegg_mapping or uniprot_id not in kegg_mapping:
-            print("✗ No KEGG mapping found")
+            print("[FAIL] No KEGG mapping found")
             return []
 
         kegg_ids = kegg_mapping[uniprot_id]
-        print(f"✓ KEGG ID(s): {kegg_ids}")
+        print(f"[OK] KEGG ID(s): {kegg_ids}")
 
         # Get pathways for first KEGG ID
         kegg_id = kegg_ids[0]
@@ -231,10 +231,10 @@ def discover_pathways(uniprot, kegg, uniprot_id):
         pathways = kegg.get_pathway_by_gene(gene_id, organism)
 
         if not pathways:
-            print("✗ No pathways found")
+            print("[FAIL] No pathways found")
             return []
 
-        print(f"✓ Found {len(pathways)} pathway(s):\n")
+        print(f"[OK] Found {len(pathways)} pathway(s):\n")
 
         # Get pathway names
         pathway_info = []
@@ -258,7 +258,7 @@ def discover_pathways(uniprot, kegg, uniprot_id):
         return pathway_info
 
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return []
 
 
@@ -269,7 +269,7 @@ def find_interactions(protein_query):
     print(f"{'='*70}")
 
     if PSICQUIC is None:
-        print("⊘ Skipped (this bioservices release does not ship PSICQUIC)")
+        print("[SKIP] Skipped (this bioservices release does not ship PSICQUIC)")
         return []
 
     try:
@@ -283,12 +283,12 @@ def find_interactions(protein_query):
         results = p.query("mint", query)
 
         if not results:
-            print("✗ No interactions found in MINT")
+            print("[FAIL] No interactions found in MINT")
             return []
 
         # Parse PSI-MI TAB format
         lines = results.strip().split("\n")
-        print(f"✓ Found {len(lines)} interaction(s):\n")
+        print(f"[OK] Found {len(lines)} interaction(s):\n")
 
         # Display first 10 interactions
         interactions = []
@@ -300,7 +300,7 @@ def find_interactions(protein_query):
                 interaction_type = fields[11]
 
                 interactions.append((protein_a, protein_b, interaction_type))
-                print(f"  {i}. {protein_a} ↔ {protein_b}")
+                print(f"  {i}. {protein_a} <-> {protein_b}")
 
         if len(lines) > 10:
             print(f"  ... and {len(lines)-10} more")
@@ -308,7 +308,7 @@ def find_interactions(protein_query):
         return interactions
 
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return []
 
 
@@ -325,11 +325,11 @@ def get_go_annotations(uniprot_id):
         annotations = g.Annotation(protein=uniprot_id, format="tsv")
 
         if not annotations:
-            print("✗ No GO annotations found")
+            print("[FAIL] No GO annotations found")
             return []
 
         lines = annotations.strip().split("\n")
-        print(f"✓ Found {len(lines)-1} annotation(s)\n")
+        print(f"[OK] Found {len(lines)-1} annotation(s)\n")
 
         # Group by aspect
         aspects = {"P": [], "F": [], "C": []}
@@ -365,7 +365,7 @@ def get_go_annotations(uniprot_id):
         return aspects
 
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return {}
 
 
@@ -400,13 +400,13 @@ Examples:
     # Step 1: Search protein
     uniprot, uniprot_id = search_protein(args.protein)
     if not uniprot_id:
-        print("\n✗ Failed to find protein. Exiting.")
+        print("\n[FAIL] Failed to find protein. Exiting.")
         sys.exit(1)
 
     # Step 2: Retrieve sequence
     sequence = retrieve_sequence(uniprot, uniprot_id)
     if not sequence:
-        print("\n⚠ Warning: Could not retrieve sequence")
+        print("\n[WARN] Warning: Could not retrieve sequence")
 
     # Step 3: BLAST search
     ncbi_email = resolve_ncbi_email(args.email)
@@ -429,8 +429,8 @@ Examples:
     print(f"{'='*70}")
     print(f"  Protein: {args.protein}")
     print(f"  UniProt ID: {uniprot_id}")
-    print(f"  Sequence: {'✓' if sequence else '✗'}")
-    print(f"  BLAST: {'✓' if not args.skip_blast and sequence else '⊘'}")
+    print(f"  Sequence: {'[OK]' if sequence else '[FAIL]'}")
+    print(f"  BLAST: {'[OK]' if not args.skip_blast and sequence else '[SKIP]'}")
     print(f"  Pathways: {len(pathways)} found")
     print(f"  Interactions: {len(interactions)} found")
     print(f"  GO annotations: {sum(len(v) for v in go_terms.values())} found")

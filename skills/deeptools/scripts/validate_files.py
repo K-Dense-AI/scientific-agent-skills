@@ -18,20 +18,21 @@ def check_file_exists(filepath):
         return False, f"File not found: {filepath}"
     if not os.access(filepath, os.R_OK):
         return False, f"File not readable: {filepath}"
-    return True, f"✓ File exists: {filepath}"
+    return True, f"[OK] File exists: {filepath}"
 
 
 def check_bam_index(bam_file):
     """Check if BAM file has an index (.bai or .bam.bai)."""
     bai_file1 = bam_file + ".bai"
-    bai_file2 = bam_file.replace(".bam", ".bai")
+    # Preserve parent directories and any earlier .bam in the filename.
+    bai_file2 = str(Path(bam_file).with_suffix(".bai"))
 
     if os.path.exists(bai_file1):
-        return True, f"✓ BAM index found: {bai_file1}"
+        return True, f"[OK] BAM index found: {bai_file1}"
     elif os.path.exists(bai_file2):
-        return True, f"✓ BAM index found: {bai_file2}"
+        return True, f"[OK] BAM index found: {bai_file2}"
     else:
-        return False, f"✗ BAM index missing for: {bam_file}\n  Run: samtools index {bam_file}"
+        return False, f"[FAIL] BAM index missing for: {bam_file}\n  Run: samtools index {bam_file}"
 
 
 def check_bigwig_file(bw_file):
@@ -39,8 +40,8 @@ def check_bigwig_file(bw_file):
     # Check file size (bigWig files should have reasonable size)
     file_size = os.path.getsize(bw_file)
     if file_size < 100:
-        return False, f"✗ bigWig file suspiciously small: {bw_file} ({file_size} bytes)"
-    return True, f"✓ bigWig file appears valid: {bw_file} ({file_size} bytes)"
+        return False, f"[FAIL] bigWig file suspiciously small: {bw_file} ({file_size} bytes)"
+    return True, f"[OK] bigWig file appears valid: {bw_file} ({file_size} bytes)"
 
 
 def check_bed_file(bed_file):
@@ -50,27 +51,27 @@ def check_bed_file(bed_file):
             lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
         if len(lines) == 0:
-            return False, f"✗ BED file is empty: {bed_file}"
+            return False, f"[FAIL] BED file is empty: {bed_file}"
 
         # Check first few lines for basic format
         for i, line in enumerate(lines[:10], 1):
             fields = line.split('\t')
             if len(fields) < 3:
-                return False, f"✗ BED file format error at line {i}: expected at least 3 columns\n  Line: {line}"
+                return False, f"[FAIL] BED file format error at line {i}: expected at least 3 columns\n  Line: {line}"
 
             # Check if start and end are integers
             try:
                 start = int(fields[1])
                 end = int(fields[2])
                 if start >= end:
-                    return False, f"✗ BED file error at line {i}: start >= end ({start} >= {end})"
+                    return False, f"[FAIL] BED file error at line {i}: start >= end ({start} >= {end})"
             except ValueError:
-                return False, f"✗ BED file format error at line {i}: start and end must be integers\n  Line: {line}"
+                return False, f"[FAIL] BED file format error at line {i}: start and end must be integers\n  Line: {line}"
 
-        return True, f"✓ BED file format appears valid: {bed_file} ({len(lines)} regions)"
+        return True, f"[OK] BED file format appears valid: {bed_file} ({len(lines)} regions)"
 
     except Exception as e:
-        return False, f"✗ Error reading BED file: {bed_file}\n  Error: {str(e)}"
+        return False, f"[FAIL] Error reading BED file: {bed_file}\n  Error: {str(e)}"
 
 
 def validate_files(bam_files=None, bigwig_files=None, bed_files=None):
@@ -184,10 +185,10 @@ Examples:
     # Summary
     print("\n" + "="*50)
     if success:
-        print("✓ All validations passed!")
+        print("[OK] All validations passed!")
         sys.exit(0)
     else:
-        print("✗ Some validations failed. Please fix the issues above.")
+        print("[FAIL] Some validations failed. Please fix the issues above.")
         sys.exit(1)
 
 

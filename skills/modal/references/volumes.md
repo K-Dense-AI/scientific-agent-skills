@@ -135,14 +135,16 @@ Modal auto-commits volume changes in the background every few seconds and on con
 
 ### Explicit Commit
 
-Force an immediate commit:
+Persist the writer's changes before signaling downstream work. A commit does not
+refresh an already mounted reader; that reader must reload after closing its open
+volume file handles:
 
 ```python
 @app.function(volumes={"/data": vol})
 def writer():
     with open("/data/file.txt", "w") as f:
         f.write("hello")
-    vol.commit()  # Make immediately visible to other containers
+    vol.commit()  # Persist; already mounted readers still need reload()
 ```
 
 ### Reload

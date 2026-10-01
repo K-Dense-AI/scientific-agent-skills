@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 compatibility: Requires Python >=3.10. Scripts use numpy, pandas, and pyDOE3 (DOE matrices). Install with uv as shown below.
 license: MIT license
 metadata:
-  version: "1.2"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -143,6 +143,14 @@ design = central_composite({"temp_C": (20, 60), "conc_mM": (1, 10)}, seed=42)
 
 design.to_csv("experimental_runs.csv", index=False)
 ```
+
+Before running a central composite design, inspect each factor's actual minimum
+and maximum. The default `face="circumscribed"` places axial points beyond the
+supplied low/high factorial settings; those arguments are not hard operating
+limits. If the stated ranges are physical limits, choose `face="inscribed"` or
+`face="faced"`, then recheck all combinations. Do not clip out-of-range rows:
+clipping changes the design geometry and its statistical properties. See the
+[NIST CCD comparison](https://www.itl.nist.gov/div898/handbook/pri/section3/pri3361.htm).
 
 Run order is randomized by default so factors aren't confounded with time/drift
 (machine warm-up, reagent aging). See `references/factorial_and_doe.md` for picking

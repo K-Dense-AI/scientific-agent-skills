@@ -281,7 +281,7 @@ def test_cli_dry_run_writes_plan_without_backend_or_embedding_model(tmp_path, mo
         "  endpoint: http://localhost:1234/v1\n"
         "  model: Gemma-4-31B-it\n"
         "screenpipe:\n"
-        "  url: http://screenpipe.test\n"
+        "  url: http://localhost:3030\n"
         "cluster:\n"
         "  min_session_minutes: 0\n"
         "  idle_gap_minutes: 10\n"

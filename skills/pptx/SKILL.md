@@ -3,7 +3,7 @@ name: pptx
 description: "Use this skill any time a .pptx or .potx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx or .potx file (even if the extracted content will be used elsewhere, like in an email or summary); editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates (.potx), layouts, speaker notes, or comments. Trigger whenever the user mentions \"deck,\" \"slides,\" \"presentation,\" or references a .pptx or .potx filename, regardless of what they plan to do with the content afterward. If a .pptx or .potx file needs to be opened, created, or touched, use this skill."
 license: Proprietary. LICENSE.txt has complete terms
 metadata:
-  version: "2.1"
+  version: "2.3"
   skill-author: Anthropic, PBC
   source: https://github.com/anthropics/skills/tree/main/skills/pptx
 ---
@@ -187,6 +187,10 @@ markitdown output.pptx | grep -iE "\bx{3,}\b|lorem|ipsum|\bTODO|\[insert|this.*(
 
 If grep returns results, fix them before declaring success.
 
+### Accessibility QA
+
+Check the deck in PowerPoint with Accessibility Checker and inspect the [Reading Order pane](https://support.microsoft.com/en-us/powerpoint/make-slides-easier-to-read-by-using-the-reading-order-pane). Arrange objects in the intended spoken sequence, add meaningful alt text to informative visuals, and exclude purely decorative objects from reading order. A correctly rendered slide can still be read in the wrong order by a screen reader. If native accessibility checks are unavailable, state that gap instead of treating image inspection as accessibility validation.
+
 ### File QA (required)
 
 ```bash
@@ -243,4 +247,4 @@ ls -1 "$PWD"/slide-*.jpg
 
 ---
 
-*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/pptx). Vendored here unmodified except for frontmatter metadata; see LICENSE.txt for terms.*
+*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/pptx). Adapted here with frontmatter metadata and accessibility QA guidance; see LICENSE.txt for terms.*

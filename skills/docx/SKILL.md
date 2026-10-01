@@ -3,7 +3,7 @@ name: docx
 description: "Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files) or Word templates (.dotx files). Triggers include: any mention of 'Word doc', 'word document', '.docx', '.dotx', or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx or .dotx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a 'report', 'memo', 'letter', 'template', or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation."
 license: Proprietary. LICENSE.txt has complete terms
 metadata:
-  version: "2.1"
+  version: "2.3"
   skill-author: Anthropic, PBC
   source: https://github.com/anthropics/skills/tree/main/skills/docx
 ---
@@ -75,6 +75,16 @@ Accepting a deleted paragraph mark should join that paragraph to the one below i
 
 An empty bullet in either view is an artifact of that view, not a defect in the document. Check paragraph deletions in the XML.
 
+### Document-wide edit coverage
+
+`word/document.xml` contains the main story, not all document text. Before a
+whole-document replacement, inventory the relevant header, footer, footnote,
+endnote, comment, and text-box stories through the package relationships.
+`merge_runs.py` processes only `word/document.xml`; it does not normalize those
+other parts. Apply the requested edit wherever its scope requires, preserve
+relationships, and check the rendered first-page and odd/even headers and
+footers as well as the body. See Microsoft's [WordprocessingML structure](https://learn.microsoft.com/en-us/office/open-xml/word/structure-of-a-wordprocessingml-document).
+
 ## Comments
 
 Comments require six cross-linked files. Use the helper — directory mode when you'll also be editing `document.xml` (saves an unzip/rezip cycle), `.docx`-direct mode otherwise:
@@ -96,4 +106,4 @@ The script writes `comments.xml`, `commentsExtended.xml`, `commentsIds.xml`, `co
 
 ---
 
-*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/docx). Vendored here unmodified except for frontmatter metadata; see LICENSE.txt for terms.*
+*This skill is created and maintained by [Anthropic](https://github.com/anthropics/skills/tree/main/skills/docx). Adapted here with frontmatter metadata and editing-scope guidance; see LICENSE.txt for terms.*

@@ -5,7 +5,7 @@ license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ and datamol (installed with medchem). Optional Lilly demerit filter requires separate `lilly-medchem-rules` conda package.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -239,6 +239,13 @@ List available descriptors: `mc.rules.list_descriptors()`
 ## Workflow Patterns
 
 ### Pattern 1: Initial Triage of a Compound Library
+
+Before filtering, assign stable source-row IDs and separate failed SMILES/SDF
+parses from valid molecules that fail a chemical rule. Retain original structure
+text and a rejected-input table; report input, parsed, rule-failed, and retained
+counts. The bundled loader removes invalid molecules (and resets tabular indices),
+so do not align results back to the original file by row position. The example
+below assumes all supplied structures parse successfully.
 
 ```python
 import datamol as dm

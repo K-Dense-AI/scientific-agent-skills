@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -201,6 +202,30 @@ class EvidenceTests(ArborRunTestCase):
             "set-evidence", "--node", "n2", "--dev-score", "0.1", "--status", "pruned"
         )
         self.assertEqual(self.tree["nodes"]["n2"]["status"], "pruned")
+
+    def test_invalid_evidence_status_leaves_all_persisted_state_unchanged(self) -> None:
+        self.run_command("set-evidence", "--node", "n2", "--dev-score", "0.4",
+                         "--result", "original result")
+        state_path = self.run_dir / ".arbor" / "tree.json"
+        before = state_path.read_bytes()
+        for status in ("inprogress", ""):
+            with self.subTest(status=status):
+                with self.assertRaisesRegex(SystemExit, "status must be one of"):
+                    self.run_command(
+                        "set-evidence", "--node", "n2", "--dev-score", "0.9",
+                        "--result", "replacement", "--insight", "new lesson",
+                        "--branch-ref", "new-branch", "--status", status,
+                    )
+                self.assertEqual(state_path.read_bytes(), before)
+        out, _ = self.run_command("observe")
+        self.assertIn("n2 [executed]", out)
+        self.run_command("validate")
+
+    def test_set_evidence_accepts_every_supported_status(self) -> None:
+        for status in sorted(arbor_tree.VALID_STATUS):
+            with self.subTest(status=status):
+                self.run_command("set-evidence", "--node", "n2", "--status", status)
+                self.assertEqual(self.tree["nodes"]["n2"]["status"], status)
 
     def test_a_partial_update_leaves_untouched_fields_alone(self) -> None:
         self.run_command(
@@ -422,6 +447,31 @@ class ValidateTests(ArborRunTestCase):
 
 
 class ProjectionTests(ArborRunTestCase):
+    def test_each_observe_list_uses_numeric_node_order(self) -> None:
+        self.init()
+        ids = [f"n{i}" for i in range(1, 13)]
+        for nid in ids:
+            self.run_command("add-node", "--parent", "n0", "--hypothesis", f"idea {nid}")
+        for status in ("running", "executed", "pruned"):
+            with self.subTest(status=status):
+                for nid in ids:
+                    self.run_command("set-status", "--node", nid, "--status", status)
+                before = self.tree
+                out, _ = self.run_command("observe")
+                self.assertEqual(re.findall(r"^\s+(n\d+)\b", out, re.MULTILINE), ids)
+                self.assertEqual(self.tree, before)
+
+    def test_status_preserves_depth_first_order_with_numeric_siblings(self) -> None:
+        self.init()
+        for i in range(11):
+            self.run_command("add-node", "--parent", "n0", "--hypothesis", f"idea {i}")
+        self.run_command("add-node", "--parent", "n2", "--hypothesis", "nested idea")
+        before = self.tree
+        out, _ = self.run_command("status")
+        ids = re.findall(r"^\s*\[.\] (n\d+)\b", out, re.MULTILINE)
+        self.assertEqual(ids, ["n0", "n1", "n2", "n12", *[f"n{i}" for i in range(3, 12)]])
+        self.assertEqual(self.tree, before)
+
     def test_observe_reports_the_objective_and_every_node(self) -> None:
         self.init(objective="Reduce inference latency")
         self.run_command("add-node", "--parent", "n0", "--hypothesis", "quantise weights")

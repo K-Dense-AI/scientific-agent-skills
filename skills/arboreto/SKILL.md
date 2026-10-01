@@ -3,7 +3,7 @@ name: arboreto
 description: Infer gene regulatory networks (GRNs) from gene expression data using scalable algorithms (GRNBoost2, GENIE3). Use when analyzing transcriptomics data (bulk RNA-seq, single-cell RNA-seq) to identify transcription factor-target gene relationships and regulatory interactions. Supports distributed computation for large-scale datasets.
 license: BSD-3-Clause license
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -196,6 +196,12 @@ Arboreto returns a DataFrame with regulatory links:
 | `TF` | Transcription factor (regulator) |
 | `target` | Target gene |
 | `importance` | Regulatory importance score (higher = stronger) |
+
+`importance` ranks predictive contributions in the fitted regressions; it is not
+a binding probability, p-value, or proof of direct causal regulation. The example
+cutoff of 0.5 is illustrative, not a calibrated high-confidence threshold. Compare
+matched preprocessing, sample sizes, gene sets, and seed stability before calling
+a link condition-specific; validate candidate edges with motif or perturbation evidence.
 
 **Filtering strategy**:
 - `limit=N` at inference time (return top N links globally)

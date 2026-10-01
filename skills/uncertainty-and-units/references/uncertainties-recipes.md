@@ -141,7 +141,7 @@ assume:
 ```python
 popt, pcov = curve_fit(f, x, y, sigma=sigma, absolute_sigma=False)  # default
 # pcov is rescaled by the reduced chi-square: parameter uncertainties absorb the
-# goodness of fit, and are identical to what you get by passing no sigma at all.
+# goodness of fit. Relative sigma weights remain; this is not generally an unweighted fit.
 
 popt, pcov = curve_fit(f, x, y, sigma=sigma, absolute_sigma=True)
 # pcov reflects the standard uncertainties you supplied.

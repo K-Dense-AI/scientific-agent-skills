@@ -1,0 +1,43 @@
+{
+  "skill_name": "primer-design",
+  "fixture_base": "fixtures",
+  "evals": [
+    {
+      "id": 1,
+      "name": "existing-pair-specificity",
+      "prompt": "Review the existing research PCR pair in review-pairs.tsv against review-reference.fasta. The intended product is in review-expected.tsv (0-based half-open). Screen products from 40 to 500 bp with up to two mismatches per core, allowing zero mismatches in its terminal five bases. Assess thermodynamics at 50 mM monovalent cations, 1.5 mM total divalent cations, 0.6 mM total dNTP, 50 nM oligos, and 37 C for free energy. Provide the ordering sequences, an auditable product inventory, numerical thermodynamics, reference provenance, and your recommendation about using the pair. Work locally; do not order anything.",
+      "files": [
+        "review-pairs.tsv",
+        "review-reference.fasta",
+        "review-expected.tsv"
+      ],
+      "expected_output": "Report correct intended product and unexpected same-primer product with scoped conclusions, numerical evidence, and provenance.",
+      "assertions": [
+        "Recovers the intended product at construct_A:[40,194), length 154.",
+        "Finds both unexpected F/F products [40,434) and [280,434), with correct roles and lengths.",
+        "Calculates thermodynamics under the requested chemistry and preserves correct 5-prime-to-3-prime ordering sequences.",
+        "Preserves input hashes and an executable reproduction path.",
+        "Recommends redesign and confines specificity claims to the supplied synthetic reference and search model."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "tailed-design-with-mask",
+      "prompt": "Design three candidate pairs on design-template.fasta for research PCR. Products should be 100\u2013200 bp before tails and flank template interval [280,320). Exclude primer binding in design-mask.bed, which is in template coordinates. Add the following 48-base 5-prime tail to BOTH primers: ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT. Use 50 mM monovalent cations, 1.5 mM total divalent cations, 0.6 mM total dNTP, and 50 nM oligos. Report core Tm, assess full oligo secondary structures where supported at 37 C, and screen this supplied reference for products of 40\u2013500 bp with up to two mismatches and zero mismatches in the terminal five bases. Deliver ordering sequences, intended product coordinates, reproducible artifacts, and clear remaining limitations. Work locally; do not order anything.",
+      "files": [
+        "design-template.fasta",
+        "design-mask.bed"
+      ],
+      "expected_output": "Three valid flanking pairs with mask/strand/tail correctness, scoped local product screen, and explicit unsupported full-oligo structure assessment.",
+      "assertions": [
+        "Returns three candidate pairs with 100-200 bp reference products flanking [280,320).",
+        "Both binding cores avoid the BED exclusions and match the correct template strands.",
+        "Full order sequences concatenate exactly the supplied 48-base tail and correct core, including the reverse primer.",
+        "Core Tm agrees with Primer3 under the supplied chemistry.",
+        "Identifies full-oligo structure calculations as unsupported or supplies a valid length-appropriate calculation without silently truncating.",
+        "Computes a scoped product screen and preserves input/settings/version evidence and a reproduction path."
+      ]
+    }
+  ],
+  "evaluation_instructions": "Supply only the prompt and named fixtures to each executor; keep expected_output and assertions with the grader. Never expose the entire evals.json to the executor."
+}

@@ -4,7 +4,7 @@ description: Build evidence-traceable market research reports and assumption-dri
 license: MIT
 compatibility: Python 3.11+ standard library for optional offline CLIs. The optional LaTeX template uses XeLaTeX or LuaLaTeX. Online research requires user-approved network access and source-specific terms; bundled scripts make no network, LLM, or image calls.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
 ---
 
@@ -225,6 +225,12 @@ instrument wording, precision, processing, and limitations.
 For interviews/focus groups, disclose recruitment, consent, role coverage,
 dates/mode, guide, coding, divergent evidence, privacy controls, and limits to
 generalization.
+
+Before reporting a trend across survey waves, compare the exact wording, response
+options, question order, target population, recruitment, mode, and weighting.
+A changed instrument or sample can create an apparent demand shift. Mark the break,
+use an overlap/bridge study when available, or report the waves separately rather
+than feeding the difference into a growth forecast. See [AAPOR best practices](https://aapor.org/standards-and-ethics/best-practices/).
 
 Never:
 

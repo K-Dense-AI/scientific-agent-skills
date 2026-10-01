@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: MIT
 compatibility: Requires Python >=3.10,<3.13. Examples target cellxgene-census 1.17.x and the 2025-11-08 stable LTS Census; spatial workflows need the spatial extra and TileDB-SOMA >=1.15.5. No authentication is required for public Census data.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -115,12 +115,20 @@ obs_column_names=["cell_type", "tissue_general", "disease"]  # Not all columns
 ### Check Dataset Presence for Gene-Specific Queries
 When analyzing specific genes, verify which datasets measured them:
 ```python
-presence = cellxgene_census.get_presence_matrix(
-    census,
-    "homo_sapiens",
-    var_value_filter="feature_name in ['CD4', 'CD8A']"
+genes = cellxgene_census.get_var(
+    census, "homo_sapiens",
+    value_filter="feature_name in ['CD4', 'CD8A']",
+    column_names=["soma_joinid", "feature_id", "feature_name"],
 )
+presence = cellxgene_census.get_presence_matrix(census, "homo_sapiens")
+# Columns use Census join IDs, not positions in the filtered gene table.
+gene_presence = presence[:, genes["soma_joinid"].to_numpy()]
 ```
+
+Presence rows are dataset `soma_joinid` values, not cell IDs; a zero means the
+feature was not measured in that dataset, not that measured expression was zero.
+The remote-query snippets are illustrative; verify the selected release and
+returned schema before loading a large expression slice.
 
 ### Two-Step Workflow: Explore Then Query
 First explore metadata to understand available data, then query expression:
@@ -249,9 +257,17 @@ with cellxgene_census.open_soma() as census:
         obs_value_filter="cell_type == 'macrophage' and tissue_general in ['lung', 'liver', 'brain'] and is_primary_data == True",
     )
 
-    # Analyze macrophage differences across tissues
+    # Exploratory cell-level marker ranking; Census X contains raw counts.
+    import scanpy as sc
+    adata.layers["counts"] = adata.X.copy()
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
     sc.tl.rank_genes_groups(adata, groupby="tissue_general")
 ```
+
+For tissue-effect inference, aggregate or model biological replicates using donor
+and study provenance. Thousands of cells from one donor are not thousands of
+independent replicates, and tissue effects can be confounded with dataset or assay.
 
 ## Troubleshooting
 

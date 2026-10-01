@@ -30,7 +30,10 @@ import re
 import sys
 from pathlib import Path
 
-import pandas as pd
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # Ranks the Waypoint tokenizer understands, most specific first.
 RANK_PREFIXES: dict[str, str] = {
@@ -120,6 +123,8 @@ def deepest_rank(lineage: str) -> str | None:
 
 def parse_metaphlan(path: Path, rank: str) -> pd.DataFrame:
     """Parse a merged MetaPhlAn table into a samples x lineage matrix."""
+    import pandas as pd
+
     header: list[str] | None = None
     rows: list[list[str]] = []
     with open(path, encoding="utf-8") as handle:
@@ -163,6 +168,8 @@ def parse_metaphlan(path: Path, rank: str) -> pd.DataFrame:
 
 def parse_kraken_report(path: Path, rank: str) -> pd.Series:
     """Parse one Kraken2 report into a lineage -> clade-read-count Series."""
+    import pandas as pd
+
     prefix = RANK_PREFIXES[rank]
     stack: list[tuple[int, str]] = []  # (indent depth, prefixed name)
     counts: dict[str, float] = {}
@@ -216,6 +223,8 @@ def parse_kraken_report(path: Path, rank: str) -> pd.Series:
 
 def parse_kraken(paths: list[Path], rank: str) -> pd.DataFrame:
     """Parse many Kraken2 reports into a samples x lineage matrix."""
+    import pandas as pd
+
     per_sample = {}
     for path in paths:
         series = parse_kraken_report(path, rank)
@@ -234,6 +243,8 @@ def parse_table(
     orientation: str,
 ) -> pd.DataFrame:
     """Parse a QIIME 2 / biom / generic delimited table into samples x lineage."""
+    import pandas as pd
+
     sep = "," if path.suffix.lower() == ".csv" else "\t"
     with open(path, encoding="utf-8") as handle:
         first = handle.readline()
@@ -290,6 +301,8 @@ def matrix_to_waypoint(
     Duplicate lineage columns are summed first: MetaPhlAn and Kraken can both
     produce the same normalised lineage from different rows.
     """
+    import pandas as pd
+
     if matrix.empty:
         raise ValueError("abundance matrix is empty")
 
@@ -327,6 +340,8 @@ def matrix_to_waypoint(
 
 def attach_metadata(frame: pd.DataFrame, metadata_path: Path) -> pd.DataFrame:
     """Join per-sample metadata, indexed by sample ID, onto a waypoint frame."""
+    import pandas as pd
+
     suffix = metadata_path.suffix.lower()
     if suffix == ".parquet":
         meta = pd.read_parquet(metadata_path)
@@ -353,6 +368,8 @@ def attach_metadata(frame: pd.DataFrame, metadata_path: Path) -> pd.DataFrame:
 
 
 def build_matrix(args: argparse.Namespace, paths: list[Path]) -> pd.DataFrame:
+    import pandas as pd
+
     if args.format == "metaphlan":
         frames = [parse_metaphlan(p, args.rank) for p in paths]
         return pd.concat(frames) if len(frames) > 1 else frames[0]

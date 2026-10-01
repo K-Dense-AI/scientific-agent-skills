@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "name": "Two-route positional-label demonstration",
+  "flux_unit": "relative units; uptake fixed to 100",
+  "provenance": "Original analytical demonstration. Generic carbon rearrangement, not an organism-specific pathway.",
+  "metabolites": [
+    {
+      "id": "S",
+      "carbons": 2,
+      "boundary": "source",
+      "symmetric": false
+    },
+    {
+      "id": "A",
+      "carbons": 2,
+      "boundary": "internal",
+      "symmetric": false
+    },
+    {
+      "id": "B",
+      "carbons": 2,
+      "boundary": "internal",
+      "symmetric": false
+    },
+    {
+      "id": "Out",
+      "carbons": 2,
+      "boundary": "sink",
+      "symmetric": false
+    }
+  ],
+  "reactions": [
+    {
+      "id": "uptake",
+      "substrates": [
+        [
+          "S",
+          "AB"
+        ]
+      ],
+      "products": [
+        [
+          "A",
+          "AB"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 200,
+      "fixed": 100
+    },
+    {
+      "id": "straight",
+      "substrates": [
+        [
+          "A",
+          "AB"
+        ]
+      ],
+      "products": [
+        [
+          "B",
+          "AB"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "swap",
+      "substrates": [
+        [
+          "A",
+          "AB"
+        ]
+      ],
+      "products": [
+        [
+          "B",
+          "BA"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    },
+    {
+      "id": "export",
+      "substrates": [
+        [
+          "B",
+          "AB"
+        ]
+      ],
+      "products": [
+        [
+          "Out",
+          "AB"
+        ]
+      ],
+      "lower": 0.001,
+      "upper": 300
+    }
+  ],
+  "fragments": [
+    {
+      "id": "Bfirst",
+      "metabolite": "B",
+      "carbons": [
+        1
+      ],
+      "provenance": "Synthetic position-specific carbon-1 measurement; not an experimentally established fragment assignment."
+    },
+    {
+      "id": "Bwhole",
+      "metabolite": "B",
+      "carbons": [
+        1,
+        2
+      ],
+      "provenance": "Synthetic complete two-carbon pool measurement."
+    }
+  ]
+}

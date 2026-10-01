@@ -164,7 +164,7 @@ def main() -> None:
         data = json.load(f)
     
     total_steps = len(data["animation_steps"])
-    print(f"\n📊 Total frames: {total_steps}")
+    print(f"\nData: Total frames: {total_steps}")
     
     # Get the final forecast step for reference
     final_forecast = data["animation_steps"][-1]
@@ -229,7 +229,7 @@ def main() -> None:
     plt.close()
     
     # Save as GIF
-    print(f"\n💾 Saving GIF: {OUTPUT_FILE}")
+    print(f"\nSaving GIF: {OUTPUT_FILE}")
     frames[0].save(
         OUTPUT_FILE,
         save_all=True,
@@ -241,7 +241,7 @@ def main() -> None:
     # Get file size
     size_kb = OUTPUT_FILE.stat().st_size / 1024
     print(f"   File size: {size_kb:.1f} KB")
-    print(f"\n✅ Done!")
+    print(f"\n[OK] Done!")
 
 
 if __name__ == "__main__":

@@ -240,82 +240,31 @@ if len(lines) > 1:
 
 UniChem specializes in mapping chemical compound identifiers across databases.
 
-### Source Database IDs
+### Current UniChem 2 API (bioservices 1.16.0)
 
-| Source ID | Database |
-|-----------|----------|
-| 1 | ChEMBL |
-| 2 | DrugBank |
-| 3 | PDB |
-| 4 | IUPHAR/BPS Guide to Pharmacology |
-| 5 | PubChem |
-| 6 | KEGG |
-| 7 | ChEBI |
-| 8 | NIH Clinical Collection |
-| 14 | FDA/SRS |
-| 22 | PubChem |
-
-### Basic Usage
+Use `get_compounds(compound, source_type)` and inspect `compounds[*].sources`.
+The old per-source helpers and conversion methods are absent in 1.16.0. KEGG
+is not an accepted source; use a verified ChEBI cross-reference or InChIKey.
+Do not reuse a historical numeric source table without checking `u.source_ids`.
 
 ```python
 from bioservices import UniChem
 
-u = UniChem()
-
-# Get ChEMBL ID from KEGG compound ID
-chembl_id = u.get_compound_id_from_kegg("C11222")
-print(chembl_id)  # CHEMBL278315
+u = UniChem(verbose=False)
+response = u.get_compounds("CHEBI:15365", "chebi")  # aspirin
+mappings = sorted({
+    (source["shortName"], source["compoundId"])
+    for compound in response.get("compounds", [])
+    for source in compound.get("sources", [])
+})
+for database, identifier in mappings:
+    print(f"{database}: {identifier}")
+chembl_ids = [identifier for database, identifier in mappings if database == "chembl"]
 ```
 
-### All Compound IDs
-
-```python
-# Get all identifiers for a compound
-# src_compound_id: compound ID, src_id: source database ID
-all_ids = u.get_all_compound_ids("CHEMBL278315", src_id=1)  # 1 = ChEMBL
-
-for mapping in all_ids:
-    src_name = mapping['src_name']
-    src_compound_id = mapping['src_compound_id']
-    print(f"{src_name}: {src_compound_id}")
-```
-
-### Specific Database Conversion
-
-```python
-# Convert between specific databases
-# from_src_id=6 (KEGG), to_src_id=1 (ChEMBL)
-result = u.get_src_compound_ids("C11222", from_src_id=6, to_src_id=1)
-print(result)
-```
-
-### Common Compound Mappings
-
-#### KEGG → ChEMBL
-
-```python
-u = UniChem()
-chembl_id = u.get_compound_id_from_kegg("C00031")  # D-Glucose
-print(f"ChEMBL: {chembl_id}")
-```
-
-#### ChEMBL → PubChem
-
-```python
-result = u.get_src_compound_ids("CHEMBL278315", from_src_id=1, to_src_id=22)
-if result:
-    pubchem_id = result[0]['src_compound_id']
-    print(f"PubChem: {pubchem_id}")
-```
-
-#### ChEBI → DrugBank
-
-```python
-result = u.get_src_compound_ids("5292", from_src_id=7, to_src_id=2)
-if result:
-    drugbank_id = result[0]['src_compound_id']
-    print(f"DrugBank: {drugbank_id}")
-```
+The ChEBI and InChIKey aspirin queries returned CHEMBL25 in a live smoke test.
+Responses can contain several structures or source IDs. Preserve them and verify
+stereochemistry, charge, and salt/parent form before selecting a single match.
 
 ---
 
@@ -333,16 +282,17 @@ k = KEGG()
 # Get compound entry
 entry = k.get("cpd:C11222")
 
-# Parse for specific database
-chebi_id = None
+# Preserve all ChEBI candidates, including distinct protonation forms.
+chebi_ids = []
 uniprot_ids = []
 
 for line in entry.split("\n"):
     if "ChEBI:" in line:
-        # Extract ChEBI ID
-        parts = line.split("ChEBI:")
-        if len(parts) > 1:
-            chebi_id = parts[1].strip().split()[0]
+        for identifier in line.split("ChEBI:", 1)[1].split():
+            if identifier not in chebi_ids:
+                chebi_ids.append(identifier)
+chebi_id = chebi_ids[0] if len(chebi_ids) == 1 else None
+print(f"ChEBI candidates: {chebi_ids}; unique candidate: {chebi_id}")
 
 # For genes/proteins
 gene_entry = k.get("hsa:7535")
@@ -436,6 +386,13 @@ print(ids)
 
 ### Pattern 2: Compound Name → All Database IDs
 
+Use this illustrative example only after reviewing the KEGG search hit and its
+single ChEBI candidate for stereochemistry, charge, and salt/parent form.
+A KEGG entry with multiple distinct ChEBI IDs is left unresolved: all candidates
+are returned, and no UniChem lookup occurs. For example, KEGG C00022 links both
+pyruvate (CHEBI:15361) and pyruvic acid (CHEBI:32816). Candidate preservation and
+mapping guards below were tested with mocked KEGG/UniChem responses.
+
 ```python
 from bioservices import KEGG, UniChem, ChEBI
 
@@ -453,25 +410,30 @@ def compound_name_to_ids(compound_name):
 
     # Get KEGG entry for ChEBI
     entry = k.get(f"cpd:{kegg_id}")
-    chebi_id = None
+    chebi_ids = []
     for line in entry.split("\n"):
         if "ChEBI:" in line:
-            parts = line.split("ChEBI:")
-            if len(parts) > 1:
-                chebi_id = parts[1].strip().split()[0]
-                break
+            for identifier in line.split("ChEBI:", 1)[1].split():
+                if identifier not in chebi_ids:
+                    chebi_ids.append(identifier)
+    chebi_id = chebi_ids[0] if len(chebi_ids) == 1 else None
 
-    # Get ChEMBL from UniChem
-    u = UniChem()
-    try:
-        chembl_id = u.get_compound_id_from_kegg(kegg_id)
-    except:
-        chembl_id = None
+    # Map only the unique reviewed candidate; preserve unresolved forms below.
+    chembl_ids = []
+    if chebi_id:
+        response = UniChem().get_compounds(f"CHEBI:{chebi_id}", "chebi")
+        chembl_ids = sorted({
+            source["compoundId"]
+            for match in response.get("compounds", [])
+            for source in match.get("sources", [])
+            if source.get("shortName") == "chembl"
+        })
 
     return {
         'kegg': kegg_id,
         'chebi': chebi_id,
-        'chembl': chembl_id
+        'chebi_ids': chebi_ids,
+        'chembl': chembl_ids
     }
 
 # Usage

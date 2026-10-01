@@ -4,7 +4,7 @@ description: Build, simulate, transpile, and execute quantum circuits with Qiski
 license: Apache-2.0
 compatibility: Python 3.10+ on a supported 64-bit platform. Local SDK workflows need qiskit; noisy simulation needs qiskit-aer; IBM QPU access needs qiskit-ibm-runtime, network access, an IBM Quantum Platform account, and an API key.
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -77,6 +77,8 @@ print(counts)
 ```
 
 Sampler V2 preserves shots and classical-register structure. Access the register by its actual name; `measure_all()` uses `meas`.
+
+For circuits with multiple classical registers, each register’s counts are a marginal distribution. Preserve shot alignment when computing cross-register correlations; multiplying marginal frequencies destroys those correlations. Use `SamplerPubResult.join_data` with an explicit register order for joint bitstrings and record that order in the result labels. See the [join-data contract](https://quantum.cloud.ibm.com/docs/en/api/qiskit/2.3/qiskit.primitives.SamplerPubResult).
 
 ## Quick Local Estimation
 

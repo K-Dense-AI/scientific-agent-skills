@@ -4,7 +4,7 @@ description: Convert heterogeneous documents and selected URIs to Markdown with 
 license: MIT
 compatibility: Python 3.10+ and uv. Examples target MarkItDown 0.1.6. Core local conversion can run offline; URL, YouTube, audio transcription, LLM, Azure, and MCP workflows may use network or external services.
 metadata:
-  version: "2.2"
+  version: "2.3"
   skill-author: K-Dense Inc.
 ---
 

@@ -95,8 +95,10 @@ Keep `quick-reader` runs to **3–10 papers** for interactive work — one LLM c
 runs, prefer a single `map` with a higher `-j` over several overlapping map requests; the server caps
 concurrency at 256 and per-user limits may be lower.
 
-After a map completes, answer from its output. Do not follow up by re-reading each paper individually
-— that discards the work you just paid for.
+After a map completes, use its output to organize the answer. Verify source lines for material
+quantitative claims and direct quotations before citing them; inspect only the relevant passages
+or supplements rather than repeating the entire extraction. Map output is an LLM summary, so the
+source-line citation contract still applies.
 
 ### Structured output
 

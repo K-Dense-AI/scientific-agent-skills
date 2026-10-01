@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python 3.11+ with uv. The verified snapshot uses pymatgen 2026.5.4, pymatgen-core 2026.7.16, and mp-api 0.46.4. Bundled help and planning CLIs use only the standard library; local scientific execution lazily requires the pinned pymatgen packages. Materials Project access additionally requires explicit network approval and the single named secret MP_API_KEY.
 allowed-tools: Read Write Bash Glob Python
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
   last-reviewed: "2026-07-23"
 ---
@@ -263,6 +263,14 @@ python scripts/phase_diagram_generator.py entries.json --analyze Li2O
 Elemental endpoints and all competing phases must be present. Do not mix raw
 energies from different functionals, pseudopotentials, magnetic states, or
 correction conventions. Computed on-hull status is not experimental stability.
+
+For a mixed GGA/GGA+U/r2SCAN hull, Materials Project corrections can depend on
+the chemical system used to build the hull. Do not transplant corrected entries
+from their home systems into a new system unchanged. Follow the documented
+`MaterialsProjectDFTMixingScheme` workflow on the complete target-system entry
+set, retain raw energies and correction records, and inspect excluded entries.
+The [official phase-diagram methodology](https://docs.materialsproject.org/methodology/materials-methodology/thermodynamic-stability/phase-diagrams-pds)
+distinguishes this from the earlier GGA/GGA+U-only correction workflow.
 
 ## Band structures, DOS, VASP, and Q-Chem
 

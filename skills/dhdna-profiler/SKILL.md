@@ -1,24 +1,22 @@
 ---
 name: dhdna-profiler
-description: Extract cognitive patterns and thinking fingerprints from any text. Use this skill when the user wants to analyze how someone thinks, understand cognitive style, profile writing or speech patterns, compare thinking styles between people, asks "what's my thinking style", "analyze how this person reasons", "cognitive profile", "thinking pattern", "DHDNA", "digital DNA", or wants to understand the mind behind any text. Also trigger when the user provides text and wants deeper insight into the author's reasoning patterns, decision-making style, or cognitive signature.
+description: Applies the DHDNA framework as an exploratory rubric for reasoning and writing patterns in supplied text. Use when the user asks for DHDNA, cognitive-style reflection, a thinking-pattern profile, or comparisons of textual reasoning. Scores describe evidence in the sample, not validated psychological traits or personal identity.
 allowed-tools: Read Write
 license: MIT license
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: AHK Strategies (ashrafkahoush-ux)
 ---
 
 # DHDNA Profiler — Cognitive Pattern Extraction
 
-A structured system for extracting the cognitive fingerprint of any text's author. Based on the Digital Human DNA (DHDNA) framework — the theory that every mind has a unique signature pattern expressed through how it reasons, decides, values, and communicates.
+An exploratory rubric for describing patterns in a supplied text, based on the Digital Human DNA (DHDNA) framework. Treat its cognitive-fingerprint language as a framework metaphor, not evidence of a unique, stable, or identifiable psychological signature.
 
 Published research: [DHDNA Pre-print (DOI: 10.5281/zenodo.18736629)](https://doi.org/10.5281/zenodo.18736629) | [IDNA Consolidation v2 (DOI: 10.5281/zenodo.18807387)](https://doi.org/10.5281/zenodo.18807387)
 
 ## Core Concept
 
-Just as biological DNA encodes physical identity through base pairs, Digital Human DNA encodes cognitive identity through thinking patterns. Every person's combination of analytical depth, creative range, emotional processing, strategic thinking, and ethical reasoning creates a **unique cognitive signature** — as distinctive as a fingerprint.
-
-The profiler doesn't judge thinking as "good" or "bad." It maps the topology of how a mind works.
+Describe observable reasoning and rhetorical choices in this sample. Genre, task, language proficiency, editing, collaboration, and AI assistance can change those choices. A score is an analyst annotation, not a measurement of the author's cognitive architecture; agreement with framework labels does not establish psychometric validity.
 
 ## The 12 Cognitive Dimensions
 
@@ -41,7 +39,7 @@ When profiling text, score each dimension on a 1–10 scale based on evidence in
 
 ### The 6 Tension Pairs
 
-Dimensions exist in tension — high scores on one often correlate with lower scores on its pair. These tensions ARE the cognitive signature:
+These are proposed interpretive pairings, not established negative correlations. Score each dimension independently; both members may be high, low, or unobserved:
 
 | Pair           | Tension                    | What It Reveals                                                        |
 | -------------- | -------------------------- | ---------------------------------------------------------------------- |
@@ -60,24 +58,24 @@ Read the text carefully. For each dimension, identify **specific textual evidenc
 
 - Direct quotes that demonstrate the dimension
 - Structural patterns (how arguments are built)
-- What's present AND what's absent (gaps reveal as much as content)
+- Distinguish explicit evidence from material the prompt/genre gave no opportunity to express
 - Recurring patterns across multiple passages
 
 ### Phase 2 — Scoring
 
 For each of the 12 dimensions:
 
-1. Score 1-10 based on evidence
+1. Score 1-10 only when the sample supplies relevant evidence; otherwise use N/A, not a low score
 2. Cite the strongest textual evidence for that score
-3. Flag confidence level: HIGH (multiple clear signals), MEDIUM (some signals), LOW (inferred)
+3. Flag confidence in the textual annotation: HIGH (multiple clear signals), MEDIUM (some signals), LOW (inferred); this is not confidence in a stable personal trait
 
 ### Phase 3 — Pattern Synthesis
 
 After scoring, identify:
 
-**Dominant Pattern:** The 2-3 highest-scoring dimensions — this is the mind's "home base"
+**Dominant Pattern:** The 2-3 most evidenced dimensions in this sample, excluding N/A
 
-**Shadow Pattern:** The 2-3 lowest-scoring dimensions — this is where the mind doesn't naturally go
+**Less Evidenced Pattern:** Dimensions with less evidence in this sample; absence does not establish a personal deficit
 
 **Signature Tensions:** Which tension pairs show the widest gap? These define the cognitive style more than any individual score.
 
@@ -119,13 +117,13 @@ TENSION MAP:
   ... (all 6 pairs)
 
 DOMINANT PATTERN: [Top 2-3 dimensions]
-SHADOW PATTERN: [Bottom 2-3 dimensions]
+LESS EVIDENCED PATTERN: [Observed lower scores; list N/A separately]
 REASONING TOPOLOGY: [Linear / Spiral / Web / Dialectic / Fractal]
 DECISION FINGERPRINT: [Analyze-first / Feel-first / Envision-first / Question-first]
 
 NARRATIVE SYNTHESIS:
-[2-3 paragraph natural language description of how this mind works,
-what makes it distinctive, and what it might miss]
+[2-3 paragraphs about observed textual patterns, supporting quotations,
+missing evidence, and plausible task/genre explanations]
 
 KEY QUOTES:
 [3-5 most revealing quotes with dimension attribution]
@@ -134,7 +132,7 @@ KEY QUOTES:
 
 ## Comparison Mode
 
-When the user provides two or more texts from different authors, produce individual profiles and then a **comparison synthesis**:
+When the user provides two or more texts from different authors, first compare genre, prompt, length, language, and editing context. Where these differ, describe sample differences without attributing them to the authors. Then produce individual profiles and a **comparison synthesis**:
 
 - Where do the minds converge? (shared high dimensions)
 - Where do they diverge? (opposing scores on the same dimension)
@@ -173,7 +171,7 @@ summarizing a document, and the boundaries matter:
 
 ## What This Is NOT
 
-- Not a personality test (MBTI, Big Five, etc.) — those measure behavioral tendencies, DHDNA measures cognitive architecture
+- Not a validated personality or cognitive-architecture test; numeric annotations do not establish construct validity
 - Not a judgment of intelligence — a chess grandmaster and a poet may score very differently but both demonstrate profound cognitive capability
 - Not static — a person's DHDNA evolves as they learn, experience, and grow. A profile is a snapshot, not a destiny.
 

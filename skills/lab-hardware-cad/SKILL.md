@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python 3.10-3.14 with build123d 0.11.1 and matplotlib for snapshots. Geometry commands require build123d; the standards lookup and the interface check run on the standard library alone. No network access needed.
 allowed-tools: Read Write Edit Bash Glob Grep
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-08-15"
   build123d-version: "0.11.1"
@@ -248,6 +248,8 @@ from the same constants it is checked against passes with zero headroom by const
 cite it as evidence the geometry is right; `facts` and the snapshot are the geometry checks.
 An empty declaration list passes: a part that mates with nothing in the bundled database has
 nothing to declare, and its interface dimensions are instead named as unchecked in the report.
+A manifest must contain an explicit `interfaces` list; a missing field or `null` is a malformed
+manifest, not evidence that interfaces were reviewed and none applied.
 
 Use `interfaces` rather than `check.py fit` for anything internal — a pocket, bore, or slot does
 not appear in the part's outer bounding box, which is what `fit` measures. Reach for `fit` only

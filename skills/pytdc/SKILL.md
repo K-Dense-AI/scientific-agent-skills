@@ -5,7 +5,7 @@ license: MIT
 allowed-tools: Read Write Edit Bash
 compatibility: Requires uv, CPython 3.11, PyTDC 1.1.15, and setuptools 80.9.0 for its legacy pkg_resources runtime import. Dataset, benchmark, checkpoint, and remote-oracle operations require network/storage review and explicit user approval.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -240,8 +240,12 @@ train, valid = group.get_train_valid_split(
 
 For one run, `group.evaluate({name: test_predictions})` returns metric results.
 For leaderboard aggregation, pass a **list of at least five prediction
-dictionaries** to `group.evaluate_many(...)`. Do not index `group.get(...)` by
-seed, and do not derive dummy predictions from test labels.
+dictionaries** to `group.evaluate_many(...)`. These must represent independent
+model runs, not five copies of one prediction vector. Preserve the exact test-row
+order and identify each run’s training/split seed. Report the returned standard
+deviation as run-to-run variability, not a confidence interval on generalization
+performance. Do not index `group.get(...)` by seed, and do not derive dummy
+predictions from test labels. See the [TDC leaderboard guide](https://tdcommons.ai/benchmark/overview/).
 
 Use `scripts/benchmark_evaluation.py` to validate a bounded JSON prediction plan
 before any group download. See [references/utilities.md](references/utilities.md)

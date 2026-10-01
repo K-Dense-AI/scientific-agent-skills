@@ -19,6 +19,34 @@ def _err_probe(*_args, **_kwargs):
     return ("error", "boom")
 
 
+def test_screenpipe_probe_rejects_remote_http_before_network(monkeypatch):
+    from doctor import default_screenpipe_probe
+
+    monkeypatch.setenv("SCREENPIPE_TOKEN", "test-token")
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must reject before making a request")
+    monkeypatch.setattr("doctor.httpx.get", forbidden)
+    status, detail = default_screenpipe_probe({"screenpipe": {"url": "http://remote.example"}})
+    assert status == "error"
+    assert "plaintext HTTP" in detail
+    assert "test-token" not in detail
+
+
+def test_screenpipe_probe_preserves_loopback_and_https_auth(monkeypatch):
+    import httpx
+    from doctor import default_screenpipe_probe
+
+    monkeypatch.setenv("SCREENPIPE_TOKEN", "test-token")
+    calls = []
+    def get(url, **kwargs):
+        calls.append((url, kwargs))
+        return httpx.Response(200)
+    monkeypatch.setattr("doctor.httpx.get", get)
+    for url in ("http://localhost:3030", "http://127.0.0.1:3030", "http://[::1]:3030", "https://remote.example"):
+        assert default_screenpipe_probe({"screenpipe": {"url": url}}) == ("ok", url)
+        assert calls[-1][1]["headers"]["Authorization"] == "Bearer test-token"
+
+
 def test_check_all_green(tmp_path: Path):
     result = check(
         _config(tmp_path),

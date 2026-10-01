@@ -1,0 +1,16 @@
+$ Original pedagogical database by K-Dense Inc.; MIT license.
+$ Hypothetical ideal CU-NI model. NOT assessed copper-nickel thermodynamics.
+$ G(FCC) = ideal mixing; G(LIQUID) adds (1-x)*(10000-10*T)+x*(12000-10*T).
+$ Energies J/mol, T K. Defined range 298.15 to 2000 K. No pressure dependence.
+ELEMENT CU FCC_A1 63.546 0 0 !
+ELEMENT NI FCC_A1 58.6934 0 0 !
+ELEMENT VA VACUUM 0 0 0 !
+TYPE_DEFINITION % SEQ * !
+PHASE FCC_A1 % 1 1 !
+CONSTITUENT FCC_A1 :CU,NI: !
+PARAMETER G(FCC_A1,CU;0) 298.15 0; 2000 N !
+PARAMETER G(FCC_A1,NI;0) 298.15 0; 2000 N !
+PHASE LIQUID % 1 1 !
+CONSTITUENT LIQUID :CU,NI: !
+PARAMETER G(LIQUID,CU;0) 298.15 10000-10*T; 2000 N !
+PARAMETER G(LIQUID,NI;0) 298.15 12000-10*T; 2000 N !

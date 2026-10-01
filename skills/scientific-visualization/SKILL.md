@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and uv for pinned examples. Bundled CLIs are network-free and load Matplotlib, Pillow, or pypdf only when needed. Plotly static export with Kaleido v1 requires a compatible Chrome/Chromium installation.
 allowed-tools: Read Write Edit Bash Glob Grep
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -120,6 +120,8 @@ sns.lineplot(
     ax=ax,
 )
 ```
+
+For repeated measurements, preserve the subject/sample identifier. To show individual trajectories, use Seaborn's `units` with `estimator=None`; this draws one line per sampling unit instead of an aggregate mean. For an aggregate uncertainty band, compute intervals using the actual independent sampling unit (for example, a subject-level bootstrap) and plot those intervals explicitly. A row-wise CI and a fixed random seed do not account for within-subject dependence. See the [relational tutorial](https://seaborn.pydata.org/tutorial/relational).
 
 Axes-level functions fit custom Matplotlib layouts; figure-level functions create their own figures/facets. Do not customize Seaborn's internal artist lists as if they were stable API.
 

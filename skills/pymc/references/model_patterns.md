@@ -115,9 +115,7 @@ better, so the best model's `elpd_diff` is 0 and the others are negative):
 - **|elpd_diff| > 4 but within 2 `dse`**: Moderate evidence for the better model
 - **|elpd_diff| > 4 and beyond 2 `dse`**: Strong evidence for the better model
 
-**Check Pareto-k values:**
-- k < 0.7: LOO reliable
-- k > 0.7: Consider WAIC or k-fold CV
+**Check Pareto-k values:** Use the threshold reported by the installed ArviZ version and inspect influential observations when the importance-sampling diagnostic fails. Refit problematic leave-one-out cases or use appropriately structured K-fold validation; switching to WAIC is not a repair for unreliable PSIS-LOO. Record the predictive unit (observation, patient/group, or future time block), because holding out rows can answer a different question from predicting new groups or future data.
 
 ### Model Averaging
 

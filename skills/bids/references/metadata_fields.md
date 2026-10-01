@@ -89,9 +89,11 @@ Example for ascending sequential (3 slices, TR=2s):
 {"SliceTiming": [0.0, 0.667, 1.333]}
 ```
 
-Example for interleaved (odd-first, 6 slices, TR=2s):
+Illustrative equal-spacing example: odd-first slice acquisition order 1, 3, 5, 2, 4, 6
+with 6 slices, TR=2s, no dead time, and positive `SliceEncodingDirection`.
+The array is indexed by slice, not ordered by acquisition time:
 ```json
-{"SliceTiming": [0.0, 0.667, 1.333, 0.333, 1.0, 1.667]}
+{"SliceTiming": [0.0, 1.0, 0.333, 1.333, 0.667, 1.667]}
 ```
 
 **PhaseEncodingDirection** values:

@@ -46,9 +46,10 @@ tiler = GridTiler(
 tiler.extract(slide)
 ```
 
-Keep each tile's coordinates. `ScoreTiler.extract(slide, report_path="tiles_report.csv")`
-writes a CSV with `tile_name,x_coord,y_coord,level,...`, which is the least fragile way to
-carry them. See the `histolab` skill for tissue masks, filters and the other tilers.
+Write a coordinate manifest during extraction with `tile_name,x_coord,y_coord,level`
+and document whether coordinates use level-0 or selected-level pixels and tile origins
+or centers. The assembly example assumes this explicit schema; do not assume a
+`ScoreTiler` scoring report supplies these fields. Preserve tile IDs through batching.
 
 ## 3. Predict in batches
 
@@ -108,12 +109,22 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 
-report = pd.read_csv("tiles_report.csv")
+# Manifest produced during extraction: tile_name, x_coord, y_coord, level.
+# Coordinate units/origin must be documented by that extraction workflow.
+report = pd.read_csv("tiles_report.csv").set_index("tile_name", verify_integrity=True)
+tile_names = [path.name for path in tile_paths]  # prediction row order
+if len(tile_names) != len(set(tile_names)):
+    raise ValueError("Tile filenames must be unique within a slide")
+if expression.shape != (len(tile_names), len(genes)):
+    raise ValueError("Prediction dimensions do not match tile and gene manifests")
+if set(report.index) != set(tile_names):
+    raise ValueError("Coordinate manifest must match the predicted tile set exactly")
+report = report.loc[tile_names]
 coords = report[["x_coord", "y_coord"]].to_numpy(dtype=float)
 
 adata = ad.AnnData(
     X=expression,
-    obs=pd.DataFrame({"tile_name": report["tile_name"]}).set_index("tile_name"),
+    obs=report.copy(),
     var=pd.DataFrame(index=pd.Index(genes, name="gene")),
 )
 adata.obsm["spatial"] = coords

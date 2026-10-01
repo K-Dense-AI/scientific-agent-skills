@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: Apache-2.0 license
 compatibility: Requires Python 3.10+, PyTorch 2.4+, and transformers 5.x. Gated or private Hub models need an HF token (`hf auth login` or `HF_TOKEN`).
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
 ---
 
@@ -124,6 +124,8 @@ See `references/models.md` for loading patterns and best practices.
 Generate text with LLMs using various decoding strategies (greedy, beam search, sampling) and control parameters (temperature, top-k, top-p).
 
 **When to use**: Creative text generation, code generation, conversational AI, text completion.
+
+For chat or instruction-tuned checkpoints, format messages with that checkpoint's `tokenizer.apply_chat_template` rather than hand-written role delimiters. Prefer `tokenize=True`; if formatting with `tokenize=False` and tokenizing afterward, set `add_special_tokens=False` to avoid duplicated BOS/EOS tokens. Use `add_generation_prompt=True` to start a new assistant reply, and preserve the same template when preparing fine-tuning data.
 
 See `references/generation.md` for generation strategies and parameters.
 

@@ -8,7 +8,7 @@ description: >
   creating BIDS derivatives.
 license: https://creativecommons.org/licenses/by/4.0/
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: Yaroslav Halchenko
 ---
 
@@ -87,8 +87,9 @@ Twelve workflow areas, each with worked code, are documented in
     DataFrame output.
 12. **BIDS-Apps** — the standard invocation pattern, and fMRIPrep, MRIQC, and QSIPrep.
 
-Validate early and often: PyBIDS validates structure when it indexes a dataset, so an
-indexing failure usually means a naming or metadata problem rather than a code bug.
+Validate with the BIDS validator as well as indexing with PyBIDS. Successful indexing
+is not a full compliance check; record the validator and BIDS schema versions, and
+inspect warnings and metadata inheritance before analysis.
 
 ## Reference Materials
 
@@ -114,11 +115,11 @@ Update schema and BEPs with: `python scripts/update_schema.py`
 
 ### 3. Missing SliceTiming
 **Cause**: `dcm2niix` couldn't extract slice timing from DICOM headers.
-**Fix**: Determine slice order from the scan protocol and add manually to the JSON sidecar. Common patterns: ascending, descending, interleaved (odd-first or even-first).
+**Fix**: Recover actual slice acquisition offsets from scanner metadata or a verified sequence protocol. Slice order alone does not determine timing, especially with multiband acquisition or dead time. Store offsets in seconds in slice-index order, accounting for `SliceEncodingDirection`; document missing timing instead of inventing it.
 
 ### 4. Phase encoding direction confusion
 **Cause**: Axis labels (i/j/k vs x/y/z vs LR/AP/SI) are confusing.
-**Fix**: In BIDS, use NIfTI image axes: `i`=first axis, `j`=second, `k`=third. `-` means negative direction. For standard axial acquisitions: `j` is typically anterior-posterior. Verify with the acquisition protocol.
+**Fix**: In BIDS, use NIfTI image axes: `i`=first axis, `j`=second, `k`=third. `-` means negative direction. Anatomical direction depends on the NIfTI affine and converter orientation; do not infer `j` or its sign from an AP/PA series label alone. Verify against scanner metadata and the image orientation.
 
 ### 5. PyBIDS is slow on large datasets
 **Cause**: Full filesystem indexing on every `BIDSLayout()` call.

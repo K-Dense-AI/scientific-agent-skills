@@ -280,12 +280,25 @@ class TestDeclaredInterfaces(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("not verified", result.stdout)
 
-    def test_manifest_without_interfaces_says_how_to_add_them(self):
+    def test_explicit_empty_interfaces_pass_with_unchecked_warning(self):
         result = run_cli(
             str(SCRIPTS / "check.py"), "interfaces", str(self._manifest([]))
         )
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("INTERFACES", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("UNCHECKED", result.stdout)
+        payload = json.loads(self._check([]).stdout)
+        self.assertTrue(payload["pass"])
+        self.assertEqual(payload["checks"], [])
+
+    def test_missing_or_malformed_interfaces_are_not_empty_declarations(self):
+        for payload in ({}, [], {"interfaces": None}, {"interfaces": False},
+                        {"interfaces": 0}, {"interfaces": ""}, {"interfaces": {}}):
+            with self.subTest(payload=payload):
+                target = self._manifest([])
+                target.write_text(json.dumps(payload), encoding="utf-8")
+                result = run_cli(str(SCRIPTS / "check.py"), "interfaces", str(target))
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("interfaces", result.stderr)
 
     def test_unsupported_target_is_rejected(self):
         result = run_cli(

@@ -3,7 +3,7 @@ name: imaging-data-commons
 description: Query and download public cancer imaging data from NCI Imaging Data Commons. Invoke for any question about IDC collections, cancer imaging datasets, DICOM data access, radiology (CT, MR, PET) or pathology AI training sets, metadata queries, visualization, or license checks — even when the user doesn't explicitly mention "IDC". No authentication required.
 license: This skill is provided under the MIT License. IDC data itself has individual licensing (mostly CC-BY, some CC-NC) that must be respected when using the data.
 metadata:
-  version: "1.5"
+  version: "1.7"
   source-skill-version: 1.8.1
   skill-author: Andrey Fedorov, @fedorov
   idc-index: "0.12.5"
@@ -480,9 +480,9 @@ idc-index equivalent.
 **Issue: Downloaded DICOM files won't open**
 - **Cause:** Corrupted download, or an object type the viewer does not handle — SEG, RTSTRUCT,
   SR, and slide microscopy all need specialized tools
-- **Solution:** Check `Modality` and `SOPClassUID` first, validate with
-  `pydicom.dcmread(file, force=True)`, try another viewer (3D Slicer, QuPath for pathology),
-  then re-download
+- **Solution:** Inspect `Modality`, `SOPClassUID`, and transfer syntax with normal `pydicom.dcmread`;
+  [forced parsing is not validation](https://pydicom.github.io/pydicom/stable/reference/generated/pydicom.filereader.dcmread.html).
+  Check download integrity and decoder/viewer support before re-downloading; reserve `force=True` for diagnosed non-Part-10 inputs.
 
 ## Resources
 

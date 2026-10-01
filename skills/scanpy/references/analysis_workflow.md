@@ -51,7 +51,7 @@ sc.pp.normalize_total(adata, target_sum=1e4)
 # Log-transform
 sc.pp.log1p(adata)
 
-# Save raw counts for later
+# Save the full log-normalized matrix for markers/plots, not raw counts
 adata.raw = adata
 
 # Identify highly variable genes

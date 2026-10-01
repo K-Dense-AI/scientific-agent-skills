@@ -1,0 +1,16 @@
+{
+  "mechanism": "h2o2.yaml",
+  "phase": "ohmech",
+  "reactor": "constant-volume",
+  "temperature_k": 1000.0,
+  "pressure_pa": 101325.0,
+  "mole_amounts": {"H2": 2.0, "O2": 1.0, "AR": 7.0},
+  "end_time_s": 0.003,
+  "samples": 3001,
+  "rtol": 1e-9,
+  "atol": 1e-15,
+  "max_time_step_s": 1e-5,
+  "minimum_temperature_rise_k": 200.0,
+  "tracked_species": ["H2", "O2", "H2O", "OH"],
+  "delay_relative_tolerance": 0.01
+}

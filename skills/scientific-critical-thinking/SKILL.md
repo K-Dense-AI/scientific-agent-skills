@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit
 license: MIT license
 compatibility: Analytical guidance needs no network. Optional figures via the scientific-schematics skill require OPENROUTER_API_KEY and outbound API access to OpenRouter.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -104,6 +104,10 @@ Per-topic detail is in [references/scientific_method.md](references/scientific_m
    - Consider field-specific norms for effect sizes and methods
    - Recognize exploratory vs. confirmatory contexts
    - Account for resource limitations in evaluating studies
+
+### Apply risk-of-bias tools to the right unit
+
+For RoB 2, identify the specific result: outcome, time point, intervention comparison, numerical estimate, and effect of assignment versus adherence. Use the variant for individually randomized, cluster, or crossover trials; record signalling answers and justifications rather than assigning one blanket score to the whole paper. Different outcomes in the same trial can have different bias judgments. See the [Cochrane RoB 2 guidance](https://training.cochrane.org/handbook/current/chapter-08).
 
 ### When Providing Critique
 

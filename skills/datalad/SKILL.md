@@ -5,7 +5,7 @@ compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 10.x.
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: Dylan Pulver
 ---
 
@@ -138,6 +138,8 @@ unclean starting state makes the record unreliable. Save or discard first, or pa
 command before committing to it with `--dry-run basic` or `--dry-run command`.
 
 A run that changes nothing produces no commit, exactly as `datalad save` does.
+
+`run` records the command and dataset state; it does not freeze arbitrary host-installed software or external services. Version an environment lockfile and scripts as declared inputs, or use a tracked container image with `containers-run`. Record random seeds and relevant runtime settings, then test `rerun` from a fresh environment before claiming computational reproducibility.
 
 ### Re-executing
 

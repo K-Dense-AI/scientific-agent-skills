@@ -87,7 +87,7 @@ timesfm.ForecastConfig(
 | `max_horizon` | 0 | Set to your maximum forecast length |
 | `normalize_inputs` | False | **Always set True** — prevents scale-dependent instability |
 | `per_core_batch_size` | 1 | Increase for throughput; decrease if OOM |
-| `use_continuous_quantile_head` | False | **Set True** for calibrated prediction intervals |
+| `use_continuous_quantile_head` | False | **Set True** to use the quantile head; validate empirical coverage separately |
 | `force_flip_invariance` | True | Keep True unless profiling shows it hurts |
 | `infer_is_positive` | True | Set False for series that can be negative (temperature, returns) |
 | `fix_quantile_crossing` | False | **Set True** to guarantee monotonic quantiles |

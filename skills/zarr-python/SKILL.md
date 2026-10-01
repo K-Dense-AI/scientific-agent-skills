@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: MIT license
 compatibility: Requires Python 3.12+ and zarr 3.x. Cloud I/O needs zarr[remote] plus pinned s3fs or gcsfs. Legacy Zarr v2 workflows need exact 2.x pins on older Python.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -202,6 +202,10 @@ print(z2.attrs['description'])
 ```
 
 **Important**: Attributes must be JSON-serializable (strings, numbers, lists, dicts, booleans, null).
+
+## Parallel write ownership
+
+Partition writers by stored object: disjoint **chunks** for an unsharded array, or disjoint **shards** for a sharded array. Different inner chunks can share one shard, so distinct element slices alone do not establish safe concurrent writes. Assign a single writer per shard or coordinate updates externally, and serialize resize/append and metadata changes. Reopen and verify written regions after workers finish.
 
 ## Chunking, Compression, Storage, and Performance
 

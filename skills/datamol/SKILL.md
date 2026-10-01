@@ -5,7 +5,7 @@ license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.8+ and datamol (uv pip install). RDKit is installed automatically as a datamol dependency (since 0.12.2). Optional s3fs/gcsfs for cloud I/O via fsspec.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -99,7 +99,11 @@ For detailed API documentation, consult these reference files:
 
 ## Best Practices
 
-1. **Always standardize molecules** from external sources:
+1. **Choose and record a task-specific standardization policy** for external molecules.
+   Preserve original structures and IDs alongside transformed ones; metal disconnection,
+   neutralization, salt stripping, and stereochemistry changes can alter the assayed entity.
+   Do not apply these transformations automatically to organometallic or formulation tasks.
+   The following is an illustrative policy for inputs where metal disconnection is intended:
    ```python
    mol = dm.standardize_mol(mol, disconnect_metals=True, normalize=True, reionize=True)
    ```
@@ -108,7 +112,7 @@ For detailed API documentation, consult these reference files:
    ```python
    mol = dm.to_mol(smiles)
    if mol is None:
-       # Handle invalid SMILES
+       raise ValueError("Invalid SMILES; retain the source row in the rejection log")
    ```
 
 3. **Use parallel processing** for large datasets:
@@ -182,7 +186,7 @@ predictions = model.predict(X_test)
 ## Troubleshooting
 
 **Issue**: Molecule parsing fails
-- **Solution**: Use `dm.standardize_smiles()` first or try `dm.fix_mol()`
+- **Solution**: Retain the failed source record and diagnose syntax/valence first. Standardization is not guaranteed to repair invalid chemistry; inspect any `fix_mol()` result and record the transformation before treating it as the original compound.
 
 **Issue**: Memory errors with clustering
 - **Solution**: Use `dm.pick_diverse()` instead of full clustering for large sets

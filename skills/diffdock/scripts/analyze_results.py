@@ -242,7 +242,7 @@ def export_to_csv(results, output_path):
                     pred['path']
                 ])
 
-    print(f"✓ Exported results to: {output_path}")
+    print(f"[OK] Exported results to: {output_path}")
 
 
 def get_top_predictions(results, n=10, sort_by='confidence'):

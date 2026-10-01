@@ -173,7 +173,7 @@ After extracting metadata, scan the BibTeX file for entries missing key fields:
 | @book | author/editor, title, publisher, year | isbn, doi |
 | @misc | author, title, year | doi or url |
 
-Any `@article` entry missing `volume`, `pages`, or `doi` is considered **incomplete** and must be enriched.
+Investigate missing fields against the publisher record, but distinguish unavailable or not-yet-assigned metadata from extraction errors. Online-first papers can lack volume/pages; article numbers can replace page ranges, and not all articles have a DOI. Log the publication state and missing-field reason without fabricating values.
 
 #### Step 2: Web Search for Missing Metadata
 

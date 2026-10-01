@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ and statsmodels 0.14.6-compatible dependencies. Use `uv pip install statsmodels==0.14.6`; optional predictive-metric examples also need scikit-learn.
 license: BSD-3-Clause license
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -62,7 +62,7 @@ need interpreting.
 ### Data Preparation
 
 1. **Always add constant**: Use `sm.add_constant()` unless excluding intercept
-2. **Check for missing values**: Handle or impute before fitting
+2. **Check for missing values**: For array-based models, use `missing="raise"` during construction to catch unexpected NaNs; the default `missing="none"` does not check and can yield all-NaN estimates. If dropping rows is justified, record retained row IDs and compare models on the same observations. Fit any imputation on training data only.
 3. **Scale if needed**: Improves convergence, interpretation (but not required for tree models)
 4. **Encode categoricals**: Use formula API or manual dummy coding
 

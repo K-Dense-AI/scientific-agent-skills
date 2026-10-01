@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ with numpy and scipy. No network access and no proprietary software. The estimation tools this skill orients you towards (NONMEM, Monolix, Phoenix, Simcyp, GastroPlus) are licensed separately and are never invoked by these scripts.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-07-27"
 ---
@@ -82,9 +82,13 @@ Four choices decide the answer and are usually left implicit. This script makes 
 `--auc-method` (default `linup-logdown`), `--blq-rule`, `--lambda-z-points` or an explicit
 `--lambda-z-window`, and whether you report `auc_inf_obs` or `auc_inf_pred`.
 
-Lambda_z selection uses the standard rule: start from the last three quantifiable points, extend
-backwards, keep the longer window only if **adjusted** r-squared improves by more than 0.0001.
-Plain r-squared can only rise as points are added, so it would always pick the longest window.
+The bundled Lambda_z selector starts from the last three quantifiable points and
+extends backwards, retaining a longer window only when adjusted r-squared improves
+by more than 0.0001. This is a specific helper convention, not an exact reproduction
+of Phoenix Best Fit: Phoenix favors the longer window when adjusted r-squared is
+within 0.0001 of its maximum. Neither plain nor adjusted r-squared is necessarily
+monotonic when observations are added. Record the selection convention and inspect
+the chosen tail; see [Phoenix slope estimation](https://onlinehelp.certara.com/phoenix/8.3/topics/Lambda_Z_or_Slope_Estimation_settings.htm).
 Points at or before Tmax are never eligible — including Tmax fits the tail of absorption and
 biases half-life, Vz and AUCinf downward.
 

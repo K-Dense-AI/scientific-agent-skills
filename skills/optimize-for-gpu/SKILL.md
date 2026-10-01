@@ -4,7 +4,7 @@ description: GPU-accelerates scientific Python on NVIDIA hardware and verifies t
 license: MIT
 compatibility: Requires an NVIDIA CUDA-capable GPU for GPU execution. RAPIDS 26.06 requires Python 3.11+ on Linux or WSL2 and matching CUDA 12 or 13 wheels. Package installation needs network access.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense, Inc.
 ---
 
@@ -138,6 +138,13 @@ print(benchmark(gpu_function, (arg1, arg2), n_warmup=10, n_repeat=100))
 Use `%gpu_timeit` in notebooks, Nsight Systems (`nsys`) for end-to-end timelines, and Nsight
 Compute (`ncu`) for kernel analysis. Report both synchronized kernel/region time and realistic
 end-to-end latency; include transfer and conversion costs when production pays them.
+
+Measure peak device memory as well as time. For CuPy, distinguish live allocations
+from memory retained by its pool; a high `nvidia-smi` reading after arrays are
+released is not by itself a leak. Record the allocator and pooling policy, include
+temporary buffers and FFT caches, and leave headroom for CUDA context/library
+allocations outside the pool limit. Avoid clearing the pool inside timed repeats
+unless production does so. See [CuPy memory management](https://docs.cupy.dev/en/stable/user_guide/memory.html).
 
 ### 7. Keep, revise, or reject the port
 

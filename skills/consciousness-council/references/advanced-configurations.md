@@ -72,7 +72,7 @@ After synthesis, the Council can optionally score the deliberation quality:
 
 **CQS Formula:** (Diversity × 0.25) + (Tension × 0.30) + (Blind Spot × 0.25) + (Actionability × 0.20)
 
-A good deliberation scores 3.5+ overall. Below 3.0, consider re-running with different members or a reframed question.
+These scores and weights are optional editorial heuristics, not validated measures of accuracy, expertise, or decision quality. Do not convert CQS or archetype agreement into a probability of correctness.
 
 ## Multi-Round Deliberation
 
@@ -91,6 +91,6 @@ Sometimes the user doesn't need the full deliberation output — they just need 
 
 1. Run the full deliberation internally
 2. Only output the Synthesis section
-3. Offer to "show the full deliberation" if the user wants the reasoning
+3. If asked for detail, provide a concise summary of the perspectives, evidence, assumptions, and trade-offs.
 
 This is faster and less overwhelming for quick decisions.

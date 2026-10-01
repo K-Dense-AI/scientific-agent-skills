@@ -4,7 +4,7 @@ description: Submit and manage protocols on Ginkgo Bioworks Cloud Lab (cloud.gin
 license: MIT license
 allowed-tools: Read
 metadata:
-  version: "2.1"
+  version: "2.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -86,6 +86,14 @@ The catalog is organized into **Expression & Purification** (in vitro / cell-fre
 - **RNA (mRNA/circRNA)?** IVT synthesis + qPCR.
 
 ## General Ordering Workflow
+
+Treat the tables above as planning estimates. Recheck the selected protocol's
+[current catalog page](https://cloud.ginkgo.bio/protocols) and configured quote
+for the actual sample count, replicates, readout, and turnaround before ordering.
+Save the protocol URL, downloaded input-template revision, submitted construct
+manifest, replicate/plate map, quote identifier, and access date together. A
+feasibility report or quote is not evidence that execution has started or that
+results passed QC.
 
 1. Select a protocol at https://cloud.ginkgo.bio/protocols
 2. Configure parameters (number of proteins/samples/molecules/targets, replicates, plates)

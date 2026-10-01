@@ -21,7 +21,7 @@ Every table should identify:
 ## Counts and denominators
 
 - Show `n/N (%)`, not a percentage alone, unless the governing output specifies another form.
-- Require `0 <= n <= N` and `N > 0`.
+- For a proportion of distinct participants, require `0 <= n <= N` and `N > 0`. This bound does not apply to recurrent event counts; preserve the verified count or exposure-time rate and label its denominator separately.
 - Recalculate only for consistency checking; do not silently replace the reported percentage.
 - State the rounding rule and tolerance.
 - Do not add subgroup percentages when the subgroup denominator is unknown.

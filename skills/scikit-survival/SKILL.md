@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+, uv, and the pinned scikit-survival 0.28.0 stack for executable examples. Bundled CLIs are local and network-free by default.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
 ---
 
@@ -183,7 +183,7 @@ ibs = integrated_brier_score(y_train, y_test, surv_prob, times)
 
 - Harrell C and Uno C measure rank discrimination, not calibration.
 - Cumulative/dynamic AUC measures discrimination at selected horizons and accepts
-  1D or time-dependent 2D risk scores; it rejects survival probabilities.
+  1D or time-dependent 2D risk scores. Do not rely on a runtime rejection to catch survival probabilities: they are numeric arrays too, but their ranking runs in the opposite direction. Verify that higher input values mean greater event risk before interpreting AUC.
 - Brier score is censoring-weighted probability error and reflects both
   discrimination and calibration. It is not a standalone calibration curve.
 - Calibration requires horizon-specific predicted-versus-observed checks on

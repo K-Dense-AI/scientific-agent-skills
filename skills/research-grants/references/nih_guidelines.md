@@ -761,7 +761,7 @@ We have addressed these concerns as follows:
 7. **Refocus innovation**: Clarify what's novel and why it matters
 
 **Timing**:
-- Can resubmit at any of the next 3 deadlines (36 months after initial submission)
+- Submit the single permitted A1 within 37 months of the initial application due date, using an eligible NOFO and its resubmission dates; verify the current NIH resubmission policy.
 - Use time wisely to generate new data
 - Don't rush resubmission with minor changes
 

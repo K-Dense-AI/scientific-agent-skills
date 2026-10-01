@@ -347,6 +347,22 @@ class ReportTests(unittest.TestCase):
         self.assertIn("ready", report.verdict)
         self.assertIn(str(report.recommended_batch_size), report.verdict_detail)
 
+    def test_reports_print_on_cp1252_for_success_warning_and_failure(self) -> None:
+        for total_ram in (1.0, 32.0):
+            with self.subTest(total_ram=total_ram):
+                report = self.run_checks(
+                    total_ram=total_ram, modules={"torch": None, "timesfm": None}
+                )
+                raw = io.BytesIO()
+                with io.TextIOWrapper(raw, encoding="cp1252", errors="strict") as stream:
+                    with contextlib.redirect_stdout(stream):
+                        check_system.print_report(report)
+                    stream.flush()
+                    output = raw.getvalue().decode("cp1252")
+                    self.assertIn("VERDICT", output)
+                    self.assertIn("WARN", output)
+                    self.assertIn("ready" if report.passed else "does NOT meet", output)
+
     def test_a_cuda_host_is_reported_in_gpu_mode(self) -> None:
         report = self.run_checks(modules={"torch": GpuCheckTests.torch_module(cuda=True)})
         self.assertEqual(report.mode, "gpu")
@@ -591,16 +607,16 @@ class ForecastAssemblyTests(unittest.TestCase):
         # TimesFM returns [mean, q0.1 ... q0.9], so the 10th, 50th and 90th
         # percentiles are columns 1, 5 and 9.
         band = self.results["sales"]
-        self.assertEqual(band["lower_90"], [1.0] * self.HORIZON)
-        self.assertEqual(band["lower_80"], [2.0] * self.HORIZON)
+        self.assertEqual(band["lower_80"], [1.0] * self.HORIZON)
+        self.assertEqual(band["lower_60"], [2.0] * self.HORIZON)
         self.assertEqual(band["median"], [5.0] * self.HORIZON)
-        self.assertEqual(band["upper_80"], [8.0] * self.HORIZON)
-        self.assertEqual(band["upper_90"], [9.0] * self.HORIZON)
+        self.assertEqual(band["upper_60"], [8.0] * self.HORIZON)
+        self.assertEqual(band["upper_80"], [9.0] * self.HORIZON)
 
     def test_the_bands_are_ordered_from_low_to_high(self) -> None:
         band = self.results["revenue"]
-        for lower, upper in (("lower_90", "lower_80"), ("lower_80", "median"),
-                             ("median", "upper_80"), ("upper_80", "upper_90")):
+        for lower, upper in (("lower_80", "lower_60"), ("lower_60", "median"),
+                             ("median", "upper_60"), ("upper_60", "upper_80")):
             with self.subTest(pair=(lower, upper)):
                 self.assertLess(band[lower][0], band[upper][0])
 
@@ -623,11 +639,11 @@ class OutputWritingTests(unittest.TestCase):
         self.results = {
             name: {
                 "forecast": [1.0, 2.0, 3.0],
-                "lower_90": [0.1, 0.2, 0.3],
-                "lower_80": [0.2, 0.3, 0.4],
+                "lower_80": [0.1, 0.2, 0.3],
+                "lower_60": [0.2, 0.3, 0.4],
                 "median": [1.0, 2.0, 3.0],
-                "upper_80": [1.8, 2.8, 3.8],
-                "upper_90": [1.9, 2.9, 3.9],
+                "upper_60": [1.8, 2.8, 3.8],
+                "upper_80": [1.9, 2.9, 3.9],
             }
             for name in ("sales", "revenue")
         }
@@ -674,11 +690,11 @@ class OutputWritingTests(unittest.TestCase):
 
     def test_every_band_column_survives_the_round_trip(self) -> None:
         written = self.write_csv(pd.DataFrame({"sales": [1.0]}), None)
-        for column in ("forecast", "lower_90", "lower_80", "median",
-                       "upper_80", "upper_90"):
+        for column in ("forecast", "lower_80", "lower_60", "median",
+                       "upper_60", "upper_80"):
             self.assertIn(column, written.columns)
         first = written[(written["series"] == "sales") & (written["step"] == 1)]
-        self.assertEqual(first["lower_90"].iloc[0], 0.1)
+        self.assertEqual(first["lower_80"].iloc[0], 0.1)
 
     def test_the_json_output_keeps_the_series_names_and_bands(self) -> None:
         destination = self.root / "forecasts.json"
@@ -686,7 +702,7 @@ class OutputWritingTests(unittest.TestCase):
             forecast_csv.write_json_output(self.results, str(destination))
         payload = json.loads(destination.read_text())
         self.assertEqual(set(payload), {"sales", "revenue"})
-        self.assertEqual(payload["sales"]["upper_90"], [1.9, 2.9, 3.9])
+        self.assertEqual(payload["sales"]["upper_80"], [1.9, 2.9, 3.9])
 
 
 if __name__ == "__main__":

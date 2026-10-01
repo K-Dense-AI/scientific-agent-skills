@@ -3,7 +3,7 @@ name: glycoengineering
 description: Analyze and engineer protein glycosylation. Scan sequences for N-glycosylation sequons (N-X-S/T), predict O-glycosylation hotspots, and access curated glycoengineering tools (NetOGlyc, GlycoShield, GlycoWorkbench). For glycoprotein engineering, therapeutic antibody optimization, and vaccine design.
 license: Unknown
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: Kuan-lin Huang
 ---
 
@@ -32,7 +32,10 @@ Use this skill when:
 
 ### Scanning for N-Glycosylation Sites
 
-N-glycosylation occurs at the sequon **N-X-[S/T]** where X ≠ Proline.
+Canonical N-glycosylation candidates follow **N-X-[S/T]** where X ≠ Proline.
+Scan every residue: `NNST` contains candidates at positions 1 and 2. These are
+sequence motifs, not proof of occupancy; [NetNGlyc](https://services.healthtech.dtu.dk/services/NetNGlyc-1.0/)
+also warns that cellular topology and sequence context affect interpretation.
 
 ```python
 import re
@@ -62,9 +65,8 @@ def find_n_glycosylation_sequons(sequence: str) -> List[dict]:
                 'context': context,
                 'sequon_type': 'NXS' if triplet[2] == 'S' else 'NXT'
             })
-            i += 3
-        else:
-            i += 1
+        # Advance one residue so overlapping sequons (NNST) are retained.
+        i += 1
     return results
 
 def summarize_glycosylation_sites(sequence: str, protein_name: str = "") -> str:

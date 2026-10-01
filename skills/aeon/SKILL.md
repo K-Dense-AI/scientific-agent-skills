@@ -5,7 +5,7 @@ license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.10+ and the aeon package (uv pip install). Optional aeon[all_extras] for deep learning and extended dependencies.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,7 +15,7 @@ metadata:
 
 Aeon is a scikit-learn compatible Python toolkit for time series machine learning ([aeon-toolkit.org](https://www.aeon-toolkit.org/)). It provides algorithms across classification, regression, clustering, forecasting, anomaly detection, segmentation, similarity search, distances, transformations, benchmarking, and visualization — with a consistent estimator API.
 
-**Version note:** Examples target **aeon 1.x** (stable docs: v1.4.0, March 2026). The v1.0 release reworked forecasting and transformations; import paths differ from aeon 0.x/sktime-era code.
+**Version note:** Examples target **aeon 1.4.0**; the ROCKET feature examples were smoke-tested on this release. The v1.0 release reworked forecasting and transformations; import paths differ from aeon 0.x/sktime-era code.
 
 ## When to Use This Skill
 
@@ -33,16 +33,16 @@ Apply this skill when:
 Requires **Python 3.10+** (3.11+ recommended). Pin a 1.x release for reproducibility:
 
 ```bash
-uv pip install "aeon>=1.4,<2"
+uv pip install "aeon==1.4.0"
 ```
 
 For deep learning forecasters/classifiers and other optional estimators:
 
 ```bash
-uv pip install "aeon[all_extras]>=1.4,<2"
+uv pip install "aeon[all_extras]==1.4.0"
 ```
 
-On zsh, quote the extras: `uv pip install "aeon[all_extras]>=1.4,<2"`.
+On zsh, quote the extras: `uv pip install "aeon[all_extras]==1.4.0"`.
 
 ### Experimental modules
 
@@ -179,9 +179,9 @@ Transform time series for feature engineering. See `references/transformations.m
 
 **ROCKET Features:**
 ```python
-from aeon.transformations.collection.convolution_based import RocketTransformer
+from aeon.transformations.collection.convolution_based import Rocket
 
-rocket = RocketTransformer()
+rocket = Rocket()
 X_features = rocket.fit_transform(X_train)
 
 # Use features with any sklearn classifier
@@ -271,10 +271,10 @@ X_train, y_train = load_regression("Covid3Month", split="train")
 
 **Benchmarking:**
 ```python
-from aeon.benchmarking import get_estimator_results
+from aeon.benchmarking.results_loaders import get_estimator_results
 
 # Compare with published results
-published = get_estimator_results("ROCKET", "GunPoint")
+published = get_estimator_results("ROCKET", ["GunPoint"])
 ```
 
 ## Common Workflows
@@ -298,11 +298,11 @@ accuracy = pipeline.score(X_test, y_test)
 ### Feature Extraction + Traditional ML
 
 ```python
-from aeon.transformations.collection import RocketTransformer
+from aeon.transformations.collection.convolution_based import Rocket
 from sklearn.ensemble import GradientBoostingClassifier
 
 # Extract features
-rocket = RocketTransformer()
+rocket = Rocket()
 X_train_features = rocket.fit_transform(X_train)
 X_test_features = rocket.transform(X_test)
 

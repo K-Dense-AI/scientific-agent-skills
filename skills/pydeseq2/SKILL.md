@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 compatibility: Requires Python >=3.11 and PyDESeq2 0.5.4-compatible dependencies. Examples target PyDESeq2 0.5.x, formulaic design strings, explicit contrasts, and uv-based installs.
 license: MIT license
 metadata:
-  version: "1.4"
+  version: "1.6"
   skill-author: K-Dense Inc.
 ---
 
@@ -278,16 +278,7 @@ if counts_df.shape[1] < counts_df.shape[0]:
 
 **Cause:** Confounded variables (e.g., all treated samples in one batch)
 
-**Solution:** Remove confounded variable or add interaction term
-```python
-# Check confounding
-print(pd.crosstab(metadata.condition, metadata.batch))
-
-# Either simplify design or add interaction
-design = "~condition"  # Remove batch
-# OR
-design = "~condition + batch + condition:batch"  # Model interaction
-```
+**Solution:** Inspect the condition-by-batch contingency table and the design-matrix rank. If batch and condition are perfectly confounded, their effects cannot be separated from these data: adding an interaction does not restore identifiability, and dropping batch produces an unadjusted, confounded condition estimate. Obtain a balanced design or restrict conclusions to an estimable comparison. Remove a redundant term only when scientifically justified; distinguish this from unused factor levels or empty interaction cells. See the [DESeq2 full-rank guidance](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#model-matrix-not-full-rank).
 
 ### No Significant Genes
 
