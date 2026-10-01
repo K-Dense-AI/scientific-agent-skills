@@ -1,3 +1,4 @@
+# Author: Narvik Aghamalian
 """Tests for the mne-python skill's bundled scripts.
 
 The helper tests need only the standard library (plus NumPy for the numerical
@@ -389,7 +390,7 @@ class TestPreprocess:
             "--resample", "125", "--no-report", cwd=workdir,
         )
         log = json.loads((workdir / tag / f"{tag}_desc-preproc_log.json").read_text(encoding="utf-8"))
-        assert log["events"]["dropped_after_conversion"] == ["STI 014"]
+        assert log["events"]["dropped_after_verification"] == ["STI 014"]
         assert "ecg" in log["ica"]
         raw = mne.io.read_raw(workdir / tag / f"{tag}_desc-clean_eeg.fif")
         assert raw.info["sfreq"] == 125
@@ -404,6 +405,94 @@ class TestPreprocess:
         assert len(got) == len(want) == log["events"]["converted"]
         assert max(abs(a - b) for a, b in zip(got, want)) <= 1.0 / 125
         assert set(event_id) == {"1", "2"}
+
+
+def stim_recording(mne, path: Path, pulses: dict, annotations=(), meas_date=None) -> None:
+    """Save a 60 s, 200 Hz recording: Cz noise plus stim channels with 3-sample pulses.
+
+    ``pulses`` maps a stim channel name to (sample, code) pairs; ``annotations`` are
+    (onset_s, label) pairs relative to the start of the data.
+    """
+    import numpy as np
+
+    sfreq, n_samples = 200.0, 12000
+    names = ["Cz", *pulses]
+    data = np.zeros((len(names), n_samples))
+    data[0] = np.random.default_rng(3).normal(0.0, 10e-6, n_samples)
+    for row, channel in enumerate(pulses, start=1):
+        for sample, code in pulses[channel]:
+            data[row, sample : sample + 3] = code
+    raw = mne.io.RawArray(data, mne.create_info(names, sfreq, ["eeg"] + ["stim"] * len(pulses)))
+    if meas_date is not None:
+        raw.set_meas_date(meas_date)
+    if annotations:
+        onsets, labels = zip(*annotations)
+        raw.set_annotations(
+            mne.Annotations(list(onsets), [0.0] * len(onsets), list(labels),
+                            orig_time=raw.info["meas_date"])
+        )
+    raw.save(path, overwrite=True)
+
+
+def annotation_times(raw) -> list[tuple[float, str]]:
+    """(seconds from the first sample, label) for every annotation.
+
+    ``raw.annotations.onset`` counts from the first *acquired* sample, so it includes
+    ``raw.first_time`` whether or not the recording has a measurement date.
+    """
+    return sorted(
+        (round(float(onset - raw.first_time), 3), str(label))
+        for onset, label in zip(raw.annotations.onset, raw.annotations.description)
+    )
+
+
+class TestStimEventPreservation:
+    """Stim channels are dropped before resampling only once every event is annotated."""
+
+    def preprocess(self, mne, workdir: Path, name: str, *extra: str):
+        run("preprocess_eeg.py", f"{name}_raw.fif", "--out-dir", name, "--resample", "100",
+            "--no-ica", "--no-report", *extra, cwd=workdir)
+        clean = mne.io.read_raw(workdir / name / f"{name}_desc-clean_eeg.fif")
+        log = json.loads((workdir / name / f"{name}_desc-preproc_log.json").read_text(encoding="utf-8"))
+        return clean, log["events"]
+
+    def test_unrelated_annotation_does_not_block_conversion(self, mne, workdir: Path) -> None:
+        # The reviewer's reproduction: stim pulses plus one unrelated annotation.
+        stim_recording(mne, workdir / "unrelated_raw.fif", {"STI 014": [(200, 1), (400, 2)]},
+                       annotations=[(0.0, "recording-start")])
+        clean, events = self.preprocess(mne, workdir, "unrelated")
+        assert clean.ch_names == ["Cz"] and clean.info["sfreq"] == 100
+        assert annotation_times(clean) == [(0.0, "recording-start"), (1.0, "1"), (2.0, "2")]
+        assert events["converted"] == 2
+        assert events["dropped_after_verification"] == ["STI 014"]
+
+    def test_every_stim_channel_is_converted(self, mne, workdir: Path) -> None:
+        pulses = {"STI 014": [(200, 1), (600, 1)], "STI 015": [(400, 1), (800, 3)]}
+        stim_recording(mne, workdir / "twostim_raw.fif", pulses, annotations=[(5.0, "note")])
+        clean, events = self.preprocess(mne, workdir, "twostim")
+        assert clean.ch_names == ["Cz"]
+        assert annotation_times(clean) == [
+            (1.0, "STI 014/1"), (2.0, "STI 015/1"), (3.0, "STI 014/1"), (4.0, "STI 015/3"),
+            (5.0, "note"),
+        ]
+        assert events["label_format"] == "channel/code"
+        assert {name: entry["events"] for name, entry in events["channels"].items()} == {
+            "STI 014": 2, "STI 015": 2,
+        }
+
+    @pytest.mark.parametrize("dated", [False, True])
+    def test_matching_annotations_are_not_duplicated(self, mne, workdir: Path, dated: bool) -> None:
+        """One event is already annotated, one is not; both survive a crop exactly once."""
+        import datetime
+
+        meas_date = datetime.datetime(2024, 5, 1, 9, 30, tzinfo=datetime.timezone.utc) if dated else None
+        name = f"partial{int(dated)}"
+        stim_recording(mne, workdir / f"{name}_raw.fif", {"STI 014": [(200, 1), (400, 2)]},
+                       annotations=[(0.8, "recording-start"), (1.0, "1")], meas_date=meas_date)
+        clean, events = self.preprocess(mne, workdir, name, "--crop", "0.5", "50")
+        assert annotation_times(clean) == [(0.3, "recording-start"), (0.5, "1"), (1.5, "2")]
+        assert events["channels"]["STI 014"]["already_annotated"] == 1
+        assert events["converted"] == 1
 
 
 class TestErp:

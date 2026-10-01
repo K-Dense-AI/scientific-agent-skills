@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Narvik Aghamalian
 """Epoch continuous EEG, average ERPs per condition, and measure components.
 
 For every condition (and A-B difference wave) x region of interest x window it

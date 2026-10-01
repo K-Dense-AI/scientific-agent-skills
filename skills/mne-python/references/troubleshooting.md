@@ -29,8 +29,11 @@ Messages are quoted from MNE-Python 1.13.2 (first line only).
 - **EOG/ECG/trigger channels typed as EEG** after EDF/BrainVision/EEGLAB import enter the
   average reference and ICA. Set types first.
 - **`raw.filter()` without `picks`** leaves EOG/ECG unfiltered.
-- **Wrong `first_samp` in `annotations_from_events`** shifts events after a crop
-  (`io-and-channels.md`).
+- **`raw.set_annotations(raw.annotations + other)` on a cropped recording without a
+  measurement date** moves every existing annotation by `raw.first_time` (MNE 1.13).
+  Append in place instead (`io-and-channels.md`).
+- **Dropping stim channels before every one of them is converted** loses the triggers. An
+  unrelated annotation, such as a recording-start comment, is no evidence that they were.
 - **`annotate_amplitude(peak=...)`** thresholds sample-to-sample jumps, not peak-to-peak.
 - **`match_alias=True`** places `T5`/`T6` at T9/T10 instead of P7/P8.
 - **Event codes from `events_from_annotations`** are assigned in sorted label order, not

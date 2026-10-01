@@ -152,9 +152,9 @@ Descriptions starting with `BAD` mark spans that `Epochs(reject_by_annotation=Tr
 `EDGE` or `BAD boundary` mark concatenation points that filters do not cross.
 
 ```python
-bad = mne.Annotations(onset=[30.0], duration=[2.5], description=["BAD_movement"],
-                      orig_time=raw.annotations.orig_time)
-raw.set_annotations(raw.annotations + bad)
+# raw.annotations counts onsets from the first *acquired* sample: add raw.first_time to a
+# time measured from the start of the data, and append in place (see the warning below).
+raw.annotations.append(onset=30.0 + raw.first_time, duration=2.5, description="BAD_movement")
 print(raw.annotations.to_data_frame(time_format=None).tail(3))
 ```
 
@@ -186,27 +186,43 @@ print(np.unique(events[:, 2], return_counts=True))
 - `shortest_event` (samples) and `min_duration` (seconds) filter glitches; `consecutive`
   controls how back-to-back changes are read.
 
-**Convert stim-channel events to annotations before resampling or cropping-and-saving.**
-Annotations are times, so they survive resampling; stim channels become unreliable. The
-right `first_samp` depends on whether the recording has a measurement date:
+**Convert stim-channel events to annotations before resampling.** Annotations are times, so
+they survive resampling; stim channels do not. Convert **every** stim channel, keep the
+existing annotations, and drop a stim channel only after its events are annotations. An
+unrelated annotation, such as a recording-start comment, says nothing about the triggers.
 
 ```python
-orig_time = stim_raw.info["meas_date"]
-annotations = mne.annotations_from_events(
-    events,
-    sfreq=stim_raw.info["sfreq"],
-    event_desc={1: "standard", 2: "target"},
-    first_samp=0 if orig_time is not None else stim_raw.first_samp,
-    orig_time=orig_time,
-)
-stim_raw.set_annotations(annotations).drop_channels(["STI 014"])
+sfreq = stim_raw.info["sfreq"]
+stim_channels = [ch for ch, kind in zip(stim_raw.ch_names, stim_raw.get_channel_types())
+                 if kind == "stim"]
+labels = {1: "standard", 2: "target"}
+for channel in stim_channels:
+    channel_events = mne.find_events(stim_raw, stim_channel=channel, shortest_event=1)
+    stim_raw.annotations.append(
+        onset=channel_events[:, 0] / sfreq,            # samples already include first_samp
+        duration=0.0,
+        description=[labels.get(code, str(code)) for code in channel_events[:, 2]],
+    )
+stim_raw.drop_channels(stim_channels)
 stim_raw.resample(125.0)
 events_125, event_id_125 = mne.events_from_annotations(stim_raw)
+print(event_id_125, len(events_125))
 ```
 
-With a measurement date, annotation onsets count from `meas_date`, and event samples already
-include `first_samp`; without one, onsets count from the first sample. Passing the wrong
-`first_samp` shifts every event by `first_samp / sfreq` after any crop.
+- `raw.annotations` stores onsets in seconds since the first **acquired** sample, that is
+  `events[:, 0] / sfreq` or `seconds_into_data + raw.first_time`, with or without a
+  measurement date. Appending in that frame is exact.
+- **Avoid `raw.set_annotations(raw.annotations + other)` on a recording without a
+  measurement date whose first sample is not 0** (cropped data, many MEG FIF files). In
+  MNE 1.13 `set_annotations` reads `orig_time=None` onsets as relative to the first sample
+  and adds `first_time` again, which moves every existing annotation. On such recordings
+  `annotate_amplitude`, `annotate_break` and the other `annotate_*` functions also return
+  onsets counted from the first sample, so add `raw.first_time` when appending them (see
+  `preprocessing.md`). With a measurement date the frames agree and both idioms work.
+- With several stim channels, prefix labels with the channel (`STI 014/1`) so equal codes on
+  different trigger lines stay distinct. `scripts/preprocess_eeg.py --resample` converts
+  every stim channel this way, skips events already annotated with the same label and onset,
+  and verifies each event before it drops the stim channels.
 
 Merge codes into one condition with `mne.merge_events(events, [1, 3], 13)`, and keep
 trial-level variables (response time, stimulus features) in `Epochs.metadata`;

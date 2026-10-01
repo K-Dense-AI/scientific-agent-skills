@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Narvik Aghamalian
 """Shared helpers for the MNE-Python skill command-line tools.
 
 Module scope is standard library only, so every CLI can build its parser and

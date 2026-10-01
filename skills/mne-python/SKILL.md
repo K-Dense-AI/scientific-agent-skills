@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python 3.11+ with mne 1.13 (tested 1.13.2), NumPy, SciPy, and Matplotlib; pandas for ERP measures and data frames; scikit-learn for decoding. Optional - python-picard (fast ICA), edfio/pybv/eeglabio (export), mne-bids, mne-icalabel with onnxruntime, nibabel (source labels). The scripts run offline; sample datasets and the fsaverage template need network access.
 metadata:
   version: "1.0"
-  skill-author: Ai369Dev
+  skill-author: Narvik Aghamalian
 ---
 
 # MNE-Python: EEG and MEG analysis
@@ -63,9 +63,10 @@ Each of these fails silently: the code runs and the numbers are wrong.
    on the copy used to fit ICA. Filter continuous data, never short epochs.
 5. **Events are yours to verify.** `events_from_annotations` assigns codes in sorted label
    order; always use the returned `event_id`. Stim channels need `find_events` (BioSemi:
-   `mask=2**16 - 1`). Convert stim events to annotations before resampling; in
-   `annotations_from_events` use `first_samp=0` when `meas_date` is set and `raw.first_samp`
-   when it is not.
+   `mask=2**16 - 1`). Before resampling, append the events of **every** stim channel with
+   `raw.annotations.append(events[:, 0] / sfreq, 0.0, labels)`, then drop the stim channels.
+   Avoid `raw.set_annotations(raw.annotations + new)` on recordings without `meas_date`:
+   MNE 1.13 re-adds `first_time` and shifts the existing annotations of cropped data.
 6. **ICA: fit on a 1 Hz high-passed copy, apply to the analysis data.** Exclude bad channels,
    fix `random_state`, prefer Picard (`fit_params=dict(ortho=False, extended=True)`), and
    check what you remove: frontal proxies for EOG also correlate with frontal brain activity.
@@ -155,7 +156,9 @@ Details that matter:
   more than 20% of 1 s windows). More than 25% bad stops the run with the log written.
   Notch filtering runs only when line noise reaches the pass band. ICA uses Picard when
   installed, otherwise extended Infomax, and logs the blink-locked amplitude before and after;
-  a small reduction triggers a warning. Stim events become annotations before resampling.
+  a small reduction triggers a warning. Before resampling, the events of every stim channel
+  are appended to the existing annotations (labels `code`, or `channel/code` with several
+  stim channels), each one is verified, and only then are the stim channels dropped.
 - **ERP analysis.** `--list-events` shows the labels to use. Windows are closed intervals
   in seconds; measures match `mne.stats.erp` (tested). Contrast SME is
   `sqrt(SME_a² + SME_b²)`. `--reject-uv auto` sets a robust per-recording limit; `--equalize`

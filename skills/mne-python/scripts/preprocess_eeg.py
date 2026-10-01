@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Narvik Aghamalian
 """Preprocess scalp EEG reproducibly and log every decision.
 
 Steps, in order (all recorded in <prefix>_desc-preproc_log.json):
@@ -301,33 +302,77 @@ class Pipeline:
         self.log["montage"] = section
 
     def events_to_annotations(self) -> None:
+        """Before resampling, copy every stim channel's events into annotations.
+
+        Resampling makes stim channels unreliable, so they are dropped -- but only
+        after each of their events has been verified to exist as an annotation with
+        the same label at the same onset. Existing annotations (task markers,
+        comments, a recording-start note) are kept and never taken as proof that
+        the stim events were converted. With one stim channel the labels are the
+        codes ('1', '2'); with several they are 'channel/code' so identical codes
+        on different trigger lines stay distinct.
+        """
         raw, mne, np = self.raw, self.mne, self.np
         stim = self.names_of("stim")
-        section: dict[str, Any] = {"stim_channels": stim, "converted": 0}
-        needs = bool(stim) and self.args.resample and self.args.resample < raw.info["sfreq"]
-        if needs:
-            channel = next((c for c in ("STI101", "STI 014") if c in stim), stim[0])
-            events = mne.find_events(raw, stim_channel=channel, shortest_event=1, verbose="ERROR")
-            existing = [
-                d for d in raw.annotations.description
-                if not str(d).lower().startswith(("bad", "edge", "boundary"))
-            ]
-            if len(events) and not existing:
-                orig_time = raw.info["meas_date"]
-                annotations = mne.annotations_from_events(
-                    events,
-                    raw.info["sfreq"],
-                    first_samp=0 if orig_time is not None else raw.first_samp,
-                    orig_time=orig_time,
-                )
-                raw.set_annotations(raw.annotations + annotations)
-                section["converted"] = int(len(events))
-                section["codes"] = {str(c): int(n) for c, n in zip(*np.unique(events[:, 2], return_counts=True))}
-            elif existing:
-                section["note"] = "annotations already hold events; stim channel not converted"
-            raw.drop_channels(stim)
-            section["dropped_after_conversion"] = stim
+        section: dict[str, Any] = {"stim_channels": stim, "converted": 0, "channels": {}}
         self.log["events"] = section
+        if not (stim and self.args.resample and self.args.resample < raw.info["sfreq"]):
+            return
+        sfreq = raw.info["sfreq"]
+        # raw.annotations stores onsets as seconds since the first acquired sample
+        # (event sample / sfreq; first_samp included), with or without a meas_date.
+        # Appending in that frame is exact. Rebuilding with
+        # raw.set_annotations(raw.annotations + new) is not: without a meas_date,
+        # MNE re-adds first_time and shifts every existing annotation of a
+        # cropped recording.
+        tolerance = 0.5 / sfreq
+
+        def annotated(onset: float, label: str) -> bool:
+            current = raw.annotations
+            return bool(
+                ((current.description == label) & (np.abs(current.onset - onset) <= tolerance)).any()
+            )
+
+        expected: list[tuple[str, float, str]] = []
+        for channel in stim:
+            try:
+                events = mne.find_events(
+                    raw, stim_channel=channel, shortest_event=1, verbose="ERROR"
+                )
+            except Exception as error:  # e.g. an analog line typed as stim
+                raise CliError(
+                    f"could not read events from stim channel {channel!r} ({error}); "
+                    "retype it with --channel-types or drop it with --drop"
+                ) from error
+            prefix = f"{channel}/" if len(stim) > 1 else ""
+            onsets = events[:, 0] / sfreq
+            labels = [f"{prefix}{int(code)}" for code in events[:, 2]]
+            new = [(t, label) for t, label in zip(onsets, labels) if not annotated(t, label)]
+            if new:
+                raw.annotations.append(
+                    [t for t, _ in new], [0.0] * len(new), [label for _, label in new]
+                )
+            codes, counts = np.unique(events[:, 2], return_counts=True)
+            section["channels"][channel] = {
+                "events": int(len(events)),
+                "added": len(new),
+                "already_annotated": int(len(events)) - len(new),
+                "codes": {f"{prefix}{int(c)}": int(n) for c, n in zip(codes, counts)},
+            }
+            section["converted"] += len(new)
+            expected += [(channel, t, label) for t, label in zip(onsets, labels)]
+
+        missing = [(channel, t, label) for channel, t, label in expected if not annotated(t, label)]
+        if missing:
+            channel, t, label = missing[0]
+            raise CliError(
+                f"{len(missing)} stim events could not be stored as annotations (first: "
+                f"{label!r} at {t - raw.first_time:.3f} s into the data on {channel}); stim "
+                "channels were kept, so rerun without --resample or fix the events first"
+            )
+        raw.drop_channels(stim)
+        section["label_format"] = "channel/code" if len(stim) > 1 else "code"
+        section["dropped_after_verification"] = stim
 
     def filter(self) -> None:
         args, raw, np = self.args, self.raw, self.np
@@ -792,7 +837,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     log = pipeline.log
     ica = log["ica"]
-    print(f"saved {outputs['clean']} (+ ICA, log{'' if args.no_report else ', report'})")
+    written = [label for key, label in (("ica", "ICA"), ("report", "report")) if key in log["outputs"]]
+    print(f"saved {outputs['clean']} (+ {', '.join([*written, 'log'])})")
     print(f"  bad channels: {log['bad_channels']['final'] or 'none'}; "
           f"interpolated: {log['interpolation']['interpolated'] or 'none'}")
     if ica.get("applied"):

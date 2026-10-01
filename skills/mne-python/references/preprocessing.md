@@ -107,7 +107,11 @@ lof_bads, lof_scores = mne.preprocessing.find_bad_channels_lof(
 ```python
 breaks = mne.preprocessing.annotate_break(raw, min_break_duration=15.0)
 jumps, jump_bads = mne.preprocessing.annotate_amplitude(raw, peak=dict(eeg=100e-6))
-raw.set_annotations(raw.annotations + breaks + jumps)
+for extra in (breaks, jumps):
+    # Without a meas_date these onsets count from the first sample, while raw.annotations
+    # counts from the first acquired sample (io-and-channels.md); append in place.
+    shift = raw.first_time if extra.orig_time is None else 0.0
+    raw.annotations.append(extra.onset + shift, extra.duration, extra.description)
 ```
 
 - `annotate_amplitude` compares **sample-to-sample differences** `|x[i+1] - x[i]|`, not a

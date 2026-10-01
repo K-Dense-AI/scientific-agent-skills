@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Narvik Aghamalian
 """Simulate a 32-channel scalp-EEG oddball recording with known ground truth.
 
 The signal mixes spatially correlated 1/f background activity, posterior alpha,

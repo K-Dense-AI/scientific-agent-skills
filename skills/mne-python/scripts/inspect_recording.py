@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Narvik Aghamalian
 """Triage an EEG recording before analysis: what is in it, and what looks wrong.
 
 Opens any format MNE reads (FIF, EDF/BDF, BrainVision, EEGLAB, EGI .mff, CNT,

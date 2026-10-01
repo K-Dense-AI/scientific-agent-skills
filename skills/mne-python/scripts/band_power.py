@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Author: Narvik Aghamalian
 """Resting-state spectral summary: band power, individual alpha frequency, asymmetry.
 
 Cuts the recording into fixed-length segments, drops segments that overlap BAD
