@@ -1,6 +1,6 @@
 # Compendial, CLSI, and ISO Sources (No Standard Text)
 
-Research basis: **2026-07-27**. This reference identifies documents, their scope, and where to obtain
+Research basis: **2026-09-30**. This reference identifies documents, their scope, and where to obtain
 them. **It does not reproduce their requirements, thresholds, or study designs**, because they are
 copyrighted and paywalled.
 
@@ -24,8 +24,8 @@ review date in the laboratory's controlled source register.
 
 | Chapter | Title | Scope |
 | --- | --- | --- |
-| `<1220>` | Analytical Procedure Life Cycle | Three-stage lifecycle: procedure design (Stage 1), performance qualification (Stage 2), ongoing performance verification (Stage 3), organised around an analytical target profile. Official 1 May 2022 (incorporated into USP–NF 2022 Issue 1 on 1 Nov 2021). Integrates the concepts previously spread across `<1224>`, `<1225>`, and `<1226>`. |
-| `<1225>` | Validation of Compendial Procedures | Validation of non-compendial procedures, and of compendial procedures used outside their stated scope. Stage 2 activity under `<1220>`. |
+| `<1220>` | Analytical Procedure Life Cycle | Three-stage lifecycle: procedure design (Stage 1), performance qualification (Stage 2), ongoing performance verification (Stage 3), organised around an analytical target profile. Official 1 May 2022, confirmed by the USP Council of Experts report. Integrates the concepts previously spread across `<1224>`, `<1225>`, and `<1226>`. |
+| `<1225>` | Validation of Compendial Procedures | Compendial validation. The linked 2025 preview is a **proposal** extending and aligning the chapter with Q2(R2); confirm the effective controlled text before relying on proposed Stage 2 changes. |
 | `<1226>` | Verification of Compendial Procedures | Assessment of selected performance characteristics showing a compendial procedure works under actual conditions of use. **Verification is not revalidation** and does not repeat the full validation. |
 | `<1224>` | Transfer of Analytical Procedures | Transfer between laboratories. |
 | `<1010>` | Analytical Data — Interpretation and Treatment | Statistical treatment of analytical data. |
@@ -44,37 +44,41 @@ either direction is expensive — unnecessary full validation, or an unsupported
 
 ## CLSI EP series
 
-Designations and titles below were taken from clsi.org listings and secondary sources on the
-research date. **Editions change; confirm the current edition on <https://clsi.org/> before designing
-a study.** Marked `[confirm]` where the edition was not read from the publisher directly.
+Publisher catalogue metadata checked **2026-09-30**; full standards were not accessed.
+These edition numbers identify the reviewed baseline, not a guarantee of the next revision.
 
-| Designation | Subject | Note |
+| Designation | Subject | Publisher edition baseline |
 | --- | --- | --- |
-| EP05 | Evaluation of precision of quantitative measurement procedures | Establishment of precision; the multi-day/multi-run designs. `[confirm edition]` |
-| EP06 | Evaluation of linearity of quantitative measurement procedures | 2nd edition reported. `[confirm edition]` |
-| EP07 | Interference testing in clinical chemistry | Screening, quantifying and confirming interferents; verifying manufacturer interference claims. 3rd edition reported. `[confirm edition]` |
-| EP09 | Measurement procedure comparison and bias estimation using patient samples | The method-comparison document. 3rd edition reported. `[confirm edition]` |
-| EP15 | User verification of precision and estimation of bias | The short study a laboratory runs to verify a manufacturer's claims. 3rd edition reported. `[confirm edition]` |
-| EP17 | Evaluation of detection capability | Limit of blank, limit of detection, limit of quantitation; verification of manufacturer claims. `[confirm edition]` |
-| EP25 | Evaluation of stability of in vitro diagnostic reagents | `[confirm edition]` |
-| EP28 | Defining, establishing, and verifying reference intervals | Formerly designated C28. An implementation guide (EP28IG) also exists. `[confirm edition]` |
+| [EP05](https://clsi.org/shop/standards/ep05-plus/) | Precision establishment | **4th edition**, 11 Dec 2025; Plus includes a Quick Guide |
+| [EP06](https://clsi.org/shop/standards/ep06/) | Linearity | 2nd edition, 24 Nov 2020; publisher also lists separate establishment/implementation guides |
+| [EP07](https://clsi.org/shop/standards/ep07-plus/) | Interference | 3rd edition, 30 Apr 2018; Plus guide published 17 Mar 2026 is not a new edition |
+| [EP09](https://clsi.org/shop/standards/ep09/) | Patient-sample comparison and bias | 3rd edition, corrected 20 Jun 2018 |
+| [EP15](https://clsi.org/shop/standards/ep15/) | User precision verification and bias estimation | 3rd edition, 11 Sep 2014 |
+| [EP17](https://clsi.org/shop/standards/ep17/) | Detection capability | 2nd edition |
+| [EP25](https://clsi.org/shop/standards/ep25/) | Stability of in vitro medical laboratory test reagents | 2nd edition |
+| [EP28](https://clsi.org/shop/standards/ep28/) | Reference intervals | 3rd edition; EP28IG companion listed |
+
+The [May 2026 publisher update](https://clsi.org/resources/insights-blog/purpose-driven-content-for-ep-documents-a-strategic-update/)
+describes modular EP documents and a revision in progress for EP09. A development announcement or
+companion guide is not proof that a new technical edition superseded the listed standard.
 
 **Vocabulary.** CLSI distinguishes *limit of blank*, *limit of detection*, and *limit of quantitation*
 as three separate quantities with separate protocols. This is not the same taxonomy as ICH Q2(R2)'s
 detection limit and quantitation limit, and the two should not be translated into each other
 casually — the underlying definitions and the experiments differ.
 
-**Verification versus establishment.** For an FDA-cleared or CE-marked assay used as intended, a
+**Verification versus establishment.** For an unmodified FDA-cleared or approved nonwaived test under CLIA, a
 laboratory *verifies* the manufacturer's performance claims — a bounded study. For a
 laboratory-developed test, or an assay used off-label, the laboratory *establishes* performance,
 which is a much larger exercise. Under CLIA the distinction has direct regulatory consequences and
-also depends on test complexity. Determine which applies before designing anything.
+also depends on test complexity. CE marking alone does not establish this US distinction; apply
+the governing regional requirements. See the [CMS CLIA regulation entrypoint](https://www.cms.gov/medicare/health-safety-standards/clinical-laboratory-improvement-amendments-clia/clia-regulations-compliance).
 
 ## ISO standards
 
 | Standard | Relevance |
 | --- | --- |
-| ISO/IEC 17025:2017 | Clause 7.2 selection, verification and validation of methods; clause 7.6 measurement uncertainty. Validation "to the extent necessary" for the intended application — no characteristic list, no numeric criteria. |
+| ISO/IEC 17025:2017 (edition 3; ISO catalogue status: confirmed) | Clause 7.2 selection, verification and validation of methods; clause 7.6 measurement uncertainty. Validation "to the extent necessary" for the intended application — no universal fixed checklist or numeric acceptance limits. |
 | ISO 15189 | Medical laboratories: quality and competence. The clinical-laboratory counterpart to 17025. |
 | ISO 21748 / ISO 5725 series | Using repeatability, reproducibility and trueness estimates in measurement uncertainty; accuracy of measurement methods. |
 

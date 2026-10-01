@@ -57,6 +57,11 @@ Prefer logical indexing for selection and `find` only when numeric indices are
 needed. Verify mask shape. Deleting with `A(index)=[]` changes shape and can be
 ambiguous for multidimensional arrays.
 
+R2026b changes an easy-to-miss edge case: linear logical deletion with an
+all-false mask can still reshape built-in arrays into a row vector. Preserve
+and check the intended shape even when no values match, and include a
+no-match case in migration tests.
+
 ### Cell, structure, and table indexing
 
 ```matlab
@@ -213,7 +218,7 @@ loop exists.
 - [ ] Preallocation and vectorization are measured, not assumed.
 - [ ] Memory estimates include temporaries and expanded outputs.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [Array Indexing](https://www.mathworks.com/help/matlab/math/array-indexing.html)
 - [Compatible Array Sizes for Basic Operations](https://www.mathworks.com/help/matlab/matlab_prog/compatible-array-sizes-for-basic-operations.html)
@@ -226,3 +231,4 @@ loop exists.
 - [Preallocation](https://www.mathworks.com/help/matlab/matlab_prog/preallocating-arrays.html)
 - [`timeit`](https://www.mathworks.com/help/matlab/ref/timeit.html)
 - [Profile MATLAB Code](https://www.mathworks.com/help/matlab/matlab_prog/profiling-for-improving-performance.html)
+- [R2026b release notes: logical deletion](https://www.mathworks.com/help/matlab/release-notes.html)

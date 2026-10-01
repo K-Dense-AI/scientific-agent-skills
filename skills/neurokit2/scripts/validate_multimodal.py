@@ -41,7 +41,7 @@ def _stream_profile(
     *,
     root: Path,
     max_rows: int,
-) -> tuple[dict[str, Any], list[str], list[str]]:
+) -> tuple[dict[str, Any], list[str], list[str], list[float]]:
     validate_keys(
         stream,
         allowed={
@@ -101,12 +101,13 @@ def _stream_profile(
     )
     signal = values[stream["value_column"]]
     missing_count = sum(value is None for value in signal)
-    finite_signal = [float(value) for value in signal if value is not None]
-    flat_count = sum(
-        current == previous for previous, current in pairwise(finite_signal)
-    )
+    finite_pairs = [
+        (previous, current) for previous, current in pairwise(signal)
+        if previous is not None and current is not None
+    ]
+    flat_count = sum(current == previous for previous, current in finite_pairs)
     flat_fraction = (
-        flat_count / (len(finite_signal) - 1) if len(finite_signal) > 1 else None
+        flat_count / len(finite_pairs) if finite_pairs else None
     )
     errors: list[str] = []
     warnings: list[str] = []
@@ -138,6 +139,13 @@ def _stream_profile(
             end_time = start_time
     else:
         end_time = start_time + (row_count - 1) / declared_rate
+        times = [start_time + index / declared_rate for index in range(row_count)]
+
+    grid_error_samples = (
+        max(abs((time - start_time) * declared_rate - index)
+            for index, time in enumerate(times))
+        if len(times) == row_count else None
+    )
 
     if observed_rate is not None:
         relative_rate_error = abs(observed_rate - declared_rate) / declared_rate
@@ -147,6 +155,8 @@ def _stream_profile(
             )
     if interval_jitter is not None and interval_jitter > 0.01:
         warnings.append("timestamp interval jitter exceeds 1% of the median")
+    if grid_error_samples is not None and grid_error_samples > 0.5:
+        warnings.append("timestamps deviate more than half a sample from the declared grid")
     if missing_count:
         warnings.append(f"{missing_count} signal values are missing")
     if flat_fraction is not None and flat_fraction > 0.20:
@@ -164,9 +174,11 @@ def _stream_profile(
         "row_count": row_count,
         "start_time_s": start_time,
         "timestamp_maximum_relative_jitter": interval_jitter,
+        "timestamp_maximum_grid_error_samples": grid_error_samples,
+        "time_basis": "observed" if time_column is not None else "declared_uniform_grid",
         "unit": stream["unit"],
     }
-    return profile, errors, warnings
+    return profile, errors, warnings, times
 
 
 def validate_manifest(
@@ -226,16 +238,18 @@ def validate_manifest(
     )
 
     profiles: list[dict[str, Any]] = []
+    timestamps: dict[str, list[float]] = {}
     errors: list[str] = []
     warnings: list[str] = []
     for index, stream in enumerate(streams, start=1):
         try:
-            profile, stream_errors, stream_warnings = _stream_profile(
+            profile, stream_errors, stream_warnings, stream_times = _stream_profile(
                 stream, root=root, max_rows=max_rows
             )
         except CliError as exc:
             raise CliError(f"stream {index}: {exc}") from exc
         profiles.append(profile)
+        timestamps[profile["name"]] = stream_times
         errors.extend(f"{profile['name']}: {message}" for message in stream_errors)
         warnings.extend(f"{profile['name']}: {message}" for message in stream_warnings)
 
@@ -278,8 +292,28 @@ def validate_manifest(
         <= (500.0 / profile["declared_sampling_rate_hz"])
         for profile in profiles
     )
+    maximum_sample_offsets_ms: dict[str, float | None] = {}
+    reference_times = timestamps[reference_name]
+    for profile in profiles:
+        times = timestamps[profile["name"]]
+        maximum_sample_offsets_ms[profile["name"]] = (
+            max(abs(time - reference_time) * 1000.0
+                for time, reference_time in zip(times, reference_times))
+            if same_rate and same_count and len(times) == len(reference_times)
+            and len(times) == profile["row_count"] else None
+        )
+    all_samples_aligned = all(
+        offset is not None and offset <= 500.0 / rates[0]
+        for offset in maximum_sample_offsets_ms.values()
+    )
+    uniform_grids = all(
+        profile["timestamp_maximum_grid_error_samples"] is not None
+        and profile["timestamp_maximum_grid_error_samples"] <= 0.5
+        for profile in profiles
+    )
     bio_process_compatible = (
         same_rate and same_count and no_missing and starts_within_sample and not errors
+        and all_samples_aligned and uniform_grids
     )
     if not same_rate:
         warnings.append(
@@ -299,6 +333,8 @@ def validate_manifest(
             "minimum_overlap_s": minimum_overlap_s,
             "reference_stream": reference_name,
             "start_offsets_ms": start_offsets_ms,
+            "maximum_sample_offsets_ms": maximum_sample_offsets_ms,
+            "grid_tolerance_samples": 0.5,
             "synchronization": alignment["synchronization"],
         },
         "bio_process_direct_input_compatible": bio_process_compatible,

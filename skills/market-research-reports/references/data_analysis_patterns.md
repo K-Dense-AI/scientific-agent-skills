@@ -172,10 +172,12 @@ Scenario analysis explores coherent joint states. It is not a confidence
 interval. Statistical prediction intervals require a specified model, error
 process, diagnostics, and coverage interpretation.
 
-The 2023
-[OMB Circular A-4](https://www.whitehouse.gov/wp-content/uploads/2023/11/CircularA-4.pdf)
+The reinstated 2003
+[OMB Circular A-4](https://www.whitehouse.gov/wp-content/uploads/2025/08/CircularA-4.pdf)
 provides primary guidance on characterizing uncertainty, sensitivity, and
-transparent assumptions. The
+transparent assumptions. The 2023 revision was revoked by
+[memorandum M-25-15](https://www.whitehouse.gov/wp-content/uploads/2025/03/M-25-15-Recission-and-Reinstatement-of-Circular-A-4.pdf);
+do not present it as current OMB guidance. The
 [UK Green Book 2026](https://www.gov.uk/government/publications/the-green-book-appraisal-and-evaluation-in-central-government/the-green-book-2026)
 provides additional public-sector appraisal guidance. Adapt principles
 proportionately; do not imply that a market report is a regulatory appraisal.
@@ -244,7 +246,7 @@ Before computing:
 - disclose whether values are revenue, units, capacity, or active users;
 - avoid false precision when company and total estimates use different methods.
 
-The [2023 U.S. Merger Guidelines](https://www.ftc.gov/system/files/ftc_gov/pdf/2023_merger_guidelines_final_12.18.2023.pdf)
+The [2023 U.S. Merger Guidelines](https://www.justice.gov/atr/merger-guidelines)
 describe HHI as one indicator in case-specific merger analysis. The
 [2024 EU Market Definition Notice](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C_202401645)
 addresses product/geographic scope, non-price parameters, dynamic and digital

@@ -62,7 +62,7 @@ def generate_plan(
             "python": ">=3.10",
             "torch": ">=2.9",
             "warning": (
-                "The 4.0 default branch is not the latest stable PyPI artifact. Pin the "
+                "The historical 4.0 snapshot is not current native 5.0 or a PyPI artifact. Pin the "
                 "commit and use an audited CUDA/CPU build environment."
             ),
         }

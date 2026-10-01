@@ -1,11 +1,13 @@
 ---
 name: anndata
-description: Data structure for annotated matrices in single-cell analysis. Use when working with .h5ad files or integrating with the scverse ecosystem. This is the data format skill—for analysis workflows use scanpy; for probabilistic models use scvi-tools; for population-scale queries use cellxgene-census.
+description: Handles annotated matrices in single-cell analysis, .h5ad and Zarr files, and integration with the scverse ecosystem. This is the data format skill—for analysis workflows use scanpy; for probabilistic models use scvi-tools; for population-scale queries use cellxgene-census.
 license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.11+ and uv. Examples target AnnData 0.12.16, with experimental APIs clearly marked where used.
+compatibility: Requires Python 3.12+ and anndata; uv for installation. Optional dask/lazy extras for lazy I/O; openpyxl for Excel, loompy for legacy Loom, and provider-specific fsspec adapters for remote stores. Network required for installation and remote data only.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
+  upstream-version: "0.13.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -28,25 +30,28 @@ Use this skill when:
 
 ## Installation
 
-Requires Python 3.11+. These examples target AnnData 0.12.16; this pin is not a claim
-that it is the newest release.
+Targets AnnData 0.13.4 (current PyPI release reviewed 2026-09-30), requiring Python
+3.12+. Small synthetic checks cover dense/sparse matrices, native I/O, metadata,
+concatenation, and lazy reads. File paths, biological analysis, remote stores, and
+third-party integration examples are illustrative unless stated otherwise.
 
 ```bash
-uv pip install "anndata==0.12.16"
+uv pip install "anndata==0.13.4"
 
 # Lazy I/O and dask-backed operations
-uv pip install "anndata[dask,lazy]==0.12.16"
-
-# Development / docs (contributors)
-uv pip install "anndata[dev,test,doc]==0.12.16"
+uv pip install "anndata[dask,lazy]==0.13.4"
 ```
 
 Use unpinned installs only when intentionally tracking the latest compatible release.
 
 Current API notes:
 - Use `anndata.io` for non-native `read_*` and `write_*` helpers. Top-level `anndata.read_h5ad` and `anndata.read_zarr` remain supported.
-- Avoid deprecated APIs: `ad.read`, `AnnData.concatenate()`, `AnnData.*_keys()`, and `anndata.__version__`. Prefer `ad.read_h5ad`, `ad.concat`, mapping `.keys()`, and `importlib.metadata.version("anndata")`.
-- Treat `anndata.experimental` APIs as useful but unstable. Prefer them for large-data workflows only when their current caveats are acceptable.
+- Use `ad.concat`; `AnnData.concatenate()` was removed in 0.13. Avoid old `ad.read`, deprecated `AnnData.*_keys()` helpers and `anndata.__version__`; prefer explicit readers, mapping `.keys()`, and `importlib.metadata.version("anndata")`.
+- In 0.13, `.X` is also `layers[None]`; layer iteration includes `None`. Use `key is not None` when selecting named layers. View `.X` writes now use copy-on-write.
+- Zarr v3 and automatic sharding are the defaults; the Python dependency is Zarr >=3. Dense H5AD `X` remains writable with `backed="r+"`, but backed sparse item assignment is unsupported in 0.13.
+- `AnnLoader` and Loom reading/writing are deprecated. `AnnCollection` and other experimental APIs need the caveats in the references.
+
+These changes are documented in the [official release notes](https://anndata.readthedocs.io/en/stable/release-notes/). The live docs header still displayed 0.13.3.post0 at review; behavior below was also checked against installed 0.13.4 source.
 
 ## Quick Start
 
@@ -77,7 +82,11 @@ adata = ad.AnnData(X=X, obs=obs, var=var)
 ```python
 # Native formats (read_h5ad/read_zarr remain at top-level)
 adata = ad.read_h5ad('data.h5ad')
-adata = ad.read_h5ad('large_data.h5ad', backed='r')  # lazy load for large files
+source = ad.read_h5ad('large_data.h5ad', backed='r')  # X backed; metadata/layers can load
+try:
+    subset = source[:100, :].to_memory()
+finally:
+    source.file.close()
 adata = ad.read_zarr('data.zarr')
 
 # Other formats: prefer anndata.io (top-level imports are deprecated)
@@ -102,7 +111,7 @@ adata.write_h5ad('output.h5ad', compression='gzip')
 
 # Write other formats
 adata.write_zarr('output.zarr')
-adata.write_csvs('output_dir/')
+adata.write_csvs('output_dir/', skip_data=False)  # Lossy; may densify X
 ```
 
 ### Basic operations
@@ -150,8 +159,11 @@ Common commands:
 from anndata.io import read_mtx
 
 # Read/write h5ad
-adata = ad.read_h5ad('data.h5ad', backed='r')
-adata.write_h5ad('output.h5ad', compression='gzip')
+source = ad.read_h5ad('data.h5ad', backed='r')
+try:
+    source.write_h5ad('output.h5ad', compression='gzip')
+finally:
+    source.file.close()
 
 # 10X Genomics (via scanpy)
 import scanpy as sc
@@ -222,8 +234,8 @@ Common commands:
 filtered = adata[adata.obs['quality_score'] > 0.8]
 hv_genes = adata[:, adata.var['highly_variable']]
 
-# Transpose
-adata_T = adata.T
+# Transpose an independent in-memory object; .raw is not retained
+adata_T = adata.copy().T
 
 # Copy vs view
 view = adata[0:100, :]  # View (lightweight reference)
@@ -258,10 +270,14 @@ adata.X = csr_matrix(adata.X)
 # Convert strings to categoricals
 adata.strings_to_categoricals()
 
-# Use backed mode for large files
-adata = ad.read_h5ad('large.h5ad', backed='r')
+# Materialize a manageable backed subset before modifying it
+source = ad.read_h5ad('large.h5ad', backed='r')
+try:
+    adata = source[:1000, :].to_memory()
+finally:
+    source.file.close()
 
-# Store raw before filtering
+# Snapshot current X/var before feature filtering (not automatically raw counts)
 adata.raw = adata.copy()
 adata = adata[:, adata.var['highly_variable']]
 ```
@@ -271,6 +287,10 @@ adata = adata[:, adata.var['highly_variable']]
 AnnData serves as the foundational data structure for the scverse ecosystem:
 
 ### Scanpy (Single-cell analysis)
+
+Illustrative analysis; requires Scanpy and its selected clustering backend.
+Choose QC thresholds and representations for the assay, and keep count provenance.
+
 ```python
 import scanpy as sc
 
@@ -299,47 +319,54 @@ mdata = mu.MuData({'rna': adata_rna, 'protein': adata_protein})
 ```
 
 ### PyTorch integration
-```python
-from anndata.experimental import AnnLoader
 
-# Create DataLoader for deep learning
-dataloader = AnnLoader(adata, batch_size=128, shuffle=True)
+`anndata.experimental.AnnLoader` is deprecated since 0.12.17. Follow the official
+[annbatch migration tutorial](https://anndata.readthedocs.io/en/stable/tutorials/notebooks/annbatch.html)
+for `annbatch.Loader`; no training run or GPU compatibility is claimed here.
 
-for batch in dataloader:
-    X = batch.X
-    # Train model
-```
+### Third-party storage compatibility
+
+AnnData 0.13.4 exposes `(None, X)` in `layers.items()`. TileDB-SOMA 2.3.0
+`from_anndata` can fail when treating that key as a URI name. Do not claim this
+version pair ingests successfully or delete `layers[None]` as a workaround (that
+removes X). Use an independently tested compatible environment and verify values,
+identifiers, named layers, and provenance after any conversion.
 
 ## Common Workflows
 
 ### Single-cell RNA-seq analysis
 ```python
 import anndata as ad
+import numpy as np
 import scanpy as sc
 
 # 1. Load data (10X via scanpy; anndata handles h5ad/zarr natively)
 adata = sc.read_10x_h5('filtered_feature_bc_matrix.h5')
 
 # 2. Quality control
-adata.obs['n_genes'] = (adata.X > 0).sum(axis=1)
-adata.obs['n_counts'] = adata.X.sum(axis=1)
+adata.obs['n_genes'] = np.asarray((adata.X > 0).sum(axis=1)).ravel()
+adata.obs['n_counts'] = np.asarray(adata.X.sum(axis=1)).ravel()
 adata = adata[adata.obs['n_genes'] > 200]
 adata = adata[adata.obs['n_counts'] < 50000]
 
-# 3. Store raw
-adata.raw = adata.copy()
+# 3. Preserve counts explicitly, then normalize X
+adata = adata.copy()
+adata.layers['counts'] = adata.X.copy()
+adata.uns['matrix_semantics'] = {'counts': 'untransformed counts'}
 
 # 4. Normalize and filter
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
+adata.raw = adata.copy()  # Snapshot log-normalized X with all genes
+adata.uns['matrix_semantics']['raw'] = 'log1p library-size normalized expression'
 sc.pp.highly_variable_genes(adata, n_top_genes=2000)
-adata = adata[:, adata.var['highly_variable']]
+adata = adata[:, adata.var['highly_variable']].copy()
 
 # 5. Save processed data
 adata.write_h5ad('processed.h5ad')
 ```
 
-### Batch integration
+### Combining batches
 ```python
 # Load multiple batches
 adata1 = ad.read_h5ad('batch1.h5ad')
@@ -354,20 +381,15 @@ adata = ad.concat(
     join='inner'
 )
 
-# Apply batch correction
-import scanpy as sc
-sc.pp.combat(adata, key='batch')
-
-# Continue analysis
-sc.pp.pca(adata)
-sc.pp.neighbors(adata)
-sc.tl.umap(adata)
+# Inspect retained features and provenance before choosing an integration method.
+assert adata.obs['batch'].notna().all()
+# Concatenation alone does not correct batch effects; see the scanpy skill.
 ```
 
 ### Working with large datasets
 
-In H5AD backed mode, `r+` persists changes to `X`, not arbitrary edits to `obs`,
-`var`, or `uns`. Write those edits to a new file and reopen it to verify they
+In H5AD backed mode, `r+` supports in-place dense `X` updates, not sparse `X`
+item assignment in 0.13, nor arbitrary edits to `obs`, `var`, or `uns`. Write those edits to a new file and reopen it to verify they
 survived. Close the source with `adata.file.close()` when finished; materialize
 any needed subsets before closing. See the [backed I/O contract](https://anndata.readthedocs.io/en/stable/generated/anndata.io.read_h5ad.html).
 
@@ -375,7 +397,7 @@ any needed subsets before closing. See the [backed I/O contract](https://anndata
 # Open in backed mode
 adata = ad.read_h5ad('100GB_dataset.h5ad', backed='r')
 
-# Filter based on metadata (no data loading)
+# Filter on already-loaded metadata without loading all X
 high_quality = adata[adata.obs['quality_score'] > 0.8]
 
 # Load filtered subset
@@ -389,33 +411,31 @@ chunk_size = 1000
 for i in range(0, adata.n_obs, chunk_size):
     chunk = adata[i:i+chunk_size, :].to_memory()
     process(chunk)
+adata.file.close()
 ```
 
 ## Troubleshooting
 
 ### Out of memory errors
-Use backed mode or convert to sparse matrices:
+Use backed mode and materialize a subset that fits memory:
 ```python
 # Backed mode
 adata = ad.read_h5ad('file.h5ad', backed='r')
 
-# Sparse matrices
-from scipy.sparse import csr_matrix
-adata.X = csr_matrix(adata.X)
+# Materialize only a manageable subset; converting already-loaded huge arrays
+# to sparse does not undo the peak memory cost.
+subset = adata[:1000, :].to_memory()
+adata.file.close()
 ```
 
 ### Slow file reading
-Use compression and appropriate formats:
+Benchmark chunk layout and compression for the access pattern; gzip reduces size but can slow reads:
 ```python
 # Optimize for storage
 adata.strings_to_categoricals()
 adata.write_h5ad('file.h5ad', compression='gzip')
 
-# Use Zarr for cloud storage; v3 writes are opt-in in anndata 0.12
-import anndata as ad
-
-ad.settings.zarr_write_format = 3
-ad.settings.auto_shard_zarr_v3 = True  # experimental; independent of zarr_write_format
+# Zarr v3 and automatic sharding are defaults in 0.13.4
 adata.write_zarr('file.zarr', chunks=(1000, 1000))
 ```
 

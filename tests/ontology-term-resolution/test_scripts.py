@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+import urllib.error
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -54,6 +55,7 @@ def doc(**overrides):
         "obo_id": "UBERON:0002107",
         "label": "liver",
         "synonym": ["iecur", "jecur"],
+        "related_synonyms": ["iecur", "jecur"],
         "ontology_name": "uberon",
         "is_defining_ontology": True,
         "type": "class",
@@ -149,7 +151,7 @@ class LabelMatchingTests(unittest.TestCase):
     def test_match_type_distinguishes_label_synonym_and_partial(self):
         self.assertEqual(ols_client.match_type("liver", doc()), "exact_label")
         self.assertEqual(ols_client.match_type("LIVER", doc()), "exact_label")
-        self.assertEqual(ols_client.match_type("iecur", doc()), "exact_synonym")
+        self.assertEqual(ols_client.match_type("iecur", doc()), "related_synonym")
         self.assertEqual(
             ols_client.match_type("liver", doc(label="caudate lobe of liver", synonym=[])),
             "partial",
@@ -183,7 +185,7 @@ class CandidateRankingTests(unittest.TestCase):
 
     def test_label_match_outranks_synonym_match(self):
         docs = [
-            doc(obo_id="UBERON:0000001", label="other", synonym=["liver"]),
+            doc(obo_id="UBERON:0000001", label="other", synonym=["liver"], exact_synonyms=["liver"]),
             doc(obo_id="UBERON:0002107", label="liver", synonym=[]),
         ]
         ranked = ols_client.rank_candidates("liver", docs)
@@ -333,7 +335,7 @@ class ValidateTermTests(unittest.TestCase):
                               _home_ontology="mondo", _resolved_via="iri")
         result = self.check(term, curie="MONDO:0000001")
         self.assertEqual(result["status"], "imported_only")
-        self.assertIn("mondo does not define", result["detail"])
+        self.assertIn("no defining copy verified for mondo", result["detail"])
 
     def test_non_class_terms_warn(self):
         result = self.check(self.live_term(type="property"))
@@ -707,7 +709,7 @@ class ZoomaHelperTests(unittest.TestCase):
             zooma_client.ontology_filter([])
         self.assertEqual(
             zooma_client.ontology_filter(["UBERON", "CL"]),
-            "required:[none],ontologies:[uberon,cl]",
+            "ontologies:[uberon,cl],defining_only:[true]",
         )
 
     def test_flatten_hit_converts_obo_iris_and_flags_weak_confidence(self):
@@ -772,6 +774,177 @@ class MapTermsTests(unittest.TestCase):
             self.assertEqual(map_terms.main(["--ontology", "cl"]), 2)
 
 
+class CurrentContractRegressionTests(unittest.TestCase):
+    def test_exact_only_rejects_partial_and_nonexact_scopes(self):
+        cases = [doc(label="liver lobe", synonym=[], related_synonyms=[]),
+                 doc(label="organ", related_synonyms=["liver"]),
+                 doc(label="organ", broad_synonyms=["liver"]),
+                 doc(label="organ", narrow_synonyms=["liver"]),
+                 doc(label="organ", synonym=["liver"])]
+        for candidate in cases:
+            with self.subTest(candidate=candidate), patch.object(resolve_terms, "search", return_value=[candidate]):
+                result = resolve_terms.resolve_one("liver", ontology="uberon", subtree_iri=None,
+                                                   rows=5, exact_only=True)
+                self.assertEqual(result["candidates"], [])
+
+    def test_exact_only_keeps_explicit_exact_synonym(self):
+        with patch.object(resolve_terms, "search", return_value=[doc(label="organ", exact_synonyms=["liver"])]):
+            result = resolve_terms.resolve_one("liver", ontology="uberon", subtree_iri=None,
+                                               rows=5, exact_only=True)
+        self.assertEqual(result["candidates"][0]["match_type"], "exact_synonym")
+
+    def test_scoped_term_detail_synonym_is_preserved(self):
+        record = {"synonyms": ["organ"], "obo_synonym": [{"name": "organ", "scope": "hasBroadSynonym"}]}
+        self.assertEqual(ols_client.synonym_scope("organ", record), "broad")
+        self.assertIsNone(ols_client.synonym_scope("organ", {"obo_synonym": None}))
+
+    def test_malformed_service_object_is_not_an_empty_scientific_result(self):
+        with patch.object(ols_client, "_request", return_value={"error": "unavailable"}):
+            with self.assertRaises(ols_client.OlsError):
+                ols_client.search("liver")
+        with self.assertRaises(ols_client.OlsError):
+            ols_client._all_terms({"error": "unavailable"})
+        self.assertEqual(ols_client._all_terms({"page": {"totalElements": 0}}), [])
+
+    def test_unrecognized_iri_cannot_become_a_known_curie(self):
+        for iri in ["https://example.org/UBERON_0002107", "http://purl.obolibrary.org/obo/UBERON_1?x=1",
+                    "http://www.ebi.ac.uk/efo/CL_0000182", "not_a_real_iri"]:
+            self.assertIsNone(ols_client.iri_to_curie(iri), iri)
+
+    def test_orpha_bioregistry_alias_has_ordo_iri_and_home(self):
+        self.assertEqual(ols_client.curie_to_ontology_id("ORPHA:558"), "ordo")
+        self.assertEqual(ols_client.candidate_iris("ORPHA:558"),
+                         ["http://www.orpha.net/ORDO/Orphanet_558"])
+
+    def test_missing_index_uses_verified_iri_and_later_defining_copy(self):
+        first = {"_embedded": {"terms": [doc(ontology_name="efo", is_defining_ontology=False)]},
+                 "_links": {"next": {"href": "http://www.ebi.ac.uk/ols4/api/terms?page=1"}}}
+        final = {"_embedded": {"terms": [doc()]}}
+        with patch.object(ols_client, "_request", side_effect=[{"_embedded": {"terms": []}}, first]), \
+             patch.object(ols_client, "_request_url", return_value=final) as next_page:
+            found = ols_client.term_detail("UBERON:0002107")
+        self.assertEqual(found["_resolved_via"], "iri")
+        self.assertTrue(found["is_defining_ontology"])
+        next_page.assert_called_once()
+
+    def test_pagination_loop_is_not_a_complete_result(self):
+        page = {"_embedded": {"terms": []}, "_links": {"next": {"href": "same"}}}
+        with patch.object(ols_client, "_request_url", return_value=page):
+            with self.assertRaises(ols_client.OlsError):
+                ols_client._all_terms(page)
+
+    def test_http_ols_links_are_upgraded_before_request(self):
+        response = io.BytesIO(b'{"_embedded": {"terms": []}}')
+        with patch.object(ols_client.urllib.request, "urlopen", return_value=response) as fetch:
+            ols_client._request_url("http://www.ebi.ac.uk/ols4/api/terms?size=1")
+        self.assertEqual(fetch.call_args.args[0].full_url, "https://www.ebi.ac.uk/ols4/api/terms?size=1")
+
+    def test_ancestor_relation_selects_subclass_link_and_all_pages(self):
+        term = {"_links": {"ancestors": {"href": "https://www.ebi.ac.uk/ols4/api/subclass"},
+                           "hierarchicalAncestors": {"href": "https://www.ebi.ac.uk/ols4/api/hierarchy"}}}
+        first = {"_embedded": {"terms": [{"obo_id": "UBERON:1"}]},
+                 "_links": {"next": {"href": "https://www.ebi.ac.uk/ols4/api/subclass?page=1"}}}
+        second = {"_embedded": {"terms": [{"iri": "http://purl.obolibrary.org/obo/UBERON_2"}]}}
+        with patch.object(ols_client, "term_detail", return_value=term), \
+             patch.object(ols_client, "_request_url", side_effect=[first, second]) as fetch:
+            result = ols_client.ancestor_curies("UBERON:0002107", relation="is-a")
+        self.assertEqual(result, {"UBERON:1", "UBERON:2"})
+        self.assertIn("/subclass?size=500", fetch.call_args_list[0].args[0])
+
+    def test_incomplete_ancestor_traversal_is_an_error(self):
+        for term in [None, {}, {"_links": {"hierarchicalAncestors": {"href": "https://www.ebi.ac.uk/ols4/api/ancestors"}}}]:
+            with patch.object(ols_client, "term_detail", return_value=term), \
+                 patch.object(ols_client, "_request_url", side_effect=urllib.error.HTTPError("url", 404, "gone", {}, None)):
+                with self.assertRaises(ols_client.OlsError):
+                    ols_client.ancestor_curies("UBERON:0002107")
+
+    def test_including_obsolete_combines_two_filters(self):
+        with patch.object(ols_client, "_request", side_effect=[
+            {"response": {"docs": [doc()]}},
+            {"response": {"docs": [doc(obo_id="UBERON:old", label="obsolete")]}},
+        ]) as fetch:
+            records = ols_client.search("liver", include_obsolete=True)
+        self.assertEqual(len(records), 2)
+        self.assertEqual([call.args[1]["obsoletes"] for call in fetch.call_args_list], ["false", "true"])
+
+    def test_imported_copy_does_not_satisfy_namespace_constraint(self):
+        with patch.object(validate_terms, "term_detail", return_value=doc(ontology_name="uberon", is_defining_ontology=False)):
+            result = validate_terms.check_term("CL:0000182", None, branch=None, expect_ontologies={"uberon"})
+        self.assertEqual(result["status"], "wrong_ontology")
+
+    def test_imported_copy_in_home_document_still_warns(self):
+        with patch.object(validate_terms, "term_detail", return_value=doc(is_defining_ontology=False, _home_ontology="uberon")):
+            result = validate_terms.check_term("UBERON:0002107", None, branch=None, expect_ontologies=None)
+        self.assertEqual(result["status"], "imported_only")
+
+    def test_unknown_replacement_iri_is_not_lost_or_invented(self):
+        iri = "https://example.org/UBERON_0002107"
+        with patch.object(validate_terms, "term_detail", return_value=doc(is_obsolete=True, term_replaced_by=iri)):
+            result = validate_terms.check_term("UBERON:0002107", None, branch=None, expect_ontologies=None)
+        self.assertEqual(result["replacement"], iri)
+
+    def test_nonexistent_branch_is_usage_error_before_row_validation(self):
+        with patch.object(validate_terms, "term_detail", return_value=None), \
+             patch.object(validate_terms, "check_term") as check:
+            code = validate_terms.main(["UBERON:0002107", "--branch", "UBERON:9999999"])
+        self.assertEqual(code, 2)
+        check.assert_not_called()
+
+    def test_ragged_or_empty_identifier_rows_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "in.tsv"
+            for row in ["sample1\n", "sample1\t\n"]:
+                path.write_text("sample\tid\n" + row)
+                with patch.object(validate_terms, "check_term") as check:
+                    self.assertEqual(validate_terms.main(["--input", str(path)]), 2)
+                check.assert_not_called()
+
+    def test_resolver_transport_error_does_not_claim_identifier_rejection(self):
+        with patch.object(lookup_prefix, "get_resource", return_value=HP_RESOURCE), \
+             patch.object(lookup_prefix, "get_reference", return_value={"providers": {"miriam": "https://identifiers.org/HP:0001250"}}), \
+             patch.object(lookup_prefix, "resolve_identifiers", side_effect=id_client.IdError("timeout")):
+            result = lookup_prefix.lookup_one("HP:0001250")
+        self.assertEqual(result["identifiers_org"], "https://identifiers.org/HP:0001250")
+        self.assertIn("unverified", result["detail"])
+
+    def test_resolver_5xx_is_not_a_bad_identifier_response(self):
+        def fail(*args, **kwargs):
+            raise urllib.error.HTTPError("url", 503, "unavailable", {}, io.BytesIO(b'{"errorMessage":"unavailable"}'))
+        with patch.object(id_client.urllib.request, "urlopen", side_effect=fail), \
+             patch.object(id_client.time, "sleep"):
+            with self.assertRaises(id_client.IdError):
+                id_client.resolve_identifiers("HP:0001250")
+
+    def test_resolver_400_is_a_structured_identifier_rejection(self):
+        failure = urllib.error.HTTPError("url", 400, "bad", {}, io.BytesIO(b'{"errorMessage":"NOT A NAMESPACE"}'))
+        with patch.object(id_client.urllib.request, "urlopen", side_effect=failure):
+            self.assertEqual(id_client.resolve_identifiers("HPO:0001250")["errorMessage"], "NOT A NAMESPACE")
+
+    def test_no_ols_mapping_does_not_invent_an_ols_id(self):
+        resource = {"prefix": "some-provider", "mappings": {}}
+        result = id_client.classify_prefix_query("some-provider", resource, local=None)
+        self.assertEqual(result["ols_id"], "")
+
+    def test_zooma_reports_underlying_embedding_evidence(self):
+        hit = {"confidence": "GOOD", "semanticTags": ["http://purl.obolibrary.org/obo/UBERON_0002107"],
+               "provenance": {"evidence": "ZOOMA_INFERRED_FROM_CURATED", "source": {"name": "zooma"}},
+               "derivedFrom": {"provenance": {"evidence": "OLS_EMBEDDING", "source": {"name": "uberon"}}}}
+        row = zooma_client.flatten_hit(hit)[0]
+        self.assertEqual(row["evidence"], "OLS_EMBEDDING")
+        self.assertEqual(row["source"], "uberon")
+        self.assertEqual(len(row["provenance_chain"]), 2)
+
+    def test_zooma_ontology_filter_rejects_injected_filter_syntax(self):
+        with self.assertRaises(zooma_client.ZoomaError):
+            zooma_client.ontology_filter(["cl],ontologies:[none"])
+        with self.assertRaises(zooma_client.ZoomaError):
+            zooma_client.ontology_filter(["none"])
+
+    def test_nonpositive_top_is_usage_error(self):
+        self.assertEqual(resolve_terms.main(["liver", "--top", "0"]), 2)
+        self.assertEqual(map_terms.main(["PBMC", "--ontology", "cl", "--top", "-1"]), 2)
+
+
 @unittest.skipUnless(LIVE, "set OLS_LIVE_TESTS=1 to run tests that call EBI OLS")
 class LiveApiTests(unittest.TestCase):
     """Pin the live-service behaviour the offline logic assumes."""
@@ -797,10 +970,11 @@ class LiveApiTests(unittest.TestCase):
         self.assertNotIn("is_obsolete", docs[0])
         self.assertNotIn("term_replaced_by", docs[0])
 
-    def test_iri_fallback_resolves_a_term_missing_from_the_obo_id_index(self):
+    def test_mondo_root_resolves_without_pinning_an_old_index_gap(self):
         term = ols_client.term_detail("MONDO:0000001")
-        self.assertIsNotNone(term, "MONDO:0000001 is live but unindexed by obo_id")
-        self.assertEqual(term["_resolved_via"], "iri")
+        self.assertIsNotNone(term)
+        self.assertEqual(term["label"], "disease")
+        self.assertEqual(term["ontology_name"], "mondo")
 
     def test_orphanet_override_resolves(self):
         term = ols_client.term_detail("Orphanet:558")

@@ -43,7 +43,8 @@ Observability,Datadog,4000
 
 ## Tips
 
-- Format: `Source,Target,Value` — one flow per line
+- Format: `Source,Target,Value` — one flow per line. Quote labels containing commas and double embedded quotes, following CSV syntax; avoid cyclic flows
+- Use finite nonnegative values with a common unit. Validate incoming/outgoing totals for conserved intermediate nodes, and label losses or accumulation explicitly
 - Values determine the width of each flow band
 - Keep to **3 levels** maximum (source → category → destination)
 - Blank lines between groups improve source readability
@@ -69,3 +70,8 @@ Category A,Destination 2,200
 
 Category B,Destination 3,300
 ```
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/sankey.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

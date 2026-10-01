@@ -1,6 +1,6 @@
 """Minimal Opentrons OT-2 protocol template.
 
-The OT-2 maximum at this skill's 2026-07-23 baseline is Protocol API 2.28.
+The OT-2 maximum at this skill's 2026-10-01 baseline is Protocol API 2.28.
 Simulate and analyze this file in the OT-2 App before physical execution.
 """
 

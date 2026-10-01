@@ -40,6 +40,17 @@ class InputError(Exception):
     """Raised for malformed or out-of-bounds user input."""
 
 
+def finite_float(value: str) -> float:
+    """Argparse converter that refuses NaN and infinity."""
+    try:
+        result = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected a finite number") from exc
+    if not math.isfinite(result):
+        raise argparse.ArgumentTypeError("expected a finite number")
+    return result
+
+
 # --------------------------------------------------------------------------
 # Special functions
 # --------------------------------------------------------------------------
@@ -396,10 +407,19 @@ def lack_of_fit(xs: Sequence[float], ys: Sequence[float], fit: LinearFit) -> dic
             "replicated_levels": replicated,
             "reason": "needs replicates at >=1 level and >=3 distinct levels",
         }
+    # Use the same variance model as the fitted line. Weights must be constant
+    # within a concentration level for this replicate-based partition.
+    level_weights: dict[float, float] = {}
+    for x, weight in zip(xs, fit.weights):
+        level = round(float(x), 12)
+        if level in level_weights and weight != level_weights[level]:
+            return {"applicable": False, "reason": "weights differ within a level"}
+        level_weights[level] = weight
     ss_pe = math.fsum(
-        math.fsum((v - mean(vals)) ** 2 for v in vals) for vals in groups.values()
+        level_weights[level] * math.fsum((v - mean(vals)) ** 2 for v in vals)
+        for level, vals in groups.items()
     )
-    ss_res = math.fsum(r * r for r in fit.residuals)
+    ss_res = math.fsum(w * r * r for w, r in zip(fit.weights, fit.residuals))
     ss_lof = max(0.0, ss_res - ss_pe)
     ms_pe = ss_pe / df_pe
     ms_lof = ss_lof / df_lof
@@ -423,9 +443,8 @@ def lack_of_fit(xs: Sequence[float], ys: Sequence[float], fit: LinearFit) -> dic
 def heteroscedasticity(xs: Sequence[float], residuals: Sequence[float]) -> dict[str, Any]:
     """Compare residual spread in the lowest and highest thirds of the range.
 
-    A large ratio means unweighted least squares over-weights the top of the
-    curve, which biases back-calculated results at the bottom -- exactly where
-    an impurity reporting threshold or an LLOQ lives.
+    A large ratio is a variance-model diagnostic. Heteroscedasticity alone does
+    not bias OLS coefficients, but can reduce efficiency and low-range precision.
     """
     pairs = sorted(zip(xs, residuals), key=lambda p: p[0])
     n = len(pairs)
@@ -566,18 +585,18 @@ def deming(
     inverse regression (y treated as error-free). lambda = 1 means equal error
     variances and reduces to orthogonal regression.
 
-    In practice lambda is estimated as (SD of x replicates / SD of y replicates)
+    In practice lambda is estimated as (SD of y replicates / SD of x replicates)
     squared, so equal-precision procedures give 1.
 
     Ordinary least squares assumes x is error-free, which is false when
-    comparing two measurement procedures, and biases the slope toward zero.
+    comparing procedures; independent error in x can attenuate the slope.
     """
     n = len(xs)
     if n != len(ys):
         raise InputError("x and y must be the same length")
     if n < 3:
         raise InputError("Deming regression needs at least 3 points")
-    if lambda_ratio <= 0:
+    if not math.isfinite(lambda_ratio) or lambda_ratio <= 0:
         raise InputError("lambda_ratio must be > 0")
 
     def _fit(xv: Sequence[float], yv: Sequence[float]) -> tuple[float, float]:
@@ -632,7 +651,7 @@ def deming(
 
 
 def passing_bablok(xs: Sequence[float], ys: Sequence[float]) -> dict[str, Any]:
-    """Passing-Bablok regression: non-parametric, no distributional assumption.
+    """Passing-Bablok for distinct x and a positively associated linear relation.
 
     Robust to outliers and does not assume a known error-variance ratio, which
     is why CLSI EP09-style method comparison work often prefers it.
@@ -642,6 +661,13 @@ def passing_bablok(xs: Sequence[float], ys: Sequence[float]) -> dict[str, Any]:
         raise InputError("x and y must be the same length")
     if n < 5:
         raise InputError("Passing-Bablok needs at least 5 points")
+    if n > 1000:
+        raise InputError("Passing-Bablok limited to 1000 pairs because pairwise slopes are quadratic")
+    if len(set(xs)) != n:
+        raise InputError("bundled Passing-Bablok does not support tied reference values")
+    xb, yb = mean(xs), mean(ys)
+    if math.fsum((x - xb) * (y - yb) for x, y in zip(xs, ys)) <= 0:
+        raise InputError("bundled Passing-Bablok requires positive association")
 
     slopes: list[float] = []
     for i in range(n):
@@ -652,7 +678,9 @@ def passing_bablok(xs: Sequence[float], ys: Sequence[float]) -> dict[str, Any]:
                 continue
             if dx == 0:
                 continue  # vertical pair carries no finite slope
-            slopes.append(dy / dx)
+            slope = dy / dx
+            if slope != -1.0:
+                slopes.append(slope)
     if not slopes:
         raise InputError("no usable pairwise slopes")
 
@@ -676,6 +704,8 @@ def passing_bablok(xs: Sequence[float], ys: Sequence[float]) -> dict[str, Any]:
     c = z_ppf(0.975) * math.sqrt(n * (n - 1.0) * (2.0 * n + 5.0) / 18.0)
     m1 = int(round((n_slopes - c) / 2.0))
     m2 = n_slopes - m1 + 1
+    if m1 + shift < 1 or m2 + shift > n_slopes:
+        raise InputError("Passing-Bablok confidence ranks exceed finite slope support; use a dedicated implementation")
     lo_idx = min(max(m1 + shift - 1, 0), n_slopes - 1)
     hi_idx = min(max(m2 + shift - 1, 0), n_slopes - 1)
     slope_lo, slope_hi = slopes[lo_idx], slopes[hi_idx]
@@ -755,8 +785,10 @@ def tost_paired(
     n = len(diffs)
     if n < 2:
         raise InputError("TOST needs at least 2 differences")
-    if margin <= 0:
+    if not math.isfinite(margin) or margin <= 0:
         raise InputError("margin must be > 0")
+    if not 0 < alpha < 0.5:
+        raise InputError("alpha must be between 0 and 0.5")
     d = mean(diffs)
     sd = sample_sd(diffs)
     se = sd / math.sqrt(n)
@@ -859,20 +891,22 @@ def parse_rows(text: str, path_hint: str | None = None) -> list[dict[str, str]]:
 
 
 def require_columns(rows: list[dict[str, str]], columns: Iterable[str]) -> None:
-    present = set(rows[0].keys())
-    missing = [c for c in columns if c not in present]
-    if missing:
-        raise InputError(
-            f"missing required column(s): {', '.join(missing)}; found: {', '.join(sorted(present))}"
-        )
+    columns = tuple(columns)
+    for i, row in enumerate(rows):
+        missing = [c for c in columns if c not in row]
+        if missing:
+            raise InputError(f"row {i + 1}: missing required column(s): {', '.join(missing)}")
 
 
 def to_float(value: str, column: str, row_index: int) -> float:
     try:
-        return float(str(value).strip())
+        number = float(str(value).strip())
+        if not math.isfinite(number):
+            raise ValueError("non-finite number")
+        return number
     except (TypeError, ValueError) as exc:
         raise InputError(
-            f"row {row_index + 1}: column '{column}' is not numeric: {value!r}"
+            f"row {row_index + 1}: column '{column}' is not numeric (finite required): {value!r}"
         ) from exc
 
 
@@ -914,7 +948,7 @@ def emit(rows: list[dict[str, Any]], fmt_name: str, stream=None) -> None:
     """Print rows as a table, TSV, or JSON."""
     stream = stream or sys.stdout
     if fmt_name == "json":
-        json.dump(rows, stream, indent=2, default=_json_default)
+        json.dump(_json_safe(rows), stream, indent=2, allow_nan=False)
         print(file=stream)
     elif fmt_name == "tsv":
         if not rows:
@@ -927,12 +961,14 @@ def emit(rows: list[dict[str, Any]], fmt_name: str, stream=None) -> None:
         emit_table(rows, stream=stream)
 
 
-def _json_default(obj: Any) -> Any:
+def _json_safe(obj: Any) -> Any:
     if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
         return None
-    if isinstance(obj, tuple):
-        return list(obj)
-    raise TypeError(f"not JSON serialisable: {type(obj)!r}")
+    if isinstance(obj, (tuple, list)):
+        return [_json_safe(value) for value in obj]
+    if isinstance(obj, dict):
+        return {key: _json_safe(value) for key, value in obj.items()}
+    return obj
 
 
 def note(message: str) -> None:

@@ -12,7 +12,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "waypoint-bio"
@@ -99,6 +101,21 @@ class LineageNormalisationTests(unittest.TestCase):
 
 class MetaphlanConversionTests(unittest.TestCase):
     @requires_pandas
+    def test_strain_descendants_do_not_duplicate_species_abundance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "merged.tsv"
+            path.write_text(
+                "clade_name\ts1\n"
+                "k__Bacteria|g__A|s__A_one\t60\n"
+                "k__Bacteria|g__A|s__A_one|t__SGB1\t60\n"
+                "k__Bacteria|g__B|s__B_two\t40\n",
+                encoding="utf-8",
+            )
+            matrix = converter.parse_metaphlan(path, "species")
+            self.assertEqual(matrix.sum(axis=1).iloc[0], 100)
+            self.assertEqual(len(matrix.columns), 2)
+
+    @requires_pandas
     def test_species_rows_only_and_renormalised(self) -> None:
         matrix = converter.parse_metaphlan(
             FIXTURES / "metaphlan_merged.tsv", rank="species"
@@ -165,6 +182,22 @@ class KrakenConversionTests(unittest.TestCase):
 
 class QiimeConversionTests(unittest.TestCase):
     @requires_pandas
+    def test_shared_feature_lineages_are_summed_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "table.tsv"
+            path.write_text(
+                "#OTU ID\ts1\ttaxonomy\n"
+                "f1\t1\tg__A\nf2\t2\tg__A\nf3\t3\tg__B\n",
+                encoding="utf-8",
+            )
+            matrix = converter.parse_table(path, taxonomy_column="taxonomy", orientation="auto")
+            self.assertEqual(matrix.shape, (1, 3))
+            frame = converter.matrix_to_waypoint(matrix)
+            self.assertEqual(frame.iloc[0]["Relative Abundances"], [0.5, 0.5])
+            with self.assertRaisesRegex(ValueError, "taxonomy column"):
+                converter.parse_table(path, taxonomy_column="missing", orientation="auto")
+
+    @requires_pandas
     def test_biom_banner_taxonomy_column_and_unassigned(self) -> None:
         matrix = converter.parse_table(
             FIXTURES / "qiime2_table.tsv",
@@ -186,6 +219,30 @@ class QiimeConversionTests(unittest.TestCase):
 
 
 class WaypointFormatTests(unittest.TestCase):
+    @requires_pandas
+    def test_invalid_abundances_are_rejected(self) -> None:
+        for value in [-1.0, float("nan"), float("inf")]:
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "finite and nonnegative"):
+                converter.matrix_to_waypoint(pd.DataFrame([[value]], columns=[LACTOBACILLUS]))
+
+    @requires_pandas
+    def test_parquet_metadata_preserves_named_string_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "labels.parquet"
+            meta = pd.DataFrame({"Group": ["case"]}, index=pd.Index(["001"], name="sample_id"))
+            meta.to_parquet(path)
+            frame = pd.DataFrame({"Taxa": [[LACTOBACILLUS]], "Relative Abundances": [[1.0]]}, index=["001"])
+            joined = converter.attach_metadata(frame, path)
+            self.assertEqual(joined.loc["001", "Group"], "case")
+
+    @requires_pandas
+    def test_duplicate_metadata_ids_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "labels.csv"
+            path.write_text("sample_id,Group\ns1,a\ns1,b\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must be unique"):
+                converter.attach_metadata(pd.DataFrame(index=["s1"]), path)
+
     @requires_pandas
     def test_duplicate_lineages_are_summed(self) -> None:
         matrix = pd.DataFrame(
@@ -235,7 +292,7 @@ class ConverterCliTests(unittest.TestCase):
             frame = vocab_coverage.load_dataframe(output)
             self.assertIn("Group", frame.columns)
             self.assertEqual(sorted(frame["Group"]), ["Case", "Control"])
-            self.assertEqual(len(frame.loc[0, "Taxa"]), 2)
+            self.assertEqual(len(frame.loc["sampleA", "Taxa"]), 2)
 
     @requires_pandas
     def test_kraken_end_to_end_parquet(self) -> None:
@@ -295,6 +352,41 @@ class StubTokenizer:
 
 
 class VocabCoverageTests(unittest.TestCase):
+    @requires_pandas
+    def test_revision_reaches_remote_tokenizer_loader(self) -> None:
+        package = types.ModuleType("waypoint_bio")
+        package.__path__ = []
+        tokenizer_module = types.ModuleType("waypoint_bio.tokenizer")
+        tokenizer_module.load_tokenizer = Mock()
+        transformers_module = types.ModuleType("transformers")
+        transformers_module.AutoTokenizer = Mock()
+        with patch.dict(sys.modules, {"waypoint_bio": package,
+                                      "waypoint_bio.tokenizer": tokenizer_module,
+                                      "transformers": transformers_module}):
+            result = vocab_coverage.load_tokenizer("outpost-bio/Waypoint-6m", revision="a" * 40)
+        transformers_module.AutoTokenizer.from_pretrained.assert_called_once_with(
+            "outpost-bio/Waypoint-6m", revision="a" * 40, trust_remote_code=True)
+        self.assertIs(result, transformers_module.AutoTokenizer.from_pretrained.return_value)
+        tokenizer_module.load_tokenizer.assert_not_called()
+
+    @requires_pandas
+    def test_misaligned_or_invalid_list_values_are_rejected(self) -> None:
+        for taxa, abundance in [([LACTOBACILLUS], []), ("g__A", [1.0]),
+                                ([LACTOBACILLUS], [-1.0]), ([LACTOBACILLUS], [float("nan")]),
+                                ([LACTOBACILLUS], [float("inf")])]:
+            frame = pd.DataFrame({"Taxa": [taxa], "Relative Abundances": [abundance]})
+            with self.subTest(taxa=taxa, abundance=abundance), self.assertRaises(ValueError):
+                vocab_coverage.coverage_report(frame, StubTokenizer(set()))
+
+    @requires_pandas
+    def test_csv_sample_ids_keep_leading_zeros(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "samples.csv"
+            frame = pd.DataFrame({"Taxa": [[LACTOBACILLUS]], "Relative Abundances": [[1.0]]},
+                                 index=pd.Index(["001"], name="sample_id"))
+            frame.to_csv(path)
+            self.assertEqual(vocab_coverage.load_dataframe(path).index.tolist(), ["001"])
+
     @requires_pandas
     def test_coverage_weights_by_abundance(self) -> None:
         frame = pd.DataFrame(

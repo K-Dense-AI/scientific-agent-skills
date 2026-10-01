@@ -1,119 +1,115 @@
-# End-to-End Example: Lead Optimization Campaign
+# Example: Tautomer-Aware Analogue Triage
 
-A complete campaign: project and folder setup, tautomer selection, pKa and property
-prediction across an analogue series, result collection and summary, and a docking
-follow-up on the selected compound.
+This illustrative campaign preserves molecule objects through geometry workflows,
+uses SMILES only for a SMILES pKa method, and records workflow identifiers.
+The toy aminopyridines below are not claimed to be active against a target.
+Hosted results and docking accuracy were not tested in this refresh.
 
-## End-to-end example: Lead optimization campaign
-
-This example demonstrates a realistic workflow for optimizing a hit compound:
+Requires `rowan-python==3.2.0`, pandas, a configured `ROWAN_API_KEY`, and a
+prepared receptor plus validated pocket coordinates for the optional follow-up.
 
 ```python
-import rowan
+from pathlib import Path
+import json
 import pandas as pd
+import rowan
 
-# 1. Create a project and folder for organization
-project = rowan.create_project(name="CDK2 Hit Optimization")
-rowan.set_project("CDK2 Hit Optimization")
-folder = rowan.create_folder(name="round_1_tautomers_and_pka")
+# Work around the Folder annotation defect in SDK 3.2.0.
+from datetime import datetime
+rowan.Folder.model_rebuild(_types_namespace={"datetime": datetime})
 
-# 2. Load hit compound and analogues
-hit = "CCNc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1"  # Known hit
-analogues = [
-    "CCNc1ncc(c(Nc2ccccc2)n1)-c1cccnc1",      # Remove F
-    "CCNc1ncc(c(Nc2ccc(Cl)cc2)n1)-c1cccnc1",  # Cl instead of F
-    "CCC(C)Nc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1",  # Propyl instead of ethyl
-]
+project = rowan.create_project(name="Analogue triage example")
+rowan.project_uuid = project.uuid
+folder = rowan.create_folder(name="round_1", parent_uuid=project.root_folder_uuid)
+compounds = {"fluoro": "Nc1ncc(F)cc1", "chloro": "Nc1ncc(Cl)cc1", "methoxy": "Nc1ncc(OC)cc1"}
 
-# 3. Determine best tautomers (just in case)
-print("Searching tautomeric forms...")
-taut_workflows = [
-    rowan.submit_tautomer_search_workflow(
-        rowan.Molecule.from_smiles(smi), name=f"analog_{i}", folder=folder,
-    )
-    for i, smi in enumerate(analogues)
-]
+rows = []
+selected_tautomers = {}
+workflow_ids = {}
 
-best_tautomers = []
-for wf in taut_workflows:
-    result = wf.result()
-    best_tautomers.append(result.best_tautomer)
+def remember(compound, step, workflow):
+    workflow_ids.setdefault(compound, {})[step] = workflow.uuid
+    Path("campaign_workflows.json").write_text(json.dumps(workflow_ids, indent=2))
 
-# 4. Predict pKa and basic properties for all analogues
-print("Predicting pKa and properties...")
-pka_workflows = [
-    rowan.submit_pka_workflow(
-        smi, method="chemprop_nevolianis2025", name=f"compound_{i}", folder=folder,
-    )
-    for i, smi in enumerate(best_tautomers)
-]
-
-descriptor_workflows = [
-    rowan.submit_descriptors_workflow(
-        rowan.Molecule.from_smiles(smi), name=f"compound_{i}", folder=folder
-    )
-    for i, smi in enumerate(best_tautomers)
-]
-
-# 5. Collect results
-pka_results = []
-for wf in pka_workflows:
+for compound, smiles in compounds.items():
     try:
-        result = wf.result()
-        pka_results.append({
-            "compound": wf.name,
-            "pka": result.strongest_acid,  # pKa of the strongest acid site
-            "uuid": wf.uuid,
-        })
-    except rowan.WorkflowError as e:
-        print(f"pKa prediction failed for {wf.name}: {e}")
+        taut_wf = rowan.submit_tautomer_search_workflow(
+            rowan.Molecule.from_smiles(smiles), name=f"{compound} tautomers", folder=folder,
+        )
+        remember(compound, "tautomers", taut_wf)
+        tautomer = taut_wf.result().best_tautomer  # Molecule or None
+        if tautomer is None or not tautomer.smiles:
+            rows.append({"compound": compound, "error": "No weighted tautomer with SMILES"})
+            continue
+        selected_tautomers[compound] = tautomer
 
-descriptor_results = []
-for wf in descriptor_workflows:
-    try:
-        result = wf.result()
-        desc = result.descriptors
-        descriptor_results.append({
-            "compound": wf.name,
+        pka_wf = rowan.submit_pka_workflow(
+            tautomer.smiles, method="starling", name=f"{compound} pKa", folder=folder,
+        )
+        remember(compound, "pka", pka_wf)
+        desc_wf = rowan.submit_descriptors_workflow(
+            tautomer, name=f"{compound} descriptors", folder=folder,
+        )
+        remember(compound, "descriptors", desc_wf)
+        pka = pka_wf.result()
+        desc = desc_wf.result().descriptors
+        if desc is None:
+            raise ValueError("Completed descriptor workflow returned no descriptors")
+        rows.append({
+            "compound": compound,
+            "tautomer_smiles": tautomer.smiles,
+            "strongest_acid": pka.strongest_acid,
+            "strongest_base": pka.strongest_base,
             "exact_mass": desc.get("MW"),
             "topological_psa": desc.get("TopoPSA"),
             "logp": desc.get("SLogP"),
-            "hba": desc.get("nHBAcc"),
-            "hbd": desc.get("nHBDon"),
-            "uuid": wf.uuid,
         })
-    except rowan.WorkflowError as e:
-        print(f"Descriptor calculation failed for {wf.name}: {e}")
+    except rowan.WorkflowError as exc:
+        rows.append({"compound": compound, "error": str(exc)})
 
-# 6. Merge and summarize
-df_pka = pd.DataFrame(pka_results)
-df_desc = pd.DataFrame(descriptor_results)
-df = df_pka.merge(df_desc, on="compound", how="outer")
+summary = pd.DataFrame(rows)
+summary.to_csv("triage.csv", index=False)
+print(summary.to_string(index=False))
+```
 
-print("\n=== Preliminary SAR ===")
-print(df.to_string())
+Do not automatically rank compounds by the smallest pKa: the relevant acid/base
+site, desired charge at assay pH, permeability, solubility, and target interactions
+all matter. A single highest-weight tautomer is a triage simplification. Carry
+multiple populated tautomers/protomers into docking when warranted.
 
-# 7. Select promising compound for docking
-# compound names are "compound_0", "compound_1", etc. — extract the index
-top_idx = int(df.loc[df["pka"].idxmin(), "compound"].split("_")[1])
-top_smiles = best_tautomers[top_idx]
+After reviewing the table and experimental objectives, supply `candidate.txt`
+with the selected compound identifier, `prepared_receptor.pdb`, and `pocket.json`
+containing `[[cx, cy, cz], [sx, sy, sz]]` in Å for that exact receptor:
 
-print(f"\nProceeding with docking: {top_smiles}")
-
-# 8. Docking campaign
-protein = rowan.create_protein_from_pdb_id(code="1CKP", name="CDK2_1CKP")
-pocket = [[10.5, 24.2, 31.8], [18.0, 18.0, 18.0]]
-
+```python
+candidate = Path("candidate.txt").read_text().strip()
+if candidate not in selected_tautomers:
+    raise ValueError("Selected candidate has no usable tautomer structure")
+pocket = json.loads(Path("pocket.json").read_text())
+protein = rowan.upload_protein(
+    name="prepared target", file_path="prepared_receptor.pdb", project_uuid=project.uuid,
+)
 docking_wf = rowan.submit_docking_workflow(
     protein=protein,
     pocket=pocket,
-    initial_molecule=rowan.Molecule.from_smiles(top_smiles),
+    initial_molecule=selected_tautomers[candidate],
+    docking_settings=rowan.VinaSettings(scoring_function="vinardo"),
     do_pose_refinement=True,
-    name=f"docking_{top_idx}",
+    name=f"{candidate} docking",
+    folder=folder,
 )
-
-dock_result = docking_wf.result()
-print(f"\nDocking score: {dock_result.scores[0]:.2f} kcal/mol")
-print(f"Best pose saved to: best_pose.pdb")
-dock_result.best_pose.write("best_pose.pdb")
+remember(candidate, "docking", docking_wf)
+dock = docking_wf.result()
+if not dock.scores:
+    raise RuntimeError("No successful docking poses")
+print(f"Docking score: {dock.scores[0].score:.2f} kcal/mol")
+Path("best_pose.xyz").write_text(dock.best_pose.to_xyz())
+if dock.scores[0].complex_pdb:
+    dock.get_complex(0).download_structure(name="docked_complex", file_format="mmcif")
 ```
+
+Set per-workflow `max_credits` to the campaign's agreed limits before execution.
+Inspect poses, stereochemistry, clashes, and retained waters/cofactors; validate
+with a known ligand where possible. Neither a docking score nor a cofolding
+confidence score establishes biological activity. For restartable batches and
+submission ambiguity, see [batch_and_webhooks.md](batch_and_webhooks.md).

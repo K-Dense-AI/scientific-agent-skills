@@ -1,514 +1,234 @@
-# Noise Modeling and Mitigation
+# Noise modeling and mitigation
 
-This guide covers noise models, noisy simulation, characterization, and error mitigation in Cirq.
+Examples target Cirq 1.7.0 and small local systems. Noise assumptions are part of
+the scientific model: specify gate durations, idle evolution, readout, qubit
+order, and calibration date. A phenomenological channel is not a complete
+hardware characterization.
 
-## Noise Channels
-
-### Depolarizing Noise
+## Channels and their parameters
 
 ```python
 import cirq
 import numpy as np
+from scipy.optimize import curve_fit
 
-# Single-qubit depolarizing channel
-depol_channel = cirq.depolarize(p=0.01)
-
-# Apply to qubit
 q = cirq.LineQubit(0)
-noisy_op = depol_channel(q)
-
-# Add to circuit
-circuit = cirq.Circuit(
-    cirq.H(q),
-    depol_channel(q),
-    cirq.measure(q, key='m')
-)
+simulator = cirq.DensityMatrixSimulator(dtype=np.complex128, seed=42)
+channels = [
+    cirq.depolarize(p=0.01),
+    cirq.amplitude_damp(gamma=0.1),
+    cirq.phase_damp(gamma=0.1),
+    cirq.bit_flip(p=0.01),
+    cirq.phase_flip(p=0.01),
+    cirq.generalized_amplitude_damp(p=0.8, gamma=0.2),
+]
+for channel in channels:
+    rho = simulator.simulate(cirq.Circuit(cirq.H(q), channel(q))).final_density_matrix
+    assert np.isclose(np.trace(rho), 1)
+    assert np.linalg.eigvalsh(rho).min() >= -1e-10
 ```
 
-### Amplitude Damping
+- `depolarize(p)` applies a nonidentity Pauli with total probability p; p is not
+  directly the average gate infidelity. With `n_qubits=2` it is a joint channel,
+  different from independent one-qubit channels on the pair.
+- `amplitude_damp(gamma)` decays |1> to |0> with probability gamma.
+- `phase_damp(gamma)` multiplies off-diagonal entries by `sqrt(1-gamma)`.
+- `generalized_amplitude_damp(p, gamma)` has decay probability `p*gamma` and
+  excitation probability `(1-p)*gamma`; p weights the relaxation branch.
+- `cirq.reset(q)` resets to |0>. To prepare |1>, reset and then apply X.
+
+## Gate-specific and qubit-specific noise
 
 ```python
-# Amplitude damping (T1 decay)
-gamma = 0.1
-amp_damp = cirq.amplitude_damp(gamma)
-
-# Apply after gate
-circuit = cirq.Circuit(
-    cirq.X(q),
-    amp_damp(q)
-)
-```
-
-### Phase Damping
-
-```python
-# Phase damping (T2 dephasing)
-gamma = 0.1
-phase_damp = cirq.phase_damp(gamma)
-
-circuit = cirq.Circuit(
-    cirq.H(q),
-    phase_damp(q)
-)
-```
-
-### Bit Flip Noise
-
-```python
-# Bit flip channel
-bit_flip_prob = 0.01
-bit_flip = cirq.bit_flip(bit_flip_prob)
-
-circuit = cirq.Circuit(
-    cirq.H(q),
-    bit_flip(q)
-)
-```
-
-### Phase Flip Noise
-
-```python
-# Phase flip channel
-phase_flip_prob = 0.01
-phase_flip = cirq.phase_flip(phase_flip_prob)
-
-circuit = cirq.Circuit(
-    cirq.H(q),
-    phase_flip(q)
-)
-```
-
-### Generalized Amplitude Damping
-
-```python
-# Generalized amplitude damping
-p = 0.1  # Damping probability
-gamma = 0.2  # Excitation probability
-gen_amp_damp = cirq.generalized_amplitude_damp(p=p, gamma=gamma)
-```
-
-### Reset Channel
-
-```python
-# Reset to |0⟩ or |1⟩
-reset_to_zero = cirq.reset(q)
-
-# Reset appears as measurement followed by conditional flip
-circuit = cirq.Circuit(
-    cirq.H(q),
-    reset_to_zero
-)
-```
-
-## Noise Models
-
-### Constant Noise Model
-
-```python
-# Apply same noise to all qubits
-noise = cirq.ConstantQubitNoiseModel(
-    qubit_noise_gate=cirq.depolarize(0.01)
-)
-
-# Simulate with noise
-simulator = cirq.DensityMatrixSimulator(noise=noise)
-result = simulator.run(circuit, repetitions=1000)
-```
-
-### Gate-Specific Noise
-
-```python
-class CustomNoiseModel(cirq.NoiseModel):
-    """Apply different noise to different gate types."""
-
+class GateNoise(cirq.NoiseModel):
     def noisy_operation(self, op):
-        # Single-qubit gates: depolarizing noise
-        if len(op.qubits) == 1:
-            return [op, cirq.depolarize(0.001)(op.qubits[0])]
-
-        # Two-qubit gates: higher depolarizing noise
-        elif len(op.qubits) == 2:
-            return [
-                op,
-                cirq.depolarize(0.01)(op.qubits[0]),
-                cirq.depolarize(0.01)(op.qubits[1])
-            ]
-
+        if cirq.is_measurement(op):
+            return op  # model readout separately
+        n = len(op.qubits)
+        if n in (1, 2) and cirq.has_unitary(op):
+            p = 0.001 if n == 1 else 0.01
+            return [op, cirq.depolarize(p, n_qubits=n).on(*op.qubits)]
         return op
 
-# Use custom noise model
-noise_model = CustomNoiseModel()
-simulator = cirq.DensityMatrixSimulator(noise=noise_model)
-```
-
-### Qubit-Specific Noise
-
-```python
 class QubitSpecificNoise(cirq.NoiseModel):
-    """Different noise for different qubits."""
-
     def __init__(self, qubit_noise_map):
         self.qubit_noise_map = qubit_noise_map
 
     def noisy_operation(self, op):
-        noise_ops = [op]
-        for qubit in op.qubits:
-            if qubit in self.qubit_noise_map:
-                noise = self.qubit_noise_map[qubit]
-                noise_ops.append(noise(qubit))
-        return noise_ops
+        if cirq.is_measurement(op):
+            return op
+        return [op, [self.qubit_noise_map[q](q) for q in op.qubits
+                     if q in self.qubit_noise_map]]
 
-# Define per-qubit noise
-q0, q1, q2 = cirq.LineQubit.range(3)
-noise_map = {
-    q0: cirq.depolarize(0.001),
-    q1: cirq.depolarize(0.005),
-    q2: cirq.depolarize(0.002)
-}
-
-noise_model = QubitSpecificNoise(noise_map)
-```
-
-### Thermal Noise
-
-```python
-class ThermalNoise(cirq.NoiseModel):
-    """Thermal relaxation noise."""
-
-    def __init__(self, T1, T2, gate_time):
-        self.T1 = T1  # Amplitude damping time
-        self.T2 = T2  # Dephasing time
-        self.gate_time = gate_time
-
-    def noisy_operation(self, op):
-        # Calculate probabilities
-        p_amp = 1 - np.exp(-self.gate_time / self.T1)
-        p_phase = 1 - np.exp(-self.gate_time / self.T2)
-
-        noise_ops = [op]
-        for qubit in op.qubits:
-            noise_ops.append(cirq.amplitude_damp(p_amp)(qubit))
-            noise_ops.append(cirq.phase_damp(p_phase)(qubit))
-
-        return noise_ops
-
-# Typical superconducting qubit parameters
-T1 = 50e-6  # 50 μs
-T2 = 30e-6  # 30 μs
-gate_time = 25e-9  # 25 ns
-
-noise_model = ThermalNoise(T1, T2, gate_time)
-```
-
-## Adding Noise to Circuits
-
-### with_noise Method
-
-```python
-# Add noise to all operations
-noisy_circuit = circuit.with_noise(cirq.depolarize(p=0.01))
-
-# Simulate noisy circuit
-simulator = cirq.DensityMatrixSimulator()
+circuit = cirq.Circuit(cirq.H(q), cirq.measure(q, key="result"))
+noisy_circuit = circuit.with_noise(GateNoise())
 result = simulator.run(noisy_circuit, repetitions=1000)
 ```
 
-### insert_into_circuit Method
+`with_noise` handles the returned operation tree and time ordering. Do not collect
+an operation and its following noise on the same qubit into one `Moment` (overlap
+is invalid). Gate-based models above omit idle-qubit noise. A constant model
+`cirq.ConstantQubitNoiseModel(cirq.depolarize(0.01))` instead adds a layer to every
+system qubit after every nonvirtual moment, including measurement moments.
+
+## Relaxation with T1 and T2
+
+For zero-temperature Markovian relaxation, `1/Tphi = 1/T2 - 1/(2*T1)` and the
+phase-damping parameter is `1-exp(-2*t/Tphi)`. Using `1-exp(-t/T2)` as phase damping
+in addition to amplitude damping double counts relaxation and gives the wrong
+coherence decay. The following fixed-duration model is deliberately local to each
+operation; a scheduled hardware model must also account for idle intervals.
 
 ```python
-# Manual noise insertion
-def add_noise_to_circuit(circuit, noise_model):
-    noisy_moments = []
-    for moment in circuit:
-        ops = []
-        for op in moment:
-            ops.extend(noise_model.noisy_operation(op))
-        noisy_moments.append(cirq.Moment(ops))
-    return cirq.Circuit(noisy_moments)
-```
-
-## Readout Noise
-
-### Measurement Error Model
-
-```python
-class ReadoutNoiseModel(cirq.NoiseModel):
-    """Model readout/measurement errors."""
-
-    def __init__(self, p0_given_1, p1_given_0):
-        # p0_given_1: Probability of measuring 0 when state is 1
-        # p1_given_0: Probability of measuring 1 when state is 0
-        self.p0_given_1 = p0_given_1
-        self.p1_given_0 = p1_given_0
+class ThermalNoise(cirq.NoiseModel):
+    def __init__(self, T1, T2, gate_time):
+        values = np.asarray([T1, T2, gate_time], dtype=float)
+        if not np.all(np.isfinite(values)) or T1 <= 0 or T2 <= 0 or gate_time < 0:
+            raise ValueError("Use finite positive T1/T2 and nonnegative duration")
+        if T2 > 2*T1:
+            raise ValueError("This relaxation model requires T2 <= 2*T1")
+        self.gamma_amp = -np.expm1(-gate_time/T1)
+        inverse_Tphi = max(0.0, 1/T2 - 1/(2*T1))
+        self.gamma_phase = -np.expm1(-2*gate_time*inverse_Tphi)
 
     def noisy_operation(self, op):
-        if isinstance(op.gate, cirq.MeasurementGate):
-            # Apply bit flip before measurement
-            noise_ops = []
-            for qubit in op.qubits:
-                # Average readout error
-                p_error = (self.p0_given_1 + self.p1_given_0) / 2
-                noise_ops.append(cirq.bit_flip(p_error)(qubit))
-            noise_ops.append(op)
-            return noise_ops
-        return op
+        if cirq.is_measurement(op):
+            return op
+        return [op, [
+            [cirq.amplitude_damp(self.gamma_amp)(q), cirq.phase_damp(self.gamma_phase)(q)]
+            for q in op.qubits
+        ]]
 
-# Typical readout errors
-readout_noise = ReadoutNoiseModel(p0_given_1=0.02, p1_given_0=0.01)
+thermal = ThermalNoise(T1=50e-6, T2=30e-6, gate_time=25e-9)
+thermal_circuit = cirq.Circuit(cirq.I(q)).with_noise(thermal)
+plus = np.array([1, 1], dtype=complex) / np.sqrt(2)
+thermal_rho = simulator.simulate(thermal_circuit, initial_state=plus).final_density_matrix
+np.testing.assert_allclose(thermal_rho[0, 1], 0.5*np.exp(-25e-9/30e-6), atol=1e-12)
 ```
 
-## Noise Characterization
+## Asymmetric classical readout errors
 
-### Randomized Benchmarking
+Cirq's confusion matrix has **rows = true state, columns = recorded state**.
+Do not average asymmetric errors into one bit-flip probability.
 
 ```python
-import cirq
-
-def generate_rb_circuit(qubits, depth):
-    """Generate randomized benchmarking circuit."""
-    # Random Clifford gates
-    clifford_gates = [cirq.X, cirq.Y, cirq.Z, cirq.H, cirq.S]
-
-    circuit = cirq.Circuit()
-    for _ in range(depth):
-        for qubit in qubits:
-            gate = np.random.choice(clifford_gates)
-            circuit.append(gate(qubit))
-
-    # Add inverse to return to initial state (ideally)
-    # (simplified - proper RB requires tracking full sequence)
-
-    circuit.append(cirq.measure(*qubits, key='result'))
-    return circuit
-
-# Run RB experiment
-def run_rb_experiment(qubits, depths, repetitions=1000):
-    """Run randomized benchmarking at various depths."""
-    simulator = cirq.DensityMatrixSimulator(
-        noise=cirq.ConstantQubitNoiseModel(cirq.depolarize(0.01))
-    )
-
-    survival_probs = []
-    for depth in depths:
-        circuits = [generate_rb_circuit(qubits, depth) for _ in range(20)]
-
-        total_survival = 0
-        for circuit in circuits:
-            result = simulator.run(circuit, repetitions=repetitions)
-            # Calculate survival probability (returned to |0⟩)
-            counts = result.histogram(key='result')
-            survival = counts.get(0, 0) / repetitions
-            total_survival += survival
-
-        avg_survival = total_survival / len(circuits)
-        survival_probs.append(avg_survival)
-
-    return survival_probs
-
-# Fit to extract error rate
-# p_survival = A * p^depth + B
-# Error per gate ≈ (1 - p) / 2
+p1_given_0, p0_given_1 = 0.01, 0.20
+confusion = np.array([[1-p1_given_0, p1_given_0], [p0_given_1, 1-p0_given_1]])
+measurement = cirq.measure(q, key="result", confusion_map={(0,): confusion})
+readout_result = cirq.Simulator(seed=42).run(
+    cirq.Circuit(cirq.X(q), measurement), repetitions=2000
+)
 ```
 
-### Cross-Entropy Benchmarking (XEB)
+The tuple `(0,)` selects a position within the measurement, not the numerical
+coordinate of a qubit. For column probability vectors, observed = confusion.T @
+true. Correlated readout needs a joint matrix, and full n-qubit calibration scales
+as `2**n` prepared states.
 
 ```python
-def xeb_fidelity(circuit, simulator, ideal_probs, repetitions=10000):
-    """Calculate XEB fidelity."""
+def mitigate_readout_probabilities(measured_probs, confusion):
+    measured_probs = np.asarray(measured_probs, dtype=float)
+    confusion = np.asarray(confusion, dtype=float)
+    if confusion.shape != (len(measured_probs), len(measured_probs)):
+        raise ValueError("Confusion matrix and outcome vector dimensions differ")
+    if (not np.all(np.isfinite(confusion)) or np.any(confusion < 0)
+            or not np.allclose(confusion.sum(axis=1), 1)):
+        raise ValueError("Expected a row-stochastic confusion matrix")
+    if (not np.all(np.isfinite(measured_probs)) or np.any(measured_probs < 0)
+            or not np.isclose(measured_probs.sum(), 1)):
+        raise ValueError("Expected normalized measured probabilities")
+    if np.linalg.cond(confusion) > 1e8:
+        raise ValueError("Readout correction is ill-conditioned")
+    # May contain negative entries from shot noise; retain as quasi-probabilities.
+    return np.linalg.solve(confusion.T, measured_probs)
 
-    # Run noisy simulation
-    result = simulator.run(circuit, repetitions=repetitions)
-    measured_probs = result.histogram(key='result')
-
-    # Normalize
-    for key in measured_probs:
-        measured_probs[key] /= repetitions
-
-    # Calculate cross-entropy
-    cross_entropy = 0
-    for bitstring, prob in measured_probs.items():
-        if bitstring in ideal_probs:
-            cross_entropy += prob * np.log2(ideal_probs[bitstring])
-
-    # Convert to fidelity
-    n_qubits = len(circuit.all_qubits())
-    fidelity = (2**n_qubits * cross_entropy + 1) / (2**n_qubits - 1)
-
-    return fidelity
+true_probs = np.array([0.25, 0.75])
+corrected = mitigate_readout_probabilities(confusion.T @ true_probs, confusion)
+np.testing.assert_allclose(corrected, true_probs)
 ```
 
-## Noise Visualization
+Do not silently clip negatives, round to integer counts, or discard mass. Report
+uncertainty from both experimental and calibration shots; use a constrained fit
+if physical probabilities are required, explicitly reporting its assumptions.
 
-### Heatmap Visualization
+## Benchmarking
+
+Use an actual Clifford sequence followed by its inverse for randomized
+benchmarking. Random Pauli/H/S gates without inversion are not an RB experiment.
+Cirq supplies a single-qubit RB workflow:
 
 ```python
-import matplotlib.pyplot as plt
-
-def plot_noise_heatmap(device, noise_metric):
-    """Plot noise characteristics across 2D grid device."""
-
-    # Get device qubits (assuming GridQubit)
-    qubits = sorted(device.metadata.qubit_set)
-    rows = max(q.row for q in qubits) + 1
-    cols = max(q.col for q in qubits) + 1
-
-    # Create heatmap data
-    heatmap = np.full((rows, cols), np.nan)
-
-    for qubit in qubits:
-        if isinstance(qubit, cirq.GridQubit):
-            value = noise_metric.get(qubit, 0)
-            heatmap[qubit.row, qubit.col] = value
-
-    # Plot
-    plt.figure(figsize=(10, 8))
-    plt.imshow(heatmap, cmap='RdYlGn_r', interpolation='nearest')
-    plt.colorbar(label='Error Rate')
-    plt.title('Qubit Error Rates')
-    plt.xlabel('Column')
-    plt.ylabel('Row')
-    plt.show()
-
-# Example usage
-noise_metric = {q: np.random.random() * 0.01 for q in device.metadata.qubit_set}
-plot_noise_heatmap(device, noise_metric)
+rb = cirq.experiments.single_qubit_rb(
+    cirq.Simulator(seed=42), q,
+    parameters=cirq.experiments.RBParameters(
+        num_clifford_range=[2, 4, 8, 16], num_circuits=3, repetitions=100,
+    ),
+    rng_or_seed=42,
+)
+print(rb.data)
 ```
 
-### Gate Fidelity Visualization
+This ideal smoke example checks survival, not a reliable hardware error estimate.
+For real RB, sample enough independent Clifford sequences at multiple lengths,
+fit `A*p**m+B`, and report uncertainty and the gate/Clifford convention. Avoid
+extracting a fit from an all-one ideal curve.
+
+For linear XEB, the estimator is `D * mean(p_ideal(observed_bitstrings)) - 1`.
+It is not the logarithmic cross-entropy formula. Use Cirq's implementation:
 
 ```python
-def plot_gate_fidelities(calibration_data):
-    """Plot single- and two-qubit gate fidelities."""
-
-    sq_fidelities = []
-    tq_fidelities = []
-
-    for qubit, metrics in calibration_data.items():
-        if 'single_qubit_rb_fidelity' in metrics:
-            sq_fidelities.append(metrics['single_qubit_rb_fidelity'])
-        if 'two_qubit_rb_fidelity' in metrics:
-            tq_fidelities.append(metrics['two_qubit_rb_fidelity'])
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-    ax1.hist(sq_fidelities, bins=20)
-    ax1.set_xlabel('Single-Qubit Gate Fidelity')
-    ax1.set_ylabel('Count')
-    ax1.set_title('Single-Qubit Gate Fidelities')
-
-    ax2.hist(tq_fidelities, bins=20)
-    ax2.set_xlabel('Two-Qubit Gate Fidelity')
-    ax2.set_ylabel('Count')
-    ax2.set_title('Two-Qubit Gate Fidelities')
-
-    plt.tight_layout()
-    plt.show()
+q0, q1 = cirq.LineQubit.range(2)
+ideal = cirq.Circuit(cirq.ry(0.4)(q0), cirq.rx(0.8)(q1), cirq.CZ(q0, q1))
+samples = cirq.Simulator(seed=42).run(
+    ideal + cirq.Circuit(cirq.measure(q0, q1, key="result")), repetitions=100
+)
+bitstrings = [cirq.big_endian_bits_to_int(row) for row in samples.measurements["result"]]
+xeb = cirq.experiments.xeb_fidelity(ideal, bitstrings, qubit_order=[q0, q1])
 ```
 
-## Error Mitigation Techniques
+The tiny example is an API smoke test, not a suitable random-circuit ensemble
+for interpreting XEB as circuit fidelity. Finite-sample estimates need not stay
+in [0,1]. Preserve ideal circuit and measured qubit ordering.
 
-### Zero-Noise Extrapolation
+## Zero-noise extrapolation and cancellation
+
+For a simulation study, vary a specified noise parameter while keeping the ideal
+circuit and observable fixed. Hardware ZNE instead needs a justified way to
+scale physical noise, such as characterized gate folding. A fit can amplify
+statistical/model error and does not prove error mitigation worked.
 
 ```python
-def zero_noise_extrapolation(circuit, noise_levels, simulator):
-    """Extrapolate to zero noise limit."""
-
-    expectation_values = []
-
-    for noise_level in noise_levels:
-        # Scale noise
-        noisy_circuit = circuit.with_noise(
-            cirq.depolarize(p=noise_level)
-        )
-
-        # Measure expectation
-        result = simulator.simulate(noisy_circuit)
-        # ... calculate expectation value
-        exp_val = calculate_expectation(result)
-        expectation_values.append(exp_val)
-
-    # Extrapolate to zero noise
-    from scipy.optimize import curve_fit
-
-    def exponential_fit(x, a, b, c):
-        return a * np.exp(-b * x) + c
-
-    popt, _ = curve_fit(exponential_fit, noise_levels, expectation_values)
-    zero_noise_value = popt[2]
-
-    return zero_noise_value
+def extrapolate_exponential(noise_levels, expectation_values):
+    x, y = np.asarray(noise_levels, float), np.asarray(expectation_values, float)
+    if x.ndim != 1 or y.shape != x.shape or len(np.unique(x)) < 4:
+        raise ValueError("Need at least four distinct noise levels and matched values")
+    if not np.all(np.isfinite(x)) or not np.all(np.isfinite(y)) or np.any(x < 0):
+        raise ValueError("Expected finite nonnegative levels and finite expectations")
+    def model(x, a, b, c):
+        return a*np.exp(-b*x) + c
+    fit, covariance = curve_fit(model, x, y, p0=[0.8, 1.0, 0.0], maxfev=10000)
+    return float(model(0.0, *fit)), fit, covariance
 ```
 
-### Probabilistic Error Cancellation
+The zero-noise value is **a+c**, not the asymptote c. Compare fit families, hold
+out noise levels, and propagate measurement uncertainty. Probabilistic error
+cancellation needs a characterized implementable noisy operation basis and
+quasi-probability sampling weights; it cannot be implemented by an unspecified
+scalar inverse error rate.
 
-```python
-def quasi_probability_decomposition(noisy_gate, ideal_gate, noise_model):
-    """Decompose noisy gate into quasi-probability distribution."""
+## Google noise and plots
 
-    # Decompose noisy gate as: N = ideal + error
-    # Invert: ideal = (N - error) / (1 - error_rate)
+Use `cirq_google.engine.load_device_noise_properties(processor_id)` for bundled
+median data, then `NoiseModelFromGoogleNoiseProperties`. See the fully local QVM
+in [simulation.md](simulation.md). Live `get_device_specification()` supplies
+constraints, not noise properties. Calibration maps use metric names as keys,
+then qubit tuples to lists of values; inspect metric names/units before plotting.
 
-    # This creates a quasi-probability distribution
-    # (some probabilities may be negative)
+For GridQubit heatmaps, missing calibration values should be NaN/masked, never
+zero error. Keep calibration date, gate definition, and units in the figure.
 
-    # Implementation depends on specific noise model
-    pass
-```
-
-### Readout Error Mitigation
-
-```python
-def mitigate_readout_errors(results, confusion_matrix):
-    """Apply readout error mitigation using confusion matrix."""
-
-    # Invert confusion matrix
-    inv_confusion = np.linalg.inv(confusion_matrix)
-
-    # Get measured counts
-    counts = results.histogram(key='result')
-
-    # Convert to probability vector
-    total_counts = sum(counts.values())
-    measured_probs = np.array([counts.get(i, 0) / total_counts
-                               for i in range(len(confusion_matrix))])
-
-    # Apply inverse
-    corrected_probs = inv_confusion @ measured_probs
-
-    # Convert back to counts
-    corrected_counts = {i: int(p * total_counts)
-                       for i, p in enumerate(corrected_probs) if p > 0}
-
-    return corrected_counts
-```
-
-## Hardware-Based Noise Models
-
-### From Google Calibration
-
-```python
-import os
-import cirq_google as cg
-
-engine = cg.Engine(project_id=os.environ['GOOGLE_CLOUD_PROJECT'])
-processor = engine.get_processor('weber')
-noise_props = processor.get_device_specification()
-
-noise_model = cg.NoiseModelFromGoogleNoiseProperties(noise_props)
-
-simulator = cirq.DensityMatrixSimulator(noise=noise_model)
-result = simulator.run(circuit, repetitions=1000)
-```
-
-## Best Practices
-
-1. **Use density matrix simulator for noisy simulations**: State vector simulators cannot model mixed states
-2. **Match noise model to hardware**: Use calibration data when available
-3. **Include all error sources**: Gate errors, decoherence, readout errors
-4. **Characterize before mitigating**: Understand noise before applying mitigation
-5. **Consider error propagation**: Noise compounds through circuit depth
-6. **Use appropriate benchmarking**: RB for gate errors, XEB for full circuit fidelity
-7. **Visualize noise patterns**: Identify problematic qubits and gates
-8. **Apply targeted mitigation**: Focus on dominant error sources
-9. **Validate mitigation**: Verify that mitigation improves results
-10. **Keep circuits shallow**: Minimize noise accumulation
+Sources: [channels and measurements](https://quantumai.google/cirq/noise/representing_noise),
+[phase damping](https://quantumai.google/reference/python/cirq/PhaseDampingChannel),
+[RB](https://github.com/quantumlib/Cirq/blob/v1.7.0/cirq-core/cirq/experiments/qubit_characterizations.py),
+[XEB](https://github.com/quantumlib/Cirq/blob/v1.7.0/cirq-core/cirq/experiments/fidelity_estimation.py),
+[Google QVM](https://quantumai.google/cirq/simulate/quantum_virtual_machine).

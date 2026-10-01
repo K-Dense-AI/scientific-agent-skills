@@ -1,883 +1,315 @@
-# Benchling REST API Endpoints Reference
+# Benchling REST API Reference
 
-## Base URL
+Reviewed 2026-09-30 against the [official reference](https://benchling.com/api/reference),
+platform guides, and generated **benchling-api-client 2.0.434**, resolved alongside SDK **1.25.0**.
+The public reference is a JavaScript application; the published Python client supplied
+the endpoint/parameter/model definitions for this audit. Check your tenant's interactive
+reference before executing writes, especially on a validated/restricted release.
+No authenticated endpoint calls were made. Payloads below are illustrative.
 
-All API requests use the base URL format:
-```
-https://{tenant}.benchling.com/api/v2
-```
+## Version and authentication
 
-Replace `{tenant}` with your Benchling tenant name.
+This reference covers `https://{tenant}.benchling.com/api/v2`. V3 also exists;
+consult its [availability/stability guide](https://docs.benchling.com/docs/v3-api-overview)
+and tenant documentation rather than replacing `/v2` with `/v3` in these paths.
 
-## API Versioning
+Use HTTPS and either Basic auth (API key as username, empty password) or OAuth Bearer
+auth. JSON writes use `Content-Type: application/json`. Token exchanges are form encoded
+at `/oauth/token`; the SDK's legacy `/api/v2/token` path still works. See
+[authentication](authentication.md) for identity, expiry, and token acquisition.
 
-Current API version: `v2`
+## Responses, pagination, and filters
 
-The API version is specified in the URL path. Stable endpoints follow [Benchling stability guidelines](https://docs.benchling.com/docs/stability); `alpha` and `beta` endpoints may change with shorter notice.
+Single-resource endpoints generally return a resource object; `GET /entries/{id}` is an
+exception with an `entry` wrapper. Creation usually returns HTTP 201 and the created
+resource. List responses use a **resource-specific collection key**, never a universal `results` key:
 
-## Authentication
-
-All requests require authentication via HTTP headers:
-
-**API Key (Basic Auth):**
-```bash
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/dna-sequences \
-  -u "your_api_key:"
-```
-
-**OAuth Bearer Token:**
-```bash
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/dna-sequences \
-  -H "Authorization: Bearer your_access_token"
-```
-
-## Common Headers
-
-```
-Authorization: Bearer {token}
-Content-Type: application/json
-Accept: application/json
-```
-
-## Response Format
-
-All responses follow a consistent JSON structure:
-
-**Single Resource:**
 ```json
 {
-  "id": "seq_abc123",
-  "name": "My Sequence",
-  "bases": "ATCGATCG",
-  ...
+  "dnaSequences": [{"id": "seq_example", "name": "Construct 001", "bases": "ATCG"}],
+  "nextToken": "opaque-token"
 }
 ```
 
-**List Response:**
+Most paginated lists accept `pageSize` (default 50, maximum 100) and `nextToken`. Preserve
+filters when requesting the next page; stop on an empty token. Some lists differ:
+`GET /registries` returns `registries` without the standard pagination arguments.
+`GET /events` has additional polling semantics described below.
+
+Filters are endpoint-specific. On DNA sequences, `name` matches the full name;
+`nameIncludes` supports substring search. `modifiedAt` and `createdAt` are string filters;
+consult the tenant reference for their comparison syntax rather than assuming every
+timestamp filter is inclusive. Use `archiveReason` for archival filtering according to
+the endpoint definition; `archived=false` is not a supported replacement.
+
+### Collection and resource routes
+
+All paths in this table are relative to `/api/v2`. A `GET` collection returns the named
+collection; `POST` creates one resource with the type's create model. A resource `GET`
+returns one object (with the entry wrapper noted above) and `PATCH` applies its update model.
+
+| Collection | Collection methods | Collection key | Resource path and methods |
+|---|---|---|---|
+| `/dna-sequences` | GET, POST | `dnaSequences` | `/dna-sequences/{dnaSequenceId}` GET, PATCH |
+| `/rna-sequences` | GET, POST | `rnaSequences` | `/rna-sequences/{rnaSequenceId}` GET, PATCH |
+| `/aa-sequences` | GET, POST | `aaSequences` | `/aa-sequences/{aaSequenceId}` GET, PATCH |
+| `/custom-entities` | GET, POST | `customEntities` | `/custom-entities/{customEntityId}` GET, PATCH |
+| `/mixtures` | GET, POST | `mixtures` | `/mixtures/{mixtureId}` GET, PATCH |
+| `/containers` | GET, POST | `containers` | `/containers/{containerId}` GET, PATCH |
+| `/boxes` | GET, POST | `boxes` | `/boxes/{boxId}` GET, PATCH |
+| `/locations` | GET, POST | `locations` | `/locations/{locationId}` GET, PATCH |
+| `/plates` | GET, POST | `plates` | `/plates/{plateId}` GET, PATCH |
+| `/entries` | GET, POST | `entries` | `/entries/{entryId}` GET, PATCH |
+| `/workflow-tasks` | GET, POST | `workflowTasks` | `/workflow-tasks/{workflowTaskId}` GET, PATCH |
+| `/folders` | GET, POST | `folders` | `/folders/{folderId}` GET |
+| `/projects` | GET | `projects` | `/projects/{projectId}` GET |
+| `/users` | GET | `users` | `/users/{userId}` GET |
+| `/teams` | GET | `teams` | `/teams/{teamId}` GET |
+| `/registries` | GET | `registries` | `/registries/{registryId}` GET |
+
+This is a task-oriented subset, not a claim that these are each service's only methods.
+There is no documented `/users/me` endpoint; test auth against an accessible resource.
+
+### Schema routes
+
+Use `GET` on each collection or append `/{schemaId}` for one schema:
+
+| Collection | Collection key |
+|---|---|
+| `/entity-schemas` | `entitySchemas` |
+| `/entry-schemas` | `entrySchemas` |
+| `/container-schemas` | `containerSchemas` |
+| `/box-schemas` | `boxSchemas` |
+| `/location-schemas` | `locationSchemas` |
+| `/plate-schemas` | `plateSchemas` |
+| `/workflow-task-schemas` | `workflowTaskSchemas` |
+
+There is no generic stable-v2 `/schemas?entityType=...` route. The SDK exposes these as
+`benchling.schemas.list_entity_schemas()`, `get_entity_schema_by_id(id)`, and analogous
+resource-specific methods. Schema definitions determine field names, value types,
+required values, units, and valid workflow statuses.
+
+## Entity create/update/archive
+
+A registered DNA sequence create body for `POST /dna-sequences`:
+
 ```json
 {
-  "results": [
-    {"id": "seq_1", "name": "Sequence 1"},
-    {"id": "seq_2", "name": "Sequence 2"}
-  ],
-  "nextToken": "token_for_next_page"
-}
-```
-
-## Pagination
-
-List endpoints support pagination:
-
-**Query Parameters:**
-- `pageSize`: Number of items per page (default: 50, max: 100)
-- `nextToken`: Token from previous response for next page
-
-**Example:**
-```bash
-curl -X GET \
-  "https://your-tenant.benchling.com/api/v2/dna-sequences?pageSize=50&nextToken=abc123"
-```
-
-## Error Responses
-
-**Format:**
-```json
-{
-  "error": {
-    "type": "NotFoundError",
-    "message": "DNA sequence not found",
-    "userMessage": "The requested sequence does not exist or you don't have access"
-  }
-}
-```
-
-**Common Status Codes:**
-- `200 OK`: Success
-- `201 Created`: Resource created
-- `400 Bad Request`: Invalid parameters
-- `401 Unauthorized`: Missing or invalid credentials
-- `403 Forbidden`: Insufficient permissions
-- `404 Not Found`: Resource doesn't exist
-- `422 Unprocessable Entity`: Validation error
-- `429 Too Many Requests`: Rate limit exceeded
-- `500 Internal Server Error`: Server error
-
-## Core Endpoints
-
-### DNA Sequences
-
-**List DNA Sequences:**
-```http
-GET /api/v2/dna-sequences
-
-Query Parameters:
-- pageSize: integer (default: 50, max: 100)
-- nextToken: string
-- folderId: string
-- schemaId: string
-- name: string (filter by name)
-- modifiedAt: string (ISO 8601 date)
-```
-
-**Get DNA Sequence:**
-```http
-GET /api/v2/dna-sequences/{sequenceId}
-```
-
-**Create DNA Sequence:**
-```http
-POST /api/v2/dna-sequences
-
-Body:
-{
-  "name": "My Plasmid",
+  "name": "Construct 001",
   "bases": "ATCGATCG",
   "isCircular": true,
-  "folderId": "fld_abc123",
-  "schemaId": "ts_abc123",
-  "fields": {
-    "gene_name": {"value": "GFP"},
-    "resistance": {"value": "Kanamycin"}
-  },
-  "entityRegistryId": "src_abc123",  // optional for registration
-  "namingStrategy": "NEW_IDS"        // optional for registration
+  "folderId": "lib_example",
+  "schemaId": "ts_example",
+  "registryId": "src_example",
+  "namingStrategy": "NEW_IDS",
+  "fields": {"gene_name": {"value": "GFP"}}
 }
 ```
 
-**Update DNA Sequence:**
-```http
-PATCH /api/v2/dna-sequences/{sequenceId}
+Omit registration arguments to create an unregistered entity. To assign a human registry
+identifier explicitly, supply `entityRegistryId` **instead of** `namingStrategy`, together
+with `registryId`. These are different concepts, not interchangeable IDs.
 
-Body:
-{
-  "name": "Updated Plasmid",
-  "fields": {
-    "gene_name": {"value": "mCherry"}
-  }
-}
+`POST /rna-sequences` uses `bases` (RNA alphabet) and `isCircular`.
+`POST /aa-sequences` uses `aminoAcids`. `POST /custom-entities` uses `name`, `schemaId`,
+`folderId`, and applicable fields. Do not coerce numeric fields to strings globally.
+A partial update uses the same field-value envelope, for example:
+
+```json
+{"fields": {"passage_number": {"value": 16}}}
 ```
 
-**Archive DNA Sequence:**
-```http
-POST /api/v2/dna-sequences:archive
+Sequence filters include `folderId`, `schemaId`, `name`, `nameIncludes`, `modifiedAt`,
+`createdAt`, `registryId`, and `archiveReason`; `schemaId` is an optional custom-entity
+filter rather than a requirement to list all accessible entities.
 
-Body:
-{
-  "dnaSequenceIds": ["seq_abc123"],
-  "reason": "Deprecated construct"
-}
+Archival endpoints are `POST /dna-sequences:archive`, `/rna-sequences:archive`,
+`/aa-sequences:archive`, `/custom-entities:archive`, and `/mixtures:archive`.
+Use the appropriate array key (`dnaSequenceIds`, `rnaSequenceIds`, `aaSequenceIds`,
+`customEntityIds`, or `mixtureIds`) and an allowed reason:
+
+```json
+{"dnaSequenceIds": ["seq_example"], "reason": "Retired"}
 ```
 
-### RNA Sequences
+Allowed `EntityArchiveReason` values in this release include `Made in error`, `Retired`,
+`Expended`, `Shipped`, `Contaminated`, `Expired`, `Missing`, and `Other`. Free-form
+reasons such as `Cleanup` are not the enum. Read the archival response rather than
+assuming deletion; archival preserves records and can affect related data.
 
-**List RNA Sequences:**
-```http
-GET /api/v2/rna-sequences
-```
+For mixture creation, each ingredient uses a separate amount and unit:
 
-**Get RNA Sequence:**
-```http
-GET /api/v2/rna-sequences/{sequenceId}
-```
-
-**Create RNA Sequence:**
-```http
-POST /api/v2/rna-sequences
-
-Body:
-{
-  "name": "gRNA-001",
-  "bases": "AUCGAUCG",
-  "folderId": "fld_abc123",
-  "fields": {
-    "target_gene": {"value": "TP53"}
-  }
-}
-```
-
-**Update RNA Sequence:**
-```http
-PATCH /api/v2/rna-sequences/{sequenceId}
-```
-
-**Archive RNA Sequence:**
-```http
-POST /api/v2/rna-sequences:archive
-```
-
-### Amino Acid (Protein) Sequences
-
-**List AA Sequences:**
-```http
-GET /api/v2/aa-sequences
-```
-
-**Get AA Sequence:**
-```http
-GET /api/v2/aa-sequences/{sequenceId}
-```
-
-**Create AA Sequence:**
-```http
-POST /api/v2/aa-sequences
-
-Body:
-{
-  "name": "GFP Protein",
-  "aminoAcids": "MSKGEELFTGVVPILVELDGDVNGHKF",
-  "folderId": "fld_abc123"
-}
-```
-
-### Custom Entities
-
-**List Custom Entities:**
-```http
-GET /api/v2/custom-entities
-
-Query Parameters:
-- schemaId: string (required to filter by type)
-- pageSize: integer
-- nextToken: string
-```
-
-**Get Custom Entity:**
-```http
-GET /api/v2/custom-entities/{entityId}
-```
-
-**Create Custom Entity:**
-```http
-POST /api/v2/custom-entities
-
-Body:
-{
-  "name": "HEK293T-Clone5",
-  "schemaId": "ts_cellline_abc",
-  "folderId": "fld_abc123",
-  "fields": {
-    "passage_number": {"value": "15"},
-    "mycoplasma_test": {"value": "Negative"}
-  }
-}
-```
-
-**Update Custom Entity:**
-```http
-PATCH /api/v2/custom-entities/{entityId}
-
-Body:
-{
-  "fields": {
-    "passage_number": {"value": "16"}
-  }
-}
-```
-
-### Mixtures
-
-**List Mixtures:**
-```http
-GET /api/v2/mixtures
-```
-
-**Create Mixture:**
-```http
-POST /api/v2/mixtures
-
-Body:
-{
-  "name": "LB-Amp Media",
-  "folderId": "fld_abc123",
-  "schemaId": "ts_mixture_abc",
-  "ingredients": [
-    {
-      "componentEntityId": "ent_lb_base",
-      "amount": {"value": "1000", "units": "mL"}
-    },
-    {
-      "componentEntityId": "ent_ampicillin",
-      "amount": {"value": "100", "units": "mg"}
-    }
-  ]
-}
-```
-
-### Containers
-
-**List Containers:**
-```http
-GET /api/v2/containers
-
-Query Parameters:
-- parentStorageId: string (filter by location/box)
-- schemaId: string
-- barcode: string
-```
-
-**Get Container:**
-```http
-GET /api/v2/containers/{containerId}
-```
-
-**Create Container:**
-```http
-POST /api/v2/containers
-
-Body:
-{
-  "name": "Sample-001",
-  "schemaId": "cont_schema_abc",
-  "barcode": "CONT001",
-  "parentStorageId": "box_abc123",
-  "fields": {
-    "concentration": {"value": "100 ng/μL"},
-    "volume": {"value": "50 μL"}
-  }
-}
-```
-
-**Update Container:**
-```http
-PATCH /api/v2/containers/{containerId}
-
-Body:
-{
-  "fields": {
-    "volume": {"value": "45 μL"}
-  }
-}
-```
-
-**Transfer Container:**
-```http
-POST /api/v2/containers:transfer
-
-Body:
-{
-  "containerIds": ["cont_abc123"],
-  "destinationStorageId": "box_xyz789"
-}
-```
-
-**Check Out Container:**
-```http
-POST /api/v2/containers:checkout
-
-Body:
-{
-  "containerIds": ["cont_abc123"],
-  "comment": "Taking to bench"
-}
-```
-
-**Check In Container:**
-```http
-POST /api/v2/containers:checkin
-
-Body:
-{
-  "containerIds": ["cont_abc123"],
-  "locationId": "bench_loc_abc"
-}
-```
-
-### Boxes
-
-**List Boxes:**
-```http
-GET /api/v2/boxes
-
-Query Parameters:
-- parentStorageId: string
-- schemaId: string
-```
-
-**Get Box:**
-```http
-GET /api/v2/boxes/{boxId}
-```
-
-**Create Box:**
-```http
-POST /api/v2/boxes
-
-Body:
-{
-  "name": "Freezer-A-Box-01",
-  "schemaId": "box_schema_abc",
-  "parentStorageId": "loc_freezer_a",
-  "barcode": "BOX001"
-}
-```
-
-### Locations
-
-**List Locations:**
-```http
-GET /api/v2/locations
-```
-
-**Get Location:**
-```http
-GET /api/v2/locations/{locationId}
-```
-
-**Create Location:**
-```http
-POST /api/v2/locations
-
-Body:
-{
-  "name": "Freezer A - Shelf 2",
-  "parentStorageId": "loc_freezer_a",
-  "barcode": "LOC-A-S2"
-}
-```
-
-### Plates
-
-**List Plates:**
-```http
-GET /api/v2/plates
-```
-
-**Get Plate:**
-```http
-GET /api/v2/plates/{plateId}
-```
-
-**Create Plate:**
-```http
-POST /api/v2/plates
-
-Body:
-{
-  "name": "PCR-Plate-001",
-  "schemaId": "plate_schema_abc",
-  "barcode": "PLATE001",
-  "wells": [
-    {"position": "A1", "entityId": "ent_abc"},
-    {"position": "A2", "entityId": "ent_xyz"}
-  ]
-}
-```
-
-### Entries (Notebook)
-
-**List Entries:**
-```http
-GET /api/v2/entries
-
-Query Parameters:
-- folderId: string
-- schemaId: string
-- modifiedAt: string
-```
-
-**Get Entry:**
-```http
-GET /api/v2/entries/{entryId}
-```
-
-**Create Entry:**
-```http
-POST /api/v2/entries
-
-Body:
-{
-  "name": "Experiment 2025-10-20",
-  "folderId": "fld_abc123",
-  "schemaId": "entry_schema_abc",
-  "fields": {
-    "objective": {"value": "Test gene expression"},
-    "date": {"value": "2025-10-20"}
-  }
-}
-```
-
-**Update Entry:**
-```http
-PATCH /api/v2/entries/{entryId}
-
-Body:
-{
-  "fields": {
-    "results": {"value": "Successful expression"}
-  }
-}
-```
-
-### Workflow Tasks
-
-**List Workflow Tasks:**
-```http
-GET /api/v2/tasks
-
-Query Parameters:
-- workflowId: string
-- statusIds: string[] (comma-separated)
-- assigneeId: string
-```
-
-**Get Task:**
-```http
-GET /api/v2/tasks/{taskId}
-```
-
-**Create Task:**
-```http
-POST /api/v2/tasks
-
-Body:
-{
-  "name": "PCR Amplification",
-  "workflowId": "wf_abc123",
-  "assigneeId": "user_abc123",
-  "schemaId": "task_schema_abc",
-  "fields": {
-    "template": {"value": "seq_abc123"},
-    "priority": {"value": "High"}
-  }
-}
-```
-
-**Update Task:**
-```http
-PATCH /api/v2/tasks/{taskId}
-
-Body:
-{
-  "statusId": "status_complete_abc",
-  "fields": {
-    "completion_date": {"value": "2025-10-20"}
-  }
-}
-```
-
-### Folders
-
-**List Folders:**
-```http
-GET /api/v2/folders
-
-Query Parameters:
-- projectId: string
-- parentFolderId: string
-```
-
-**Get Folder:**
-```http
-GET /api/v2/folders/{folderId}
-```
-
-**Create Folder:**
-```http
-POST /api/v2/folders
-
-Body:
-{
-  "name": "2025 Experiments",
-  "parentFolderId": "fld_parent_abc",
-  "projectId": "proj_abc123"
-}
-```
-
-### Projects
-
-**List Projects:**
-```http
-GET /api/v2/projects
-```
-
-**Get Project:**
-```http
-GET /api/v2/projects/{projectId}
-```
-
-### Users
-
-**Get Current User:**
-```http
-GET /api/v2/users/me
-```
-
-**List Users:**
-```http
-GET /api/v2/users
-```
-
-**Get User:**
-```http
-GET /api/v2/users/{userId}
-```
-
-### Teams
-
-**List Teams:**
-```http
-GET /api/v2/teams
-```
-
-**Get Team:**
-```http
-GET /api/v2/teams/{teamId}
-```
-
-### Schemas
-
-**List Schemas:**
-```http
-GET /api/v2/schemas
-
-Query Parameters:
-- entityType: string (e.g., "dna_sequence", "custom_entity")
-```
-
-**Get Schema:**
-```http
-GET /api/v2/schemas/{schemaId}
-```
-
-### Registries
-
-**List Registries:**
-```http
-GET /api/v2/registries
-```
-
-**Get Registry:**
-```http
-GET /api/v2/registries/{registryId}
-```
-
-## Bulk Operations
-
-### Batch Archive
-
-**Archive Multiple Entities:**
-```http
-POST /api/v2/{entity-type}:archive
-
-Body:
-{
-  "{entity}Ids": ["id1", "id2", "id3"],
-  "reason": "Cleanup"
-}
-```
-
-### Batch Transfer
-
-**Transfer Multiple Containers:**
-```http
-POST /api/v2/containers:bulk-transfer
-
-Body:
-{
-  "transfers": [
-    {"containerId": "cont_1", "destinationId": "box_a"},
-    {"containerId": "cont_2", "destinationId": "box_b"}
-  ]
-}
-```
-
-## Async Operations
-
-Some operations return task IDs for async processing:
-
-**Response:**
 ```json
 {
-  "taskId": "task_abc123"
+  "name": "Example formulation",
+  "schemaId": "ts_mixture",
+  "folderId": "lib_example",
+  "ingredients": [{
+    "componentEntityId": "bfi_component",
+    "amount": "100",
+    "units": "mg",
+    "catalogIdentifier": null,
+    "componentLotContainerId": null,
+    "componentLotEntityId": null,
+    "componentLotText": null,
+    "notes": null
+  }]
 }
 ```
 
-**Check Task Status:**
-```http
-GET /api/v2/tasks/{taskId}
+## Inventory payloads and actions
 
-Response:
-{
-  "id": "task_abc123",
-  "status": "RUNNING", // or "SUCCEEDED", "FAILED"
-  "message": "Processing...",
-  "response": {...}  // Available when status is SUCCEEDED
-}
+For container/box/plate creation, `schemaId` is required. Location creation requires
+`name` and `schemaId`. Depending on storage type, add `parentStorageId`, `barcode`,
+`name`, or schema `fields`. Query containers and boxes by `ancestorStorageId` and
+`barcodes` (comma-separated); `parentStorageId` and singular `barcode` are not the list
+filters shown in this SDK. Ancestor filters include nested descendants.
+
+Move a container physically with `PATCH /containers/{containerId}`:
+
+```json
+{"parentStorageId": "loc_destination"}
 ```
 
-## Field Value Format
+Check out with `POST /containers:check-out`:
 
-Custom schema fields use a specific format:
+```json
+{"containerIds": ["con_example"], "assigneeId": "usr_example", "comment": "At bench"}
+```
 
-**Simple Value:**
+Check in with `POST /containers:check-in`:
+
+```json
+{"containerIds": ["con_example"], "comments": "Returned"}
+```
+
+These operations return HTTP 200 with an empty JSON object `{}` on success. There is no `locationId` parameter
+for check-in. Notice the hyphen in each route and different `comment`/`comments` keys.
+
+**Material transfer** has two distinct operations:
+
+- `POST /containers/{destinationContainerId}:transfer`: `ContainerTransfer` body,
+  including `destinationContents` plus the applicable source/quantity fields; HTTP 200 with `{}`
+  on success.
+- `POST /transfers`: a `transfers` array of `MultipleContainersTransfer` objects;
+  returns HTTP 202 with a `taskId` for async processing. Limit: 5000 transfers per request.
+
+Illustrative batch body:
+
 ```json
 {
-  "field_name": {
-    "value": "Field Value"
-  }
+  "transfers": [{
+    "sourceContainerId": "con_source",
+    "destinationContainerId": "con_destination",
+    "transferQuantity": {"value": 5.0, "units": "uL"}
+  }]
 }
 ```
 
-**Dropdown:**
+Neither `/containers:transfer` nor `/containers:bulk-transfer` is the corresponding
+stable-v2 route. Never use material transfer to represent moving a tube to a box.
+
+Plate creation `wells` is a mapping of positions to well properties, not an array of
+`{"position": "A1", "entityId": ...}`. Create/read the plate first, resolve its well
+container IDs, then load biological contents through transfer APIs. Storage schema and
+well positions must match the actual plate configuration.
+
+## Entries, workflow tasks, folders
+
+`POST /entries` requires `name` and `folderId`; `entryTemplateId`, `initialTables`,
+`schemaId`, and `fields` support appropriate template/schema workflows. `PATCH /entries/{id}`
+updates supported metadata and schema fields; it is not a general rich-text editor.
+`GET /entries` supports `projectId`, `schemaId`, `modifiedAt`, and other documented
+filters, but does not expose `folderId` in the stable SDK's list method.
+`GET /entry-templates` and `/entry-templates/{entryTemplateId}` discover templates.
+There is no general `entry_links` service to attach arbitrary objects to an entry.
+
+`POST /workflow-tasks` requires a task group:
+
+```json
+{"workflowTaskGroupId": "wtg_example", "assigneeId": "usr_example"}
+```
+
+`GET /workflow-tasks` accepts comma-separated `workflowTaskGroupIds`, `statusIds`, and
+`assigneeIds`, plus `schemaId` and pagination. `PATCH /workflow-tasks/{workflowTaskId}`
+can set `statusId`, `assigneeId`, `scheduledOn`, and `fields`. Status IDs come from the
+workflow task schema; there is no `workflowId` create/list field here.
+
+`POST /folders` takes `name` and `parentFolderId`; the parent determines the project.
+Do not add a `projectId` to `FolderCreate`. Folder listing does accept `projectId` and
+`parentFolderId` filters.
+
+## Async jobs and events
+
+`GET /tasks/{taskId}` polls an asynchronous server job; it is not the workflow-task
+CRUD endpoint. Responses contain `status` (`RUNNING`, `SUCCEEDED`, `FAILED`) and
+operation-specific `response`, `errors`, or `message` when applicable. Timeout on the
+client does not cancel the job. Keep the task ID and check its final outcome.
+
+`GET /events` returns `events` with `nextToken`. Filters include `createdAt.gte`,
+`startingAfter` (event ID), `eventTypes` (comma-separated), `poll`, and `pageSize`.
+The SDK spelling is `created_atgte`. Events are sorted by processing order, not by
+`createdAt`; never terminate recovery early merely because a timestamp is out of order.
+See [event recovery](eventbridge.md) for retention and deduplication.
+
+## Field values
+
+The `fields` mapping is keyed by actual schema field names, with a `value` member:
+
 ```json
 {
-  "dropdown_field": {
-    "value": "Option1"  // Must match exact option name
-  }
+  "passage_number": {"value": 15},
+  "comment": {"value": "QC passed"},
+  "linked_entities": {"value": ["seq_example"]},
+  "selection": {"value": ["sfso_example"]}
 }
 ```
 
-**Date:**
-```json
-{
-  "date_field": {
-    "value": "2025-10-20"  // Format: YYYY-MM-DD
-  }
-}
+Use schema-defined scalar/list multiplicity. Dropdown values are option IDs, not
+human option labels. Numeric fields accept numeric values; date/datetime formats depend
+on the field definition. `null` is distinct from omission and may clear a value.
+See [schema field types](https://docs.benchling.com/docs/schemas).
+
+## Errors and limits
+
+Failures normally use an `error` object with `message`, `type`, and sometimes
+`userMessage`. Do not assume exception-class names like `RateLimitError` appear in JSON.
+Check HTTP status before reading success data: 400 invalid request, 401 authentication,
+403 permission, 404 missing/inaccessible resource, 429 throttling, and 5xx server errors.
+A successful check-in or single-container transfer returns an empty JSON object.
+
+The [V2 limits guide](https://docs.benchling.com/docs/rate-limiting) currently lists
+60 requests/30 seconds across user keys per tenant, 300/30 seconds per app, and
+1000/30 seconds across apps per tenant. There are separate dynamic throughput limits.
+The response headers are `x-rate-limit-limit`, `x-rate-limit-remaining`, and
+`x-rate-limit-reset`; **reset is seconds remaining, not an epoch timestamp**.
+
+Use bounded exponential backoff with jitter for 429/transient server failures and honor
+server retry guidance when present. Do not invent a JSON `retryAfter` field or recurse
+without an attempt limit. Reconcile ambiguous write failures before repeating creates.
+
+## Direct pagination example
+
+This illustrative read-only example uses `httpx`, checks status, and preserves filters:
+
+```python
+import os
+import httpx
+
+with httpx.Client(
+    base_url=os.environ["BENCHLING_TENANT_URL"].rstrip("/") + "/api/v2/",
+    auth=(os.environ["BENCHLING_API_KEY"], ""),
+    timeout=30.0,
+) as client:
+    params = {"pageSize": 100, "schemaId": "ts_example"}
+    while True:
+        response = client.get("dna-sequences", params=params)
+        response.raise_for_status()
+        data = response.json()
+        for sequence in data["dnaSequences"]:
+            print(sequence["id"], sequence["name"])
+        next_token = data.get("nextToken")
+        if not next_token:
+            break
+        params["nextToken"] = next_token
 ```
-
-**Entity Link:**
-```json
-{
-  "entity_link_field": {
-    "value": "seq_abc123"  // Entity ID
-  }
-}
-```
-
-**Numeric:**
-```json
-{
-  "numeric_field": {
-    "value": "123.45"  // String representation
-  }
-}
-```
-
-## Rate Limiting
-
-**Limits:**
-- Default: 100 requests per 10 seconds per user/app
-- Rate limit headers included in responses:
-  - `X-RateLimit-Limit`: Total allowed requests
-  - `X-RateLimit-Remaining`: Remaining requests
-  - `X-RateLimit-Reset`: Unix timestamp when limit resets
-
-**Handling 429 Responses:**
-```json
-{
-  "error": {
-    "type": "RateLimitError",
-    "message": "Rate limit exceeded",
-    "retryAfter": 5  // Seconds to wait
-  }
-}
-```
-
-## Filtering and Searching
-
-**Common Query Parameters:**
-- `name`: Partial name match
-- `modifiedAt`: ISO 8601 datetime
-- `createdAt`: ISO 8601 datetime
-- `schemaId`: Filter by schema
-- `folderId`: Filter by folder
-- `archived`: Boolean (include archived items)
-
-**Example:**
-```bash
-curl -X GET \
-  "https://tenant.benchling.com/api/v2/dna-sequences?name=plasmid&folderId=fld_abc&archived=false"
-```
-
-## Best Practices
-
-### Request Efficiency
-
-1. **Use appropriate page sizes:**
-   - Default: 50 items
-   - Max: 100 items
-   - Adjust based on needs
-
-2. **Filter on server-side:**
-   - Use query parameters instead of client filtering
-   - Reduces data transfer and processing
-
-3. **Batch operations:**
-   - Use bulk endpoints when available
-   - Archive/transfer multiple items in one request
-
-### Error Handling
-
-```javascript
-// Example error handling
-async function fetchSequence(id) {
-  try {
-    const response = await fetch(
-      `https://tenant.benchling.com/api/v2/dna-sequences/${id}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        // Rate limit - retry with backoff
-        const retryAfter = response.headers.get('Retry-After');
-        await sleep(retryAfter * 1000);
-        return fetchSequence(id);
-      } else if (response.status === 404) {
-        return null;  // Not found
-      } else {
-        throw new Error(`API error: ${response.status}`);
-      }
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Request failed:', error);
-    throw error;
-  }
-}
-```
-
-### Pagination Loop
-
-```javascript
-async function getAllSequences() {
-  let allSequences = [];
-  let nextToken = null;
-
-  do {
-    const url = new URL('https://tenant.benchling.com/api/v2/dna-sequences');
-    if (nextToken) {
-      url.searchParams.set('nextToken', nextToken);
-    }
-    url.searchParams.set('pageSize', '100');
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    const data = await response.json();
-    allSequences = allSequences.concat(data.results);
-    nextToken = data.nextToken;
-  } while (nextToken);
-
-  return allSequences;
-}
-```
-
-## References
-
-- **API Documentation:** https://benchling.com/api/reference
-- **Interactive API Explorer:** https://your-tenant.benchling.com/api/reference (requires authentication)
-- **Changelog:** https://docs.benchling.com/changelog

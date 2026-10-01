@@ -146,6 +146,18 @@ class SafetyTests(unittest.TestCase):
             with self.assertRaises(_common.CliError):
                 _common.emit_json({"ok": False}, output=output, root=root)
 
+    def test_directory_symlinks_cannot_bypass_input_or_output_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nested = root / "actual" / "nested"
+            nested.mkdir(parents=True)
+            (nested / "slide.svs").write_bytes(b"synthetic")
+            (root / "alias").symlink_to(root / "actual", target_is_directory=True)
+            with self.assertRaisesRegex(_common.CliError, "symlink"):
+                _common.checked_input_file("alias/nested/slide.svs", root=root, max_bytes=100)
+            with self.assertRaisesRegex(_common.CliError, "symlink"):
+                _common.checked_output_file("alias/nested/report.json", root=root, suffixes={".json"})
+
     def test_skill_version_and_progressive_disclosure(self) -> None:
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         self.assertRegex(skill, r'\n  version: "\d+\.\d+"\n')
@@ -165,6 +177,26 @@ class SafetyTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
+    def test_manifest_rejects_ragged_rows_and_partial_splits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.svs").write_bytes(b"synthetic")
+            for row in ("s1,p1,a.svs,train,extra", "s1,p1,a.svs", "s1,p1,a.svs,"):
+                with self.subTest(row=row):
+                    (root / "manifest.csv").write_text("slide_id,patient_id,path,split\n" + row + "\n")
+                    result = run_script("slide_manifest.py", "validate", "--manifest", "manifest.csv", "--root", str(root))
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_manifest_without_splits_does_not_claim_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.svs").write_bytes(b"synthetic")
+            (root / "manifest.csv").write_text("slide_id,patient_id,path\ns1,p1,a.svs\n")
+            result = run_script("slide_manifest.py", "validate", "--manifest", "manifest.csv", "--root", str(root))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(json.loads(result.stdout)["checks"]["patient_split_isolation"])
+
     def test_manifest_validation_and_redacted_inspection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -230,6 +262,42 @@ class ManifestTests(unittest.TestCase):
 
 
 class PlannerAndImageTests(unittest.TestCase):
+    def test_exact_pyramid_dimensions_control_tile_count(self) -> None:
+        parser = plan_pipeline.build_parser()
+        base = ["--width", "1025", "--height", "1025", "--level-downsample", "2"]
+        estimated = plan_pipeline.make_plan(parser.parse_args(base))
+        measured = plan_pipeline.make_plan(parser.parse_args(base + ["--level-width", "511", "--level-height", "511"]))
+        self.assertEqual(estimated["tile_count"], 4)
+        self.assertEqual(measured["tile_count"], 1)
+        self.assertEqual(measured["level_shape_source"], "supplied_backend_dimensions")
+        with self.assertRaises(_common.CliError):
+            plan_pipeline.make_plan(parser.parse_args(base + ["--level-width", "511"]))
+
+    def test_h5path_payload_uses_float16_and_anisotropic_mpp(self) -> None:
+        args = plan_pipeline.build_parser().parse_args([
+            "--width", "256", "--height", "256", "--pipeline", "TissueDetectionHE",
+            "--mpp-x", "0.25", "--mpp-y", "0.5",
+        ])
+        report = plan_pipeline.make_plan(args)
+        self.assertEqual(report["input_image_bytes_per_tile"], 256 * 256 * 3)
+        self.assertEqual(report["storage_image_bytes_per_tile"], 256 * 256 * 3 * 2)
+        self.assertEqual(report["storage_mask_bytes_per_tile"], 256 * 256 * 2)
+        self.assertEqual(report["physical_tile_size_um_yx"], [128, 64])
+        self.assertAlmostEqual(report["estimated_uncompressed_payload_gib"], 256 * 256 * 8 / 1024**3, places=6)
+
+    def test_released_padding_arithmetic_edge_cases(self) -> None:
+        for args, expected in [((5, 3, 2, False), 2), ((5, 3, 2, True), 3),
+                               ((6, 3, 2, True), 2), ((2, 3, 2, True), 0)]:
+            with self.subTest(args=args):
+                self.assertEqual(plan_pipeline._stable_pathml_count(*args), expected)
+
+    def test_pnm_rejects_pixels_above_header_maximum(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.pgm"
+            path.write_bytes(b"P5\n1 1\n10\n" + bytes([11]))
+            with self.assertRaisesRegex(_common.CliError, "declared maximum"):
+                image_qc.read_image(path, 10)
+
     def test_pipeline_planner_counts_tiles_and_rejects_unknown_transform(self) -> None:
         result = run_script(
             "plan_pipeline.py",
@@ -351,6 +419,35 @@ class PlannerAndImageTests(unittest.TestCase):
 
 
 class SpatialSchemaTests(unittest.TestCase):
+    def test_graph_requires_complete_features_and_level_coordinates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            document = {"schema_version": "1.0", "slide_id": "slide-1", "coordinate_unit": "um",
+                        "nodes": [{"id": "c1", "x": 0, "y": 0, "features": [1]},
+                                  {"id": "c2", "x": 1, "y": 1}], "edges": []}
+            args = validate_spatial_schema.build_parser().parse_args(["graph", "--input", "graph.json", "--root", str(root)])
+            (root / "graph.json").write_text(json.dumps(document))
+            with self.assertRaisesRegex(_common.CliError, "all nodes"):
+                validate_spatial_schema.validate_graph(args)
+            document["nodes"][1]["features"] = [2]
+            document["coordinate_unit"] = "level_pixels"
+            (root / "graph.json").write_text(json.dumps(document))
+            with self.assertRaisesRegex(_common.CliError, "level is required"):
+                validate_spatial_schema.validate_graph(args)
+            document["level"] = 1
+            (root / "graph.json").write_text(json.dumps(document))
+            self.assertTrue(validate_spatial_schema.validate_graph(args)["valid"])
+
+    def test_multiplex_rejects_ragged_rows_and_missing_levels(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for row in ("c1,s1,1,2,um,0,10,extra", "c1,s1,1,2,um,0", "c1,s1,1,2,level_pixels,,10"):
+                with self.subTest(row=row):
+                    (root / "cells.csv").write_text("cell_id,slide_id,x,y,coordinate_unit,level,marker:DAPI\n" + row + "\n")
+                    result = run_script("validate_spatial_schema.py", "multiplex", "--input", "cells.csv", "--root", str(root))
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_graph_schema(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

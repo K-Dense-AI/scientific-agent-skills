@@ -56,6 +56,10 @@ def main():
     exp = ms.MSExperiment()
     ms.FileHandler().loadExperiment(args.input, exp)
     rts, mz_arrays, int_arrays = collect_ms1(exp)
+    if not rts:
+        parser.error("no MS1 scans available for TIC/BPC/XIC extraction")
+    if args.ppm <= 0 or (args.mz and any(m <= 0 for m in args.mz)):
+        parser.error("ppm and target m/z values must be positive")
     rts = np.array(rts)
     print(f"Collected {len(rts)} MS1 scans")
 

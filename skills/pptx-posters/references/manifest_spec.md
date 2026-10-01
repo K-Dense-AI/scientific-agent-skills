@@ -47,10 +47,11 @@ The validator rejects extensions to the schema rather than silently ignoring the
 ## `document`
 
 - `id`: stable identifier beginning with a letter.
-- `title`: exact approved title.
-- `subject`: exact approved description for core document metadata.
+- `title`: exact approved title, at most 255 characters.
+- `subject`: exact approved description for core document metadata, at most 255 characters.
 - `language`: BCP 47-style language tag.
-- `authors`: exact ordered author names.
+- `authors`: exact ordered author names; joined by `; ` they must fit the 255-character
+  core-property limit. No author is silently dropped or shortened.
 - `source_ids`: exact records supporting title, subject, language, and author metadata.
 
 Exactly one text element with role `title` must match `document.title` verbatim.
@@ -274,7 +275,9 @@ Give the exact manifest and reported hash to the author. Approved form requires:
 
 The hash covers every top-level field except `approval`, using canonical sorted
 UTF-8 JSON. Any content, source, requirement, palette, coordinate, or asset-metadata
-change invalidates approval.
+change invalidates approval. The generator preserves the approval timestamp in its
+report and converts it to UTC for the PPTX created/modified core properties, as
+required by python-pptx; the original UTC offset is not stored in those properties.
 
 ## Validation modes and exit codes
 

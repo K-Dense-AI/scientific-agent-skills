@@ -1,6 +1,6 @@
 # Migration and Release Notes
 
-This skill targets MarkItDown 0.1.6. The timeline below summarizes changes that affect user code and operational guidance.
+This skill targets MarkItDown 0.1.8. The timeline below summarizes changes that affect user code and operational guidance.
 
 ## Release Timeline
 
@@ -68,6 +68,17 @@ Security maintenance release:
 - Azure Content Understanding converter
 - Expanded security guidance for broad I/O and MCP binding
 
+### 0.1.7 and 0.1.8 — maintenance through September 21, 2026
+
+- Python supports >=3.10,<3.15.
+- Document Intelligence defers API version selection to its SDK instead of hardcoding the old preview.
+- CU uses the SDK `to_llm_input()` helper and requires `azure-ai-contentunderstanding>=1.2.0b1`; see the preview-default caveat in `cloud_and_ocr.md`.
+- CLI cloud endpoints can come from `MARKITDOWN_DOCINTEL_ENDPOINT` and `MARKITDOWN_CU_ENDPOINT`; stdin is buffered before detection.
+- CSV preserves wider rows and CR-only lines; notebook BOM/headings, RSS/Atom links/content, and duplicate ZIP member handling improved.
+- `markitdown-ocr==0.1.1` uses core Office image hooks and needs core >=0.1.8.
+- `markitdown-mcp==0.0.1a7` uses MCP SDK 2.x.
+- URI schemes are case-insensitive; `file:` rejects UNC/device paths. Local path authorization is still the caller's responsibility.
+
 ## Upgrade Installation
 
 Create a clean environment for the comparison:
@@ -75,7 +86,7 @@ Create a clean environment for the comparison:
 ```bash
 uv venv --python 3.12 .venv-markitdown
 source .venv-markitdown/bin/activate
-uv pip install "markitdown[all]==0.1.6"
+uv pip install "markitdown[all]==0.1.8"
 ```
 
 Do not test a migration in an environment that still contains unknown third-party plugins.
@@ -96,7 +107,7 @@ Current:
 content = result.markdown
 ```
 
-`text_content` still works in 0.1.6 but is explicitly documented in source as a soft-deprecated alias.
+`text_content` still works in 0.1.8 but is explicitly documented in source as a soft-deprecated alias.
 
 ### Local conversion
 
@@ -259,7 +270,7 @@ uv pip install "markitdown[all]"
 Repository-standard reproducible install:
 
 ```bash
-uv pip install "markitdown[all]==0.1.6"
+uv pip install "markitdown[all]==0.1.8"
 ```
 
 The base package no longer implies every format dependency. Select an extra or `[all]`.
@@ -276,10 +287,10 @@ Current behavior:
 
 - Built-in PDF extracts an existing text layer.
 - Built-in JPEG/PNG conversion extracts metadata and optionally requests an LLM description.
-- `markitdown-ocr==0.1.0` uses an external vision-capable client for embedded images and scanned-PDF page fallback.
+- `markitdown-ocr==0.1.1` uses an external vision-capable client for embedded images and scanned-PDF page fallback.
 - Azure Document Intelligence and Content Understanding provide cloud OCR/extraction.
 
-The official OCR plugin README's `--llm-client`/`--llm-model` CLI example is not accepted by the 0.1.6 core CLI parser. Configure the plugin in Python.
+The official OCR plugin README's `--llm-client`/`--llm-model` CLI example is not accepted by the 0.1.8 core CLI parser. Configure the plugin in Python.
 
 ## Azure Migration
 
@@ -297,7 +308,7 @@ MarkItDown(
 )
 ```
 
-Without an explicit credential, the 0.1.6 converters use the named `AZURE_API_KEY` if present and otherwise `DefaultAzureCredential`.
+Without an explicit credential, the 0.1.8 converters use the named `AZURE_API_KEY` if present and otherwise `DefaultAzureCredential`.
 
 Do not rely on undocumented variable names such as `AZURE_DOCUMENT_INTELLIGENCE_KEY` for these constructors.
 
@@ -335,7 +346,7 @@ With:
 
 ## Regression Checklist
 
-- [ ] Install 0.1.6 in a clean environment
+- [ ] Install 0.1.8 in a clean environment
 - [ ] Replace `.text_content` with `.markdown`
 - [ ] Replace text streams with binary streams
 - [ ] Replace `convert_url()` with `convert_uri()` or controlled fetch
@@ -354,3 +365,4 @@ With:
 - Releases: https://github.com/microsoft/markitdown/releases
 - 0.1.0 migration notes: https://github.com/microsoft/markitdown/releases/tag/v0.1.0
 - 0.1.6 release: https://github.com/microsoft/markitdown/releases/tag/v0.1.6
+- 0.1.8 release: https://github.com/microsoft/markitdown/releases/tag/v0.1.8

@@ -540,7 +540,8 @@ def check_completeness(documents: dict[str, dict]) -> dict:
             ),
         },
         extra={
-            "ready_for_authorized_documentation_handoff": not issues,
+            "documentation_declarations_complete": not issues,
+            "handoff_authorized_by_script": False,
             "clinical_completeness_determined": False,
         },
     )

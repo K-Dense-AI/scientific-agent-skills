@@ -1,186 +1,77 @@
-# DiffDock Confidence Scores and Limitations
+# Confidence, scientific scope and validation
 
-This document provides detailed guidance on interpreting DiffDock confidence scores and understanding the tool's limitations.
+Reviewed against DiffDock v1.1.3 source/README and the DiffDock-L paper on 2026-09-30.
 
-## Confidence Score Interpretation
+## Meaning of a score
 
-DiffDock generates a confidence score for each predicted binding pose. This score indicates the model's certainty about the prediction.
+DiffDock's confidence model ranks candidate poses for a protein-ligand pair. It does
+not output a calibrated binding probability, dissociation constant, selectivity,
+residence time or ADMET endpoint. Even if confidence correlates with binding in a
+particular dataset, that does not establish an affinity model.
 
-### Score Ranges
+The upstream FAQ gives rough top-pose bands `c > 0`, `-1.5 < c < 0`, `c < -1.5`;
+it does not define equality. The helper assigns zero to Moderate and -1.5 to Low.
+These conventions and thresholds are not guarantees of pose correctness. Filename
+values have only two decimal places; preserve upstream rank and original artifacts.
+Nonfinite or missing scores are Unknown, not zero or Low.
 
-| Score Range | Confidence Level | Interpretation |
-|------------|------------------|----------------|
-| **> 0** | High confidence | Strong prediction, likely accurate binding pose |
-| **-1.5 to 0** | Moderate confidence | Reasonable prediction, may need validation |
-| **< -1.5** | Low confidence | Uncertain prediction, requires careful validation |
+Comparison across different ligands and receptor conformations is difficult and not
+calibrated. `analyze_results.py --best` is a convenience for inspection, not a ranking
+of compounds by potency. Low confidence does not prove a ligand cannot bind. Multiple
+similar sampled poses are not independent replicates; consensus can repeat model bias.
 
-### Important Notes on Confidence Scores
+## Applicability
 
-1. **Not Binding Affinity**: Confidence scores reflect prediction certainty, NOT binding affinity strength
-   - High confidence = model is confident about the structure
-   - Does NOT indicate strong/weak binding affinity
+The trained/tested problem is small-molecule docking to proteins. Success at parsing a
+peptide, nucleotide, macrocycle, metal-containing compound or very large ligand does
+not demonstrate reliable modeling. There is no universal molecular-weight or residue
+count rule that makes such inputs supported. Covalent binding and accurate coordination
+chemistry require appropriate specialist methods. DiffDock does not perform a fully
+flexible receptor search; separate conformations provide separate hypotheses.
 
-2. **Context-Dependent**: Confidence scores should be adjusted based on system complexity:
-   - **Lower expectations** for:
-     - Large ligands (>500 Da)
-     - Protein complexes with many chains
-     - Unbound protein conformations (may require conformational changes)
-     - Novel protein families not well-represented in training data
+The original DiffDock and DiffDock-L have different training/evaluation settings.
+DiffDock-L adds data and generalization strategies including Binding MOAD and van der
+Mers augmentation; record the checkpoint and assess similarity/leakage against its
+training data before describing performance on a new benchmark. Do not label all new
+proteins or membrane proteins categorically supported/unsupported without evidence.
 
-   - **Higher expectations** for:
-     - Drug-like small molecules (150-500 Da)
-     - Single-chain proteins or well-defined binding sites
-     - Proteins similar to those in training data (PDBBind, BindingMOAD)
+## Validation workflow
 
-3. **Multiple Predictions**: DiffDock generates multiple samples per complex (default: 10)
-   - Review top-ranked predictions (by confidence)
-   - Consider clustering similar poses
-   - High-confidence consensus across multiple samples strengthens prediction
+1. Check intended ligand molecular graph, charge, tautomer and stereochemistry. The
+   upstream file-input route removes existing conformers and generates a new one.
+2. Reconcile input IDs with output ranks and failed/skipped counts. Avoid reused output
+   directories. Both a silent skip and a stale output can masquerade as success.
+3. Check atom/bond identity, stereochemistry, bond lengths/angles, aromatic planarity,
+   internal strain and receptor clashes using independent tools such as PoseBusters.
+   These checks establish plausibility constraints, not experimental correctness.
+4. Visually review candidate pockets, biologically relevant chains, conserved waters,
+   cofactors and metal coordination. Do not remove meaningful components blindly.
+5. For any refinement, keep raw and refined structures and the mapping between them.
+   Relax in the actual downstream force field with appropriate ligand parameters;
+   revalidate afterwards. Rescoring does not repair an invalid pose automatically.
+6. If a reference pose is available, align receptors consistently and compare ligand
+   atoms with a chemically valid symmetry mapping. A low RMSD does not replace
+   stereochemical/clash validation. Without a reference, do not report pose accuracy.
+7. Assess affinity with a separately validated model or protocol when needed. GNINA,
+   MM/GBSA and free-energy methods have different assumptions and error sources; no
+   universal accuracy ordering or mandatory rescoring workflow applies to every system.
+8. Report uncertainty and validate experimentally where warranted.
 
-## What DiffDock Predicts
+## Upstream implementation limits
 
-### ✅ DiffDock DOES Predict
-- **Binding poses**: 3D spatial orientation of ligand in protein binding site
-- **Confidence scores**: Model's certainty about predictions
-- **Multiple conformations**: Various possible binding modes
+- PDB inference still generates ESM2 embeddings. Per-chain tokenization truncates at
+  1022 residues; inspect long-chain targets for mismatched embedding/graph lengths.
+- Sequence folding calls CUDA regardless of CPU fallback elsewhere and adds folding
+  uncertainty. A plausible fold need not be the ligand-bound conformation.
+- The inference loop can skip individual complexes. Exit status is insufficient.
+- The `batch_size` is for samples within each complex, not concurrent protein pairs.
+- The supported inference CLI offers neither a pocket-selection flag nor a precomputed
+  ESM-embedding flag. Changing chain selection changes the prepared input itself.
 
-### ❌ DiffDock DOES NOT Predict
-- **Binding affinity**: Strength of protein-ligand interaction (ΔG, Kd, Ki)
-- **Binding kinetics**: On/off rates, residence time
-- **ADMET properties**: Absorption, distribution, metabolism, excretion, toxicity
-- **Selectivity**: Relative binding to different targets
+## Sources
 
-## Scope and Limitations
-
-### Designed For
-- **Small molecule docking**: Organic compounds typically 100-1000 Da
-- **Protein targets**: Single or multi-chain proteins
-- **Outside the validated small-molecule scope**: Small peptides and oligonucleotides may run, but successful parsing or a residue-count cutoff does not establish docking reliability
-
-### NOT Designed For
-- **Large biomolecules**: Full protein-protein interactions
-  - Use DiffDock-PP, AlphaFold-Multimer, or RoseTTAFold2NA instead
-- **Large peptides/proteins**: >20 residues as ligands
-- **Covalent docking**: Irreversible covalent bond formation
-- **Metalloprotein specifics**: May not accurately handle metal coordination
-- **Membrane proteins**: Not specifically trained on membrane-embedded proteins
-
-### Training Data Considerations
-
-DiffDock was trained on:
-- **PDBBind**: Diverse protein-ligand complexes
-- **BindingMOAD**: Multi-domain protein structures
-
-**Implications**:
-- Best performance on proteins/ligands similar to training data
-- May underperform on:
-  - Novel protein families
-  - Unusual ligand chemotypes
-  - Allosteric sites not well-represented in training data
-
-## Validation and Complementary Tools
-
-### Recommended Workflow
-
-1. **Generate poses with DiffDock**
-   - Use confidence scores for initial ranking
-   - Consider multiple high-confidence predictions
-
-2. **Chemical, geometric, and visual validation**
-   - Check ligand atom/bond identity and stereochemistry against the intended input.
-   - Check bond lengths/angles, aromatic planarity, internal strain, and protein clashes
-     with an independent validator such as PoseBusters; high confidence is not a pass.
-   - Save validation results and both original and relaxed coordinates. A relaxed pose
-     is a new artifact and should be rechecked, rather than overwriting the raw prediction.
-   - Examine protein-ligand interactions in molecular viewer
-   - Check for reasonable:
-     - Hydrogen bonds
-     - Hydrophobic interactions
-     - Steric complementarity
-     - Electrostatic interactions
-
-3. **Scoring and Refinement** (choose one or more):
-   - **GNINA**: Deep learning-based scoring function
-   - **Molecular mechanics**: Energy minimization and refinement
-   - **MM/GBSA or MM/PBSA**: Binding free energy estimation
-   - **Free energy calculations**: FEP or TI for accurate affinity prediction
-
-4. **Experimental Validation**
-   - Biochemical assays (IC50, Kd measurements)
-   - Structural validation (X-ray crystallography, cryo-EM)
-
-### Tools for Binding Affinity Assessment
-
-DiffDock should be combined with these tools for affinity prediction:
-
-- **GNINA**: Fast, accurate scoring function
-  - Github: github.com/gnina/gnina
-
-- **AutoDock Vina**: Classical docking and scoring
-  - Website: vina.scripps.edu
-
-- **Free Energy Calculations**:
-  - OpenMM + OpenFE
-  - GROMACS + ABFE/RBFE protocols
-
-- **MM/GBSA Tools**:
-  - MMPBSA.py (AmberTools)
-  - gmx_MMPBSA
-
-## Performance Optimization
-
-### For Best Results
-
-1. **Protein Preparation**:
-   - Remove water molecules far from binding site
-   - Resolve missing residues if possible
-   - Consider protonation states at physiological pH
-
-2. **Ligand Input**:
-   - Provide reasonable 3D conformers when using structure files
-   - Use canonical SMILES for consistent results
-   - Pre-process with RDKit if needed
-
-3. **Computational Resources**:
-   - GPU strongly recommended (10-100x speedup)
-   - First run pre-computes lookup tables (takes a few minutes)
-   - Batch processing more efficient than single predictions
-
-4. **Parameter Tuning**:
-   - Increase `samples_per_complex` for difficult cases (20-40)
-   - Adjust temperature parameters for diversity/accuracy trade-off
-   - Use pre-computed ESM embeddings for repeated predictions
-
-## Common Issues and Troubleshooting
-
-### Low Confidence Scores
-- **Large/flexible ligands**: Consider splitting into fragments or use alternative methods
-- **Multiple binding sites**: May predict multiple locations with distributed confidence
-- **Protein flexibility**: Consider using ensemble of protein conformations
-
-### Unrealistic Predictions
-- **Clashes**: May indicate need for protein preparation or refinement
-- **Surface binding**: Check if true binding site is blocked or unclear
-- **Unusual poses**: Consider increasing samples to explore more conformations
-
-### Slow Performance
-- **Use GPU**: Essential for reasonable runtime
-- **Pre-compute embeddings**: Reuse ESM embeddings for same protein
-- **Batch processing**: More efficient than sequential individual predictions
-- **Reduce samples**: Lower `samples_per_complex` for quick screening
-
-## Citation and Further Reading
-
-For methodology details and benchmarking results, see:
-
-1. **Original DiffDock Paper** (ICLR 2023):
-   - "DiffDock: Diffusion Steps, Twists, and Turns for Molecular Docking"
-   - Corso et al., arXiv:2210.01776
-
-2. **DiffDock-L Paper** (2024):
-   - "Deep Confident Steps to New Pockets: Strategies for Docking Generalization"
-   - Corso et al., ICLR 2024, arXiv:2402.18396
-
-3. **PoseBusters Benchmark**:
-   - Rigorous docking evaluation framework
-   - Used for DiffDock validation
+- [Upstream confidence FAQ and scope](https://github.com/gcorso/DiffDock/blob/v1.1.3/README.md)
+- [Input preparation and ESM2/ESMFold implementation](https://github.com/gcorso/DiffDock/blob/v1.1.3/utils/inference_utils.py)
+- [DiffDock-L paper](https://arxiv.org/abs/2402.18396)
+- [Original DiffDock paper](https://arxiv.org/abs/2210.01776)
+- [PoseBusters documentation](https://posebusters.readthedocs.io/en/latest/)

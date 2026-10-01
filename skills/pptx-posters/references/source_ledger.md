@@ -1,21 +1,27 @@
 # Source ledger
 
-Research cutoff: **2026-07-24**. Recheck live organizer, printer, package, and
-application guidance before production use.
+Latest API/workflow review: **2026-10-01**. Original research cutoff:
+**2026-07-24**. Recheck live organizer, printer, package, and application guidance
+before production use.
 
 This ledger records the upstream basis for skill behavior. It is not a poster's
 scientific bibliography.
 
-Method: targeted `parallel-cli search` and `parallel-cli extract` queries restricted
-to the official domains cited below, followed by cross-checking canonical pages.
-Retrieval dates are stated where a page exposed no publication/update date.
+Method: current official documentation, python-pptx tagged source, and official
+PyPI release metadata were compared with all bundled scripts. The current exact
+pins passed 52 local tests on Python 3.13.3, including UTC conversion, core metadata
+limits, contain placement, deterministic generation, and path checks. Microsoft
+PowerPoint, screen-reader, PDF export, and printer behavior remain manual checks.
+The historical IEEE DSC example is explicitly bounded below; it was not
+independently refreshed. These documentation checks are not authenticated service
+tests: the shipped tools make no API calls.
 
 ## Microsoft PowerPoint
 
 ### Poster-specific product guidance
 
 - [Microsoft Create poster templates for PowerPoint](https://create.microsoft.com/en-us/templates/posters)
-  (official Microsoft Create).
+  (official Microsoft Create, now redirected to PowerPoint templates; checked 2026-10-01).
   - Describes editable PowerPoint poster/flyer templates and saving, printing, or
     sending the result as PDF.
 
@@ -26,7 +32,7 @@ generator does not ingest downloaded templates or use the page's AI design featu
 ### Slide dimensions and scaling
 
 - [Change the size of your PowerPoint slides](https://support.microsoft.com/en-us/office/change-the-size-of-your-powerpoint-slides-040a811c-be43-40b9-8d04-0de5ed79987e)
-  (Microsoft Support; checked 2026-07-24; no publication date exposed).
+  (Microsoft Support; checked 2026-10-01; no publication date exposed).
   - Custom width/height each range from 1 to 56 inches.
   - Units can be inches, centimeters, or pixels; PowerPoint converts them.
   - All slides in a presentation have the same size.
@@ -38,17 +44,25 @@ scale, and no reuse/resizing of existing content.
 ### Export
 
 - [Export a presentation](https://support.microsoft.com/en-us/powerpoint/export-a-presentation)
-  (Microsoft Support; checked 2026-07-24).
+  (Microsoft Support; checked 2026-10-01).
   - Standard is the option for publishing online and printing; Minimum size
     prioritizes a smaller file.
 
-Skill impact: provide a manual export plan and require independent PDF/print checks.
-The scripts do not invoke Office or an alternative converter.
+- [Create accessible PDFs](https://support.microsoft.com/en-us/accessibility/office-accessibility/create-accessible-pdfs)
+  (Microsoft Support; checked 2026-10-01).
+  - On macOS, the electronic-distribution/accessibility route sends the document to
+    Microsoft's online conversion service; quality settings do not imply local-only
+    processing. Object hyperlinks are preserved only by that documented route.
+
+Skill impact: provide a manual export plan with separate canvas and final-artboard
+PDF point dimensions, and require independent page-size/print checks. Scaled canvas
+output needs confirmed printer scaling or a checked full-size derivative. The
+scripts do not export PDF, invoke Office, or contact the conversion service.
 
 ### Accessibility
 
 - [Make your PowerPoint presentations accessible to people with disabilities](https://support.microsoft.com/en-us/office/make-your-powerpoint-presentations-accessible-to-people-with-disabilities-6f7772b2-2f33-4bd2-8ca7-dae3b2b3ef25)
-  (Microsoft Support; checked 2026-07-24).
+  (Microsoft Support; checked 2026-10-01).
   - Use Accessibility Checker and Reading Order pane.
   - Add alt text to visuals.
   - Do not use color alone.
@@ -62,7 +76,7 @@ The scripts do not invoke Office or an alternative converter.
   - Includes missing alt text and logical reading order checks.
 
 - [PowerPoint PDF Accessibility](https://learn.microsoft.com/en-us/office/pdf/powerpoint/powerpointpdfaccessibility)
-  (Microsoft Learn; last updated 2026-05-12).
+  (Microsoft Learn; checked 2026-10-01).
   - Documents tagged-PDF behavior and applicable PowerPoint versions/channels.
 
 Skill impact: automate only structural checks; require final Accessibility Checker,
@@ -72,7 +86,7 @@ identified as slide-specific, not a universal poster minimum.
 ### Fonts, pictures, and media
 
 - [Benefits of embedding custom fonts](https://support.microsoft.com/en-us/office/benefits-of-embedding-custom-fonts-cb3982aa-ea76-4323-b008-86670f222dbc)
-  (Microsoft Support; published 2026-05-04 in the extracted result).
+  (Microsoft Support; checked 2026-10-01).
   - Embedding can preserve layout, styling, and characters when a recipient lacks a
     font, but not all fonts permit embedding.
   - Embedding only used characters limits later editing; embedding all characters is
@@ -80,12 +94,12 @@ identified as slide-specific, not a universal poster minimum.
 
 - [Change the default resolution for inserting pictures in Office](https://support.microsoft.com/en-us/office/change-the-default-resolution-for-inserting-pictures-in-office-f4aca5b4-6332-48c6-9488-bf5e0094a7d2)
   and [Turn off picture compression](https://support.microsoft.com/en-us/office/turn-off-picture-compression-81a6b603-0266-4451-b08e-fc1bf58da658)
-  (Microsoft Support; checked 2026-07-24).
+  (Microsoft Support; checked 2026-10-01).
   - Microsoft documents High fidelity/minimal compression and a per-document option
     not to compress images.
 
 - [Video and audio file formats supported in PowerPoint](https://support.microsoft.com/en-us/office/video-and-audio-file-formats-supported-in-powerpoint-d8b12450-26db-4c7b-a5c1-593d3418fb59)
-  (Microsoft Support; checked 2026-07-24).
+  (Microsoft Support; checked 2026-10-01).
   - PowerPoint supports several audio/video formats and notes deprecations beginning
     in version 2505 for older formats.
 
@@ -154,21 +168,23 @@ of embedded/active/external content, and standard alt-description markup.
 ### python-pptx
 
 - [python-pptx on PyPI](https://pypi.org/project/python-pptx/)
-  - Current stable at cutoff: **1.0.2**, released 2024-08-07.
+  - Current stable at review: **1.0.2**, released 2024-08-07.
   - Requires Python 3.8 or later.
   - Described as creating, reading, and updating PowerPoint 2007+ `.pptx` files.
 
 - [python-pptx v1.0.2 repository tag](https://github.com/scanny/python-pptx/tree/v1.0.2)
   (official GitHub repository).
-  - GitHub had tags through v1.0.2; the GitHub Releases list returned no published
-    releases during the 2026-07-23 check. PyPI release history is therefore the
-    version authority used here.
+  - The v1.0.2 source and current PyPI metadata agree with the exact generation pin.
 
 - [Presentation API](https://python-pptx.readthedocs.io/en/latest/api/presentation.html)
   - `Presentation()`, `save`, `slide_width`, and `slide_height`; dimensions are EMU.
+  - Core-property strings have a 255-character limit. Dates are UTC-naive; callers
+    must convert non-UTC inputs before assignment.
 
 - [Shapes API](https://python-pptx.readthedocs.io/en/latest/api/shapes.html)
-  - `add_textbox`, `add_picture`, and explicit shape position/size.
+  - `add_textbox`, `add_picture`, and explicit shape position/size. Supplying both
+    picture dimensions stretches to them; this generator calculates proportional
+    dimensions itself before calling the API.
 
 - [Text API](https://python-pptx.readthedocs.io/en/latest/api/text.html)
   - Font sizes and text-frame behavior.
@@ -176,16 +192,21 @@ of embedded/active/external content, and standard alt-description markup.
 Skill impact: exact pin `python-pptx==1.0.2`; use only documented creation, slide,
 shape, text, color, and core-property APIs. Alt descriptions are added afterward
 using standard PresentationML because the public python-pptx API does not expose a
-complete poster accessibility workflow.
+complete poster accessibility workflow. The manifest checks metadata lengths before
+generation; offset-aware approval times are converted to UTC. The skill does not
+use PptxGenJS or assume a built-in `contain` API.
 
 ### Pillow
 
 - [Pillow on PyPI](https://pypi.org/project/pillow/)
-  - Current stable at cutoff: **12.3.0**, released 2026-07-01.
+  - Current stable at review: **12.3.0**, released 2026-07-01.
   - Requires Python 3.10 or later.
 
 - [Pillow documentation](https://pillow.readthedocs.io/)
-  (documentation identified itself as 12.3.0 at cutoff).
+  (documentation identified itself as 12.3.0 at review).
+- [Image API](https://pillow.readthedocs.io/en/stable/reference/Image.html)
+  - Opening is lazy; `verify()` checks structure and requires reopening before
+    `load()` decodes pixels. Decompression-bomb warnings can be promoted to errors.
 
 Skill impact: exact pin `Pillow==12.3.0`; bounded verification of local PNG/JPEG
 dimensions, mode, frames, and effective DPI. Heavy imports remain lazy so every
@@ -194,11 +215,13 @@ CLI's help works without optional packages.
 ### lxml
 
 - [lxml on PyPI](https://pypi.org/project/lxml/)
-  - Current stable at cutoff: **6.1.1**, released 2026-05-18.
+  - Current stable at review: **6.1.3**, released 2026-09-02.
   - Requires Python 3.8 or later.
-  - The 6.1.1 release includes security-related fixes in bundled XML/XSLT libraries.
+  - [6.1.3 release notes](https://github.com/lxml/lxml/blob/lxml-6.1.3/CHANGES.txt)
+    fix unintended external parameter entity parsing with the default
+    `resolve_entities="internal"` setting.
 
-Skill impact: exact transitive pin `lxml==6.1.1` for `python-pptx` generation.
+Skill impact: exact transitive pin `lxml==6.1.3` for `python-pptx` generation.
 The dependency-free inspector still uses bounded standard-library XML parsing and
 rejects DTD/entity declarations before parsing.
 
@@ -233,20 +256,24 @@ as universally accessible; rendered contrast and redundant encoding remain requi
 ## Conference examples — not universal rules
 
 - [CSCW 2026 posters](https://cscw.acm.org/2026/posters.html)
-  (official event page checked 2026-07-24; its explicit 2026 important dates include
+  (official event page checked 2026-10-01; its explicit 2026 important dates include
   a 2026-07-10 camera-ready deadline).
   - Allocated 48 × 48 inches; recommended no side over 45 inches, allowed up to
     47 inches; stated A0 or A1 could be acceptable.
 
 - [IEEE DSC 2025 poster instructions](https://attend.ieee.org/dsc-2025/call-for-posters/)
-  (official organizer page).
-  - Required the physical poster to fit A1 space: 84.1 × 59.4 cm.
+  (historical official organizer page; unavailable to the 2026-10-01 browser
+  fetch, so the 2026-07-24 evidence has not been independently refreshed).
+  - The historical record required the physical poster to fit A1 space: 84.1 × 59.4 cm.
 
 Skill impact: use these only to demonstrate variation. The validator requires the
 actual event's confirmed rule and exact source ID.
 
 ## Secure standard-library APIs
 
+- [Python `pathlib`](https://docs.python.org/3/library/pathlib.html)
+  - `resolve()` dereferences symlinks. Asset containment is checked on the resolved
+    target, while the final-symlink check uses the original manifest-relative path.
 - [Python `zipfile`](https://docs.python.org/3/library/zipfile.html)
 - [Python `xml.etree.ElementTree`](https://docs.python.org/3/library/xml.etree.elementtree.html)
 - [Python `json`](https://docs.python.org/3/library/json.html)

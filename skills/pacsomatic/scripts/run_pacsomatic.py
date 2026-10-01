@@ -2,6 +2,8 @@
 
 import argparse
 import csv
+import json
+import math
 import os
 import re
 import shlex
@@ -18,22 +20,21 @@ SCHEDULER_CMDS = {
     "sge": "qsub",
 }
 
+# Partial executable inventory only; container-internal entrypoints are not host dependencies.
 PACSOMATIC_HOST_TOOLS = [
     "pbmm2",
     "samtools",
     "mosdepth",
-    "clair3",
     "hiphase",
-    "deepsomatic",
-    "severus",
     "cnvkit.py",
     "vep",
-    "svpack",
-    "AnnotSV",
     "multiqc",
 ]
 
 MIN_JAVA_MAJOR = 17
+MAX_JAVA_MAJOR = 26
+MIN_NEXTFLOW_VERSION = (24, 4, 2)
+REVIEWED_REVISION = "24c84cb371b0339c1d65a4de9451671945e19772"
 
 
 def fail(message):
@@ -49,20 +50,18 @@ def warn(message):
     print(f"[WARN] {message}")
 
 
-def script_dir():
-    return Path(__file__).resolve().parent
-
-
 def is_remote_path(path):
     parsed = urlparse(path)
     return parsed.scheme in {"http", "https", "s3", "gs", "ftp"}
 
 
 def normalize_walltime_hhmmss(value, label):
-    if re.fullmatch(r"\d{1,3}:\d{2}:\d{2}", value):
-        return value
-    if re.fullmatch(r"\d{1,3}:\d{2}", value):
-        return f"{value}:00"
+    if re.fullmatch(r"\d{1,3}:[0-5]\d(?::[0-5]\d)?", value):
+        parts = [int(part) for part in value.split(":")]
+        if len(parts) == 2:
+            parts.append(0)
+        if any(parts):
+            return f"{parts[0]:02}:{parts[1]:02}:{parts[2]:02}"
     fail(f"Invalid {label} format: {value!r}. Use HH:MM or HH:MM:SS")
 
 
@@ -71,9 +70,12 @@ def has_any_command(names):
 
 
 def detect_java_major_version():
-    if shutil.which("java") is None:
+    java = os.environ.get("JAVA_CMD") or (str(Path(os.environ["JAVA_HOME"]) / "bin/java") if os.environ.get("JAVA_HOME") else "java")
+    if shutil.which(java) is None:
         return None
-    completed = subprocess.run(["java", "-version"], capture_output=True, text=True)
+    completed = subprocess.run([java, "-version"], capture_output=True, text=True, timeout=30)
+    if completed.returncode:
+        return None
     raw = f"{completed.stdout}\n{completed.stderr}"
     match = re.search(r'version\s+"([0-9]+)(?:\.[0-9._]+)?"', raw)
     if match:
@@ -82,8 +84,8 @@ def detect_java_major_version():
 
 
 def ensure_no_spaces(label, value):
-    if any(ch.isspace() for ch in value):
-        fail(f"{label} must not contain spaces: {value!r}")
+    if not value or any(ch.isspace() or ord(ch) < 32 for ch in value):
+        fail(f"{label} must be nonempty and contain no whitespace/control characters.")
 
 
 def validate_repo(repo_path):
@@ -102,6 +104,8 @@ def ensure_pipeline_repo(args):
 
     if args.repo_path:
         repo = validate_repo(Path(args.repo_path))
+        if args.pipeline_version:
+            fail("For --repo-path, check out the desired revision yourself and omit --pipeline-version; Nextflow -r is for remote projects.")
         args.pipeline = str(repo)
         info(f"Using local pipeline repository: {repo}")
         return
@@ -118,9 +122,19 @@ def ensure_pipeline_repo(args):
         completed = subprocess.run(cmd)
         if completed.returncode != 0:
             fail(f"git clone failed with code {completed.returncode}")
+        if args.pipeline_version:
+            completed = subprocess.run(["git", "-C", str(target), "checkout", "--detach", args.pipeline_version])
+            if completed.returncode:
+                fail("Could not check out requested pipeline revision in the new clone.")
+    elif args.pipeline_version:
+        result = subprocess.run(["git", "-C", str(target), "rev-parse", "HEAD", args.pipeline_version], capture_output=True, text=True)
+        revisions = result.stdout.splitlines()
+        if result.returncode or len(revisions) != 2 or revisions[0] != revisions[1]:
+            fail("Existing checkout differs from --pipeline-version; select its revision explicitly outside this helper.")
 
     repo = validate_repo(target)
     args.pipeline = str(repo)
+    args.pipeline_version = ""
     info(f"Using cloned pipeline repository: {repo}")
 
 
@@ -158,10 +172,6 @@ def find_conda_env_prefix(env_name):
     return None
 
 
-def default_conda_env_file():
-    return script_dir().parent / "environment" / "nextflow-env.yml"
-
-
 def create_conda_env(env_name, env_file):
     env_file = Path(env_file).expanduser().resolve()
     if not env_file.exists():
@@ -186,7 +196,9 @@ def resolve_runtime(args):
 
     prefix = find_conda_env_prefix(args.conda_env)
     if prefix is None and args.create_conda_env:
-        env_file = args.conda_env_file or str(default_conda_env_file())
+        if not args.conda_env_file:
+            fail("--create-conda-env requires --conda-env-file; no environment YAML is bundled.")
+        env_file = args.conda_env_file
         create_conda_env(args.conda_env, env_file)
         prefix = find_conda_env_prefix(args.conda_env)
 
@@ -217,13 +229,13 @@ def resolve_runtime(args):
 
 def build_generated_params_content(args, samplesheet_path):
     lines = [
-        f"input: {samplesheet_path}",
-        f"outdir: {args.outdir}",
+        f"input: {json.dumps(samplesheet_path)}",
+        f"outdir: {json.dumps(args.outdir)}",
     ]
     if args.fasta:
-        lines.append(f"fasta: {args.fasta}")
+        lines.append(f"fasta: {json.dumps(args.fasta)}")
     elif args.genome:
-        lines.append(f"genome: {args.genome}")
+        lines.append(f"genome: {json.dumps(args.genome)}")
     return "\n".join(lines) + "\n"
 
 
@@ -283,6 +295,8 @@ def build_nextflow_command(args, samplesheet_path):
 
     if args.pipeline_version:
         cmd.extend(["-r", args.pipeline_version])
+    if args.nextflow_config:
+        cmd.extend(["-c", args.nextflow_config])
 
     params_file = args.params_file
     if not params_file and args.use_generated_params_file and args.generated_params_file:
@@ -306,17 +320,18 @@ def build_nextflow_command(args, samplesheet_path):
 
 
 def scheduler_header_lines(args):
-    mem_mb = int(args.memory_gb * 1024)
-    stdout_path = os.path.join(args.logdir, args.stdout_file) if args.logdir else args.stdout_file
-    stderr_path = os.path.join(args.logdir, args.stderr_file) if args.logdir else args.stderr_file
+    mem_mb = math.ceil(args.memory_gb * 1024)
+    suffix = "%J" if args.executor == "lsf" else "%j" if args.executor == "slurm" else ""
+    stdout_path = os.path.join(args.logdir or args.outdir, args.stdout_file or f"launcher{suffix}.out")
+    stderr_path = os.path.join(args.logdir or args.outdir, args.stderr_file or f"launcher{suffix}.err")
     walltime_hhmmss = normalize_walltime_hhmmss(args.walltime, "walltime")
 
     if args.executor == "lsf":
         lines = [
             f"#BSUB -J {args.job_name}",
             f"#BSUB -n {args.cpus}",
-            f"#BSUB -M {mem_mb}",
-            f"#BSUB -W {args.walltime}",
+            f"#BSUB -M {mem_mb}MB",
+            f"#BSUB -W {int(walltime_hhmmss.split(':')[0])}:{int(walltime_hhmmss.split(':')[1]):02}",
             f"#BSUB -o {stdout_path}",
             f"#BSUB -e {stderr_path}",
         ]
@@ -331,7 +346,7 @@ def scheduler_header_lines(args):
             f"#SBATCH --job-name={args.job_name}",
             f"#SBATCH --cpus-per-task={args.cpus}",
             f"#SBATCH --mem={mem_mb}",
-            f"#SBATCH --time={args.walltime}",
+            f"#SBATCH --time={walltime_hhmmss}",
             f"#SBATCH --output={stdout_path}",
             f"#SBATCH --error={stderr_path}",
         ]
@@ -344,7 +359,7 @@ def scheduler_header_lines(args):
     if args.executor == "pbs":
         lines = [
             f"#PBS -N {args.job_name}",
-            f"#PBS -l select=1:ncpus={args.cpus}:mem={int(args.memory_gb)}gb",
+            f"#PBS -l select=1:ncpus={args.cpus}:mem={mem_mb}mb",
             f"#PBS -l walltime={walltime_hhmmss}",
             f"#PBS -o {stdout_path}",
             f"#PBS -e {stderr_path}",
@@ -359,7 +374,7 @@ def scheduler_header_lines(args):
         lines = [
             f"#$ -N {args.job_name}",
             f"#$ -pe smp {args.cpus}",
-            f"#$ -l h_vmem={max(1, int(args.memory_gb / max(1, args.cpus)))}G",
+            f"#$ -l h_vmem={math.ceil(mem_mb / args.cpus)}M",
             f"#$ -l h_rt={walltime_hhmmss}",
             f"#$ -o {stdout_path}",
             f"#$ -e {stderr_path}",
@@ -390,6 +405,7 @@ def write_launch_script(args, script_path, nextflow_cmd):
         "",
         "set -euo pipefail",
         f"mkdir -p {' '.join(shlex.quote(path) for path in mkdir_targets)}",
+        f"cd {shlex.quote(args.outdir)}",
         f"export NXF_WORK={shlex.quote(args.workdir)}",
     ])
 
@@ -415,24 +431,24 @@ def write_launch_script(args, script_path, nextflow_cmd):
 
 
 def verify_bam_and_index(label, bam_path, pbi_path):
+    ensure_no_spaces(f"{label} BAM", bam_path)
+    if not bam_path.endswith(".bam"):
+        fail(f"{label} input must end in .bam; this helper targets unaligned PacBio HiFi BAM, not CRAM.")
+    if pbi_path:
+        ensure_no_spaces(f"{label} PBI", pbi_path)
+        if not pbi_path.endswith(".pbi"):
+            fail(f"{label} PacBio index must end in .pbi; BAI/CSI are different index formats.")
+        if not is_remote_path(pbi_path):
+            require_file(f"{label} PBI", pbi_path)
     if is_remote_path(bam_path):
-        info(f"{label} BAM is remote; skipping local existence checks: {bam_path}")
+        info(f"{label} BAM is remote; accessibility and content were not verified.")
         return
+    require_file(f"{label} BAM", bam_path)
 
-    if not os.path.exists(bam_path):
-        fail(f"{label} BAM does not exist: {bam_path}")
 
-    bai_candidates = [f"{bam_path}.bai", re.sub(r"\.bam$", ".bai", bam_path, flags=re.IGNORECASE)]
-    csi_candidate = f"{bam_path}.csi"
-    has_standard_index = any(os.path.exists(path) for path in bai_candidates + [csi_candidate])
-    if not has_standard_index:
-        warn(
-            f"{label} BAM has no local .bai/.csi index alongside input path. "
-            "This is allowed, but some pipeline steps may require indexed BAMs."
-        )
-
-    if pbi_path and not os.path.exists(pbi_path):
-        fail(f"{label} .pbi path was provided but does not exist: {pbi_path}")
+def require_file(label, path):
+    if not Path(path).is_file() or Path(path).stat().st_size == 0:
+        fail(f"{label} must be a nonempty regular file: {path}")
 
 
 #: Characters that would let --module-load smuggle something other than a module
@@ -446,7 +462,7 @@ def normalize_module_load(raw):
     """Validate --module-load and return it as a safe shell line.
 
     Accepts one or more `module ...` commands separated by `&&` or `;` -- the
-    documented shape, e.g. "module purge && module load nextflow/23.10.0".
+    documented shape, e.g. "module purge && module load nextflow/26.04.6".
     Rejects anything else so a caller-supplied string cannot become arbitrary
     shell in the launch script the operator later executes.
     """
@@ -471,7 +487,7 @@ def normalize_module_load(raw):
         if not tokens or tokens[0] != "module":
             fail(
                 f"--module-load segment {segment!r} does not start with 'module'. "
-                "Pass module commands only, e.g. 'module load nextflow/23.10.0'."
+                "Pass module commands only, e.g. 'module load nextflow/26.04.6'."
             )
         normalized.append(" ".join(shlex.quote(token) for token in tokens))
 
@@ -479,6 +495,10 @@ def normalize_module_load(raw):
 
 
 def validate_inputs(args):
+    if args.dry_run and (args.run or args.submit):
+        fail("--dry-run cannot be combined with --run or --submit.")
+    if args.dry_run and (args.create_conda_env or args.checkout_dir):
+        fail("--dry-run does not clone repositories or create environments; prepare these separately.")
     args.module_load = normalize_module_load(args.module_load)
     ensure_no_spaces("patient-id", args.patient_id)
     ensure_no_spaces("tumor-sample-id", args.tumor_sample_id)
@@ -490,13 +510,43 @@ def validate_inputs(args):
         fail("Either --fasta or --genome must be provided.")
 
     if args.fasta and args.genome:
-        info("Both --fasta and --genome were provided; --fasta will be used.")
+        fail("Choose exactly one of --fasta or --genome.")
+    if args.cpus < 1 or not math.isfinite(args.memory_gb * 1024) or args.memory_gb <= 0:
+        fail("--cpus must be positive and --memory-gb must be finite and positive.")
+    walltime = normalize_walltime_hhmmss(args.walltime, "walltime")
+    if args.executor == "lsf" and not walltime.endswith(":00"):
+        fail("LSF walltime has minute precision; provide HH:MM or HH:MM:00.")
+    if args.executor in SCHEDULER_CMDS:
+        for label in ("job_name", "project", "queue", "outdir", "logdir", "stdout_file", "stderr_file"):
+            value = getattr(args, label)
+            if value and not re.fullmatch(r"[A-Za-z0-9_./%+,:@=-]+", value):
+                fail(f"--{label.replace('_', '-')} has characters unsupported in scheduler directives.")
+    try:
+        extra = shlex.split(args.extra_args)
+    except ValueError as exc:
+        fail(f"Invalid --extra-args quoting: {exc}")
+    managed = {"--input", "--outdir", "--genome", "--fasta", "-r", "-profile", "-params-file", "-c", "-work-dir", "-w"}
+    if any(token.split("=", 1)[0] in managed for token in extra):
+        fail("--extra-args cannot override managed input, reference, revision, config, profile or work paths.")
 
     verify_bam_and_index("tumor", args.tumor_bam, args.tumor_pbi)
     verify_bam_and_index("normal", args.normal_bam, args.normal_pbi)
+    if args.tumor_bam == args.normal_bam or (
+        not is_remote_path(args.tumor_bam) and not is_remote_path(args.normal_bam)
+        and os.path.samefile(args.tumor_bam, args.normal_bam)
+    ):
+        fail("Tumor and normal BAMs must be different files.")
 
-    if args.fasta and not is_remote_path(args.fasta) and not os.path.exists(args.fasta):
-        fail(f"Reference FASTA does not exist: {args.fasta}")
+    if args.fasta:
+        if not re.fullmatch(r"\S+\.fn?a(sta)?(\.gz)?", args.fasta):
+            fail("FASTA path must match upstream .fa/.fna/.fasta, optionally .gz, without whitespace.")
+        if not is_remote_path(args.fasta):
+            require_file("Reference FASTA", args.fasta)
+    for label in ("params_file", "nextflow_config"):
+        if getattr(args, label):
+            require_file(label, getattr(args, label))
+    if args.genome:
+        ensure_no_spaces("genome", args.genome)
 
 
 def ensure_runtime_tools(args):
@@ -508,6 +558,19 @@ def ensure_runtime_tools(args):
             f"Nextflow executable not found ({args.nextflow_bin}). "
             "Dry-run and generate-only modes can continue without Nextflow."
         )
+    if not nextflow_missing:
+        result = subprocess.run([args.nextflow_bin, "-version"], capture_output=True, text=True, timeout=60)
+        match = re.search(r"version\s+(\d+)\.(\d+)\.(\d+)", result.stdout + result.stderr)
+        if result.returncode or not match:
+            if args.run:
+                fail("Nextflow -version failed or could not be parsed in the selected runtime.")
+            warn("Nextflow version was not verified.")
+        elif tuple(map(int, match.groups())) < MIN_NEXTFLOW_VERSION:
+            if args.run:
+                fail("Reviewed pacsomatic revision requires Nextflow >=24.04.2.")
+            warn("Nextflow is older than the reviewed pipeline's minimum 24.04.2.")
+        else:
+            info(f"Nextflow version: {'.'.join(match.groups())}")
 
     if args.run and args.executor in SCHEDULER_CMDS:
         submit_cmd = SCHEDULER_CMDS[args.executor]
@@ -521,20 +584,17 @@ def ensure_dependency_tools(args):
     missing_warn = []
     missing_host = []
 
-    java_cmd = has_any_command(["java"])
     java_major = detect_java_major_version()
-    if not java_cmd:
+    if java_major is None:
         if args.run:
             missing_run.append("java")
         else:
             missing_warn.append("java")
-    elif java_major is None:
-        warn("Unable to detect Java version. Nextflow requires Java 17 or later.")
-    elif java_major < MIN_JAVA_MAJOR:
+    elif not MIN_JAVA_MAJOR <= java_major <= MAX_JAVA_MAJOR:
         if args.run:
-            missing_run.append(f"java>={MIN_JAVA_MAJOR}")
+            missing_run.append(f"java {MIN_JAVA_MAJOR}-{MAX_JAVA_MAJOR}")
         else:
-            missing_warn.append(f"java>={MIN_JAVA_MAJOR}")
+            missing_warn.append(f"java {MIN_JAVA_MAJOR}-{MAX_JAVA_MAJOR}")
 
     if "docker" in profile_items and not has_any_command(["docker"]):
         if args.run:
@@ -542,13 +602,12 @@ def ensure_dependency_tools(args):
         else:
             missing_warn.append("docker")
 
-    if "singularity" in profile_items or "apptainer" in profile_items:
-        container_cmd = has_any_command(["singularity", "apptainer"])
-        if not container_cmd:
+    for profile, executable in (("singularity", "singularity"), ("apptainer", "apptainer"), ("podman", "podman"), ("shifter", "shifter"), ("charliecloud", "ch-run"), ("mamba", "mamba")):
+        if profile in profile_items and not has_any_command([executable]):
             if args.run:
-                missing_run.append("singularity|apptainer")
+                missing_run.append(executable)
             else:
-                missing_warn.append("singularity|apptainer")
+                missing_warn.append(executable)
 
     if "conda" in profile_items and not has_any_command(["conda", "mamba"]):
         if args.run:
@@ -556,11 +615,8 @@ def ensure_dependency_tools(args):
         else:
             missing_warn.append("conda|mamba")
 
-    # Local profile typically expects host tools to be available directly on PATH.
-    auto_check_host_tools = args.run and "local" in profile_items
-    should_check_host_tools = args.check_host_bio_tools or auto_check_host_tools
-
-    if should_check_host_tools:
+    # No upstream profile named local; task executor and runtime profile are separate.
+    if args.check_host_bio_tools:
         for tool in PACSOMATIC_HOST_TOOLS:
             if shutil.which(tool) is None:
                 missing_host.append(tool)
@@ -570,7 +626,7 @@ def ensure_dependency_tools(args):
                 "Missing host bioinformatics tools requested by --check-host-bio-tools: "
                 + ", ".join(sorted(set(missing_host)))
             )
-            if args.run and (args.strict_host_bio_tools or auto_check_host_tools):
+            if args.run and args.strict_host_bio_tools:
                 fail(msg)
             warn(msg)
 
@@ -633,6 +689,12 @@ def extract_job_id(executor, output):
 
 def execute_launch(args, script_path):
     argv, stdin_path = submit_command_for_executor(args.executor, script_path)
+    if args.executor not in SCHEDULER_CMDS:
+        completed = subprocess.run(argv)
+        if completed.returncode:
+            fail(f"Execution failed with exit code {completed.returncode}")
+        info("Local launcher exited successfully; review pipeline completion and QC outputs.")
+        return
     if stdin_path:
         with open(stdin_path, "rb") as handle:
             completed = subprocess.run(argv, stdin=handle, text=True, capture_output=True)
@@ -642,13 +704,17 @@ def execute_launch(args, script_path):
     stderr = (completed.stderr or "").strip()
 
     if completed.returncode != 0:
+        if stdout:
+            print(stdout)
         if stderr:
             print(stderr, file=sys.stderr)
         fail(f"Execution failed with exit code {completed.returncode}")
 
-    print("--- Launch Complete ---")
+    print("--- Scheduler Accepted Submission (pipeline completion not verified) ---")
     if stdout:
         print(stdout)
+    if stderr:
+        print(stderr, file=sys.stderr)
 
     job_id = extract_job_id(args.executor, stdout)
     if job_id:
@@ -672,9 +738,9 @@ def parse_args():
     parser.add_argument("--genome", default="", help="Reference genome key, e.g. GRCh38")
     parser.add_argument("--outdir", required=True, help="Output directory")
     parser.add_argument("--workdir", default="", help="Nextflow work directory, default: <outdir>/work")
-    parser.add_argument("--logdir", default="", help="Optional scheduler logs directory; if unset use current directory")
-    parser.add_argument("--stdout-file", default="out%J.out", help="Scheduler stdout filename pattern")
-    parser.add_argument("--stderr-file", default="err%J.err", help="Scheduler stderr filename pattern")
+    parser.add_argument("--logdir", default="", help="Optional scheduler logs directory; if unset use outdir")
+    parser.add_argument("--stdout-file", default="", help="Scheduler stdout filename; default uses %%J for LSF, %%j for Slurm")
+    parser.add_argument("--stderr-file", default="", help="Scheduler stderr filename; default uses %%J for LSF, %%j for Slurm")
     parser.add_argument("--samplesheet", default="", help="Samplesheet path, default: <outdir>/samplesheet.csv")
     parser.add_argument("--script-path", default="", help="Launch script path, default: <outdir>/run_pacsomatic.<executor>.sh")
 
@@ -683,10 +749,12 @@ def parse_args():
     parser.add_argument("--repo-url", default="https://github.com/nf-core/pacsomatic.git", help="Pipeline repository URL when cloning")
     parser.add_argument("--checkout-dir", default="", help="Directory where pipeline repo should be cloned")
     parser.add_argument("--repo-name", default="pacsomatic", help="Folder name inside checkout-dir for cloned repo")
-    parser.add_argument("--pipeline-version", default="", help="Pipeline version for -r")
+    parser.add_argument("--pipeline-version", default="", help="Remote revision for -r; defaults to the reviewed pacsomatic commit")
     parser.add_argument("--nextflow-bin", default="nextflow", help="Nextflow executable path")
     parser.add_argument("--profile", default="singularity", help="Nextflow profile, e.g. singularity or singularity,institute")
     parser.add_argument("--params-file", default="", help="Path to Nextflow -params-file (yaml/json)")
+    parser.add_argument("--nextflow-config", default="", help="Infrastructure/process config passed via -c; not a pipeline params file")
+    parser.add_argument("--overwrite", action="store_true", help="Replace existing helper artifacts after review (never input files)")
     parser.add_argument("--config-name", default="pacsomatic.params.generated.yaml", help="Generated params YAML filename under outdir")
     parser.add_argument("--use-generated-params-file", action="store_true", help="Use generated params YAML via -params-file when params-file is not provided")
     parser.add_argument("--resume", action="store_true", help="Add -resume to Nextflow command")
@@ -698,13 +766,13 @@ def parse_args():
         "--executor",
         default="local",
         choices=["local", "none", "lsf", "slurm", "pbs", "sge"],
-        help="Execution backend for generated script and --run behavior",
+        help="Outer launcher backend only; task executor is set separately by profile or --nextflow-config (pbs uses PBS Pro headers)",
     )
     parser.add_argument("--job-name", default="pacsomatic", help="Scheduler job name")
     parser.add_argument("--project", default="", help="Scheduler project/account when supported")
     parser.add_argument("--queue", default="", help="Scheduler queue/partition when supported")
-    parser.add_argument("--cpus", type=int, default=16, help="CPU slots/threads")
-    parser.add_argument("--memory-gb", type=float, default=64.0, help="Requested memory in GB")
+    parser.add_argument("--cpus", type=int, default=16, help="Driver CPU slots/threads (not pipeline task resources)")
+    parser.add_argument("--memory-gb", type=float, default=64.0, help="Driver memory in GiB (not pipeline task resources)")
     parser.add_argument("--walltime", default="48:00", help="Requested walltime in HH:MM or HH:MM:SS")
     parser.add_argument("--nxf-opts", default="", help="Optional NXF_OPTS, e.g. '-Xms1g -Xmx4g'")
     parser.add_argument("--singularity-cache", default="", help="Optional NXF_SINGULARITY_CACHEDIR")
@@ -715,7 +783,7 @@ def parse_args():
     parser.add_argument(
         "--module-load",
         default="",
-        help="Optional module command prefix, e.g. 'module load nextflow/23.10.0'",
+        help="Optional module command prefix, e.g. 'module load nextflow/26.04.6'",
     )
 
     parser.add_argument(
@@ -736,6 +804,33 @@ def parse_args():
     return parser.parse_args()
 
 
+def normalize_paths(args):
+    for field in ("tumor_bam", "normal_bam", "tumor_pbi", "normal_pbi", "fasta", "outdir", "workdir", "logdir", "samplesheet", "script_path", "params_file", "nextflow_config", "with_report", "with_dag", "singularity_cache"):
+        value = getattr(args, field)
+        if value and not is_remote_path(value):
+            setattr(args, field, str(Path(value).expanduser().resolve()))
+    for field in ("outdir", "workdir", "logdir", "samplesheet", "script_path", "params_file", "nextflow_config"):
+        if is_remote_path(getattr(args, field)):
+            fail(f"--{field.replace('_', '-')} must be local for this helper.")
+    if not args.outdir:
+        fail("--outdir must be nonempty.")
+    args.workdir = args.workdir or str(Path(args.outdir) / "work")
+
+
+def validate_artifact_targets(args, samplesheet_path, launch_script_path):
+    artifacts = [Path(samplesheet_path).resolve(), Path(launch_script_path).resolve(), Path(args.outdir, args.config_name).resolve()]
+    if Path(args.config_name).name != args.config_name or not args.config_name:
+        fail("--config-name must be a filename under outdir.")
+    inputs = [Path(getattr(args, key)).resolve() for key in ("tumor_bam", "normal_bam", "tumor_pbi", "normal_pbi", "fasta", "params_file", "nextflow_config") if getattr(args, key) and not is_remote_path(getattr(args, key))]
+    if len(set(artifacts)) != len(artifacts):
+        fail("Helper artifact paths must be distinct.")
+    for path in artifacts:
+        if path in inputs or any(path.exists() and item.exists() and os.path.samefile(path, item) for item in inputs):
+            fail("Helper artifact path aliases an input file.")
+        if path.exists() and (not args.overwrite or not path.is_file()):
+            fail(f"Artifact exists: {path}. Review it, then use --overwrite to replace helper artifacts.")
+
+
 def main():
     args = parse_args()
 
@@ -744,21 +839,23 @@ def main():
 
     args.runtime_prefix = None
     args.generated_params_file = ""
-
+    normalize_paths(args)
+    validate_inputs(args)
+    if not args.repo_path and args.pipeline == "nf-core/pacsomatic" and not args.pipeline_version:
+        args.pipeline_version = REVIEWED_REVISION
+    samplesheet_path = args.samplesheet or os.path.join(args.outdir, "samplesheet.csv")
+    launch_script_path = args.script_path or default_script_path(args)
+    validate_artifact_targets(args, samplesheet_path, launch_script_path)
     ensure_pipeline_repo(args)
     runtime_prefix = resolve_runtime(args)
     if runtime_prefix is not None:
         args.runtime_prefix = str(runtime_prefix)
+        os.environ["PATH"] = str(runtime_prefix / "bin") + os.pathsep + os.environ.get("PATH", "")
 
-    validate_inputs(args)
     ensure_runtime_tools(args)
     ensure_dependency_tools(args)
 
     os.makedirs(args.outdir, exist_ok=True)
-
-    args.workdir = args.workdir or os.path.join(args.outdir, "work")
-    samplesheet_path = args.samplesheet or os.path.join(args.outdir, "samplesheet.csv")
-    launch_script_path = args.script_path or default_script_path(args)
 
     if args.logdir:
         os.makedirs(args.logdir, exist_ok=True)
@@ -780,7 +877,7 @@ def main():
     print(f"Run cmd     : {format_submit_command(submit_argv, submit_stdin)}")
 
     if args.dry_run and not args.run:
-        info("Dry run complete. Inputs and runtime dependencies validated.")
+        info("Helper checks complete; inspect warnings. BAM content, remote paths, full pipeline schema and task execution were not validated.")
         return
 
     if not args.run:

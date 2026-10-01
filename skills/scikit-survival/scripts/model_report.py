@@ -73,9 +73,9 @@ def synthetic_training_summary() -> dict[str, Any]:
             "transformed_feature_count": 4,
         },
         "package_versions": {
-            "numpy": "2.4.6",
-            "pandas": "3.0.5",
-            "scikit-learn": "1.9.0",
+            "numpy": "2.5.1",
+            "pandas": "3.0.6",
+            "scikit-learn": "1.9.1",
             "scikit-survival": "0.28.0",
         },
         "schema": {
@@ -171,6 +171,8 @@ def render_report(
         "## Scope",
         "",
         "- Aggregate, local report only; no person-level rows are embedded.",
+        "- Supplied summaries must refer to the same fitted model and held-out cohort; "
+        "this renderer does not verify that provenance.",
         "- Predictive performance does not establish causal effects or clinical utility.",
         "- This report is not clinical advice.",
         "",
@@ -239,6 +241,10 @@ def render_report(
         "separately; these metrics alone do not establish utility.",
         "",
     ]
+    training_source = _mapping(training.get("source", {}), "training.source")
+    metrics_source = _mapping(metrics.get("source", {}), "metrics.source")
+    if training_source.get("kind") == "synthetic" and metrics_source.get("kind") == "synthetic":
+        lines[4:4] = ["- Synthetic example: metric values may be illustrative; this report alone is not fit evidence."]
     return "\n".join(lines)
 
 

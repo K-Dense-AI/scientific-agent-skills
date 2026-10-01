@@ -1,11 +1,12 @@
 ---
 name: experimental-design
-description: Design experiments and studies BEFORE data is collected — choosing a design, randomizing, blocking, and laying out treatment combinations so results are interpretable. Use whenever someone is planning a study, asks how to assign subjects/samples to groups, mentions randomization, blocking, stratification, controls, factorial or fractional-factorial designs, design of experiments (DOE), screening many factors, response-surface optimization, crossover or repeated-measures or split-plot designs, cluster/group randomization, Latin squares, plate layouts, batch/run-order effects, replication vs. pseudoreplication, or sequential/adaptive/group-sequential designs. Trigger even for informal phrasings like "how should I set up this experiment", "how do I avoid confounding", "what's the best way to test these 6 factors", or "assign these mice to conditions". For computing the sample size or power once the design is chosen, use statistical-power; for analyzing data already collected, use statistical-analysis.
+description: Designs experiments and studies BEFORE data is collected — choosing a design, randomizing, blocking, and laying out treatment combinations so results are interpretable. Use whenever someone is planning a study, asks how to assign subjects/samples to groups, mentions randomization, blocking, stratification, controls, factorial or fractional-factorial designs, design of experiments (DOE), screening many factors, response-surface optimization, crossover or repeated-measures or split-plot designs, cluster/group randomization, Latin squares, plate layouts, batch/run-order effects, replication vs. pseudoreplication, or sequential/adaptive/group-sequential designs. Trigger even for informal phrasings like "how should I set up this experiment", "how do I avoid confounding", "what's the best way to test these 6 factors", or "assign these mice to conditions". For computing the sample size or power once the design is chosen, use statistical-power; for analyzing data already collected, use statistical-analysis.
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python >=3.10. Scripts use numpy, pandas, and pyDOE3 (DOE matrices). Install with uv as shown below.
+compatibility: Requires Python >=3.12 with numpy, pandas, and pydoe 1.5.0 (DOE matrices). Network access is needed only to install packages; no credentials are required.
 license: MIT license
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -38,13 +39,18 @@ This skill helps you choose among design types, generate the actual randomizatio
 ## Installation
 
 ```bash
-uv pip install "numpy>=1.26" "pandas>=2.0" pyDOE3
+uv venv --python 3.13 .venv-design
+uv pip install --python .venv-design/bin/python "numpy==2.5.3" "pandas==3.0.6" "pydoe==1.5.0"
 ```
 
-`pyDOE3` is the maintained successor to pyDOE/pyDOE2 and supplies factorial,
-fractional-factorial, Plackett-Burman, central-composite, Box-Behnken, and
-Latin-hypercube generators. The bundled scripts wrap it to return designs in real
-factor units with named columns and randomized run order.
+`pyDOE3` was [archived in May 2026](https://github.com/relf/pyDOE3); active
+development returned to [pydoe](https://pydoe.github.io/pydoe/). The bundled
+wrappers target `pydoe==1.5.0`, imported as lowercase `pydoe`, and return
+designs in real factor units. All seven DOE wrappers and both script demos were
+executed with Python 3.13, NumPy 2.5.3, pandas 3.0.6, and SciPy 1.18.1. On
+Windows, the environment interpreter is `.venv-design/Scripts/python.exe`.
+Archive the environment versions and exported schedules: a seed alone does not
+promise identical output across package or script upgrades.
 
 ---
 
@@ -59,9 +65,9 @@ What are you trying to learn?
 │   ├─ Units independent, possibly with a known nuisance factor (day, batch, site)?
 │   │     → Completely randomized (no nuisance) or RANDOMIZED BLOCK design.
 │   ├─ Each unit can receive every condition in sequence (washout possible)?
-│   │     → CROSSOVER / repeated-measures design (more power, watch carry-over).
+│   │     → CROSSOVER / repeated-measures design (watch carry-over and correlation).
 │   └─ You can only randomize groups, not individuals (schools, clinics)?
-│         → CLUSTER-randomized design (analyze at the cluster level; see pseudoreplication).
+│         → CLUSTER-randomized design (account for clustering; see pseudoreplication).
 │
 ├─ Screen MANY factors (5+) to find the few that matter?
 │     → FRACTIONAL FACTORIAL or PLACKETT-BURMAN screening design.
@@ -87,9 +93,11 @@ Detailed guidance per branch:
 ## Generating the design
 
 Two scripts produce ready-to-use, reproducible layouts. Run them from the skill's
-`scripts/` directory or add it to `sys.path`. Everything is seeded so the exact
-schedule can be archived and regenerated — a requirement for trial registration
-and good lab practice.
+`scripts/` directory or add it to `sys.path`. Seeds support reproducible layouts
+within the recorded software environment.
+The default seed is for demonstrations; choose and securely record a study-specific
+seed for a real allocation. These helpers do not implement an enrollment system
+or conceal future assignments from recruiters.
 
 ### Randomization / allocation schedules — `scripts/randomization.py`
 
@@ -100,8 +108,8 @@ from randomization import (
     assign_factorial_runs, arm_balance,
 )
 
-# Permuted blocks keep the arms balanced throughout enrollment (use for n < ~100
-# or sequential intake — simple randomization can drift out of balance with small n)
+# Permuted blocks balance at completed-block boundaries.
+# A partial final block or interim prefix need not have the requested ratio.
 sched = block_randomization(n=60, arms=["treatment", "control"], seed=42)
 
 # Balance a prognostic variable across arms by randomizing within each stratum
@@ -116,9 +124,15 @@ sched.to_csv("allocation_schedule.csv", index=False)
 ```
 
 Choosing among them: **simple** is fine for large n but can produce imbalance with
-small n; **block** guarantees balance throughout; **stratified block** additionally
-balances a known prognostic factor; **cluster** is mandatory when the intervention
+small n; **block** enforces the ratio within each complete block; **stratified block**
+does this independently within each stratum; **cluster** is mandatory when the intervention
 is delivered at a group level. See `references/randomization_and_blocking.md`.
+
+For a sequence of stratum labels, `unit_id` is the original one-based input
+position, including when strata are interleaved. Join the exported schedule to
+your subject IDs using that position and verify every ID exactly once. A dict
+input creates grouped planning slots rather than assigning an existing roster.
+Missing stratum labels and duplicate cluster IDs are rejected.
 
 ### DOE matrices — `scripts/doe_designs.py`
 
@@ -139,7 +153,10 @@ many = {f"factor_{i}": (0, 1) for i in range(7)}
 design = plackett_burman(many, seed=42)
 
 # Optimize over 2 factors with curvature (response-surface)
-design = central_composite({"temp_C": (20, 60), "conc_mM": (1, 10)}, seed=42)
+design = central_composite(
+    {"temp_C": (20, 60), "conc_mM": (1, 10)},
+    center=(2, 2), face="inscribed", seed=42,
+)
 
 design.to_csv("experimental_runs.csv", index=False)
 ```
@@ -152,9 +169,18 @@ limits. If the stated ranges are physical limits, choose `face="inscribed"` or
 clipping changes the design geometry and its statistical properties. See the
 [NIST CCD comparison](https://www.itl.nist.gov/div898/handbook/pri/section3/pri3361.htm).
 
-Run order is randomized by default so factors aren't confounded with time/drift
+The CCD example reserves four center runs; execute them independently to estimate
+pure error. The wrapper default has only one. Confirm all settings are feasible, the intended
+model matrix has full rank, and independent replication supplies residual degrees
+of freedom. Center points check aggregate curvature; they do not identify each
+quadratic term without axial or other suitable runs.
+
+DOE run order is randomized by default (Latin hypercube defaults to no added
+`run_order`) so factors are not systematically aligned with time/drift
 (machine warm-up, reagent aging). See `references/factorial_and_doe.md` for picking
-generators, reading the alias structure, and choosing resolution.
+generators, reading the alias structure, and choosing resolution. These wrappers
+shuffle globally: for split plots, plates, or a CCD run in separate batches, retain
+block IDs and randomize only within the permitted structure.
 
 ---
 
@@ -185,8 +211,8 @@ These are structural — they can't be fixed in analysis, only in design.
 7. **Aliasing ignored in fractional designs.** A low-resolution fractional factorial
    confounds main effects with interactions; know your alias structure before
    concluding a factor "has no effect."
-8. **Optimizing without curvature.** A two-level factorial can't detect a curved
-   response; you'll miss an interior optimum. Use a response-surface design.
+8. **Optimizing without curvature.** A two-level factorial alone cannot estimate
+   pure quadratic terms; you'll miss an interior optimum. Use a response-surface design.
 
 ---
 
@@ -200,9 +226,10 @@ These are structural — they can't be fixed in analysis, only in design.
 4. **Decide replication** at the correct level (and get n from the
    **statistical-power** skill for the chosen design).
 5. **Generate the layout** with `randomization.py` / `doe_designs.py`, seeded.
-6. **Randomize run/processing order** and plate/batch positions.
-7. **Document** the design, seed, and schedule (pre-register if possible) so the
-   analysis is confirmatory and the layout is auditable.
+6. **Randomize run/processing order** and plate/batch positions within the design
+   restrictions; verify roster IDs, completed-block balance, range limits, and rank.
+7. **Document** the design, software versions, seed, and schedule. Pre-specify the
+   analysis; restrict access to the seed and future assignments during enrollment.
 8. **Match the analysis to the design** — blocks, strata, clusters, and nesting must
    appear in the model (hand off to **statistical-analysis** / **statsmodels**).
 

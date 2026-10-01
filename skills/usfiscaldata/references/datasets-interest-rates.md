@@ -24,21 +24,25 @@ resp = requests.get(
         "filter": "security_type_desc:eq:Marketable",
         "sort": "-record_date",
         "page[size]": 50
-    }
+    },
+    timeout=30,
 )
+resp.raise_for_status()
 df = pd.DataFrame(resp.json()["data"])
 latest = df[df["record_date"] == df["record_date"].max()]
 print(latest[["security_desc", "avg_interest_rate_amt"]])
 
-# Historical rate for a specific security type
+# First-page preview of historical rates for a specific security type
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates",
     params={
         "fields": "record_date,avg_interest_rate_amt",
         "filter": "security_desc:eq:Treasury Notes,record_date:gte:2010-01-01",
         "sort": "-record_date"
-    }
+    },
+    timeout=30,
 )
+resp.raise_for_status()
 ```
 
 **Common security descriptions:**
@@ -74,32 +78,16 @@ Official Treasury exchange rates for foreign currencies used by federal agencies
 | `exchange_rate` | NUMBER | Units of foreign currency per 1 USD |
 | `effective_date` | DATE | Date rate became effective |
 
-```python
-# Get all current exchange rates (latest quarter)
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/rates_of_exchange",
-    params={"sort": "-record_date", "page[size]": 200}
-)
-df = pd.DataFrame(resp.json()["data"])
-latest_date = df["record_date"].max()
-current_rates = df[df["record_date"] == latest_date].copy()
-current_rates["exchange_rate"] = current_rates["exchange_rate"].astype(float)
-print(current_rates[["country_currency_desc", "exchange_rate"]].to_string())
+Fetch the latest `record_date` first, then fetch **all pages** for that date with
+all columns retained. A fixed page of 200 rows can omit currencies/amendments.
+Use `country_currency_desc:eq:Euro Zone-Euro` for euro history, preserving both
+`record_date` and `effective_date`. See [examples.md](examples.md).
 
-# Euro rate history
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/rates_of_exchange",
-    params={
-        "fields": "record_date,exchange_rate",
-        "filter": "country_currency_desc:eq:Euro Zone-Euro",
-        "sort": "-record_date",
-        "page[size]": 100
-    }
-)
-euro_df = pd.DataFrame(resp.json()["data"])
-euro_df["exchange_rate"] = euro_df["exchange_rate"].astype(float)
-euro_df["record_date"] = pd.to_datetime(euro_df["record_date"])
-```
+Amendments are separate rows with later effective dates; a rate amended at month
+end applies to the remaining months of the quarter described in the official
+notes. Do not silently deduplicate a currency without choosing a reporting period.
+Multiply USD by the rate for foreign currency; divide foreign currency by the rate
+for USD. These are reporting rates, not daily market quotes.
 
 ---
 
@@ -117,12 +105,16 @@ Two data tables under `/v1/accounting/od/`:
 
 Treasury Inflation-Protected Securities (TIPS) reference CPI data and index ratios used to calculate TIPS values.
 
+The summary table describes securities; daily observations live in detail. Neither table uses `record_date`.
+
 **Key fields:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `record_date` | DATE | Date of record |
-| `index_ratio` | NUMBER | Index ratio for TIPS adjustment |
-| `ref_cpi` | NUMBER | Reference CPI value |
+| `cusip` | STRING | Security identifier in both tables |
+| `index_date` | DATE | Daily observation date in the detail table |
+| `index_ratio` | NUMBER | Detail table index ratio |
+| `ref_cpi` | NUMBER | Detail table reference CPI |
+| `ref_cpi_on_dated_date` | NUMBER | Base CPI in the summary table |
 
 ---
 
@@ -130,7 +122,7 @@ Treasury Inflation-Protected Securities (TIPS) reference CPI data and index rati
 
 **Endpoint:** `/v1/accounting/od/frn_daily_indexes`  
 **Frequency:** Monthly release (daily index rows per CUSIP)  
-**Date Range:** April 2024 to present
+**Date Range:** October 2024 onward (current API coverage)
 
 Daily index values for Treasury Floating Rate Notes (FRNs). The rate is based on the 13-week Treasury bill auction rate. Data is published monthly with daily index rows for each CUSIP.
 
@@ -181,8 +173,18 @@ Historical interest rates for Qualified Tax Credit Bonds (QTCB). No longer updat
 
 ## State and Local Government Series (SLGS) Daily Rate Table
 
-**Endpoint:** `/v1/accounting/od/slgs_savings_bonds` (2 tables)  
+**Endpoints:** `/v1/accounting/od/slgs_demand_deposit_rates` and
+`/v1/accounting/od/slgs_time_deposit_rates`
 **Frequency:** Daily  
 **Date Range:** June 1992 to present
 
 Daily interest rates for State and Local Government Series securities, used by state and local issuers to comply with federal tax law arbitrage restrictions.
+
+## Official sources
+
+Reviewed 2026-09-30 against the current dataset dictionaries and live API responses.
+
+- [Average Interest Rates Treasury Securities](https://fiscaldata.treasury.gov/datasets/average-interest-rates-treasury-securities/)
+- [Treasury Reporting Rates Exchange](https://fiscaldata.treasury.gov/datasets/treasury-reporting-rates-exchange/)
+- [Tips Cpi Data](https://fiscaldata.treasury.gov/datasets/tips-cpi-data/)
+- [Slgs Daily Rate Table](https://fiscaldata.treasury.gov/datasets/slgs-daily-rate-table/)

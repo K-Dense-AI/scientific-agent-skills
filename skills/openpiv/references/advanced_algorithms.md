@@ -1,7 +1,7 @@
 # Advanced OpenPIV Algorithms and Settings
 
-Everything here is checked against **openpiv 0.25.4**. Confirm with `inspect.signature()` against
-other releases — names and defaults have moved between versions.
+Reviewed against the released **openpiv 0.26.1** source and SciPy runtime on 2026-10-01.
+Hosted documentation can lag the wheel; for example its API listing omits the new `backend` argument.
 
 ## Correlation methods
 
@@ -10,24 +10,27 @@ other releases — names and defaults have moved between versions.
 | Value | Behaviour |
 |-------|-----------|
 | `"circular"` (default) | FFT correlation with no zero-padding. Fastest and lowest memory. Wrap-around means a displacement past half the window aliases back as a small one in the opposite direction. |
-| `"linear"` | FFT correlation zero-padded to `2*window_size`. No wrap-around, so large displacements survive, at roughly 2–4× the cost. |
+| `"linear"` | FFT padded to a power of two covering the full correlation, then cropped back to search-window size. Reduces wrap-around; displacement range is still limited by that crop and particle overlap. |
 
-**Only those two exist in 0.25.4.** `"direct"` appears in the docstrings but the branch is missing —
-it prints `correlation method direct is not implemented` and then raises
-`UnboundLocalError: cannot access local variable 'corr'`. Do not offer it as an option.
+Use these two names. `"direct"` appears in some legacy docstrings but is not implemented by the
+SciPy `extended_search_area_piv` correlation path. Do not offer it as an option.
 
-Use `"linear"` whenever `search_area_size > window_size`. `"circular"` accepts an extended search
-area without complaining but keeps relying on wrap-around, and on OpenPIV's own `test1` pair at
-`window_size=32, search_area_size=38` it produced a peak |u| of 255 px/s against 87 px/s for
-`"linear"` — the difference is aliased vectors, not physics.
+Both methods support extended search; larger extreme velocities alone do not establish aliasing.
+The bundled CLI chooses `"linear"` with `normalized_correlation=True` for extended windows,
+following the API's normalization requirement. Validate either choice using known displacements.
 
 `normalized_correlation=True` normalizes intensities per window before correlating, making peak
 heights comparable across windows of differing brightness — useful under uneven illumination. It also
 shifts the `s2n` scale, so re-tune the threshold after switching it on.
 
-`use_vectorized=True` swaps the per-window loop for the batched
-`vectorized_correlation_to_displacements` path. Same results, faster on large fields, higher peak
-memory since all correlation maps exist at once.
+`use_vectorized=True` batches peak extraction and signal-to-noise calculations. Both paths already
+hold the correlation stack; edge/degenerate peak behavior can differ. It remains False in
+`extended_search_area_piv`, but `PIVSettings.use_vectorized` defaults to True since 0.25.5.
+
+`backend="scipy"` selects the tested reference path. `"auto"` can use installed Rust components;
+in 0.26.1 the FFT dispatcher still selects SciPy unless `"rust"` is explicit. `"rust"` requires
+`openpiv_rust` and raises ImportError when absent. Record backend and package versions; do not
+assume every wheel contains the extension or infer speed/numerical parity from release notes.
 
 ## Subpixel peak fitting
 
@@ -66,14 +69,22 @@ everything or nothing.
    windows using the previous pass as a predictor, then re-correlates on the next smaller window.
 5. Remaining NaNs filled with zeros; `transform_coordinates` applied.
 
-It returns `(x, y, u, v, flags)` in **pixels per frame**. `settings.dt` and
-`settings.scaling_factor` exist on the dataclass but the `windef` chain applies neither —
-`first_pass` calls `extended_search_area_piv` without passing `dt`. Convert afterwards:
+It returns `(x, y, u, v, flags)` with coordinates in pixels and velocities in **pixels per frame**.
+`simple_multipass` (and alias `multigrid_windef`) ignore `settings.dt` and
+`settings.scaling_factor`; convert afterwards:
 
 ```python
 x, y, u, v = scaling.uniform(x, y, u, v, scaling_factor=96.52)
 u, v = u / dt, v / dt      # scaling.uniform does not divide by dt
 ```
+
+Batch `windef.piv(settings)` does apply both before saving. The array convenience wrapper always
+validates/replaces the first pass, does not perform the batch image preprocessing or between-pass
+smoothing, and discards the final masked-array mask when returning `.data`. For masks, full switch
+control, and preserved quality information use the batch pipeline or manage lower-level passes.
+Always supply settings: the no-settings wrapper resets window lists to two entries but leaves
+`num_iterations=3`. Construction checks list lengths and overlap; changing attributes bypasses those
+checks, and the number of iterations must still match the requested passes.
 
 The upside of working in px/frame is that the validation defaults (`min_max_u_disp=(-30, 30)`,
 `median_threshold=3`) are stated in px/frame and therefore mean what the PIV literature says they
@@ -89,7 +100,8 @@ window, which a fixed-window single pass cannot.
 
 ## `PIVSettings` reference
 
-`windef.PIVSettings()` is a dataclass; set attributes on an instance.
+`windef.PIVSettings()` is a dataclass. Prefer constructor keywords so its consistency checks run.
+This table describes batch settings; do not assume the simple array wrapper uses every field.
 
 **Input and region**
 
@@ -108,17 +120,22 @@ window, which a fixed-window single pass cannot.
 | `dynamic_masking_filter_size` | `7` | Gaussian/median filter size in px |
 | `static_mask` | `None` | Boolean array marking permanently excluded pixels |
 
+The 0.26.1 batch dispatcher checks `"edge"` (singular), while `dynamic_masking` expects `"edges"`;
+the latter also has the uint8-indexing bug described in SKILL.md. Neither spelling is a safe edge
+masking recipe for this release. Use intensity/static masks and verify excluded regions on outputs.
+
 **Correlation**
 
 | Field | Default |
 |-------|---------|
 | `correlation_method` | `"circular"` (or `"linear"`) |
+| `backend` | `"auto"` (or `"scipy"`, `"rust"`) |
 | `normalized_correlation` | `False` |
 | `windowsizes` | `(64, 32, 16)` |
 | `overlap` | `(32, 16, 8)` |
 | `num_iterations` | `3` |
 | `subpixel_method` | `"gaussian"` |
-| `use_vectorized` | `False` |
+| `use_vectorized` | `True` |
 | `deformation_method` | `"symmetric"` |
 | `interpolation_order` | `3` |
 
@@ -128,10 +145,11 @@ window, which a fixed-window single pass cannot.
 
 | Field | Default | Meaning |
 |-------|---------|---------|
-| `dt` | `1.0` | Seconds between frames — **ignored by the `windef` chain** |
-| `scaling_factor` | `1.0` | Pixels per physical unit — **ignored by the `windef` chain** |
+| `dt` | `1.0` | Seconds between frames; applied by batch `piv`, ignored by `simple_multipass` |
+| `scaling_factor` | `1.0` | Pixels per physical unit; same batch/array distinction |
 
-**Validation** — all consumed by `validation.typical_validation`
+**Validation** — thresholds consumed by `validation.typical_validation`; the batch runner controls
+whether the first pass is validated
 
 | Field | Default | Meaning |
 |-------|---------|---------|
@@ -167,6 +185,7 @@ into the final result, so report it as part of the processing chain.
 | `save_plot`, `show_plot`, `show_all_plots` | `False` |
 | `scale_plot` | `100` |
 | `fmt` | `"%.4e"` |
+| `n_cpus` | `1` (batch image-pair multiprocessing) |
 
 ## Volumetric PIV (`openpiv.pyprocess3D`)
 
@@ -188,11 +207,24 @@ u, v, w, s2n = pyprocess3D.extended_search_area_piv3D(
 x, y, z = pyprocess3D.get_coordinates(
     vol_a.shape, search_area_size=(38, 38, 38), window_size=(32, 32, 32), overlap=(16, 16, 16)
 )
+# 0.26.1's FFT direction differs from 2D. These components align with
+# increasing column, row, depth coordinates (verify on a known translation).
+column_velocity, row_velocity, depth_velocity = -u, v, w
 ```
 
 Inputs are 3D intensity volumes — this module correlates reconstructed volumes; it does not perform
 the tomographic reconstruction itself. `dt` is a per-axis tuple. Memory scales with the cube of
 window size, so 32³ windows on a large volume are already demanding.
+
+The 0.26.1 3D FFT reverses frame B, unlike the 2D path. Positive input translations along
+`(row, column, depth)` give raw `(u, v, w)=(-dcolumn, +drow, +ddepth)/dt`, confirmed for both
+shift directions. Do not reuse the 2D sign conversion. The mapping above aligns velocities with
+the increasing column/row/depth coordinates returned by `get_coordinates`; apply a separately
+calibrated laboratory-axis transform to both positions and velocities. The grid stride uses
+`window_size-overlap`, unlike the 2D extended
+search stride. `sig2noise_method=None` returns three arrays here, rather than the 2D API's three
+arrays with a NaN s2n. The 32³ recipe ran on synthetic volumes; smaller positive and negative
+translations established the component signs. Real volumetric experiments remain unvalidated.
 
 ## Phase separation (`openpiv.phase_separation`)
 
@@ -214,6 +246,8 @@ big, small = phase_separation.khalitov_longmire(
 Criteria dicts accept `min_size`, `max_size`, `min_brightness`, and `max_brightness`. `min_size` is
 mandatory for the big-particle dict and `max_size` for the small-particle dict; unrecognized keys are
 ignored silently, so check spelling.
+Size cutoffs are segmented region areas in pixels, not particle diameters; strict inequalities
+exclude equality. Brightness and `I_sat` must match the input intensity scale (the example is 8-bit).
 
 Also available: `median_filter_method(image, kernel_size)` (Kiger & Pan) and
 `opening_method(image, kernel_size, iterations=1, thresh_factor=1.1)` for simpler size-based
@@ -231,3 +265,24 @@ image are contaminated by the dispersed phase.
 | Solid bodies, reflections, free surfaces | `preprocess.dynamic_masking` or a `static_mask` |
 | Two-phase flow | `phase_separation` first, then PIV per phase |
 | Volumetric data | `pyprocess3D.extended_search_area_piv3D` |
+
+## Review sources and verification
+
+- [0.26.1 release and backend notes](https://github.com/OpenPIV/openpiv-python/releases/tag/v0.26.1)
+- [Official API reference](https://openpiv.readthedocs.io/en/latest/src/api_reference.html)
+- [Released correlation source](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/pyprocess.py)
+- [Released settings](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/settings.py)
+- [Batch and array multipass source](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/windef.py)
+- [Masking source](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/preprocess.py)
+- [Validation](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/validation.py),
+  [replacement](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/lib.py), and
+  [smoothing](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/smoothn.py)
+- [3D correlation](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/pyprocess3D.py) and
+  [phase separation](https://github.com/OpenPIV/openpiv-python/blob/v0.26.1/openpiv/phase_separation.py)
+
+Tests use generated particle translations, analytic velocity fields, mask persistence, fractional
+intensities, multipass units, NaN smoothing, and small volumetric/phase-separation examples. These
+are API/numerical checks, not validation of a real experiment's calibration, uncertainty, tracer
+fidelity, time/ensemble convergence, or particle-phase classification. Rust was unavailable in
+the tested environment; its execution and claimed speedup were not verified. No remote service,
+authentication, endpoints, or pagination are involved in local OpenPIV processing.

@@ -1,10 +1,15 @@
 # E. coli Protein Expression, Purification, and Quantification
 
 **URL:** https://cloud.ginkgo.bio/protocols/ecoli-expression-purification-quantification
+**Service terms:** https://cloud.ginkgo.bio/terms/ecoli-expression-purification-quantification
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $209/sample
 **Turnaround:** up to 3 weeks
 **Throughput:** Up to 96 constructs in parallel
+
+The catalog says up to 3 weeks, while service terms state 15-20 business days from
+DNA submission. Confirm scheduling in the accepted order.
 
 ## Overview
 

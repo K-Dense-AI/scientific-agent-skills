@@ -3,6 +3,11 @@
 Framing, specificity, reviewer psychology, and readability — the practices that separate
 funded proposals from merely competent ones.
 
+Reviewed 2026-10-01. These are writing heuristics, not agency rules or predictors of
+funding. Preserve investigator authorship, check the selected opportunity's AI policy,
+and ground every factual assertion, preliminary result and commitment in evidence.
+Label projections and unknowns rather than polishing them into apparent facts.
+
 ## Writing Principles for Competitive Proposals
 
 ### Clarity and Accessibility
@@ -11,7 +16,7 @@ funded proposals from merely competent ones.
 - Technical reviewers in your field (will scrutinize methods)
 - Reviewers in related but not identical fields (need context)
 - Program officers (look for alignment with agency goals)
-- Panel members reading 15+ proposals (need clear organization)
+- Panel members with limited review time (need clear organization)
 
 **Strategies**:
 - Use clear section headings and subheadings

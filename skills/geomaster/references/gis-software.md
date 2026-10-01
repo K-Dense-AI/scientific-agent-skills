@@ -1,6 +1,10 @@
 # GIS Software Integration
 
-Guide to integrating with major GIS platforms: QGIS, ArcGIS, GRASS GIS, and SAGA GIS.
+Native GIS integration, reviewed 2026-10-01. All examples are illustrative: these
+applications/licenses were not installed or executed. Run them in the GIS vendor's
+Python environment, check the installed version and inspect tool help before use.
+QGIS's `latest` cookbook currently redirects to 3.44, so use explicit 4.2 material
+when targeting its Qt6 runtime.
 
 ## QGIS / PyQGIS
 
@@ -25,53 +29,29 @@ for feature in vector_layer.getFeatures():
     attrs = feature.attributes()
 ```
 
-### Creating QGIS Processing Scripts
+### Processing algorithms
+
+Run inside an initialized QGIS environment with Processing registered. Inspect the
+provider's current parameters before assembling a workflow:
 
 ```python
-from qgis.PyQt.QtCore import QCoreApplication
-from qgis.core import (QgsProcessingAlgorithm, QgsProcessingParameterRasterDestination,
-                       QgsProcessingParameterRasterLayer)
-
-class NDVIAlgorithm(QgsProcessingAlgorithm):
-    INPUT = 'INPUT'
-    OUTPUT = 'OUTPUT'
-
-    def tr(self, string):
-        return QCoreApplication.translate('Processing', string)
-
-    def createInstance(self):
-        return NDVIAlgorithm()
-
-    def name(self):
-        return 'ndvi_calculation'
-
-    def displayName(self):
-        return self.tr('Calculate NDVI')
-
-    def group(self):
-        return self.tr('Raster')
-
-    def groupId(self):
-        return 'raster'
-
-    def shortHelpString(self):
-        return self.tr("Calculate NDVI from Sentinel-2 imagery")
-
-    def initAlgorithm(self, config=None):
-        self.addParameter(QgsProcessingParameterRasterLayer(
-            self.INPUT, self.tr('Input Sentinel-2 Raster')))
-
-        self.addParameter(QgsProcessingParameterRasterDestination(
-            self.OUTPUT, self.tr('Output NDVI')))
-
-    def processAlgorithm(self, parameters, context, feedback):
-        raster = self.parameterAsRasterLayer(parameters, self.INPUT, context)
-
-        # NDVI calculation
-        # ... implementation ...
-
-        return {self.OUTPUT: destination}
+import processing
+processing.algorithmHelp('native:buffer')
+result = processing.run('native:buffer', {
+    'INPUT': metric_vector_layer, 'DISTANCE': 100, 'SEGMENTS': 8,
+    'END_CAP_STYLE': 0, 'JOIN_STYLE': 0, 'MITER_LIMIT': 2,
+    'DISSOLVE': False, 'OUTPUT': 'TEMPORARY_OUTPUT',
+})
+buffer_layer = result['OUTPUT']
 ```
+
+For a custom `QgsProcessingAlgorithm`, implement parameter registration,
+`processAlgorithm` and `createInstance`, and return the actual produced destination.
+A placeholder `destination` variable is not an NDVI implementation. Raster calculations
+must use explicit bands, scale/offset, masks and a defined output grid as in the local
+raster helper; wire those through registered parameters rather than guessing Sentinel
+band positions. Validate `QgsVectorLayer.isValid()`/`QgsRasterLayer.isValid()` before
+adding or processing a layer.
 
 ### Plugin Development
 
@@ -83,7 +63,7 @@ def classFactory(iface):
 
 # my_plugin.py
 from qgis.PyQt.QtCore import QSettings
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtGui import QAction  # QGIS 4 / Qt6
 from qgis.core import QgsProject
 
 class MyPlugin:
@@ -151,11 +131,11 @@ out_hillshade = Hillshade("dem.tif", azimuth=315, altitude=45)
 out_hillshade.save("hillshade.tif")
 
 # Viewshed analysis
-out_viewshed = Viewshed("observer_points.shp", "dem.tif", obs_elevation_field="HEIGHT")
+out_viewshed = Viewshed("dem.tif", "observer_points.shp")  # observer fields follow tool schema
 out_viewshed.save("viewshed.tif")
 
 # Cost distance
-cost_raster = CostDistance("source.shp", "cost.tif")
+cost_raster = DistanceAccumulation("source.shp", in_cost_raster="cost.tif")
 cost_raster.save("cost_distance.tif")
 
 # Hydrology: Flow direction
@@ -215,8 +195,9 @@ m = aprx.listMaps()[0]
 # Get layer
 layer = m.listLayers("Parcels")[0]
 
-# Export to spatial dataframe
-sdf = pd.DataFrame.spatial.from_layer(layer)
+# Read the local ArcPy feature layer through a feature-class source path.
+from arcgis.features import GeoAccessor, GeoSeriesAccessor
+sdf = pd.DataFrame.spatial.from_featureclass(layer.dataSource)
 
 # Plot
 sdf.plot(column='VALUE', cmap='YlOrRd', legend=True)
@@ -226,7 +207,7 @@ plt.show()
 locator = "C:/data/locators/composite.locator"
 results = arcpy.geocoding.GeocodeAddresses(
     "addresses.csv", locator, "Address Address",
-    None, "geocoded_results.gdb"
+    "geocoded_results.gdb/addresses"
 )
 ```
 
@@ -238,10 +219,9 @@ results = arcpy.geocoding.GeocodeAddresses(
 import grass.script as gscript
 import grass.script.array as garray
 
-# Initialize GRASS session
-gscript.run_command('g.gisenv', set='GISDBASE=/grassdata')
-gscript.run_command('g.gisenv', set='LOCATION_NAME=nc_spm_08')
-gscript.run_command('g.gisenv', set='MAPSET=user1')
+# Run within an initialized GRASS mapset (for example launch through
+# `grass /path/to/location/mapset --exec python workflow.py`). Merely writing
+# GISDBASE/LOCATION_NAME/MAPSET with g.gisenv does not initialize a session.
 
 # Import raster
 gscript.run_command('r.in.gdal', input='elevation.tif', output='elevation')
@@ -253,6 +233,8 @@ gscript.run_command('v.in.ogr', input='roads.shp', output='roads')
 info = gscript.raster_info('elevation')
 print(info)
 
+# Match computational region/resolution to the imported DEM.
+gscript.run_command('g.region', raster='elevation', align='elevation')
 # Slope analysis
 gscript.run_command('r.slope.aspect', elevation='elevation',
                     slope='slope', aspect='aspect')
@@ -271,56 +253,24 @@ stats = gscript.parse_command('r.univar', map='elevation', flags='g')
 
 ## SAGA GIS
 
-### Using SAGA via Command Line
+### Using SAGA via command line
+
+Tool IDs/parameters belong to a specific SAGA release. For the reviewed 9.12.1
+slope/aspect/curvature tool, the library is `ta_morphometry`, ID `0`:
 
 ```python
 import subprocess
-import os
-
-# SAGA path
-saga_cmd = "/usr/local/saga/saga_cmd"
-
-# Grid Calculus
-def saga_grid_calculus(input1, input2, output, formula):
-    cmd = [
-        saga_cmd, "grid_calculus", "GridCalculator",
-        f"-GRIDS={input1};{input2}",
-        f"-RESULT={output}",
-        f"-FORMULA={formula}"
-    ]
-    subprocess.run(cmd)
-
-# Slope analysis
-def saga_slope(dem, output_slope):
-    cmd = [
-        saga_cmd, "ta_morphometry", "SlopeAspectCurvature",
-        f"-ELEVATION={dem}",
-        f"-SLOPE={output_slope}"
-    ]
-    subprocess.run(cmd)
-
-# Morphometric features
-def saga_morphometry(dem):
-    cmd = [
-        saga_cmd, "ta_morphometry", "MorphometricFeatures",
-        f"-DEM={dem}",
-        f"-SLOPE=slope.sgrd",
-        f"-ASPECT=aspect.sgrd",
-        f"-CURVATURE=curvature.sgrd"
-    ]
-    subprocess.run(cmd)
-
-# Channel network
-def saga_channels(dem, threshold=1000):
-    cmd = [
-        saga_cmd, "ta_channels", "ChannelNetworkAndDrainageBasins",
-        f"-ELEVATION={dem}",
-        f"-CHANNELS=channels.shp",
-        f"-BASINS=basins.shp",
-        f"-THRESHOLD={threshold}"
-    ]
-    subprocess.run(cmd)
+subprocess.run(['saga_cmd', 'ta_morphometry', '0',
+                '-ELEVATION', 'dem.sgrd', '-SLOPE', 'slope.sgrd',
+                '-ASPECT', 'aspect.sgrd', '-UNIT_SLOPE', '1',
+                '-UNIT_ASPECT', '1'], check=True)
 ```
+
+Use `saga_cmd ta_morphometry 0 -h` and the matching version's tool documentation to
+confirm inputs/output units and method. For grid calculus/channel networks, discover
+the installed library/tool help instead of invented names such as `GridCalculator`
+or `ChannelNetworkAndDrainageBasins`. Parameter interfaces can differ across versions.
+Check exit status and output metadata; process success does not prove scientific validity.
 
 ## Cross-Platform Workflows
 
@@ -335,7 +285,7 @@ gdf = gpd.read_file('qgis_output.geojson')
 # Ensure CRS
 gdf = gdf.to_crs('EPSG:32633')
 
-# Export for ArcGIS (File Geodatabase)
+# Export for ArcGIS as GeoPackage (not File Geodatabase)
 gdf.to_file('arcgis_input.gpkg', driver='GPKG')
 # ArcGIS can read GPKG directly
 
@@ -352,13 +302,17 @@ from pathlib import Path
 # Process multiple files
 input_dir = Path('input')
 output_dir = Path('output')
+output_dir.mkdir(parents=True, exist_ok=True)
 
 for shp in input_dir.glob('*.shp'):
     gdf = gpd.read_file(shp)
 
-    # Process
+    if gdf.crs is None:
+        raise ValueError('Source CRS is unknown')
+    gdf = gdf.to_crs(gdf.estimate_utm_crs())
+    # Process in verified metre units
     gdf['area'] = gdf.geometry.area
-    gdf['buffered'] = gdf.geometry.buffer(100)
+    gdf.geometry = gdf.geometry.buffer(100)  # one active geometry for these formats
 
     # Export for various platforms
     basename = shp.stem
@@ -367,3 +321,5 @@ for shp in input_dir.glob('*.shp'):
 ```
 
 For more GIS-specific examples, see [code-examples.md](code-examples.md).
+
+Sources: [QGIS4.2](https://docs.qgis.org/4.2/en/docs/pyqgis_developer_cookbook/plugins/plugins.html), [ArcGIS viewshed](https://doc.esri.com/en/arcgis-pro/latest/tool-reference/spatial-analyst/viewshed.html), [distance accumulation](https://doc.esri.com/en/arcgis-pro/latest/tool-reference/spatial-analyst/distance-accumulation.html), [GRASS](https://grass.osgeo.org/grass-stable/manuals/r.watershed.html), [SAGA9.12 tool0](https://saga-gis.sourceforge.io/saga_tool_doc/9.12.1/ta_morphometry_0.html).

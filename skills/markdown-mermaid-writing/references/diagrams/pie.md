@@ -29,7 +29,7 @@ pie
 
 ## Tips
 
-- Values are proportional — they don't need to sum to 100
+- Values are proportional — they do not need to sum to 100, but must be nonnegative parts of the same defined whole with a positive total. Report the denominator and exact values
 - Use descriptive labels with **emoji prefix** for visual distinction
 - Limit to **7 slices maximum** — group small ones into "📦 Other"
 - Always include a `title` with relevant emoji
@@ -50,3 +50,8 @@ pie
     "📦 Category C" : 20
     "🗂️ Other" : 10
 ```
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/pie.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

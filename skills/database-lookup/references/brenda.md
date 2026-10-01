@@ -57,15 +57,26 @@ password = hashlib.sha256("your_password".encode()).hexdigest()
 result = client.service.getKmValue(
     email, password,
     "ecNumber*1.1.1.1", "organism*Homo sapiens",
-    "kmValue*", "substrate*", "literature*"
+    "kmValue*", "kmValueMaximum*", "substrate*", "commentary*",
+    "ligandStructureId*", "literature*"
 )
 ```
 
 ## Response Format
-Returns string parsed with `!` (record separator) and `#`/`*` (field separators). Must be parsed manually.
+The `brenda_zeep.wsdl` binding returns typed records, including `kmValue`,
+`kmValueMaximum`, `organism`, and `substrate` for `getKmValue`. Serialize with
+`zeep.helpers.serialize_object` when needed. The delimiter-separated string
+format belongs to the older `brenda.wsdl` interface; do not apply that parser to
+Zeep record objects. Each method has its own ordered arguments: inspect its WSDL
+signature instead of reusing the Km parameter tuple for every method.
 
 ## Rate Limits
-No published limits. SOAP responses can take 1-5 seconds. Be respectful — free academic service.
+BRENDA requests at most **one request per second**. The online service is
+CC BY 4.0; registration is required. The authenticated example is illustrative
+and was not executed during this documentation review.
+
+Reviewed 2026-09-30: [official SOAP help](https://www.brenda-enzymes.org/soap.php)
+and the linked Zeep WSDL.
 
 ## Note for this skill
 Since BRENDA uses SOAP (not REST), making calls requires writing and executing a Python script with `zeep`. Use Bash to run the script rather than WebFetch.

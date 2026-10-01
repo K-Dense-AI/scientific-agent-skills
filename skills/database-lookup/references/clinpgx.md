@@ -1,64 +1,26 @@
-# PharmGKB (Clinical Pharmacogenomics)
+# ClinPGx (PharmGKB) API
 
-## Base URL
-```
-https://api.pharmgkb.org/v1/data/
-```
+Base: `https://api.clinpgx.org/v1`. Public read access, JSON, at most **2 requests/second**.
+The old `api.pharmgkb.org` hostname was shut down July 20, 2026.
+See the [service notice](https://api.clinpgx.org/) and
+[current OpenAPI schema](https://api.clinpgx.org/openapi.json).
 
-## Auth
-No API key required for read-only access.
+| GET path | Purpose |
+|---|---|
+| `/data/gene?symbol=CYP2D6` | Resolve gene to PA accession |
+| `/data/chemical?name=warfarin` | Resolve drug/chemical |
+| `/data/summaryAnnotation?location.genes.symbol=CYP2C19&relatedChemicals.name=clopidogrel&levelOfEvidence.term=1A` | Clinical summary annotations |
+| `/data/guidelineAnnotation?source=CPIC&relatedGenes.accessionId={PA_ID}` | Prescribing guideline annotations |
+| `/data/pathway?name={name}` | Pathways by name |
+| `/data/label?relatedChemicals.name=warfarin&source=FDA` | Drug-label annotations |
 
-## Key Endpoints
+Each resource also supports `/{id}` lookup. `view` controls returned detail;
+use the enum for that resource in the schema. Inspect the JSON envelope and
+`data` field; these endpoints do not share a documented `page`/`size` search API.
+Do not substitute invented `/drug`, `/clinicalAnnotation`, `/guideline`,
+`/drugLabel` or general `/search` routes.
 
-### General search
-```
-GET https://api.pharmgkb.org/v1/search?q={term}&page=0&size=10
-```
-
-### Gene data
-```
-GET /gene?symbol={symbol}
-```
-Example: `/gene?symbol=CYP2D6`
-
-Response includes: id, symbol, chromosome, hasGuideline, hasClinicalAnnotation, cpicGene
-
-### Drug data
-```
-GET /drug?name={name}
-```
-Example: `/drug?name=warfarin`
-
-Response includes: id, name, genericNames, tradeNames, rxNormId, atcCodes
-
-### Clinical annotations (drug-gene interactions)
-```
-GET /clinicalAnnotation?gene={symbol}&drug={name}&level={level}
-```
-
-Evidence levels: `1A`, `1B`, `2A`, `2B`, `3`, `4`
-
-Example:
-```
-/clinicalAnnotation?gene=CYP2C19&drug=clopidogrel&level=1A
-```
-
-Response includes: level, gene, drug, phenotype, significance, variants, url
-
-### CPIC/DPWG guidelines
-```
-GET /guideline?gene={symbol}&drug={name}&source=CPIC
-```
-
-### Pharmacokinetic pathways
-```
-GET /pathway?drug={name}
-```
-
-### Drug labels (FDA, EMA)
-```
-GET /drugLabel?drug={name}&source=FDA
-```
-
-## Rate Limits
-No hard published limit. Be reasonable. Bulk data via PharmGKB download page.
+Resolve PA identifiers before joining resources. Keep annotation evidence level,
+gene, allele/diplotype, phenotype, population and guideline source/version.
+A pharmacogenomic association alone is not an individualized dosing recommendation.
+Bulk exports and reuse are governed by ClinPGx's data-use policy (CC BY-SA 4.0).

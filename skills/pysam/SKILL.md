@@ -1,11 +1,12 @@
 ---
 name: pysam
-description: Python/HTSlib workflows for genomic files. Use when reading, querying, filtering, or writing SAM/BAM/CRAM, VCF/BCF, FASTA/FASTQ, or tabix data with pysam, including pileup, coverage, indexing, and CRAM references.
+description: Provides Python/HTSlib workflows for genomic files. Used when reading, querying, filtering, or writing SAM/BAM/CRAM, VCF/BCF, FASTA/FASTQ, or tabix data with pysam, including pileup, coverage, indexing, and CRAM references.
 license: MIT
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.8–3.14 and pysam 0.24.0. Bundled scripts use local files. CRAM decoding may require the matching reference FASTA or an explicitly configured REF_PATH/REF_CACHE.
+compatibility: Requires Python 3.9+ and pysam 0.24.1. Bundled scripts use local files. CRAM decoding may require the matching reference FASTA or an explicitly configured REF_PATH/REF_CACHE.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -21,8 +22,8 @@ Use pysam for low-level, streaming access to HTSlib-supported genomic formats:
 - `TabixFile` for BGZF-compressed, tabix-indexed BED/GFF/GTF/custom tables
 - `pysam.samtools` and `pysam.bcftools` for wrapped command dispatchers
 
-Current upstream baseline: **pysam 0.24.0** (27 April 2026), wrapping
-HTSlib/samtools/bcftools 1.23.1. Read `references/sources.md` before updating
+Current upstream baseline: **pysam 0.24.1** (7 September 2026), wrapping
+HTSlib/samtools/bcftools 1.24. Read `references/sources.md` before updating
 version-specific guidance.
 
 ## Installation
@@ -30,7 +31,7 @@ version-specific guidance.
 Use the pinned release for reproducible work:
 
 ```bash
-uv pip install "pysam==0.24.0"
+uv pip install "pysam==0.24.1"
 ```
 
 Confirm the runtime:
@@ -38,8 +39,8 @@ Confirm the runtime:
 ```python
 import pysam
 
-print(pysam.__version__)           # 0.24.0
-print(pysam.__samtools_version__)  # 1.23.1
+print(pysam.__version__)           # 0.24.1
+print(pysam.__samtools_version__)  # 1.24
 ```
 
 Prebuilt wheels are available for supported macOS and Linux platforms. A
@@ -76,8 +77,14 @@ python scripts/inspect_hts.py reference.fa
 | `scripts/variant_summary.py` | Streaming variant, FILTER, and genotype summary as JSON | `python scripts/variant_summary.py cohort.vcf.gz --region chr1:1-1000000` |
 | `scripts/filter_alignments.py` | Filter SAM/BAM/CRAM without changing record order | `python scripts/filter_alignments.py input.bam output.bam --exclude-secondary` |
 
-All scripts refuse to overwrite existing outputs. Run each with `--help` for
-coordinate, index, and privacy notes.
+All scripts refuse to overwrite existing outputs. The filter also refuses stale
+output indexes and offers `--index --csi` for large BAM contigs. FASTA inspection
+requires an existing `.fai`; create it explicitly with `pysam.faidx()` first.
+Run each with `--help` for coordinate, index, and privacy notes.
+
+Examples use illustrative filenames and assay-specific thresholds. The local
+synthetic suite exercises these API patterns on pysam 0.24.1; remote storage and
+biological datasets are not part of that validation.
 
 ## Coordinate Contract
 
@@ -133,7 +140,8 @@ with pysam.AlignmentFile("sample.bam", "rb") as bam:
 
 Important distinctions:
 
-- `fetch()` returns alignment records overlapping a region.
+- `fetch()` returns placed alignment records overlapping a region; even an
+  unmapped-flagged record can have a reference position. Filter `is_unmapped`.
 - `count()` counts records and defaults to `read_callback="nofilter"`.
 - `count_coverage()` returns A/C/G/T base counts and defaults to base quality
   15 plus `read_callback="all"`.
@@ -157,7 +165,12 @@ with pysam.FastaFile("reference.fa") as fasta, pysam.AlignmentFile(
         min_base_quality=20,
         max_depth=100_000,
     ):
-        print(column.reference_pos, column.get_num_aligned())
+        base_depth = sum(
+            not item.is_del and not item.is_refskip
+            and item.query_position is not None
+            for item in column.pileups
+        )
+        print(column.reference_pos, base_depth)
 ```
 
 Read `references/alignment_files.md` for flags, CIGAR operations, tags,
@@ -280,8 +293,9 @@ returning the complete output in memory.
 try:
     pysam.samtools.quickcheck("-v", "sample.bam")
 except pysam.SamtoolsError as error:
-    messages = pysam.samtools.quickcheck.get_messages()
-    raise RuntimeError(messages or str(error)) from error
+    # The exception contains current stderr; get_messages() can be stale
+    # after failure in 0.24.1.
+    raise RuntimeError(str(error)) from error
 ```
 
 Use the Python API for record-level logic and dispatchers for mature bulk

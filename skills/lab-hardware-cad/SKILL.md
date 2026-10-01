@@ -1,14 +1,14 @@
 ---
 name: lab-hardware-cad
-description: Design custom laboratory hardware as parametric build123d models and export fabrication-ready STEP, STL, and DXF files - microfluidic chips and molds, optomechanical mounts and breadboard adapters, cuvette and microplate holders, tube racks, animal-behavior rigs, and 3D-printed instrument fixtures. Use when a research task needs a physical part that must mate with standardized labware, an optical table, a cage system, or a printer, CNC, or laser process.
+description: Designs custom laboratory hardware as parametric build123d models and exports fabrication artifacts as STEP, STL, and DXF files - microfluidic chips and molds, optomechanical mounts and breadboard adapters, cuvette and microplate holders, tube racks, animal-behavior rigs, and 3D-printed instrument fixtures. Use when a research task needs a physical part that must mate with standardized labware, an optical table, a cage system, or a printer, CNC, or laser process.
 license: MIT
-compatibility: Python 3.10-3.14 with build123d 0.11.1 and matplotlib for snapshots. Geometry commands require build123d; the standards lookup and the interface check run on the standard library alone. No network access needed.
+compatibility: Python 3.11-3.14 with build123d 0.13.0 and matplotlib for snapshots. Geometry commands require build123d; the standards lookup and the interface check run on the standard library alone. Network needed for installation and current vendor drawings; local geometry checks run offline.
 allowed-tools: Read Write Edit Bash Glob Grep
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-08-15"
-  build123d-version: "0.11.1"
+  last-reviewed: "2026-10-01"
+  build123d-version: "0.13.0"
 ---
 
 # Lab Hardware CAD
@@ -36,10 +36,10 @@ or scientific plotting. Those are different skills.
 
 ```bash
 uv venv --python 3.12 .venv-labcad
-uv pip install --python .venv-labcad/bin/python "build123d==0.11.1" "matplotlib>=3.8"
+uv pip install --python .venv-labcad/bin/python "build123d==0.13.0" "matplotlib>=3.8"
 ```
 
-build123d 0.11.1 requires Python >=3.10,<3.15 and pulls in the OpenCascade kernel through
+build123d 0.13.0 requires Python >=3.11,<3.15 and pulls in the OpenCascade kernel through
 `cadquery-ocp-novtk`. The wheel is large; install once per project and reuse it.
 
 All bundled scripts take `--help`. `check.py standards` runs without build123d installed.
@@ -84,9 +84,9 @@ dimension from memory.** If the number is not in the standards file or the refer
 for the vendor drawing or the measurement rather than guessing. A guessed interface dimension is
 the single most expensive failure mode in this skill.
 
-A feature that must *receive* a standardised component is sized against that component's
-**maximum material condition** — nominal plus its plus-tolerance — and only then given clearance.
-Sized from nominal instead, it fits only the smaller half of conforming parts.
+A pocket receiving an external component is sized against that component's
+**maximum material envelope** — nominal plus its plus-tolerance — and only then given clearance.
+A shaft entering a hole instead uses the hole's minimum diameter; `envelope` does not model that case.
 
 ```bash
 python scripts/check.py standards --list
@@ -108,8 +108,8 @@ fabricated declaration is worse than an honest "nobody checked this".
 
 Read `references/fabrication-limits.md`. Process determines minimum wall, minimum feature,
 achievable tolerance, and whether the part survives autoclaving or contact with your solvent.
-FDM cannot hold ±0.05 mm; SLA resin is generally not safe for cell contact without post-cure and
-testing. Record the process and material in the model docstring.
+Do not assume FDM can hold ±0.05 mm without calibration. Cell-contact SLA parts need
+a validated material and post-processing workflow plus assay-specific testing. Record the process and material in the model docstring.
 
 ### 4. Author a parametric model
 
@@ -129,14 +129,15 @@ Requirements:
   standard ID and intent. This is what makes the interface machine-checkable in step 5.
   `intent` is `"envelope"` when the feature must **accept** any conforming part (a pocket, bore,
   or slot — checked one-sided at maximum material condition plus your clearance) and `"match"`
-  when this part must itself conform (symmetric band). `clearance` is the total intended
+  when comparing against the nominal band, expanded by any explicit allowance.
+  This is not a conformance certificate. `clearance` is the total intended
   clearance in mm and must be non-negative. Declare only dimensions that constrain *this part's
   mating features* — a property of the mating equipment (a table's edge border, a typical plate
   thickness) is not an interface of yours. If no bundled standard applies, return `[]`.
 - Declare a `checks()` function of **go/no-go gauges measured from the built solid**: a `clear`
   region for everything that must pass through or fit in (screw shafts, beam corridors, the
-  mating part at maximum material condition dropping into its pocket), a `material` region for
-  everything that must remain (a ridge, a ledge, a screw seat), and a `bbox_*` bound for every
+  mating part at maximum material condition dropping into its pocket), a `material` region
+  with a requirement-sized minimum volume for everything that must remain (a ridge, a ledge, a screw seat), and a `bbox_*` bound for every
   size limit the user stated. Map **every geometric requirement in the request** to one entry;
   these catch the errors that `is_valid`, the bounding box, and declared numbers cannot see.
   `gen.py` runs them on every generation and fails the build when one fails. Schema and worked
@@ -144,19 +145,19 @@ Requirements:
 - Put the process, material, and every interface source in the module docstring.
 
 ```python
-"""SLAS microplate carrier for a custom stage insert.
+"""SLAS base-footprint fit coupon; confirm upper plate body/draft before a full holder.
 
 Process: FDM, PETG, 0.2 mm layer.  Tolerance budget +/-0.3 mm.
 Interfaces:
-  - Plate pocket: ANSI/SLAS 1-2004 (R2012) footprint 127.76 x 85.48 mm, +/-0.25.
-  - Stage bolts: user-measured, 40.0 mm centres (drawing in docs/stage.pdf).
+  - Plate pocket: ANSI/SLAS 1-2004 (R2012) footprint 127.76 x 85.48 mm, +/-0.50 overall.
+  - Upper plate body, lid and stage mounting: not represented in this coupon.
 """
 from build123d import *
 
 # --- INTERFACE (fixed by standard; do not tune) ---
 plate_l_mm = 127.76   # ANSI/SLAS 1-2004 nominal
 plate_w_mm = 85.48    # ANSI/SLAS 1-2004 nominal
-plate_tol_mm = 0.25   # ANSI/SLAS 1-2004; the pocket is sized to nominal + this
+plate_tol_mm = 0.50   # ANSI/SLAS 1-2004; the pocket is sized to nominal + this
 # --- DESIGN (free) ---
 pocket_clearance_mm = 0.40   # per-side; FDM, see fabrication-limits.md
 wall_t_mm = 3.0
@@ -167,7 +168,7 @@ body_h_mm = 12.0
 def pocket_mm() -> tuple[float, float]:
     """Pocket at the plate's maximum material condition plus clearance per side.
 
-    A pocket sized from nominal jams on roughly half of conforming plates.
+    A pocket sized from nominal can jam on conforming plates.
     """
     growth = plate_tol_mm + 2 * pocket_clearance_mm
     return plate_l_mm + growth, plate_w_mm + growth
@@ -225,7 +226,8 @@ python scripts/check.py geometry out/carrier.step --model carrier_model.py
 `gen.py` also evaluates the model's `checks()` gauges against the solid it just built, prints
 each PASS/FAIL, records them in the manifest, and exits non-zero on a failure — so a part that
 violates its own declared geometry never silently becomes an artifact. `check.py geometry`
-re-runs the same gauges against the exported STEP, which is the authoritative artifact.
+re-runs the same gauges against the exported STEP. Repeat any `gen.py --param` overrides
+with `check.py geometry --param`; otherwise the gauges use the source defaults.
 
 `out/` is a scratch convention, not a requirement. When the user asked for deliverables in a
 specific place, generate there (`--outdir .`) or copy the STEP, manifest, and DXF to it before
@@ -253,7 +255,7 @@ manifest, not evidence that interfaces were reviewed and none applied.
 
 Use `interfaces` rather than `check.py fit` for anything internal — a pocket, bore, or slot does
 not appear in the part's outer bounding box, which is what `fit` measures. Reach for `fit` only
-to check one number by hand (`--value footprint_length=128.81`), or when the part's own outline
+to check one number by hand (`--value footprint_length=129.06`), or when the part's own outline
 is the interface, such as a gasket cut to a plate footprint.
 
 For assemblies, check that parts do not interfere:
@@ -307,12 +309,13 @@ could check has to be named as such.
 
 ## Units
 
-build123d is unitless internally and everything in this skill is **millimetres and degrees**.
+build123d is unitless internally. Geometry uses **millimetres and degrees**; mesh
+`angular_tolerance` uses **radians** (0.1 rad ≈ 5.7°).
 `export_step` is called with `Unit.MM`. Imperial hardware appears throughout optomechanics
 (1/4-20 screws, 1 inch grids, SM1 threads); convert to millimetres in a single named constant at
 the point of definition and never mix systems inside an expression. 1 inch is exactly 25.4 mm, and
 a 25 mm metric optical grid is **not** interchangeable with a 1 inch imperial grid — the error
-accumulates to 1.6 mm over four holes.
+accumulates to 1.6 mm over four pitches (five hole centres).
 
 ## Tolerances and fits
 
@@ -323,8 +326,10 @@ the process tolerance in `references/fabrication-limits.md`. Common defaults, pe
 | --- | --- | --- | --- |
 | Free-sliding (plate in a pocket) | 0.40 mm | 0.20 mm | 0.10 mm |
 | Located but removable | 0.25 mm | 0.10 mm | 0.05 mm |
-| Press / interference | -0.05 mm | -0.03 mm | -0.02 mm |
+| Press / interference | Coupon-specific | Coupon-specific | Toleranced fit design |
 
+Budget the receiving part's worst-case undersize separately: minimum actual pocket
+size must exceed the mating part's maximum size plus the required functional gap.
 These are starting points for a first article, not guarantees. Say so when you report them, and
 recommend printing a test coupon of the critical interface before committing to a full part.
 
@@ -352,7 +357,7 @@ recommend printing a test coupon of the critical interface before committing to 
 | `references/behavior-rigs.md` | Arena and maze geometry, head-fixation interfaces, spouts and ports, T-slot extrusion, cleaning and durability |
 | `references/fabrication-limits.md` | Process tolerances, minimum walls and features, clearance and thread inserts, materials, autoclave and solvent and biocompatibility |
 | `references/validation.md` | Pre-fabrication checklist and the failure modes each item catches |
-| `references/build123d-patterns.md` | build123d 0.11.1 API cookbook: builder vs algebra, sketches, selectors, joints, exports |
+| `references/build123d-patterns.md` | build123d 0.13.0 API cookbook: builder vs algebra, sketches, selectors, joints, exports |
 
 ## Scripts
 
@@ -370,7 +375,8 @@ recommend printing a test coupon of the critical interface before committing to 
 | `check.py standards [--list\|--show ID]` | Browse the bundled standards data (standard library only) |
 | `snapshot.py <step> --out PNG` | Six-view orthographic and isometric render for visual review |
 
-All commands accept `--json` for machine-readable output and write progress to stderr.
+`gen.py` accepts `--json`; place `check.py --json` before its subcommand.
+`snapshot.py` writes a PNG and has no `--json` option. Progress goes to stderr.
 `check.py standards`, and `check.py interfaces` on a manifest, run without build123d installed.
 
 ## Citing Scientific Agent Skills

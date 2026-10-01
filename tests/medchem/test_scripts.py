@@ -21,6 +21,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
@@ -156,6 +157,13 @@ class LoadMoleculesTests(TemporaryDirectoryTestCase):
         self.assertEqual(mols, [])
         self.assertEqual(len(frame), 0)
 
+    def test_missing_smiles_are_parse_failures_and_keep_metadata_aligned(self) -> None:
+        path = self.root / "input.csv"
+        path.write_text("smiles,id\nCCO,valid\n,missing\n   ,blank\n", encoding="utf-8")
+        frame, mols = filter_molecules.load_molecules(path)
+        self.assertEqual(list(frame["id"]), ["valid"])
+        self.assertEqual(len(mols), 1)
+
     def test_a_missing_smiles_column_exits_rather_than_guessing(self) -> None:
         path = self.root / "input.csv"
         path.write_text("structure\nCCO\n", encoding="utf-8")
@@ -267,6 +275,32 @@ class StructuralAlertTests(unittest.TestCase):
             with self.subTest(catalog=name):
                 self.assertEqual(len(passes), 1)
 
+    def test_brenk_rejects_nitrobenzene_instead_of_using_an_empty_common_alert_set(self) -> None:
+        _, passes = next(filter_molecules.apply_alert_catalog(
+            molecules(ETHANOL, "O=[N+]([O-])c1ccccc1"), ["brenk"], 1
+        ))
+        self.assertEqual(list(passes), [True, False])
+
+    def test_unknown_catalogs_are_errors(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown named catalogs"):
+            list(filter_molecules.apply_alert_catalog(molecules(ETHANOL), ["paims"], 1))
+
+    def test_common_and_nibr_reasons_have_distinct_column_names(self) -> None:
+        common = filter_molecules.apply_common_alerts(molecules(CATECHOL), 1)
+        nibr = filter_molecules.apply_nibr(molecules(CATECHOL), 1)
+        merged = pandas.concat([common, nibr], axis=1)
+        self.assertTrue(merged.columns.is_unique)
+        self.assertIn("common_alert_reasons", merged)
+        self.assertIn("nibr_reasons", merged)
+
+    def test_accumulated_nibr_severity_is_rejected_even_without_exclusion_status(self) -> None:
+        upstream = pandas.DataFrame({"pass_filter": [True, True], "severity": [9, 10],
+                                     "status": ["flag", "flag"], "reasons": ["a", "b"]})
+        with patch.object(medchem.structural, "NIBRFilters") as factory:
+            factory.return_value.return_value = upstream
+            results = filter_molecules.apply_nibr(molecules(ETHANOL, BENZENE), 1)
+        self.assertEqual(list(results["passes_nibr"]), [True, False])
+
 
 class ComplexityAndQueryTests(unittest.TestCase):
     def test_the_complexity_column_records_the_metric_used(self) -> None:
@@ -316,21 +350,111 @@ class ChemicalGroupTests(unittest.TestCase):
             with self.subTest(column=column):
                 self.assertTrue(all(isinstance(value, bool) for value in results[column]))
 
-    def test_an_unrecognised_group_reports_no_matches_rather_than_raising(self) -> None:
-        # Documented sharp edge: unlike --rules, group names are not validated,
-        # so a typo yields an all-False column instead of an error.
-        results = filter_molecules.apply_groups(molecules(ETHANOL), ["not_a_real_group"])
-        self.assertEqual(list(results["has_not_a_real_group"]), [False])
+    def test_each_group_has_its_own_verdict(self) -> None:
+        results = filter_molecules.apply_groups(
+            molecules(ETHANOL, CAFFEINE), ["privileged_scaffolds", "common_organic_solvents"]
+        )
+        self.assertEqual(list(results["has_privileged_scaffolds"]), [False, True])
+        self.assertEqual(list(results["has_common_organic_solvents"]), [True, False])
+
+    def test_an_unrecognised_group_raises_instead_of_reported_absence(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown chemical groups"):
+            filter_molecules.apply_groups(molecules(ETHANOL), ["not_a_real_group"])
 
 
 class LillyFilterTests(unittest.TestCase):
-    def test_a_missing_lilly_installation_yields_a_null_column_of_the_right_length(self) -> None:
-        # The Lilly rules are a separate conda package. When absent the script
-        # must still return one row per molecule, or the positional concat in
-        # main() would misalign every later column.
-        results = filter_molecules.apply_lilly(molecules(ETHANOL, CAFFEINE), 160, 1)
-        self.assertEqual(list(results.columns), ["passes_lilly"])
-        self.assertEqual(len(results), 2)
+    def test_a_missing_requested_lilly_filter_is_an_error(self) -> None:
+        with patch.object(medchem.functional, "lilly_demerit_filter", side_effect=ImportError):
+            with self.assertRaisesRegex(RuntimeError, "medchem install-lilly"):
+                filter_molecules.apply_lilly(molecules(ETHANOL, CAFFEINE), 160, 1)
+
+
+class CurrentApiExamplesTests(unittest.TestCase):
+    def test_bredt_runs_on_copies_to_preserve_later_aromatic_alerts(self) -> None:
+        mol = datamol.to_mol(CATECHOL)
+        medchem.functional.bredt_filter([Chem.Mol(mol)], n_jobs=1)
+        self.assertTrue(medchem.catalogs.NamedCatalogs.pains().HasMatch(mol))
+        query = medchem.query.QueryFilter('HASSUBSTRUCTURE("c1ccccc1")')
+        self.assertEqual(query([mol], n_jobs=1, progress=False), [True])
+
+    def test_query_functional_group_names_are_not_collection_names(self) -> None:
+        query = medchem.query.QueryFilter('HASGROUP("Primary amines")')
+        self.assertEqual(query(["CCN", "CCO"], n_jobs=1, progress=False), [True, False])
+
+    def test_group_matches_are_tabular_and_filter_narrows_patterns(self) -> None:
+        group = medchem.groups.ChemicalGroup(groups=["amino_acids"])
+        hits = group.get_matches("NCC(=O)O")
+        self.assertIsInstance(hits, pandas.DataFrame)
+        self.assertGreater(len(hits), 0)
+        self.assertIn("matches", hits)
+        names = hits["name"].tolist()
+        self.assertIs(group.filter(names=names), group)
+        self.assertEqual(set(group.name), set(names))
+
+    def test_scaffold_callback_is_applied_to_the_marked_sidechain(self) -> None:
+        core = datamol.from_smarts("c1cncc([*:1])c1")
+        for atom in core.GetAtoms():
+            if atom.GetAtomMapNum() == 1:
+                atom.SetProp("query", "aromatic_sidechain")
+        constraint = medchem.constraints.Constraints(core, {
+            "aromatic_sidechain": lambda fragment: datamol.descriptors.n_aromatic_atoms(fragment) > 0
+        })
+        self.assertFalse(constraint("CN(C)C(=O)c1cncc(C)c1"))
+        self.assertTrue(constraint("c1ccc(cc1)-c1cccnc1"))
+
+    def test_fragment_rule_does_not_impose_an_undocumented_tpsa_limit(self) -> None:
+        # Glycine has TPSA >60 but satisfies the base Rule of Three.
+        glycine = datamol.to_mol("NCC(=O)O")
+        self.assertGreater(datamol.descriptors.tpsa(glycine), 60)
+        self.assertTrue(medchem.rules.basic_rules.rule_of_three(glycine))
+        self.assertFalse(medchem.rules.basic_rules.rule_of_three_extended(glycine))
+
+    def test_complexity_uses_only_percentiles_in_the_shipped_table(self) -> None:
+        self.assertTrue(medchem.complexity.ComplexityFilter(limit="90")("CCO"))
+        with self.assertRaises(ValueError):
+            medchem.complexity.ComplexityFilter(limit="95")
+        with self.assertRaises(ValueError):
+            medchem.complexity.ComplexityFilter(complexity_metric="spacialscore")
+        self.assertGreater(medchem.complexity.SPS(datamol.to_mol("CCO")), 0)
+
+
+class CliOutputTests(TemporaryDirectoryTestCase):
+    def test_input_pass_annotations_never_act_as_current_filters(self) -> None:
+        source = self.root / "input.csv"
+        source.write_text("smiles,passes_legacy\nCCO,False\n", encoding="utf-8")
+        output = self.root / "filtered.csv"
+        with patch.object(sys, "argv", ["filter_molecules.py", str(source), "--output", str(output),
+                                        "--rules", "rule_of_five", "--filter-output", "--n-jobs", "1"]):
+            filter_molecules.main()
+        result = pandas.read_csv(output)
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result.loc[0, "passes_legacy"])
+        summary = (self.root / "filtered_summary.txt").read_text()
+        self.assertNotIn("passes_legacy", summary)
+        self.assertIn("All filters passed: 1 (100.0%)", summary)
+
+    def test_filtered_output_keeps_the_full_library_summary(self) -> None:
+        source = self.root / "input.csv"
+        source.write_text(f"smiles\n{ETHANOL}\n{PENTAPEPTIDE}\n", encoding="utf-8")
+        output = self.root / "filtered.csv"
+        with patch.object(sys, "argv", ["filter_molecules.py", str(source), "--output", str(output),
+                                        "--rules", "rule_of_five", "--filter-output", "--n-jobs", "1"]):
+            filter_molecules.main()
+        self.assertEqual(len(pandas.read_csv(output)), 1)
+        summary = (self.root / "filtered_summary.txt").read_text()
+        self.assertIn("Total molecules processed: 2", summary)
+        self.assertIn("All filters passed: 1 (50.0%)", summary)
+
+    def test_zero_parsed_molecules_do_not_produce_a_successful_filter_result(self) -> None:
+        source = self.root / "input.csv"
+        source.write_text("smiles\n", encoding="utf-8")
+        output = self.root / "out.csv"
+        with patch.object(sys, "argv", ["filter_molecules.py", str(source), "--output", str(output),
+                                        "--rules", "rule_of_five"]):
+            with self.assertRaises(SystemExit) as error:
+                filter_molecules.main()
+        self.assertEqual(error.exception.code, 2)
+        self.assertFalse(output.exists())
 
 
 class SummaryReportTests(TemporaryDirectoryTestCase):

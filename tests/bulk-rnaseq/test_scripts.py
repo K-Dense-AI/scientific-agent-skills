@@ -225,7 +225,7 @@ class MetadataTests(SamplesheetTestCase):
             any("not in samplesheet" in w for w in self.report.warnings)
         )
 
-    def test_a_singleton_group_cannot_estimate_variance_and_is_fatal(self) -> None:
+    def test_a_singleton_group_fails_this_workflow_replication_policy(self) -> None:
         sheet_text = (
             "sample,fastq_1\n"
             "ctrl_1,c1.fastq.gz\nctrl_2,c2.fastq.gz\ntreat_1,t1.fastq.gz\n"
@@ -235,7 +235,7 @@ class MetadataTests(SamplesheetTestCase):
             sheet_text=sheet_text,
         )
         self.assertTrue(
-            any("need >=2 to estimate variance" in e for e in self.report.errors)
+            any("requires >=2 biological replicates" in e for e in self.report.errors)
         )
 
     def test_two_replicates_pass_but_warn_below_the_recommended_minimum(self) -> None:
@@ -332,12 +332,11 @@ class CountsMatrixTests(unittest.TestCase):
         counts = build_counts_matrix.build_from_star(self.root, "unstranded")
         self.assertEqual(list(counts.index), ["GENE1"])
 
-    def test_genes_absent_from_one_sample_become_zero_not_nan(self) -> None:
+    def test_gene_set_mismatch_is_not_silently_imputed(self) -> None:
         self._star_table("s1", "GENE1\t5\t0\t0\nGENE2\t7\t0\t0\n")
         self._star_table("s2", "GENE1\t9\t0\t0\n")
-        counts = build_counts_matrix.build_from_star(self.root, "unstranded")
-        self.assertEqual(counts.loc["GENE2", "s2"], 0)
-        self.assertEqual(str(counts.dtypes.unique()[0]), "int64")
+        with self.assertRaisesRegex(ValueError, "gene sets differ"):
+            build_counts_matrix.build_from_star(self.root, "unstranded")
 
     def test_the_strand_choice_selects_a_different_column(self) -> None:
         self._star_table("s1", "GENE1\t100\t60\t40\n")
@@ -380,5 +379,197 @@ class CountsMatrixTests(unittest.TestCase):
                 self.assertGreater((output / name).stat().st_size, 0)
 
 
+class StrictSamplesheetTests(SamplesheetTestCase):
+    def test_nfcore_requires_all_four_headers(self):
+        validate_samplesheet.validate_samplesheet(
+            self.write('sheet.csv', 'sample,fastq_1\ns1,a.fastq.gz\n'), False, self.report, nfcore=True)
+        self.assertTrue(any('first four columns' in e for e in self.report.errors))
+
+    def test_nfcore_good_sheet_passes(self):
+        validate_samplesheet.validate_samplesheet(
+            self.write('sheet.csv', GOOD_SHEET), False, self.report, nfcore=True)
+        self.assertEqual(self.report.errors, [])
+
+    def test_reused_mate_two_is_rejected(self):
+        self.validate('sample,fastq_1,fastq_2\ns1,a.fq.gz,b.fq.gz\ns2,c.fq.gz,b.fq.gz\n')
+        self.assertTrue(any('appears 2 times' in e for e in self.report.errors))
+
+    def test_cross_mate_reuse_is_rejected(self):
+        self.validate('sample,fastq_1,fastq_2\ns1,a.fq.gz,b.fq.gz\ns2,b.fq.gz,c.fq.gz\n')
+        self.assertTrue(any('appears 2 times' in e for e in self.report.errors))
+
+    def test_lane_strandedness_mismatch_is_rejected(self):
+        self.validate('sample,fastq_1,fastq_2,strandedness\ns1,a.fq.gz,,forward\ns1,b.fq.gz,,reverse\n')
+        self.assertTrue(any('inconsistent strandedness' in e for e in self.report.errors))
+
+    def test_empty_sheet_is_rejected(self):
+        self.validate('sample,fastq_1,fastq_2,strandedness\n')
+        self.assertTrue(self.report.errors)
+
+    def test_duplicate_metadata_does_not_inflate_replication(self):
+        validate_samplesheet.validate_metadata(
+            self.write('meta.csv', 'sample,condition\ns1,control\ns1,control\ns2,treated\ns2,treated\n'),
+            None, 'condition', 3, self.report)
+        self.assertTrue(any('unique' in e for e in self.report.errors))
+
+    def test_partially_missing_condition_is_rejected(self):
+        validate_samplesheet.validate_metadata(
+            self.write('meta.csv', GOOD_METADATA.replace('ctrl_1,control', 'ctrl_1,')),
+            None, 'condition', 3, self.report)
+        self.assertTrue(any('missing or CHANGE_ME' in e for e in self.report.errors))
+
+
+class CountIntegrityTests(unittest.TestCase):
+    setUp = CountsMatrixTests.setUp
+    _star_table = CountsMatrixTests._star_table
+    def test_duplicate_star_sample_after_cleanup_is_rejected(self):
+        self._star_table('s1', 'G1\t3\t0\t0\n')
+        self._star_table('s1.bam', 'G1\t4\t0\t0\n')
+        with self.assertRaisesRegex(ValueError, 'Duplicate sample'):
+            build_counts_matrix.build_from_star(self.root, 'unstranded')
+
+    def test_duplicate_star_genes_are_rejected(self):
+        self._star_table('s1', 'G1\t3\t0\t0\nG1\t4\t0\t0\n')
+        with self.assertRaisesRegex(ValueError, 'duplicate gene'):
+            build_counts_matrix.build_from_star(self.root, 'unstranded')
+
+    def test_featurecounts_fraction_is_not_truncated(self):
+        path = self.root / 'counts.txt'
+        path.write_text('Geneid\tChr\tStart\tEnd\tStrand\tLength\ts1.bam\nG1\tchr1\t1\t100\t+\t100\t1.9\n')
+        with self.assertRaisesRegex(ValueError, 'Fractional'):
+            build_counts_matrix.build_from_featurecounts(path)
+
+    def test_invalid_counts_rejected_before_writing(self):
+        for value in (-1, float('nan'), float('inf'), 0.5):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                build_counts_matrix.write_outputs(pd.DataFrame({'s1': [value]}, index=['G1']), self.root / 'out')
+        self.assertFalse((self.root / 'out').exists())
+
+    def test_zero_library_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'zero total counts'):
+            build_counts_matrix.write_outputs(pd.DataFrame({'s1': [0]}, index=['G1']), self.root / 'out')
+
+    def test_provenance_matches_sample_order_and_strand(self):
+        import json
+        self._star_table('s1', 'G1\t100\t60\t40\n')
+        counts = build_counts_matrix.build_from_star(self.root, 'reverse')
+        build_counts_matrix.write_outputs(counts, self.root / 'out')
+        record = json.loads((self.root / 'out/counts_provenance.json').read_text())
+        self.assertEqual(record['strandedness'], 'reverse')
+        self.assertEqual(record['samples'], ['s1'])
+        self.assertEqual(len(record['inputs'][0]['sha256']), 64)
+
+
+class SalmonImportTests(unittest.TestCase):
+    def setUp(self):
+        pytest.importorskip('pytximport')
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.mapping = self.root / 'tx2gene.tsv'
+        self.mapping.write_text('transcript_id\tgene_id\nt1\tG1\nt2\tG1\nt3\tG2\n')
+        for sample, reads in [('s1', [10, 20, 30]), ('s2', [20, 40, 60])]:
+            d = self.root / sample
+            d.mkdir()
+            (d / 'quant.sf').write_text('Name\tLength\tEffectiveLength\tTPM\tNumReads\n' +
+                ''.join(f't{i+1}\t100\t80\t{1e6*n/sum(reads)}\t{n}\n' for i,n in enumerate(reads)))
+
+    def test_actual_pytximport_gene_aggregation_and_orientation(self):
+        counts = build_counts_matrix.build_from_salmon(self.root, self.mapping)
+        self.assertEqual(counts.loc['G1', 's1'], 30)
+        self.assertEqual(counts.loc['G2', 's2'], 60)
+        self.assertEqual(list(counts.columns), ['s1', 's2'])
+        self.assertEqual(counts.attrs['provenance']['counts_from_abundance'], 'length_scaled_tpm')
+
+    def test_missing_mapping_is_rejected_before_import(self):
+        self.mapping.write_text('transcript_id\tgene_id\nt1\tG1\nt2\tG1\n')
+        with self.assertRaisesRegex(ValueError, 'missing 1 quantified'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+
+    def test_duplicate_mapping_columns_are_not_silently_renamed(self):
+        self.mapping.write_text('transcript_id\tgene_id\tgene_id\nt1\tG1\tOTHER\n')
+        with self.assertRaisesRegex(ValueError, 'Duplicate column'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+
+    def test_duplicate_salmon_columns_are_not_silently_renamed(self):
+        path = self.root / 's1' / 'quant.sf'
+        rows = path.read_text().splitlines()
+        path.write_text(rows[0] + '\tNumReads\n' +
+                        '\n'.join(row + '\t999' for row in rows[1:]) + '\n')
+        with self.assertRaisesRegex(ValueError, 'Duplicate column'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+
+    def test_ambiguous_mapping_is_rejected(self):
+        with self.mapping.open('a') as handle: handle.write('t1\tOTHER\n')
+        with self.assertRaisesRegex(ValueError, 'Duplicate transcript'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+
+    def test_version_stripping_is_explicit(self):
+        for sf in self.root.glob('*/quant.sf'):
+            sf.write_text(sf.read_text().replace('t1\t', 't1.1\t').replace('t2\t', 't2.1\t').replace('t3\t', 't3.1\t'))
+        with self.assertRaisesRegex(ValueError, 'missing 3 quantified'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+        counts = build_counts_matrix.build_from_salmon(self.root, self.mapping, True)
+        self.assertEqual(counts.loc['G1', 's1'], 30)
+
+    def test_gtf_helper_preserves_gene_ids(self):
+        from pytximport.utils import create_transcript_gene_map_from_annotation
+        gtf = self.root / 'annotation.gtf'
+        gtf.write_text('chr1\ttest\texon\t1\t100\t.\t+\t.\tgene_id "G1"; transcript_id "t1";\n')
+        mapping = create_transcript_gene_map_from_annotation(gtf, source_field='transcript_id', target_field='gene_id')
+        self.assertEqual(mapping.to_dict('records'), [{'transcript_id': 't1', 'gene_id': 'G1'}])
+
+    def test_pydeseq2_explicit_contrast_has_expected_direction(self):
+        pytest.importorskip('pydeseq2')
+        import numpy as np
+        from pydeseq2.dds import DeseqDataSet
+        from pydeseq2.ds import DeseqStats
+        rng = np.random.default_rng(811)
+        values = rng.negative_binomial(30, 0.2, size=(8, 80))
+        values[4:, :8] *= 5
+        counts = pd.DataFrame(values, index=[f's{i}' for i in range(8)], columns=[f'g{i}' for i in range(80)])
+        meta = pd.DataFrame({'condition': ['control']*4+['treated']*4}, index=counts.index)
+        dds = DeseqDataSet(counts=counts, metadata=meta, design='~condition', n_cpus=1, quiet=True)
+        dds.deseq2()
+        stats = DeseqStats(dds, contrast=['condition', 'treated', 'control'], alpha=0.05, n_cpus=1, quiet=True)
+        stats.summary()
+        self.assertTrue((stats.results_df.iloc[:8]['log2FoldChange'] > 1).all())
+        self.assertTrue(stats.results_df['stat'].notna().all())
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize('header', ['sample,sample,fastq_1', 'sample, sample ,fastq_1'])
+def test_samplesheet_rejects_raw_duplicate_columns(tmp_path, header):
+    path = tmp_path / 'samples.csv'
+    path.write_text(header + '\ncontrol,treated,reads.fastq.gz\n')
+    report = validate_samplesheet.Report()
+    assert validate_samplesheet.validate_samplesheet(path, False, report) is None
+    assert any('Duplicate column' in error for error in report.errors)
+
+
+def test_metadata_rejects_raw_duplicate_condition_columns(tmp_path):
+    path = tmp_path / 'metadata.csv'
+    path.write_text('sample,condition,condition\ns1,control,treated\n')
+    report = validate_samplesheet.Report()
+    validate_samplesheet.validate_metadata(path, None, 'condition', 3, report)
+    assert any('Duplicate column' in error for error in report.errors)
+
+
+def test_featurecounts_duplicate_bam_headers_are_not_renamed(tmp_path):
+    path = tmp_path / 'counts.tsv'
+    path.write_text('# Program: featureCounts\n'
+                    'Geneid\tChr\tStart\tEnd\tStrand\tLength\tsample.bam\tsample.bam\n'
+                    'G1\t1\t1\t100\t+\t100\t2\t3\n')
+    with pytest.raises(ValueError, match='Duplicate column'):
+        build_counts_matrix.build_from_featurecounts(path)
+
+
+def test_provenance_hash_matches_exact_bytes_across_read_chunks(tmp_path):
+    import hashlib
+    path = tmp_path / 'input.txt'
+    payload = b'a' * (1024 * 1024 + 7) + 'gene\u03b1\r\n'.encode('utf-8')
+    path.write_bytes(payload)
+    assert build_counts_matrix._file_record(path)['sha256'] == hashlib.sha256(payload).hexdigest()

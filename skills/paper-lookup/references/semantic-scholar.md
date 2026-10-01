@@ -18,7 +18,7 @@ https://api.semanticscholar.org/recommendations/v1  (Recommendations)
 
 ## The `fields` Parameter
 
-Almost every endpoint accepts `fields` -- a comma-separated list (no spaces) of fields to include. Without it, you only get `paperId` + `title`.
+Almost every endpoint accepts `fields` -- a comma-separated list (no spaces) of fields to include. Paper endpoints default to `paperId` + `title`; author endpoints default to `authorId` + `name`. Supported nested fields vary by endpoint.
 
 **Paper fields:**
 `paperId`, `corpusId`, `externalIds`, `url`, `title`, `abstract`, `venue`, `publicationVenue`, `year`, `referenceCount`, `citationCount`, `influentialCitationCount`, `isOpenAccess`, `openAccessPdf`, `fieldsOfStudy`, `s2FieldsOfStudy`, `publicationTypes`, `publicationDate`, `journal`, `authors`, `citations`, `references`, `tldr`, `embedding`
@@ -74,7 +74,8 @@ GET /graph/v1/paper/search/bulk?query={text}&fields={fields}&sort={field}:{order
 
 - Supports boolean operators: `+` (AND), `|` (OR), `-` (NOT), `"..."` (phrase), `*` (wildcard), `()` (grouping)
 - Token-based pagination (up to 10M papers)
-- Returns up to 1,000 per call
+- Returns up to 1,000 per call in `data`; the `total` is an estimate. Follow `token` until absent, rather than reconciling an estimated count as exact.
+- Nested citations/references are unavailable in bulk search; fetch those through their dedicated endpoints.
 - Sortable: `citationCount:desc`, `publicationDate:desc`, `paperId:asc`
 
 ### 3. Paper details (by ID)
@@ -108,7 +109,7 @@ https://api.semanticscholar.org/graph/v1/paper/DOI:10.1038/s41586-021-03819-2?fi
 GET /graph/v1/paper/{paper_id}/citations?fields={fields}&offset={n}&limit={n}
 ```
 
-Returns papers that cite this paper. `limit` max 1000.
+Returns `data[].citingPaper` with edge fields alongside the paper. `limit` max 1000. Pass response `next` as the next `offset`; stop when `next` is absent.
 
 Citation-specific fields: `contexts`, `intents`, `isInfluential`
 
@@ -118,7 +119,7 @@ Citation-specific fields: `contexts`, `intents`, `isInfluential`
 GET /graph/v1/paper/{paper_id}/references?fields={fields}&offset={n}&limit={n}
 ```
 
-Returns papers cited by this paper. Same pagination as citations.
+Returns `data[].citedPaper` (opposite direction from citations). Same pagination as citations; unresolved paper IDs or optional fields can be null.
 
 ### 6. Paper title match
 
@@ -126,7 +127,7 @@ Returns papers cited by this paper. Same pagination as citations.
 GET /graph/v1/paper/search/match?query={exact title}&fields={fields}
 ```
 
-Returns single best match with `matchScore`. 404 if no match.
+Returns the best match in `data[]`, including `matchScore`; it is not a bare paper object. HTTP 404 if no match. Check title, author, and year before treating a fuzzy title match as identity.
 
 ### 7. Author search
 
@@ -152,7 +153,7 @@ GET /graph/v1/author/{author_id}/papers?fields={fields}&offset={n}&limit={n}
 GET /recommendations/v1/papers/forpaper/{paper_id}?fields={fields}&limit={n}&from={pool}
 ```
 
-`from`: `recent` (default) or `all-cs`. `limit` max 500.
+`from`: `recent` (default) or `all-cs`. `limit` defaults to 100, max 500. Both recommendation routes return `recommendedPapers[]`, not `data[]`; they have no cursor pagination.
 
 ### 11. Multi-paper recommendations (POST)
 
@@ -175,7 +176,7 @@ Content-Type: application/json
 {"ids": ["DOI:10.1038/nature12373", "ARXIV:2005.14165"]}
 ```
 
-Max 500 IDs per request.
+Max 500 IDs per request. The response is an ordered array, with null entries possible for unresolved IDs. Keep positional correspondence and report missing items. `fields` belongs in the URL, not the JSON body.
 
 ## Pagination
 
@@ -184,7 +185,7 @@ Max 500 IDs per request.
 | Relevance search | 100 | 1,000 | offset/next |
 | Bulk search | 1,000 | 10,000,000 | token |
 | Citations/References | 1,000 | all | offset/next |
-| Author search | 1,000 | -- | offset/next |
+| Author search / author papers | 1,000 | -- | offset/next |
 
 ## Publication Types
 
@@ -201,3 +202,8 @@ Max 500 IDs per request.
 ```
 
 HTTP 404 for not found, 429 for rate limit.
+
+## Official sources reviewed 2026-09-30
+
+- https://api.semanticscholar.org/graph/v1/swagger.json
+- https://api.semanticscholar.org/recommendations/v1/swagger.json

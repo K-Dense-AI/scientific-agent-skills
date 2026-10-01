@@ -121,3 +121,27 @@ synthetic covariance; it is not an experimental dataset. Tests also verify isoto
 limits, repeated-substrate condensation, reversed-label conventions, compositional
 likelihood invariance, and non-identifiability. Larger organism models, unusual symmetry,
 or new measurement types require independent validation before scientific use.
+
+## Reviewed engine contract
+
+Checked against the official mfapy source at
+[`a10433af16682386548b360297e2476152d46ede`](https://github.com/fumiomatsuda/mfapy/tree/a10433af16682386548b360297e2476152d46ede)
+on 2026-09-30. The adapter relies on these forward-simulation contracts:
+
+- `MetabolicModel(reactions, reversible, metabolites, target_fragments)` accepts
+  the mapped dictionaries. The adapter supplies no aggregate reversible constraints
+  and uses `type="intermediate"` carbon subsets, not multi-intermediate GC-MS fragments.
+- `generate_carbon_source_template()` returns a carbon-source object initialized
+  as unlabeled. The adapter explicitly replaces **every** source distribution with
+  `set_all_isotopomers(name, values, correction="no")` and checks its boolean result.
+  The source implementation confirms that carbon 1 is the least-significant bit.
+- `generate_mdv(state, carbon_sources)` without `timepoint` evaluates steady state
+  and returns `MdvData`; `get_fragment_mdv(fragment)` returns bins in increasing mass
+  order. No natural-abundance addition is enabled by this adapter.
+
+The [current SciPy SLSQP](https://docs.scipy.org/doc/scipy/reference/optimize.minimize-slsqp.html)
+and [HiGHS linear-programming](https://docs.scipy.org/doc/scipy/reference/optimize.linprog-highs.html)
+contracts retain the bound/linear-constraint and feasibility options used here.
+The numerical suite and documented synthetic examples were rerun with Python 3.12,
+NumPy 2.5.3, SciPy 1.18.1, NLopt 2.11.0, and the pinned mfapy commit. This validates
+the bundled adapter's supported scope, not every upstream mfapy feature.

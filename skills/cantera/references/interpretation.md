@@ -9,6 +9,11 @@ rise. Tracked species are exported to support inspection; their maxima do not si
 replace the configured definition. OH and excited OH* are distinct species and may
 not both exist in the mechanism.
 
+For a species-based delay, specify mole fraction (`X`) or mass fraction (`Y`): their
+peaks can differ as mixture molecular weight changes. The linked upstream shock-tube
+example uses the maximum species mass fraction, while this helper exports mole fractions
+and determines delay only from temperature.
+
 Two-stage ignition may have an early weak heat-release peak and a later stronger one.
 The global-maximum definition selects the strongest heating peak in the modeled horizon.
 If the user needs first-stage delay, define and validate a separate event detector and

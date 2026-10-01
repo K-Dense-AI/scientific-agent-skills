@@ -1,6 +1,6 @@
 # Complexity, entropy, fractals, and RQA
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable runtime/source,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable runtime/source,
 the official Complexity API, and the NeuroKit2 complexity comparison paper.
 
 ## Return convention changed from older examples
@@ -202,7 +202,7 @@ Record:
 - surrogate/null and sensitivity results; and
 - multiplicity control and participant-level statistical design.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official Complexity API](https://neuropsychology.github.io/NeuroKit/functions/complexity.html)
 - [Stable v0.2.13 complexity source](https://github.com/neuropsychology/NeuroKit/tree/v0.2.13/neurokit2/complexity)

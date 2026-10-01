@@ -49,7 +49,7 @@ needs downloads or local analysis. Tool names may change as the server matures.
 
 ## Tool inventory
 
-Verified against server version `3.0.0b3`. Treat this as a snapshot, not a contract — call
+Live `initialize`, `tools/list`, and `resources/list` verified on 2026-09-30 against server `3.0.0b3`. Treat this as a snapshot, not a contract — call
 the server's own listing rather than assuming this list is current.
 
 | Group | Tools |
@@ -71,7 +71,7 @@ release.
 
 **Cohort results report their own filters.** `build_cohort` and `get_cohort_urls` require at
 least one filter predicate and fail cleanly without one, rather than returning the whole archive;
-results echo the filters actually applied along with warnings for any predicate that was dropped
+results echo the filters actually applied along with warnings (inside `counts` for `build_cohort`) for any predicate that was dropped
 or any value whose casing did not match. Read those warnings before reporting a count — a zero
 with no warning means the filter matched nothing, which is a real answer. Same contract as the
 REST endpoints they wrap; see `rest_api_guide.md`.
@@ -116,12 +116,11 @@ from idc_index import IDCClient
 client = IDCClient()
 
 # Confirm size before downloading — the server reports size_TB, but re-check locally
-sizes = client.sql_query(f"""
-    SELECT COUNT(*) AS series, SUM(series_size_MB)/1000 AS size_GB
-    FROM index
-    WHERE SeriesInstanceUID IN ({','.join(f"'{u}'" for u in series_uids)})
-""")
-print(sizes)
+selected = client.index[client.index["SeriesInstanceUID"].isin(series_uids)]
+missing = set(series_uids) - set(selected["SeriesInstanceUID"])
+if missing:
+    raise ValueError(f"{len(missing)} requested series absent from local index; reconcile versions")
+print({"series": len(selected), "size_GB": selected["series_size_MB"].sum() / 1000})
 
 client.download_from_selection(
     downloadDir="./data",
@@ -134,8 +133,13 @@ Run `python scripts/check_version.py` before the first `idc-index` call in a ses
 discovery happened server-side — the two components version independently.
 
 `get_cohort_urls` also returns ready-made `idc` CLI commands. Those are the better handoff
-when the user wants a shell command they can re-run outside the session; see
-`references/cli_guide.md`.
+when the user wants a shell command they can re-run outside the session, after validating
+the CLI syntax: the reviewed server omits required `--manifest-file` in its
+`download-from-manifest` suggestion. Add it; see `references/cli_guide.md`.
+
+`build_cohort` uses zero-based `page`/`page_size`; collect all pages until the returned
+series count matches `total_series`. `get_cohort_urls` defaults to only 100 URLs; inspect
+`truncated` and increase its bounded limit or partition the cohort before download.
 
 Going the other direction, `idc-index` results are already local, so there is rarely a reason
 to send them back to the server.
@@ -156,6 +160,10 @@ Everything above is portable. The items below are not, and apply only to specifi
 environments.
 
 ### Claude Code
+
+Reviewed against the official [MCP](https://code.claude.com/docs/en/mcp) and
+[permissions](https://code.claude.com/docs/en/permissions) documentation; connector naming
+and discovery surfaces still depend on the installed host version.
 
 - **Tool naming.** MCP tools are exposed as `mcp__<server>__<tool>`, where `<server>` is the
   configured server name with every character outside `A-Za-z0-9_-` replaced by `_`. A CLI

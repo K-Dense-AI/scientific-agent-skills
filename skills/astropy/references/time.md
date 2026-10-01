@@ -116,9 +116,14 @@ t_tt = t.tt
 t_tdb = t.tdb
 t_ut1 = t.ut1
 
-# Check offset
-print(f"TAI - UTC = {(t.tai - t.utc).sec} seconds")
-# TAI - UTC = 37 seconds (leap seconds)
+# These are the same instant, so their elapsed-time difference is zero.
+print((t.tai - t.utc).sec)  # 0.0
+print(t.utc.iso, t.tai.iso)  # 12:00:00 UTC and 12:00:37 TAI on this date
+
+# UTC contains leap seconds: this wall-clock interval spans two SI seconds.
+before = Time("2016-12-31 23:59:59", scale="utc")
+after = Time("2017-01-01 00:00:00", scale="utc")
+print((after - before).to_value(u.s))  # approximately 2
 ```
 
 ## Format Conversions
@@ -187,16 +192,17 @@ t_future = t + 1*u.year
 t_past = t - 1*u.week
 ```
 
+A `u.day` is 86400 SI seconds and a `u.year` is a Julian year; neither
+guarantees a fixed local wall-clock hour across UTC leap seconds or DST.
+
 ### Time Ranges
 
 ```python
 # Create range of times
-start = Time('2023-01-01')
-end = Time('2023-12-31')
-times = start + np.linspace(0, 365, 100) * u.day
-
-# Or using TimeDelta
-times = start + TimeDelta(np.linspace(0, 365, 100), format='jd')
+start = Time('2023-01-01', scale='utc')
+end = Time('2023-12-31', scale='utc')
+times = start + np.linspace(0, 1, 100) * (end - start)
+# This includes both endpoints; 365 days after Jan 1 would reach Jan 1, 2024.
 ```
 
 ## Observing-Related Features
@@ -234,11 +240,12 @@ from astropy.coordinates import SkyCoord, EarthLocation
 
 # Define target and observer
 target = SkyCoord(ra=10*u.deg, dec=20*u.deg)
-location = EarthLocation.of_site('Keck Observatory')
+# Synthetic site for a self-contained example; use surveyed coordinates in research.
+location = EarthLocation(lat=40*u.deg, lon=-120*u.deg, height=1000*u.m)
 
 # Observation times
 times = Time(['2023-01-01', '2023-06-01', '2023-12-31'],
-             location=location)
+             location=location, scale='utc')
 
 # Calculate light travel time to solar system barycenter
 ltt_bary = times.light_travel_time(target, kind='barycentric')
@@ -255,6 +262,12 @@ times_barycentric = times.tdb + ltt_bary
 era = t.earth_rotation_angle()
 ```
 
+For reproducible barycentric times, record the input scale, site, target frame/epoch
+and ephemeris (`builtin` is the default). BJD_TDB is a barycentric corrected time,
+not just `Time.utc` displayed as JD. External JPL ephemerides may require downloads.
+The RV helper returns an optical-convention correction; for precision optical RVs
+use `rv + correction + rv*correction/c` and document the convention.
+
 ## Handling Missing or Invalid Times
 
 ### Masked Times
@@ -269,8 +282,8 @@ times[1] = np.ma.masked  # Mark as missing
 # Check for masks
 print(times.mask)  # [False True False]
 
-# Get unmasked version
-times_clean = times.unmasked
+# Drop missing rows; .unmasked merely removes the mask and exposes stored values.
+times_clean = times[~times.mask]
 
 # Fill masked values
 times_filled = times.filled(Time('2000-01-01'))
@@ -288,7 +301,7 @@ t = Time('2023-01-15 12:30:45.123456789', format='iso', scale='utc')
 # Access internal representation
 print(t.jd1, t.jd2)  # Integer and fractional parts
 
-# This allows sub-nanosecond precision over astronomical timescales
+# Two-part representation preserves precision; accuracy still depends on inputs.
 ```
 
 ### Precision
@@ -373,10 +386,10 @@ times = start + np.arange(1000) * 30 * u.second
 t = Time('2023-01-15 12:00:00', scale='utc')
 dt_utc = t.to_datetime()
 
-# Convert to specific timezone using pytz
-import pytz
-eastern = pytz.timezone('US/Eastern')
-dt_eastern = dt_utc.replace(tzinfo=pytz.utc).astimezone(eastern)
+# Standard-library timezone conversion; datetime cannot represent leap seconds.
+from datetime import timezone
+from zoneinfo import ZoneInfo
+dt_eastern = t.to_datetime(timezone=timezone.utc).astimezone(ZoneInfo("America/New_York"))
 ```
 
 ### Barycentric Correction Example
@@ -388,11 +401,12 @@ from astropy.coordinates import SkyCoord, EarthLocation
 target = SkyCoord(ra='23h23m08.55s', dec='+18d24m59.3s')
 
 # Observatory location
-location = EarthLocation.of_site('Keck Observatory')
+# Synthetic site for a self-contained example; use surveyed coordinates in research.
+location = EarthLocation(lat=40*u.deg, lon=-120*u.deg, height=1000*u.m)
 
 # Observation times (must include location)
 times = Time(['2023-01-15 08:30:00', '2023-01-16 08:30:00'],
-             location=location)
+             location=location, scale='utc')
 
 # Calculate barycentric correction
 ltt_bary = times.light_travel_time(target, kind='barycentric')
@@ -401,7 +415,8 @@ ltt_bary = times.light_travel_time(target, kind='barycentric')
 times_bary = times.tdb + ltt_bary
 
 # For radial velocity work, use the coordinate helper instead
-rv_correction = target.radial_velocity_correction(obstime=times, location=location)
+# times already carries the observer location: do not supply it a second time.
+rv_correction = target.radial_velocity_correction(obstime=times)
 ```
 
 ## Performance Considerations
@@ -409,4 +424,6 @@ rv_correction = target.radial_velocity_correction(obstime=times, location=locati
 1. **Array operations are fast**: Process multiple times as arrays
 2. **Format conversions are cached**: Repeated access is efficient
 3. **Scale conversions may require IERS data**: Update `astropy-iers-data` before offline runs, or set `iers.conf.auto_download = False` to prevent network access
-4. **High precision maintained**: Sub-nanosecond accuracy across astronomical timescales
+4. **Precision is not accuracy**: Input timestamps, leap seconds, IERS, ephemerides
+   and observatory/target coordinates bound physical accuracy. Preserve `jd1`,
+   `jd2`, scale and location when serializing precise times; a single float JD loses precision.

@@ -11,14 +11,16 @@ Run FIRST at the start of an IDC session:  python scripts/check_version.py
 - Notifies (only) when a newer idc-index (PyPI) or skill release (GitHub) is
   available. Network checks are best-effort and silently skipped offline.
 
-Keep MIN_VERSION and SKILL_VERSION in sync with the SKILL.md frontmatter.
+Keep MIN_VERSION and SKILL_VERSION in sync with metadata.idc-index and
+metadata.source-skill-version, respectively, in SKILL.md.
 """
 import re
+import shlex
 import shutil
 import sys
 
 MIN_VERSION = "0.12.5"   # keep in sync with metadata.idc-index in SKILL.md
-SKILL_VERSION = "1.8.1"  # keep in sync with metadata.version in SKILL.md
+SKILL_VERSION = "1.8.1"  # upstream metadata.source-skill-version, not local metadata.version
 REPO = "ImagingDataCommons/imaging-data-commons-skill"
 
 _LEADING_DIGITS = re.compile(r"\d+")
@@ -45,7 +47,8 @@ def fetch_json(url, *keys):
     import json
     import urllib.request
     try:
-        data = json.load(urllib.request.urlopen(url, timeout=5))
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.load(response)
         for key in keys:
             data = data[key]
         return data
@@ -56,7 +59,7 @@ def fetch_json(url, *keys):
 def install_commands(spec, upgrade=False):
     """Install commands for the interpreter running this script, preferred first.
 
-    `-m pip` is always offered: every standard interpreter ships it, and naming the
+    `-m pip` is offered when pip is available in that environment; naming the
     interpreter explicitly keeps the install out of whatever other environment a bare
     `pip` on PATH would resolve to. `uv` is offered ahead of it when it is on PATH, with
     `--python` for the same reason — otherwise `uv pip install` targets the active
@@ -65,10 +68,13 @@ def install_commands(spec, upgrade=False):
     Neither form overrides the PEP 668 guard on an externally managed interpreter. Both
     refuse there, which is the intended outcome, not a gap to work around.
     """
+    # Print POSIX-shell commands; paths and specifications must remain single arguments.
     flag = "--upgrade " if upgrade else ""
-    commands = [f"{sys.executable} -m pip install {flag}'{spec}'"]
+    interpreter = shlex.quote(sys.executable)
+    requirement = shlex.quote(spec)
+    commands = [f"{interpreter} -m pip install {flag}{requirement}"]
     if shutil.which("uv"):
-        commands.insert(0, f"uv pip install --python {sys.executable} {flag}'{spec}'")
+        commands.insert(0, f"uv pip install --python {interpreter} {flag}{requirement}")
     return commands
 
 
@@ -79,7 +85,7 @@ def print_install_instructions(spec):
         print(f"    {command}")
     print()
     print("Use a virtual environment where you can; on an externally managed system Python")
-    print("(PEP 668) the install is refused until you use a virtual environment or `--user`.")
+    print("(PEP 668), create and activate a virtual environment, then re-run this script there.")
     print("Re-run this script once the install finishes.")
 
 

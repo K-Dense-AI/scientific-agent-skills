@@ -1,5 +1,12 @@
 # Modal Scaling and Concurrency
 
+Reviewed against SDK 1.6.0 and current [scaling](https://modal.com/docs/guide/scale),
+[invocation](https://modal.com/docs/guide/function-invocation-methods),
+[concurrency](https://modal.com/docs/guide/concurrent-inputs),
+[batching](https://modal.com/docs/guide/dynamic-batching) and
+[dynamic configuration](https://modal.com/docs/guide/dynamic-function-config) guides.
+Workload placeholders below are illustrative.
+
 ## Table of Contents
 
 - [Autoscaling](#autoscaling)
@@ -15,7 +22,7 @@
 Modal automatically manages a pool of containers for each function:
 - Spins up containers when there's no capacity for new inputs
 - Spins down idle containers to save costs
-- Scales from zero (no cost when idle) to thousands of containers
+- Scales container compute to zero by default; persistent storage remains separately billed
 
 No configuration needed for basic autoscaling — it works out of the box.
 
@@ -36,10 +43,14 @@ def handle_request(data):
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `max_containers` | Unlimited | Hard cap on total containers |
+| `max_containers` | Platform/workspace limit | Hard cap for this Function pool |
 | `min_containers` | 0 | Minimum warm containers (costs money even when idle) |
-| `buffer_containers` | 0 | Extra containers to prevent queuing |
-| `scaledown_window` | 60 | Seconds of idle time before shutdown |
+| `buffer_containers` | Server-selected when omitted | Extra idle containers while active |
+| `scaledown_window` | Server-selected when omitted | Maximum idle seconds while scaling down |
+
+SDK defaults are `None` for omitted settings, allowing platform defaults. Set values
+explicitly when required. Containers can shut down sooner than the scaledown window
+when overprovisioned. Warm pools reduce cold starts but cannot guarantee their absence.
 
 ### Trade-offs
 
@@ -99,7 +110,10 @@ call = process.spawn(large_data)
 result = call.get()
 ```
 
-Up to 1 million pending `.spawn()` calls.
+Up to 1 million queued `.spawn()` inputs. Use a deployed Function for durable jobs,
+persist the returned call ID, and retrieve outputs within 7 days of completion.
+`spawn_map()` submits many inputs but returns **no result handle** in SDK 1.6.0;
+each worker must persist its output if it matters.
 
 ## Concurrent Inputs
 
@@ -114,6 +128,8 @@ async def predict(text: str):
 ```
 
 This is ideal for I/O-bound workloads or async inference where a single GPU can handle multiple requests.
+Synchronous functions use threads; async functions share an event loop. Avoid blocking
+that loop. `target_inputs` can be set below `max_inputs` to give autoscaling headroom.
 
 ### With Web Endpoints
 
@@ -141,6 +157,8 @@ async def batch_predict(texts: list[str]):
 - `max_batch_size` — Maximum inputs per batch
 - `wait_ms` — How long to wait for more inputs before processing
 - The function receives a list and must return a list of the same length
+- Callers submit individual elements, e.g. `batch_predict.remote("text")`; the decorator batches them
+- A class with a batched method cannot contain other Modal methods; validate the selected configuration before enabling concurrency on a batched workload
 
 ## Dynamic Autoscaler Updates
 
@@ -159,15 +177,23 @@ def scale_down_after_peak():
 ```
 
 Settings revert to the decorator values on the next deployment.
+`with_options()`, `with_concurrency()` and `with_batching()` instead create variants
+with separate container pools. A base `max_containers` does not cap the sum of variants;
+avoid high-cardinality configurations. Variants ignore base `min_containers`, and
+`with_options()` does not accept that parameter.
 
 ## Limits
 
 | Resource | Limit |
 |----------|-------|
-| Pending inputs (unassigned) | 2,000 |
-| Total inputs (running + pending) | 25,000 |
+| Queued synchronous inputs | 2,000 |
+| Total synchronous inputs (running + queued) | 25,000 |
 | Pending `.spawn()` inputs | 1,000,000 |
 | Concurrent inputs per `.map()` | 1,000 |
-| Rate limit (web endpoints) | 200 req/s |
+| Containers per Function | 4,000, subject to lower workspace/GPU quotas |
+| Baseline synchronous invocation rate | 200/s |
+| Baseline asynchronous invocation rate | 1,500/s |
 
-Exceeding these limits triggers `Resource Exhausted` errors. Implement retry logic for resilience.
+These are documented platform limits at review time, not guaranteed capacity.
+SDK calls can raise `modal.exception.ResourceExhaustedError`; Web Functions can
+return HTTP 429. Use bounded backoff and idempotent work, and check workspace quotas.

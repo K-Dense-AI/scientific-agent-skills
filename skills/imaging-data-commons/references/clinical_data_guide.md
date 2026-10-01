@@ -19,7 +19,9 @@ For basic clinical data access, see the "Clinical Data Access" section in the ma
 Needs `idc-index` installed — run `python scripts/check_version.py`, which reports the installed
 version and prints the install command for the interpreter you are running.
 
-No BigQuery credentials required - clinical data is packaged with `idc-index`.
+No BigQuery credentials are required. `fetch_index("clinical_index")` downloads the
+dictionary and the release-specific clinical Parquet tables from public storage; network
+access is needed on first fetch.
 
 ## Understanding Clinical Data in IDC
 
@@ -164,7 +166,10 @@ merged = pd.merge(
 # Clinical tables loaded via get_clinical_table() are not automatically
 # registered in DuckDB. Register the DataFrame manually before joining.
 nlst_canc_df = client.get_clinical_table("nlst_canc")
-client._duckdb_conn.register("nlst_canc", nlst_canc_df)
+import duckdb
+connection = duckdb.connect()
+connection.register("index", client.index)
+connection.register("nlst_canc", nlst_canc_df)
 
 query = """
 SELECT
@@ -176,7 +181,7 @@ FROM index
 JOIN nlst_canc ON index.PatientID = nlst_canc.dicom_patient_id
 WHERE index.collection_id = 'nlst' AND index.Modality = 'CT'
 """
-results = client.sql_query(query)
+results = connection.execute(query).df()
 ```
 
 ## Common Use Cases
@@ -242,7 +247,10 @@ import random
 
 # Get studies for a sample Stage IV patient
 sample_patient = stage_iv_patients.iloc[0]
-studies = client.index[client.index['PatientID'] == sample_patient]['StudyInstanceUID'].unique()
+studies = client.index[
+    (client.index['collection_id'] == 'nlst') &
+    (client.index['PatientID'] == sample_patient)
+]['StudyInstanceUID'].unique()
 
 # Generate viewer URL
 if len(studies) > 0:
@@ -316,7 +324,7 @@ print(f"Patients with both imaging and clinical data: {len(overlap)}")
 **IDC Documentation:**
 - [Clinical data organization](https://learn.canceridc.dev/data/organization-of-data/clinical) - How clinical data is organized in IDC
 - [Clinical data dashboard](https://datastudio.google.com/u/0/reporting/04cf5976-4ea0-4fee-a749-8bfd162f2e87/page/p_s7mk6eybqc) - Visual summary of available clinical data
-- [idc-index clinical_index documentation](https://idc-index.readthedocs.io/en/latest/column_descriptions.html#clinical-index)
+- [idc-index clinical_index documentation](https://idc-index.readthedocs.io/en/latest/indices_reference.html#clinical-index)
 
 **Related Guides:**
 - `bigquery_guide.md` - Advanced clinical queries via BigQuery

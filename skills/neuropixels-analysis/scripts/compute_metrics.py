@@ -10,15 +10,14 @@ import argparse
 from pathlib import Path
 import json
 
-import pandas as pd
+import numpy as np
+
+from _common import load_saved, validate_recording
 import spikeinterface.full as si
 
 
-# Curation criteria presets. snr and presence_ratio are minima, the other two are
-# maxima, and each preset is at least as strict as the one above it. The ISI,
-# presence, and amplitude thresholds follow references/QUALITY_METRICS.md:
-# Allen Visual Coding uses isi_violations_ratio < 0.5, IBL's reproducible-ephys
-# criteria tighten that to < 0.1, and the strict single-unit set to < 0.01.
+# Local screening presets, not reproductions of institutional pipelines.
+# "ibl" is a retained legacy name, not IBL's sliding-RP/noise-cutoff classifier.
 CURATION_CRITERIA = {
     'allen': {
         'snr': 3.0,
@@ -28,6 +27,7 @@ CURATION_CRITERIA = {
     },
     'ibl': {
         'snr': 4.0,
+        'firing_rate': 0.1,
         'isi_violations_ratio': 0.1,
         'presence_ratio': 0.9,
         'amplitude_cutoff': 0.1,
@@ -36,9 +36,34 @@ CURATION_CRITERIA = {
         'snr': 5.0,
         'isi_violations_ratio': 0.01,
         'presence_ratio': 0.95,
-        'amplitude_cutoff': 0.05,
+        'amplitude_cutoff': 0.01,
     },
 }
+
+
+METRIC_NAMES = ['snr', 'isi_violation', 'presence_ratio', 'amplitude_cutoff', 'firing_rate', 'amplitude_cv']
+
+
+def curate_units(metrics, method='allen'):
+    """Screen units conservatively; absent/nonfinite evidence is unresolved."""
+    if method not in CURATION_CRITERIA:
+        raise ValueError(f"unknown curation method {method!r}; choose allen, ibl, or strict")
+    criteria = CURATION_CRITERIA[method]
+    labels = {}
+    for unit_id, row in metrics.iterrows():
+        values = {key: row.get(key, np.nan) for key in criteria}
+        if not all(np.isfinite(value) for value in values.values()):
+            labels[unit_id] = 'unsorted'
+        elif values['snr'] < 1.5:
+            labels[unit_id] = 'noise'
+        elif all(values[key] > limit if key in {'snr', 'presence_ratio', 'firing_rate'}
+                 else values[key] < limit for key, limit in criteria.items()):
+            labels[unit_id] = 'good'
+        elif values['isi_violations_ratio'] > (0.05 if method == 'strict' else criteria['isi_violations_ratio']):
+            labels[unit_id] = 'mua'
+        else:
+            labels[unit_id] = 'unsorted'
+    return labels
 
 
 def compute_metrics(
@@ -51,10 +76,12 @@ def compute_metrics(
     """Compute quality metrics and apply curation."""
 
     print(f"Loading sorting from: {sorting_path}")
-    sorting = si.load_extractor(Path(sorting_path) / 'sorting')
+    sorting = load_saved(sorting_path, 'sorting')
 
     print(f"Loading recording from: {recording_path}")
-    recording = si.load_extractor(Path(recording_path) / 'preprocessed')
+    recording = load_saved(recording_path, 'preprocessed')
+    validate_recording(recording)
+    si.set_global_job_kwargs(n_jobs=n_jobs, chunk_duration='1s')
 
     print(f"Units: {len(sorting.unit_ids)}")
 
@@ -80,22 +107,16 @@ def compute_metrics(
     print("Computing additional extensions...")
     analyzer.compute('noise_levels')
     analyzer.compute('spike_amplitudes')
+    analyzer.compute('amplitude_scalings')
     analyzer.compute('correlograms', window_ms=50.0, bin_ms=1.0)
     analyzer.compute('unit_locations', method='monopolar_triangulation')
+    analyzer.compute('template_similarity')
 
     # Compute quality metrics
     print("Computing quality metrics...")
     metrics = si.compute_quality_metrics(
         analyzer,
-        metric_names=[
-            'snr',
-            'isi_violations_ratio',
-            'presence_ratio',
-            'amplitude_cutoff',
-            'firing_rate',
-            'amplitude_cv',
-            'sliding_rp_violation',
-        ],
+        metric_names=METRIC_NAMES,
         n_jobs=n_jobs,
     )
 
@@ -103,40 +124,11 @@ def compute_metrics(
     metrics.to_csv(output_path / 'quality_metrics.csv')
     print(f"Saved metrics to: {output_path / 'quality_metrics.csv'}")
 
-    # Apply curation
-    criteria = CURATION_CRITERIA.get(curation_method, CURATION_CRITERIA['allen'])
-    print(f"\nApplying {curation_method} curation criteria: {criteria}")
-
-    labels = {}
-    for unit_id in metrics.index:
-        row = metrics.loc[unit_id]
-
-        # Check each criterion
-        is_good = True
-
-        if criteria.get('snr') and row.get('snr', 0) < criteria['snr']:
-            is_good = False
-
-        if criteria.get('isi_violations_ratio') and row.get('isi_violations_ratio', 1) > criteria['isi_violations_ratio']:
-            is_good = False
-
-        if criteria.get('presence_ratio') and row.get('presence_ratio', 0) < criteria['presence_ratio']:
-            is_good = False
-
-        if criteria.get('amplitude_cutoff') and row.get('amplitude_cutoff', 1) > criteria['amplitude_cutoff']:
-            is_good = False
-
-        # Classify
-        if is_good:
-            labels[int(unit_id)] = 'good'
-        elif row.get('snr', 0) < 2:
-            labels[int(unit_id)] = 'noise'
-        else:
-            labels[int(unit_id)] = 'mua'
+    labels = curate_units(metrics, method=curation_method)
 
     # Save labels
     with open(output_path / 'curation_labels.json', 'w') as f:
-        json.dump(labels, f, indent=2)
+        json.dump({str(uid): label for uid, label in labels.items()}, f, indent=2)
 
     # Summary
     label_counts = {}
@@ -147,6 +139,7 @@ def compute_metrics(
     print(f"  Good: {label_counts.get('good', 0)}")
     print(f"  MUA: {label_counts.get('mua', 0)}")
     print(f"  Noise: {label_counts.get('noise', 0)}")
+    print(f"  Unsorted: {label_counts.get('unsorted', 0)}")
     print(f"  Total: {len(labels)}")
 
     # Metrics summary

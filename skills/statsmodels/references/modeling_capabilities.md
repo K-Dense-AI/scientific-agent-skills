@@ -15,9 +15,9 @@ Comprehensive suite of linear models for continuous outcomes with various error 
 - **WLS**: Weighted least squares for heteroskedastic errors
 - **GLS**: Generalized least squares for arbitrary covariance structure
 - **GLSAR**: GLS with autoregressive errors for time series
-- **Quantile Regression**: Conditional quantiles (robust to outliers)
+- **Quantile Regression**: Conditional quantiles (median fits reduce response-outlier sensitivity, not high-leverage bias)
 - **Mixed Effects**: Hierarchical/multilevel models with random effects
-- **Recursive/Rolling**: Time-varying parameter estimation
+- **Recursive/Rolling**: Expanding-window or rolling-window coefficient estimates
 
 **Key features:**
 - Comprehensive diagnostic tests
@@ -41,7 +41,7 @@ Flexible framework extending linear models to non-normal distributions.
 - **Negative Binomial**: Overdispersed counts
 - **Gamma**: Positive continuous, right-skewed data
 - **Inverse Gaussian**: Positive continuous with specific variance structure
-- **Gaussian**: Equivalent to OLS
+- **Gaussian**: Identity link with unweighted independent errors reproduces OLS coefficients
 - **Tweedie**: Flexible family for semi-continuous data
 
 **Link functions:**
@@ -55,7 +55,7 @@ Flexible framework extending linear models to non-normal distributions.
 - Pseudo R-squared measures
 - Robust standard errors
 
-**When to use:** Non-normal outcomes, need flexible variance and link specifications
+**When to use:** A response mechanism and conditional mean/variance structure call for a GLM family and link. Marginal non-normality alone is not the criterion.
 
 **Reference:** See `references/glm.md` for family selection, link functions, interpretation, and diagnostics.
 
@@ -69,7 +69,7 @@ Models for categorical and count outcomes.
 
 **Multinomial models:**
 - **MNLogit**: Unordered categories (3+ levels)
-- **Conditional Logit**: Choice models with alternative-specific variables
+- **Conditional Logit**: Group-conditioned binary likelihood with no explicit intercept; choice sets define groups
 - **Ordered Model**: Ordinal outcomes (ordered categories)
 
 **Count models:**
@@ -163,6 +163,6 @@ Extensive testing and diagnostic capabilities for model validation.
 - HAC standard errors (Newey-West)
 - Cluster-robust standard errors
 
-**When to use:** Validating assumptions, detecting problems, ensuring robust inference
+**When to use:** Investigating assumptions and sensitivity. Diagnostic test non-rejection and robust standard errors do not establish scientific validity.
 
 **Reference:** See `references/stats_diagnostics.md` for comprehensive testing and diagnostic procedures.

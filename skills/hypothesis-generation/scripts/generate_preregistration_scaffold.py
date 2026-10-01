@@ -321,7 +321,6 @@ def generate(
     template = read_markdown(template_path)
     replacements = {
         "{{PROJECT_ID}}": _safe_text(record["project_id"]),
-        "{{GENERATED_ON}}": _safe_text(record["updated_on"]),
         "{{HUMAN_OWNER}}": _safe_text(record["human_owner"]),
         "{{RECORD_STATUS}}": _safe_text(record["status"]),
         "{{UPDATED_ON}}": _safe_text(record["updated_on"]),

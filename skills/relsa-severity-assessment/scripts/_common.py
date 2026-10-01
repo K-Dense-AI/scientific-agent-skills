@@ -13,6 +13,7 @@ baseline time point as -1, but any value works when it is named explicitly.
 from __future__ import annotations
 
 import warnings
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -43,14 +44,19 @@ def read_relsa_table(
 ) -> pd.DataFrame:
     """Read a RELSA-format table from CSV/TSV and return it with canonical names.
 
-    ``sep=None`` sniffs the delimiter. A leading unnamed index column (as written
+    ``sep=None`` chooses tab for .txt/.tsv/.tab, comma otherwise. An unnamed index column (as written
     by R's ``write.table``, and present in the published RELSA raw data) is
     dropped. The time column is detected from ``TIME_ALIASES`` unless named.
     """
     path = Path(path)
     if sep is None:
         sep = "\t" if path.suffix.lower() in {".txt", ".tsv", ".tab"} else ","
-    frame = pd.read_csv(path, sep=sep)
+    with path.open(newline="") as handle:
+        header = next(csv.reader(handle, delimiter=sep))
+    if len(header) != len(set(header)):
+        raise RelsaDataError("duplicate column names in input")
+    frame = pd.read_csv(path, sep=sep, dtype={id_col: "string"},
+                        keep_default_na=False, na_values=[""])
 
     unnamed = [c for c in frame.columns if str(c).startswith("Unnamed:")]
     frame = frame.drop(columns=unnamed)
@@ -65,10 +71,14 @@ def canonicalize(
 ) -> pd.DataFrame:
     """Rename the id/time columns to ``id``/``time`` and sort by animal and time."""
     frame = frame.copy()
+    if not frame.columns.is_unique:
+        raise RelsaDataError("duplicate column names")
 
     if id_col != ID_COL:
         if id_col not in frame.columns:
             raise RelsaDataError(f"id column {id_col!r} not in {list(frame.columns)}")
+        if ID_COL in frame.columns:
+            raise RelsaDataError("renaming the id column would overwrite 'id'")
         frame = frame.rename(columns={id_col: ID_COL})
     if ID_COL not in frame.columns:
         raise RelsaDataError(f"no {ID_COL!r} column in {list(frame.columns)}")
@@ -80,15 +90,21 @@ def canonicalize(
                 "no time column found; expected one of "
                 f"{TIME_ALIASES} or an explicit time_col"
             )
+        if len(found) != 1:
+            raise RelsaDataError("multiple time columns; specify time_col explicitly")
         time_col = found[0]
     elif time_col not in frame.columns:
         raise RelsaDataError(f"time column {time_col!r} not in {list(frame.columns)}")
     if time_col != TIME_COL:
+        if TIME_COL in frame.columns:
+            raise RelsaDataError("renaming the time column would overwrite 'time'")
         frame = frame.rename(columns={time_col: TIME_COL})
 
     frame[TIME_COL] = pd.to_numeric(frame[TIME_COL], errors="coerce")
-    if frame[TIME_COL].isna().any():
-        raise RelsaDataError("time column contains non-numeric values")
+    if not np.isfinite(frame[TIME_COL]).all():
+        raise RelsaDataError("time column must contain finite numeric values")
+    if frame[ID_COL].isna().any() or frame[ID_COL].astype(str).str.strip().eq("").any():
+        raise RelsaDataError("animal IDs must be nonempty")
 
     return frame.sort_values([ID_COL, TIME_COL], kind="stable").reset_index(drop=True)
 
@@ -109,6 +125,16 @@ def validate(frame: pd.DataFrame, variables: Sequence[str]) -> None:
     assume one measurement per animal per time point. Everything else is a
     warning, because RELSA is explicitly designed to tolerate missing data.
     """
+    if not frame.columns.is_unique or not frame.index.is_unique:
+        raise RelsaDataError("column names and row index must be unique")
+    if not variables or len(set(variables)) != len(variables):
+        raise RelsaDataError("variables must be nonempty and unique")
+    if ID_COL not in frame or TIME_COL not in frame:
+        raise RelsaDataError("id and time columns are required")
+    if frame[ID_COL].isna().any() or frame[ID_COL].astype(str).str.strip().eq("").any():
+        raise RelsaDataError("animal IDs must be nonempty")
+    if not np.isfinite(pd.to_numeric(frame[TIME_COL], errors="coerce")).all():
+        raise RelsaDataError("time column must contain finite numeric values")
     missing = [v for v in variables if v not in frame.columns]
     if missing:
         raise RelsaDataError(f"variables not in data: {missing}")
@@ -126,6 +152,8 @@ def validate(frame: pd.DataFrame, variables: Sequence[str]) -> None:
 
     for var in variables:
         col = pd.to_numeric(frame[var], errors="coerce")
+        if (frame[var].notna() & col.isna()).any() or np.isinf(col).any():
+            raise RelsaDataError(f"variable {var!r} has nonnumeric or infinite measurements")
         if col.notna().sum() == 0:
             warnings.warn(f"variable {var!r} is entirely missing", stacklevel=2)
 
@@ -165,10 +193,14 @@ def score_to_percent(
     """
     values = np.asarray(list(values), dtype=float)
     span = float(max_score) - float(baseline_score)
-    if span == 0:
+    if not np.isfinite([max_score, baseline_score]).all() or span == 0:
         raise RelsaDataError(
             f"max_score ({max_score}) must differ from baseline_score ({baseline_score})"
         )
+    finite = values[np.isfinite(values)]
+    lo, hi = sorted((float(max_score), float(baseline_score)))
+    if np.isinf(values).any() or np.any((finite < lo) | (finite > hi)):
+        raise RelsaDataError("ordinal score lies outside its declared scale")
     return 100.0 + 100.0 * (values - float(baseline_score)) / span
 
 
@@ -185,6 +217,7 @@ def percent_of_baseline(
     for that variable, with a warning — a zero baseline makes the ratio
     undefined, which is what ``score_to_percent`` exists to avoid.
     """
+    validate(frame, variables)
     out = frame.copy()
     if baseline_time is None:
         window: list[float] | None = None
@@ -192,14 +225,16 @@ def percent_of_baseline(
         window = [float(baseline_time)]  # type: ignore[arg-type]
     else:
         window = [float(t) for t in baseline_time]  # type: ignore[union-attr]
+    if window is not None and (not window or not np.isfinite(window).all()):
+        raise RelsaDataError("baseline window must contain finite times")
 
     for var in variables:
-        out[var] = pd.to_numeric(out[var], errors="coerce")
+        out[var] = pd.to_numeric(out[var], errors="raise").astype(float)
 
     problems: list[str] = []
     for animal, block in out.groupby(ID_COL, sort=False):
         if window is None:
-            rows = block.index[:1]
+            rows = block.index[block[TIME_COL] == block[TIME_COL].min()]
         else:
             rows = block.index[block[TIME_COL].isin(window)]
             if len(rows) == 0:
@@ -210,7 +245,7 @@ def percent_of_baseline(
             window_values = out.loc[rows, var].to_numpy(dtype=float)
             finite = window_values[np.isfinite(window_values)]
             base = float(finite.mean()) if finite.size else np.nan
-            if not np.isfinite(base) or base == 0:
+            if not np.isfinite(base) or base <= 0:
                 problems.append(f"{animal}/{var} (baseline {base})")
                 out.loc[block.index, var] = np.nan
                 continue
@@ -218,7 +253,7 @@ def percent_of_baseline(
 
     if problems:
         warnings.warn(
-            "baseline missing or zero, variable set to NaN for: "
+            "baseline missing or nonpositive, variable set to NaN for: "
             + ", ".join(problems[:8])
             + ("..." if len(problems) > 8 else "")
             + ". For scores whose healthy baseline is 0, use score_to_percent().",
@@ -245,9 +280,11 @@ class ForecastMetrics:
     rmse: float
     picp: float
     mpiw: float
+    n_interval: int = 0
 
     def as_dict(self) -> dict[str, float]:
-        return {"n": self.n, "rmse": self.rmse, "picp": self.picp, "mpiw": self.mpiw}
+        return {"n": self.n, "n_interval": self.n_interval,
+                "rmse": self.rmse, "picp": self.picp, "mpiw": self.mpiw}
 
 
 def forecast_metrics(
@@ -265,7 +302,7 @@ def forecast_metrics(
     """
     a = np.asarray(list(actual), dtype=float)
     p = np.asarray(list(predicted), dtype=float)
-    if a.shape != p.shape:
+    if a.ndim != 1 or a.shape != p.shape:
         raise ValueError(f"actual {a.shape} and predicted {p.shape} differ in length")
 
     ok = np.isfinite(a) & np.isfinite(p)
@@ -273,10 +310,18 @@ def forecast_metrics(
 
     picp = float("nan")
     mpiw = float("nan")
+    n_interval = 0
+    if (lower is None) != (upper is None):
+        raise ValueError("supply both lower and upper intervals")
     if lower is not None and upper is not None:
         lo = np.asarray(list(lower), dtype=float)
         hi = np.asarray(list(upper), dtype=float)
-        band = np.isfinite(lo) & np.isfinite(hi)
+        if lo.shape != a.shape or hi.shape != a.shape:
+            raise ValueError("interval arrays must match actual and predicted")
+        if np.any(lo > hi):
+            raise ValueError("lower interval exceeds upper interval")
+        band = ok & np.isfinite(lo) & np.isfinite(hi)
+        n_interval = int(band.sum())
         if band.any():
             mpiw = float(np.mean(hi[band] - lo[band]))
         cov = band & np.isfinite(a)
@@ -284,4 +329,5 @@ def forecast_metrics(
             inside = (a[cov] >= lo[cov]) & (a[cov] <= hi[cov])
             picp = float(100.0 * np.mean(inside))
 
-    return ForecastMetrics(n=int(ok.sum()), rmse=rmse, picp=picp, mpiw=mpiw)
+    return ForecastMetrics(n=int(ok.sum()), rmse=rmse, picp=picp, mpiw=mpiw,
+                           n_interval=n_interval)

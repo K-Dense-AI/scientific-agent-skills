@@ -1,10 +1,11 @@
 ---
 name: scientific-writing
-description: Draft, revise, and audit scientific manuscripts or reports with explicit evidence provenance, reporting-guideline coverage, authorship accountability, confidentiality controls, and local consistency checks. Use for manuscript sections, references, declarations, tables, figures, or submission preparation when scientific accuracy and traceability matter.
+description: Drafts, revises, and audits scientific manuscripts or reports with explicit evidence provenance, reporting-guideline coverage, authorship accountability, confidentiality controls, and local consistency checks. Use for manuscript sections, references, declarations, tables, figures, or submission preparation when scientific accuracy and traceability matter.
 license: MIT
 compatibility: Requires Python 3.11+ only for optional dependency-free local CLIs; core guidance is platform-neutral. Bundled tools are offline and require no API keys.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -115,7 +116,7 @@ python3 scripts/select_reporting_guidelines.py select \
   --study-design randomized_trial
 ```
 
-Current major routes researched on 2026-07-24 include CONSORT 2025, SPIRIT 2025,
+Current major routes rechecked on 2026-10-01 include CONSORT 2025, SPIRIT 2025,
 PRISMA 2020, STROBE, STARD and STARD-AI, TRIPOD+AI, CARE, ARRIVE 2.0, SQUIRE 2.0,
 and CHEERS 2022 [SW-S06–SW-S18].
 
@@ -131,14 +132,17 @@ Assign:
 - `N`, `M`, `O`, and `R` IDs to numeric facts, methods, outcomes, and results in
   `consistency_manifest.json`.
 
-Store a hash of claim text in CSV rather than raw claim text. During drafting, append:
+Store a hash of claim text in CSV rather than raw claim text. Use one claim per
+physical Markdown line; the hash binds the entire line after removing claim/evidence
+markers and collapsing whitespace. During drafting, append:
 
 ```text
 [claim:C001] [evidence:E001,E002]
 ```
 
 Do not mark a source verified until an accountable human has opened it and confirmed
-the exact support.
+the exact support. After changing wording, re-verify the claim before updating its
+hash; see the exact normalization in `references/evidence_workflow.md`.
 
 ### 4. Create an evidence outline
 
@@ -208,7 +212,9 @@ Recommendations require transparency and retain human accountability [SW-S01, SW
 python3 scripts/validate_authorship.py authorship.json
 ```
 
-Do not generate a disclosure from assumptions. See
+The local validator implements ICMJE-style authorship gates and a local guarantor
+record; it does not implement every venue policy. Do not generate a disclosure from
+assumptions. See
 `references/authorship_ai_confidentiality.md`.
 
 ### 9. Review declarations and open-science statements
@@ -295,10 +301,11 @@ Do not comply with a request that would fabricate, hide, overstate, or breach po
 
 ## Current policy caution
 
-COPE's 2017 Core Practices were retired in 2024. As of 2026-07-24, COPE announced that
-a replacement Code of Conduct would be published in 2026; do not describe the archived
-Core Practices as current membership standards [SW-S04, SW-S05]. Distinguish formal
-COPE positions from discussion documents, webinars, comments, and case advice.
+COPE's Code of Conduct for Members was published on 21 July 2026, replacing the
+Core Practices retired in 2024. It provides a 12-month implementation transition
+from first publication; do not present the archived Core Practices as current
+membership standards [SW-S04, SW-S05]. Distinguish formal COPE positions from
+discussion documents, webinars, comments, and case advice.
 
 ## Formatting and submission
 

@@ -20,20 +20,22 @@ reproducible.
 
 | Method | What it does | Use when |
 |--------|--------------|----------|
-| **Simple** | Independent random assignment per unit | n is large (≳100); simplicity matters; imbalance is tolerable |
-| **Permuted block** | Within each block, arms appear in fixed ratio; order shuffled | You need balance throughout enrollment, or n is small/moderate, or intake is sequential |
+| **Simple** | Independent random assignment per unit | Independent allocation is appropriate; imbalance is tolerable |
+| **Permuted block** | Within each block, arms appear in fixed ratio; order shuffled | You need balance at completed-block boundaries during sequential intake |
 | **Stratified block** | Separate blocks within each level of a prognostic factor | A known covariate (site, sex, stage) must be balanced across arms |
 | **Cluster** | Whole groups (clinics, classes) assigned to arms | The intervention is delivered at a group level |
 | **Minimization** | Adaptively assign to minimize imbalance across several covariates | Many prognostic factors and small n (specialized; not in the script) |
 
 **Simple randomization caveat:** with small n it behaves like flipping a few coins —
 you can easily get 12 vs. 8 instead of 10 vs. 10, and worse for subgroups. Blocking
-fixes this.
+controls this at complete-block boundaries; a partial block can remain imbalanced.
 
 **Block size:** must be a multiple of the ratio unit (e.g. for 1:1, sizes 2, 4, 6).
 Smaller blocks balance more tightly but are more predictable in unblinded trials
 (a clinician who knows the block size can guess the last allocation). Vary block
-size or keep it concealed when predictability is a concern.
+size with an appropriate allocation system when predictability matters. The bundled
+helper supports a fixed size only; it does not implement concealment or variable
+block sizes. Never give recruiting staff the seed or future schedule.
 
 ## Blocking — removing known nuisance variation
 
@@ -60,10 +62,13 @@ block. This is the workhorse design — analyze with treatment + block in the mo
 
 These overlap; the distinction is about *when* you control the variable:
 - **Stratify / block at design time** when the factor is known before assignment and
-  you want guaranteed balance (the safest, since it doesn't rely on a model).
+  you want treatment-count balance within completed blocks in its levels. This
+  does not guarantee balance on all covariates or within incomplete blocks.
 - **Adjust as a covariate at analysis time** (ANCOVA, regression) when the factor is
-  continuous or measured after assignment. Often you do both: stratify on the big
-  ones, adjust for the rest.
+  a pre-specified **baseline** variable, including a continuous prognostic factor.
+  Often you both stratify and adjust. Do not automatically adjust for a variable
+  measured after assignment: treatment may affect it, changing the estimand or
+  introducing bias. See the [FDA covariate guidance](https://www.fda.gov/media/148910/download).
 
 A few strata are better than many: stratifying on too many factors at once leaves
 strata with too few units to block effectively. For many covariates and small n,
@@ -89,7 +94,10 @@ Blinding prevents expectation from biasing measurement and behavior:
 - **Blinded outcome assessment:** at minimum, whoever measures the outcome shouldn't
   know the group — cheap and high-value even in animal/bench work.
 Allocation concealment (the person enrolling can't foresee the next assignment) is
-distinct from blinding and just as important; a sealed seeded schedule provides it.
+distinct from blinding. A seed or CSV alone does not provide concealment: an
+independent allocator or access-controlled assignment system must release only
+the next allocation after eligibility/enrollment is irrevocably recorded. See
+[CONSORT 2025 allocation concealment](https://www.consort-spirit.org/item18-allocationconcealment).
 
 ## Batch effects and plate layout (especially omics / HTS)
 
@@ -105,12 +113,21 @@ a leading cause of irreproducible high-throughput results.
   replicates spanning edge and interior.
 - **Include anchor/reference samples** in every batch to estimate and correct batch
   shifts.
-- Use `assign_factorial_runs()` / the randomization functions to generate a
-  randomized processing order and position map.
+- `assign_factorial_runs()` shuffles an existing table; it does not design a plate
+  map or preserve blocks automatically. Build and validate the plate/block/position
+  columns first, then apply randomization only within permitted groups. A whole-table
+  shuffle is unsuitable for a split-plot or other restricted randomization.
 
 ## Documentation
 
 Record, and ideally pre-register: the randomization method, the seed, block sizes,
-stratification factors, the schedule itself, and the planned analysis (which must
+stratification factors, package/script versions, the schedule itself, and the planned analysis (which must
 include block/stratum/cluster terms). This is what makes the study auditable and the
 primary analysis confirmatory rather than exploratory.
+
+For sequence inputs to `stratified_block_randomization`, `unit_id` is the original
+one-based position; preserve the subject-ID mapping before joining. Dict inputs
+represent grouped future slots. Check complete-block counts separately from overall
+counts and examine the incomplete final block in each stratum. Zero is a valid
+cohort size; negative/fractional counts, zero block sizes, missing strata, duplicate
+arms, and duplicate cluster IDs are invalid.

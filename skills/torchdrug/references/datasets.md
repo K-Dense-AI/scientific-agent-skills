@@ -5,6 +5,46 @@ Use the
 as the class inventory and signature source. Dataset constructors download and
 cache data under the path supplied by the caller.
 
+These are release-era loaders, not live database clients. There is no API token,
+query pagination, or current-release discovery. Constructors can fetch large
+archives as a side effect. Check the selected loader's source URL, expected
+checksum, size, and dataset license before starting a download.
+
+## ClinTox download repair
+
+The 0.2.1 class embeds a legacy DeepChem HTTP URL that returned HTTP 400 during
+this review. DeepChem's current official loader uses the HTTPS URL below. Its
+19,870-byte gzip was fetched and matches TorchDrug's MD5 exactly; it has 1,484
+raw rows before molecular sanitization/filtering. Populate the cache once before
+running any ClinTox example in this skill:
+
+```python
+from pathlib import Path
+from torchdrug import datasets, utils
+
+cache = Path("~/molecule-datasets/").expanduser()
+cache.mkdir(parents=True, exist_ok=True)
+archive = utils.download(
+    "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/clintox.csv.gz",
+    str(cache),
+    md5=datasets.ClinTox.md5,
+)
+if utils.compute_md5(archive) != datasets.ClinTox.md5:
+    raise RuntimeError("ClinTox checksum mismatch; do not train on this cache")
+```
+
+`utils.download(..., md5=...)` checks an existing cache before deciding whether
+to fetch. In this release it does **not** verify freshly downloaded bytes, hence
+the explicit post-download check. MD5 here identifies the historical benchmark
+asset; record a SHA-256 for project provenance as well.
+
+The old URLs for BACE, BBBP, HIV, MUV, SIDER, Tox21, ToxCast, QM8, QM9, and
+Lipophilicity also failed during endpoint probes. Do not blindly replace a host
+and assume equivalent contents: verify each current official loader and checksum
+or load a separately versioned local dataset with `data.MoleculeDataset.load_csv`.
+FreeSolv's old S3 route returned an unresolved HTTP 301. These are observed
+download failures, not evidence that the datasets themselves have been retired.
+
 ## Dataset families
 
 ### Molecule property prediction
@@ -135,7 +175,23 @@ torch.manual_seed(1)
 synthon_train, synthon_valid, synthon_test = synthon_dataset.split()
 ```
 
-This preserves sample alignment.
+The two views can have different row counts because one reaction yields several
+synthons. This is source-reaction partition alignment, not row-by-row alignment.
+Verify it explicitly after preprocessing/filtering:
+
+```python
+def source_ids(dataset, subset):
+    return {dataset.targets["sample id"][i] for i in subset.indices}
+
+reaction_parts = (reaction_train, reaction_valid, reaction_test)
+synthon_parts = (synthon_train, synthon_valid, synthon_test)
+ids = [source_ids(reaction_dataset, part) for part in reaction_parts]
+for expected, part in zip(ids, synthon_parts):
+    if expected != source_ids(synthon_dataset, part):
+        raise ValueError("Reaction/synthon source IDs differ; split by common IDs")
+if any(ids[i] & ids[j] for i in range(3) for j in range(i + 1, 3)):
+    raise ValueError("Reaction source IDs leak across partitions")
+```
 
 ## Feature configuration
 
@@ -143,6 +199,8 @@ Dataset dimensions depend on feature choices. Construct models from the loaded
 dataset rather than hard-coding dimensions:
 
 ```python
+from torchdrug import models
+
 model = models.GIN(
     input_dim=dataset.node_feature_dim,
     hidden_dims=[256, 256, 256],
@@ -168,6 +226,15 @@ Do not mix checkpoint weights across incompatible feature configurations.
   do not claim a random split is a scaffold split.
 - Inspect downloaded data licenses and provenance before redistribution.
 - Validate labels, missing-value masks, and task names before training.
+- `EnzymeCommission` and `GeneOntology` return `sample["targets"]` vectors;
+  their `dataset.tasks` names are not separate sample dictionary keys. Use
+  `MultipleBinaryClassification(task=list(range(len(dataset.tasks))))`.
+- `AlphaFoldDB` in this release is pinned to historical **v2** proteome archives,
+  not the current AlphaFold DB. The embedded zebrafish URL returned 404; do not
+  silently relabel a newer archive as v2.
+- HEAD probes reached ZINC250k, USPTO50k, all FB15k237 split files, and the
+  EnzymeCommission archive (about 1 GB), but do not validate bytes or parsing.
+  None of those large datasets or pretrained weights were downloaded in this audit.
 
 ## Source links
 
@@ -177,3 +244,5 @@ Do not mix checkpoint weights across incompatible feature configurations.
 - [Generation tutorial](https://torchdrug.ai/docs/tutorials/generation.html)
 - [Retrosynthesis tutorial](https://torchdrug.ai/docs/tutorials/retrosynthesis.html)
 - [Knowledge graph tutorial](https://torchdrug.ai/docs/tutorials/reasoning.html)
+- [Current DeepChem ClinTox loader](https://github.com/deepchem/deepchem/blob/master/deepchem/molnet/load_function/clintox_datasets.py)
+- [Released dataset source](https://github.com/DeepGraphLearning/torchdrug/tree/v0.2.1/torchdrug/datasets)

@@ -11,10 +11,10 @@ https://api.openweathermap.org
 - Free tier key activates within a few hours of registration.
 
 ## Rate Limits (Free Tier)
-- **60 calls per minute** (1,000 calls/day for some endpoints).
+- Quotas depend on product and subscription; check the account and [pricing page](https://openweathermap.org/price) before a batch.
 - **Current weather, 5-day forecast, geocoding:** Available on free tier.
 - **One Call 3.0:** Requires subscription (1,000 free calls/day with credit card on file).
-- **Historical data, air pollution history:** Requires paid plan for extended ranges.
+- **Air pollution history** is documented from 2020-11-27; weather-history subscriptions are a separate product. Do not assume all history routes have the same entitlement.
 
 ---
 
@@ -37,7 +37,7 @@ GET /data/2.5/weather
 | `lang`    | string | No       | `en`     | Language code for descriptions. |
 | `appid`   | string | Yes      | -        | API key. |
 
-One location parameter (`q`, `lat`+`lon`, `id`, or `zip`) is required.
+Use `lat`+`lon`. Built-in city-name, city-ID and ZIP geocoding (`q`, `id`, `zip`) is deprecated although still available; resolve locations through `/geo/1.0/` for maintained integrations.
 
 **Example:**
 ```
@@ -96,7 +96,7 @@ Returns forecast data in 3-hour intervals for 5 days (40 data points). Same loca
 
 **Example:**
 ```
-https://api.openweathermap.org/data/2.5/forecast?q=London,GB&units=metric&cnt=8&appid=YOUR_KEY
+https://api.openweathermap.org/data/2.5/forecast?lat=51.5085&lon=-0.1257&units=metric&cnt=8&appid=YOUR_KEY
 ```
 
 **Response:**
@@ -181,7 +181,19 @@ Comprehensive endpoint returning current, minutely (1h), hourly (48h), daily (8d
 https://api.openweathermap.org/data/3.0/onecall?lat=40.7128&lon=-74.006&exclude=minutely,alerts&units=metric&appid=YOUR_KEY
 ```
 
-### 5. Air Pollution
+### 5. One Call API 4.0 (separate subscription)
+
+The current [One Call 4.0 documentation](https://openweathermap.org/api/one-call-4) describes a separate endpoint family; the 3.0 route above remains separately documented. Do not change only the version in a 3.0 URL.
+
+```text
+GET /data/4.0/onecall/current?lat={lat}&lon={lon}&appid={key}
+GET /data/4.0/onecall/timeline/1h?lat={lat}&lon={lon}&appid={key}
+GET /data/4.0/onecall/timeline/1day?lat={lat}&lon={lon}&appid={key}
+```
+
+Responses contain location/timezone fields and a `data` array. Timeline responses can include `next`/`prev` URLs; follow those URLs rather than constructing offsets. Each page is a billed API call under the selected plan. The One Call by Call plan includes 1,000 calls/day free, while the initial account cap is 2,000 calls/day; those are different thresholds. Check the configured limit before running a batch. Examples here are documentation-verified, not authenticated live tests.
+
+### 6. Air Pollution
 ```
 GET /data/2.5/air_pollution
 GET /data/2.5/air_pollution/forecast

@@ -22,7 +22,7 @@ GET /SearchTools/SqlSearch
 
 | Parameter | Type   | Description |
 |-----------|--------|-------------|
-| `cmd`     | string | **Required.** SQL query against SDSS CasJobs schema. |
+| `cmd`     | string | **Required.** SQL query against the selected SkyServer release schema; this synchronous API is separate from asynchronous CasJobs. |
 | `format`  | string | `json`, `xml`, `csv`, `html`, `votable`. Default: `html`. |
 
 **Example — query 10 galaxies:**
@@ -32,7 +32,7 @@ https://skyserver.sdss.org/dr18/SkyServerWS/SearchTools/SqlSearch?cmd=SELECT TOP
 
 Type codes: `3` = galaxy, `6` = star.
 
-**Response (JSON):**
+**Response (JSON, illustrative):**
 ```json
 [
   {"Rows": [
@@ -40,6 +40,8 @@ Type codes: `3` = galaxy, `6` = star.
   ]}
 ]
 ```
+
+The response may contain a separate `SqlQuery` table alongside the result table. Select the result by `TableName` and validate its columns, rather than concatenating every `Rows` array.
 
 ### 2. Radial Search
 
@@ -54,11 +56,12 @@ GET /SearchTools/RadialSearch
 | `radius`     | float  | Search radius in arcminutes. Default: 1. |
 | `format`     | string | `json`, `xml`, `csv`. |
 | `limit`      | int    | Max results. |
-| `objtype`    | string | Filter: `star`, `galaxy`, or blank for all. |
+| `whichquery` | string | `imaging` or `spectro`, as supported by this search. |
+| `whichway` | string | Coordinate mode, e.g. `equatorial`. |
 
 **Example — objects within 2 arcmin of RA=180, Dec=+0.5:**
 ```
-https://skyserver.sdss.org/dr18/SkyServerWS/SearchTools/RadialSearch?ra=180&dec=0.5&radius=2&format=json&limit=10
+https://skyserver.sdss.org/dr18/SkyServerWS/SearchTools/RadialSearch?ra=180&dec=0.5&radius=2&whichway=equatorial&whichquery=imaging&format=json&limit=10
 ```
 
 ### 3. Rectangular Search
@@ -111,10 +114,7 @@ Returns JPEG image data.
 
 ### 7. Spectrum Plot/Data
 
-Spectrum FITS files can be retrieved from the Science Archive Server:
-```
-https://data.sdss.org/sas/dr18/spectro/sdss/redux/{run2d}/spectra/{plate}/spec-{plate}-{mjd}-{fiberid}.fits
-```
+Spectrum FITS files are on the [Science Archive Server](https://data.sdss.org/sas/dr18/). Paths depend on instrument, data release, reduction pipeline and plate/fiber formatting. Obtain the actual file URL from the selected release's object page or data model; do not construct one universal `spectro/sdss/redux` path for every survey.
 
 ## Important SQL Tables
 
@@ -124,6 +124,8 @@ https://data.sdss.org/sas/dr18/spectro/sdss/redux/{run2d}/spectra/{plate}/spec-{
 | `SpecObj`   | Spectroscopic measurements (redshifts, classifications). |
 | `Galaxy`    | View of PhotoObj filtered to galaxies. |
 | `Star`      | View of PhotoObj filtered to stars. |
+
+URL-encode `cmd` (for example `curl --get --data-urlencode "cmd=SELECT TOP 10 ..."`). Preserve 64-bit object IDs as integers or strings, not floating-point numbers.
 
 ## Rate Limits
 

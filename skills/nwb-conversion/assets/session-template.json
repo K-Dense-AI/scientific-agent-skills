@@ -23,6 +23,8 @@
     "shared_clock_evidence": "Synthetic fixture: both timestamp vectors generated from one clock"
   },
   "imaging": {
+    "num_channels": 1,
+    "num_planes": 1,
     "device": "SyntheticMicroscope",
     "device_description": "Synthetic two-photon imaging source",
     "description": "Synthetic single-plane single-channel frames",

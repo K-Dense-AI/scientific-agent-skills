@@ -2,8 +2,8 @@
 
 ## Base URLs
 - **QuickGO (EBI, recommended)**: `https://www.ebi.ac.uk/QuickGO/services` — most reliable endpoint
-- **GO API**: `https://api.geneontology.org/api` — may return 403; use QuickGO as fallback
-- **AmiGO / GOlr (Solr-based)**: `http://golr-aux.geneontology.org/solr`
+- **GO API**: `https://api.geneontology.org/api` — current OpenAPI schema: `https://api.geneontology.org/openapi.json`
+- **AmiGO / GOlr (Solr-based)**: `https://golr.geneontology.org/solr`
 
 ## Authentication
 None required. All endpoints are public.
@@ -47,11 +47,11 @@ Returns genes/proteins annotated with that GO term.
 
 ### 4. Search Entities
 ```
-GET https://api.geneontology.org/api/search/entity/{query}
+GET https://api.geneontology.org/api/search/entity/autocomplete/{query}
 ```
 Example:
 ```
-GET https://api.geneontology.org/api/search/entity/apoptosis?rows=10
+GET https://api.geneontology.org/api/search/entity/autocomplete/apoptosis
 ```
 
 ### 5. Ontology Ancestors / Descendants
@@ -116,7 +116,7 @@ GET https://www.ebi.ac.uk/QuickGO/services/ontology/go/search?query=apoptosis&li
 | `taxonId` | NCBI taxonomy ID (9606 = human) |
 | `evidenceCode` | ECO code (e.g., ECO:0000269 = experimental) |
 | `aspect` | `biological_process`, `molecular_function`, `cellular_component` |
-| `limit` | Results per page (max 100) |
+| `limit` | Results per page (max 200) |
 | `page` | Page number (1-based) |
 
 ## QuickGO Response Format
@@ -141,7 +141,7 @@ GET https://www.ebi.ac.uk/QuickGO/services/ontology/go/search?query=apoptosis&li
 
 ## Notes
 - QuickGO (EBI) is generally more robust and better documented for annotation queries.
-- GO API (geneontology.org) is better for ontology structure traversal.
-- GO IDs must be URL-encoded when used in paths (e.g., `GO%3A0008150` for `GO:0008150`).
+- GO API pagination uses `start`/`rows` on supported bioentity routes. Inspect the current OpenAPI schema for per-route parameters; the autocomplete route replaces the former general entity-search route.
+- URL-encode GO IDs when constructing paths (e.g., `GO%3A0008150` for `GO:0008150`).
 - Three GO namespaces: biological_process (BP), molecular_function (MF), cellular_component (CC).
 - Evidence codes: IDA (direct assay), IMP (mutant phenotype), IGI (genetic interaction), IEA (electronic annotation), etc.

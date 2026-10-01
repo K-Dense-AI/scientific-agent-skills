@@ -38,7 +38,7 @@ stats = client.sql_query("""
     SELECT
         COUNT(DISTINCT collection_id) as collections,
         COUNT(DISTINCT analysis_result_id) as analysis_results,
-        COUNT(DISTINCT PatientID) as patients,
+        COUNT(DISTINCT (collection_id, PatientID)) as patients,
         COUNT(DISTINCT StudyInstanceUID) as studies,
         COUNT(DISTINCT SeriesInstanceUID) as series,
         SUM(instanceCount) as instances,
@@ -243,7 +243,8 @@ See `references/clinical_data_guide.md` for complete patterns including value ma
 ## Version Tracking — "What's New in IDC vX?"
 
 Use `series_init_idc_version` and `series_revised_idc_version` in the main `index` table. Do NOT
-use `prior_versions_index` for this — it contains only removed series.
+use `prior_versions_index` as a list of new series: it contains historical revisions,
+including UIDs that still exist with different CRDC UUIDs in the current index.
 
 ```python
 VERSION = 24  # Replace with target version
@@ -306,7 +307,7 @@ client.sql_query("""
 ```python
 client.fetch_index("volume_geometry_index")
 
-# Series that form a regularly-spaced 3D volume (no resampling needed)
+# Candidate regularly spaced series; verify geometry and task-specific resampling needs
 client.sql_query("""
     SELECT i.collection_id, i.SeriesInstanceUID, i.BodyPartExamined,
            v.obliquity_degrees
@@ -336,7 +337,8 @@ Key columns: `regularly_spaced_3d_volume` (composite flag), `obliquity_degrees` 
 
 ## RT Structure Sets
 
-`rtstruct_index` has one row per RTSTRUCT series. Array columns (`ROINames`, `ROIGenerationAlgorithms`, `RTROIInterpretedTypes`) are stored as strings.
+`rtstruct_index` has one row per RTSTRUCT series. `ROINames`, `ROIGenerationAlgorithms`, and `RTROIInterpretedTypes` are string arrays
+(`VARCHAR[]` in DuckDB); use `list_contains` for membership.
 
 ```python
 client.fetch_index("rtstruct_index")
@@ -422,18 +424,19 @@ client.sql_query("""
            m.EchoTime, m.EchoTrainLength, m.ScanningSequence
     FROM index i
     JOIN mr_index m ON i.SeriesInstanceUID = m.SeriesInstanceUID
-    WHERE m.EchoTrainLength > 1
+    WHERE array_length(m.EchoTime) > 1
     LIMIT 10
 """)
 
-# PET: FDG studies with specific reconstruction method
+# PET: discover FDG spellings in Radiopharmaceutical; radionuclide alone does not identify FDG
 client.sql_query("""
     SELECT i.collection_id, i.SeriesInstanceUID,
-           p.RadionuclideCodeMeaning, p.ReconstructionMethod,
+           p.RadionuclideCodeMeaning, p.Radiopharmaceutical, p.ReconstructionMethod,
            p.Units, p.DecayCorrection
     FROM index i
     JOIN pt_index p ON i.SeriesInstanceUID = p.SeriesInstanceUID
-    WHERE p.RadionuclideCodeMeaning LIKE '%fluorodeoxyglucose%'
+    WHERE LOWER(p.Radiopharmaceutical) LIKE '%fluorodeoxyglucose%'
+       OR LOWER(p.Radiopharmaceutical) LIKE '%fdg%'
     LIMIT 10
 """)
 
@@ -447,6 +450,10 @@ client.sql_query("""
     LIMIT 10
 """)
 ```
+
+`EchoTrainLength` is the echoes within an acquisition train, not the number of distinct
+`EchoTime` values. Fluorine-18 is a radionuclide used by multiple tracers; inspect
+`Radiopharmaceutical` values and source DICOM metadata before declaring a complete FDG cohort.
 
 Key columns by table (use `client.indices_overview["ct_index"]["schema"]` for the full list):
 - **ct_index**: `SliceThickness`, `KVP`, `ConvolutionKernel`, `SpiralPitchFactor`, `XRayTubeCurrent_min/max`, `Exposure_min/max`, `PixelSpacing_row_mm/col_mm`, `Rows`, `Columns`

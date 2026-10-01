@@ -20,6 +20,7 @@ Examples:
 
 import sys
 import argparse
+from urllib.parse import quote
 from bioservices import KEGG, UniChem, ChEBI, ChEMBL
 
 
@@ -30,13 +31,16 @@ def search_kegg_compound(compound_name):
     print(f"{'='*70}")
 
     k = KEGG()
+    k.services.url = "https://rest.kegg.jp"
 
     print(f"Searching KEGG for: {compound_name}")
 
     try:
-        results = k.find("compound", compound_name)
+        results = k.services.http_get("find/compound/" + quote(compound_name, safe=""), frmt="txt")
 
-        if not results or not results.strip():
+        if not isinstance(results, str):
+            raise ValueError(f"KEGG search failed: {results!r}")
+        if not results.strip():
             print(f"[FAIL] No results found in KEGG")
             return k, None
 
@@ -50,7 +54,16 @@ def search_kegg_compound(compound_name):
             description = parts[1] if len(parts) > 1 else "No description"
             print(f"  {i}. {kegg_id}: {description}")
 
-        # Use first result
+        exact_matches = [line for line in lines if len(line.split("\t", 1)) == 2
+                         and compound_name.casefold() in {
+                             name.strip().casefold() for name in line.split("\t", 1)[1].split(";")}]
+        if len(exact_matches) == 1:
+            lines = exact_matches
+        if len(lines) > 1:
+            print("[SKIP] Ambiguous compound name; refine the query before mapping")
+            return k, None
+
+        # Use the unique result
         first_result = lines[0].split("\t")
         kegg_id = first_result[0].replace("cpd:", "")
 
@@ -223,8 +236,8 @@ def get_chebi_info(chebi_id):
             print(f"  ID: {entity.chebiId}")
             print(f"  Name: {entity.chebiAsciiName}")
 
-            if hasattr(entity, 'Formulae') and entity.Formulae:
-                print(f"  Formula: {entity.Formulae}")
+            if hasattr(entity, 'formula') and entity.formula:
+                print(f"  Formula: {entity.formula}")
 
             if hasattr(entity, 'mass') and entity.mass:
                 print(f"  Mass: {entity.mass}")
@@ -235,7 +248,7 @@ def get_chebi_info(chebi_id):
             return {
                 'chebi_id': entity.chebiId,
                 'name': entity.chebiAsciiName,
-                'formula': entity.Formulae if hasattr(entity, 'Formulae') else None,
+                'formula': entity.formula if hasattr(entity, 'formula') else None,
                 'mass': entity.mass if hasattr(entity, 'mass') else None
             }
         else:
@@ -274,7 +287,7 @@ def get_chembl_info(chembl_id):
                 print(f"  Preferred Name: {compound['pref_name']}")
 
             if 'molecule_properties' in compound:
-                props = compound['molecule_properties']
+                props = compound['molecule_properties'] or {}
 
                 if 'full_mwt' in props:
                     print(f"  Molecular Weight: {props['full_mwt']}")
@@ -289,9 +302,9 @@ def get_chembl_info(chembl_id):
                     print(f"  H-Bond Donors: {props['hbd']}")
 
             if 'molecule_structures' in compound:
-                structs = compound['molecule_structures']
+                structs = compound['molecule_structures'] or {}
 
-                if 'canonical_smiles' in structs:
+                if isinstance(structs.get('canonical_smiles'), str):
                     smiles = structs['canonical_smiles']
                     print(f"  SMILES: {smiles[:60]}{'...' if len(smiles) > 60 else ''}")
 

@@ -1,5 +1,11 @@
 # Scanpy API Quick Reference
 
+Reviewed for Scanpy 1.12.4 / AnnData 0.13.4 on 2026-10-01. These snippets are
+illustrative and require the named genes, groups and prior results to exist.
+Use the tested CLI workflow for a runnable starting point. Counts, normalized
+expression and `.raw` have distinct roles; see [upstream-review.md](upstream-review.md).
+
+
 Quick reference for commonly used scanpy functions organized by module.
 
 ## Import Convention
@@ -17,10 +23,10 @@ sc.read_10x_h5(filename)                    # Read 10X HDF5 file
 sc.read_10x_mtx(path)                       # Read 10X mtx directory
 sc.read_h5ad(filename)                      # Read h5ad (AnnData) file
 sc.read_csv(filename)                       # Read CSV file
-sc.read_excel(filename)                     # Read Excel file
+sc.read_excel(filename, sheet=0)            # Requires a sheet and Excel reader dependency
 sc.read_loom(filename)                      # Read loom file
 sc.read_text(filename)                      # Read text file
-sc.read_visium(path)                        # Read Visium spatial data
+sc.read_visium(path)                        # Deprecated; use spatialdata-io for new workflows
 ```
 
 ### Writing Functions
@@ -37,7 +43,7 @@ adata.write_zarr(filename)                  # Write to zarr format
 ### Quality Control
 
 ```python
-sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], inplace=True)
+sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, inplace=True)
 sc.pp.filter_cells(adata, min_genes=200)
 sc.pp.filter_genes(adata, min_cells=3)
 sc.pp.scrublet(adata)                              # Doublet detection (core since 1.10)
@@ -57,7 +63,7 @@ sc.pp.sqrt(adata)                                # Square root transformation
 ```python
 sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
 sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)
-# seurat, cell_ranger, seurat_v3 flavors support dask arrays (scanpy 1.10+)
+# Dask support is experimental; v3 flavors gained support in 1.12.
 ```
 
 ### Scaling and Regression
@@ -98,7 +104,7 @@ sc.tl.draw_graph(adata, layout='fa')             # Force-directed graph
 ```python
 sc.tl.leiden(adata, resolution=0.5)              # Leiden clustering (recommended)
 # sc.tl.louvain(adata, resolution=0.5)           # Deprecated in scanpy 1.12 — use leiden
-sc.tl.kmeans(adata, n_clusters=10)               # K-means clustering
+# K-means is not a scanpy.tl function; use sklearn.cluster.KMeans explicitly.
 ```
 
 ### Marker Genes and Differential Expression
@@ -110,29 +116,31 @@ sc.tl.rank_genes_groups(adata, groupby='leiden', method='logreg')
 
 # Get results as dataframe
 sc.get.rank_genes_groups_df(adata, group='0')
-# Exploratory only — per-cell tests inflate p-values; pseudobulk for rigorous DE
+# Exploratory only — per-cell tests inflate significance (often making p-values too small); pseudobulk for rigorous DE
 ```
 
 ### Aggregation (Pseudobulk)
 
 ```python
 sc.get.aggregate(adata, by='cell_type', func='sum', layer='counts')
-sc.get.aggregate(adata, by=['sample', 'cell_type'], func=['sum', 'mean'])
-# Dask-compatible for sum/mean/count (scanpy 1.12); use pydeseq2 for DE on pseudobulk
+pb = sc.get.aggregate(adata, by=['sample', 'cell_type'], func='sum', layer='counts')
+counts = pb.layers['sum']  # cells/groups x genes; pb.X is None
+# Keep biological replicate metadata; PyDESeq2 expects sample rows and gene columns.
 ```
 
 ### Trajectory Inference
 
 ```python
 sc.tl.paga(adata, groups='leiden')               # PAGA trajectory
-sc.tl.dpt(adata)                                  # Diffusion pseudotime
+sc.tl.diffmap(adata, n_comps=10)  # choose fewer for small datasets
+sc.tl.dpt(adata, n_dcs=10)                                  # Diffusion pseudotime
 ```
 
 ### Gene Scoring
 
 ```python
 sc.tl.score_genes(adata, gene_list, score_name='score')
-sc.tl.score_genes_cell_cycle(adata, s_genes, g2m_genes)
+sc.tl.score_genes_cell_cycle(adata, s_genes=s_genes, g2m_genes=g2m_genes)
 ```
 
 ### Embeddings and Projections
@@ -182,7 +190,9 @@ sc.pl.rank_genes_groups_dotplot(adata, n_genes=5)
 
 ```python
 sc.pl.paga(adata, color='leiden')                # PAGA graph
-sc.pl.dpt_timeseries(adata)                      # DPT timeseries
+# Legacy branch-order plot requires dpt_order_indices/dpt_changepoints,
+# which default n_branchings=0 does not create. Prefer the pseudotime UMAP.
+# sc.pl.dpt_timeseries(adata)                      # DPT timeseries
 ```
 
 ### QC Plots
@@ -229,7 +239,7 @@ adata.uns                  # Unstructured annotations (dict)
 adata.obsm                 # Multi-dimensional cell annotations (e.g., PCA, UMAP)
 adata.varm                 # Multi-dimensional gene annotations
 adata.layers               # Additional data layers
-adata.raw                  # Raw data backup
+adata.raw                  # Snapshot of X/var; not necessarily counts
 
 # Access
 adata.obs_names            # Cell barcodes
@@ -246,7 +256,7 @@ adata[adata.obs['leiden'] == '0', :]
 
 ```python
 sc.settings.verbosity = 3              # 0=error, 1=warning, 2=info, 3=hint
-sc.settings.set_figure_params(dpi=80, facecolor='white')
+sc.set_figure_params(dpi=80, facecolor='white')
 sc.settings.autoshow = False           # Don't show plots automatically
 sc.settings.autosave = True            # Save figures to figdir (preferred over save=)
 sc.settings.figdir = './figures/'      # Figure directory
@@ -260,8 +270,10 @@ Note: the `save=` parameter on individual `sc.pl.*` functions is deprecated in s
 ## Useful Utilities
 
 ```python
-sc.logging.print_versions()            # Print version information
+sc.logging.print_header()            # Print version information
 sc.logging.print_memory_usage()        # Print memory usage
 adata.copy()                           # Create a copy of AnnData object
-adata.concatenate([adata1, adata2])    # Concatenate AnnData objects
+import anndata as ad
+ad.concat({'sample1': adata1, 'sample2': adata2}, label='sample', join='inner')
+# Align gene IDs first; outer joins fill absent sparse features with zero.
 ```

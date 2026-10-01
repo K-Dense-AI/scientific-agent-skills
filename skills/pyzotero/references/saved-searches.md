@@ -4,14 +4,14 @@
 
 ```python
 # Get all saved search metadata (not results)
-searches = zot.searches()
+searches = zot.everything(zot.searches())
 # Returns list of dicts with name, key, conditions, version
 
 for search in searches:
     print(search['data']['name'], search['data']['key'])
 ```
 
-**Note**: Saved search *results* cannot be retrieved via the API (as of 2025). Only metadata is returned.
+`searches()` returns metadata. The Web API does not execute saved searches. The current **local** API supports `/api/users/0/searches/{searchKey}/items` (or the group equivalent), but Pyzotero 1.15.2 has no dedicated wrapper for that route.
 
 ## Creating Saved Searches
 
@@ -34,7 +34,7 @@ zot.saved_search('ML Papers', conditions)
 conditions = [
     {'condition': 'itemType', 'operator': 'is', 'value': 'journalArticle'},
     {'condition': 'tag', 'operator': 'is', 'value': 'unread'},
-    {'condition': 'date', 'operator': 'isAfter', 'value': '2023-01-01'},
+    {'condition': 'date', 'operator': 'isInTheLast', 'value': '3 years'},
 ]
 zot.saved_search('Recent Unread Articles', conditions)
 ```
@@ -43,9 +43,21 @@ zot.saved_search('Recent Unread Articles', conditions)
 
 ```python
 # Get search keys first
-searches = zot.searches()
+searches = zot.everything(zot.searches())
 keys = [s['data']['key'] for s in searches if s['data']['name'] == 'Old Search']
-zot.delete_saved_search(keys)
+# The SDK's delete_saved_search() omits the required library-version
+# precondition in 1.15.2. For REMOTE libraries, issue the documented request:
+if keys:
+    if len(keys) > 50:
+        raise ValueError('Review and delete at most 50 search keys per request')
+    version = zot.last_modified_version()
+    response = zot.client.delete(
+        f'https://api.zotero.org/{zot.library_type}/{zot.library_id}/searches',
+        params={'searchKey': ','.join(keys)},
+        headers={**zot.default_headers(), 'If-Unmodified-Since-Version': str(version)},
+    )
+    response.raise_for_status()
+    assert response.status_code == 204
 ```
 
 ## Discovering Valid Operators and Conditions
@@ -59,19 +71,25 @@ conditions = zot.show_conditions()
 
 # Operators valid for a specific condition
 title_operators = zot.show_condition_operators('title')
-# e.g. ['is', 'isNot', 'contains', 'doesNotContain', 'beginsWith']
+# A set of supported operator strings in this SDK release.
 ```
 
 ## Common Condition/Operator Combinations
 
 | Condition | Common Operators |
 |-----------|-----------------|
-| `title` | `contains`, `doesNotContain`, `is`, `beginsWith` |
+| `title` | `contains`, `doesNotContain`, `is`, `isNot` |
 | `tag` | `is`, `isNot` |
 | `itemType` | `is`, `isNot` |
-| `date` | `isBefore`, `isAfter`, `is` |
+| `date` | `isBefore`, `isInTheLast`, `is`, `isNot` |
 | `creator` | `contains`, `is` |
 | `publicationTitle` | `contains`, `is` |
-| `year` | `is`, `isBefore`, `isAfter` |
+| `year` | `is`, `isNot`, `contains` |
 | `collection` | `is`, `isNot` |
 | `fulltextContent` | `contains` |
+
+`show_operators()` is a mapping; `show_conditions()` is a keys view; `show_condition_operators()` returns a set. These use the SDK's bundled condition definitions, not live server discovery. Check `saved_search()`'s creation result for `failed`, as with `create_items()`. The direct remote delete above is illustrative and does not inherit Pyzotero's backoff wrapper; handle 429/503 and their `Retry-After` headers before another request. Never send it to the local API without local authorization and server-ID handling.
+
+Sources: [search writes](https://www.zotero.org/support/dev/web_api/v3/write_requests#search_requests), [local search execution](https://www.zotero.org/support/dev/web_api/v3/local_api).
+
+The SDK 1.15.2 condition table rejects `date/isAfter` despite listing `isAfter` in its global operators. Use a permitted condition/operator pair or an explicitly constructed direct API request after checking the server contract.

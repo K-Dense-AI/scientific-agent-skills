@@ -51,7 +51,7 @@ accessible in every intended context.
 
 ## WDL and CWL with dxCompiler
 
-Current baseline: **dxCompiler 2.17.0**.
+Current baseline: **dxCompiler 2.18.0**.
 
 Supported language versions at that baseline:
 
@@ -68,7 +68,7 @@ upgraded to 1.2 before compilation.
 Prerequisites:
 
 - Current `dx` toolkit and authenticated project context
-- dxCompiler 2.17.0 JAR from the official GitHub release
+- dxCompiler 2.18.0 JAR from the official GitHub release
 - Java 8 or 11
 - Docker only if using the documented containerized compiler workflow
 
@@ -83,7 +83,7 @@ wdlTools release before compilation.
 Then compile:
 
 ```bash
-java -jar "dxCompiler-2.17.0.jar" compile \
+java -jar "dxCompiler-2.18.0.jar" compile \
   "workflow.wdl" \
   -project "project-xxxx" \
   -folder "/workflows" \
@@ -100,12 +100,12 @@ dx run "workflow-xxxx" \
   --cost-limit 50
 ```
 
-Run `java -jar dxCompiler-2.17.0.jar help` for the exact options supported by
+Run `java -jar dxCompiler-2.18.0.jar help` for the exact options supported by
 that pinned release.
 
 ### Authenticated WDL imports
 
-dxCompiler 2.17.0 supports per-domain bearer tokens for protected HTTP(S) WDL
+dxCompiler 2.17.0 and later support per-domain bearer tokens for protected HTTP(S) WDL
 imports through `DXCOMPILER_WDL_IMPORT_BEARER_TOKENS`.
 
 This variable is highly sensitive:
@@ -131,7 +131,7 @@ dxCompiler expects one packed CWL 1.2 document.
 ```bash
 cwltool --validate "workflow.cwl.json"
 
-java -jar "dxCompiler-2.17.0.jar" compile \
+java -jar "dxCompiler-2.18.0.jar" compile \
   "workflow.cwl.json" \
   -project "project-xxxx" \
   -folder "/workflows"
@@ -214,6 +214,16 @@ dx find jobs --root-execution "job-head"
 ```
 
 Check current CLI help if a filter name differs; dx-toolkit evolves.
+
+### Offline execution
+
+With dx-toolkit 0.415.0, rebuilt Nextflow applets honor
+`nextflow_run_opts="-offline"` and automatically enable offline mode when the
+job has no outbound network access. `-offline=false` requests online mode; it
+does not grant network permission. Pre-stage required plugins, pipeline
+resources, containers, and input data so offline execution does not need a
+registry or remote download. Rebuild older applets to incorporate the updated
+template, then test a small run under the intended network policy.
 
 ### Containers
 

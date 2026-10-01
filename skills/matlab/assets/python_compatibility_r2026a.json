@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "as_of": "2026-07-23",
+  "as_of": "2026-10-01",
   "matlab_release": "R2026a",
   "python_implementation": "CPython",
   "python_architecture_bits": 64,

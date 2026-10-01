@@ -18,6 +18,8 @@ def validate_protocol(protocol):
     def finite(name, value, low=0, high=math.inf):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not low < value <= high:
             raise ValueError(f"{name} must be finite and in ({low}, {high}]")
+    if not isinstance(protocol, dict):
+        raise ValueError("Protocol must be a JSON object")
     allowed = {"model", "parameter_set", "initial_soc", "temperature_K", "sample_period_s", "steps", "parameter_overrides"}
     if set(protocol) - allowed:
         raise ValueError(f"Unsupported protocol fields: {sorted(set(protocol) - allowed)}")
@@ -32,6 +34,8 @@ def validate_protocol(protocol):
     if not isinstance(steps, list) or not steps:
         raise ValueError("steps must be a nonempty list")
     for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            raise ValueError(f"step {index}: must be a JSON object")
         if set(step) - {"kind", "duration_s", "c_rate", "until_voltage_V"}:
             raise ValueError(f"step {index}: unsupported field")
         if step.get("kind") not in {"discharge", "charge", "rest"}:
@@ -45,7 +49,12 @@ def validate_protocol(protocol):
                 finite(f"step {index} until_voltage_V", step["until_voltage_V"])
         elif "c_rate" in step or "until_voltage_V" in step:
             raise ValueError("Rest steps cannot specify c_rate or voltage cutoff")
-    for key, value in protocol.get("parameter_overrides", {}).items():
+    overrides = protocol.get("parameter_overrides", {})
+    if not isinstance(overrides, dict):
+        raise ValueError("parameter_overrides must be a JSON object")
+    for key, value in overrides.items():
+        if not isinstance(key, str):
+            raise ValueError("Parameter override names must be strings")
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             raise ValueError(f"Override {key}: only finite numeric existing parameters are supported")
     return protocol
@@ -66,11 +75,19 @@ def solve_protocol(protocol, mesh_points=20, rtol=1e-6, atol=1e-8):
         raise ValueError(f"Unknown parameter overrides: {sorted(unknown)}")
     if {"Ambient temperature [K]", "Initial temperature [K]"} & set(overrides):
         raise ValueError("Set temperature_K instead of temperature overrides")
+    if "Current function [A]" in overrides:
+        raise ValueError("Set step c_rate instead of Current function [A]; experiment steps replace it")
+    if any(key.startswith("Initial concentration in ") and " electrode [" in key for key in overrides):
+        raise ValueError("Set initial_soc instead of initial electrode concentrations; SOC initialization replaces them")
+    if any(not isinstance(parameters[key], (int, float)) for key in overrides):
+        raise ValueError("Only existing numeric parameters may be overridden; preserve functional parameter laws")
     parameters.update(overrides)
     parameters.update({"Ambient temperature [K]": protocol["temperature_K"],
                        "Initial temperature [K]": protocol["temperature_K"]})
     capacity = float(parameters["Nominal cell capacity [A.h]"])
     lower, upper = (float(parameters[key]) for key in ("Lower voltage cut-off [V]", "Upper voltage cut-off [V]"))
+    if float(parameters["Number of cells connected in series to make a battery"]) != 1:
+        raise ValueError("Only a single cell is supported; battery and cell voltage differ for series strings")
     if not (capacity > 0 and 0 < lower < upper):
         raise ValueError("Invalid nominal capacity or voltage limits in parameter set")
     steps = []
@@ -108,7 +125,7 @@ def solve_protocol(protocol, mesh_points=20, rtol=1e-6, atol=1e-8):
         terminations.append({"step": index, "kind": protocol["steps"][index]["kind"],
                              "start_s": float(t[0]), "end_s": float(t[-1]), "termination": segment.termination})
     return {"solution": solution, "segments": segments, "rows": rows, "terminations": terminations,
-            "parameters": parameters.to_json(), "mesh_points": mesh_points, "rtol": rtol, "atol": atol,
+            "parameters": simulation.parameter_values.to_json(), "mesh_points": mesh_points, "rtol": rtol, "atol": atol,
             "nominal_capacity_Ah": capacity, "voltage_limits_V": [lower, upper]}
 
 
@@ -171,6 +188,7 @@ def run(protocol_path, output, measured=None, mesh_points=20):
         "versions": {name: importlib.metadata.version(name) for name in ("pybamm", "pybammsolvers", "numpy", "casadi")},
         "protocol_sha256": hashlib.sha256(protocol_path.read_bytes()).hexdigest(),
         "parameter_set_description": pybamm.parameter_sets.get_docstring(protocol["parameter_set"]),
+        "parameter_snapshot_scope": "Base simulation parameters after initial_soc; per-step currents are set by the protocol, not the snapshot Current function [A]",
         "nominal_capacity_Ah": baseline["nominal_capacity_Ah"], "voltage_limits_V": baseline["voltage_limits_V"],
         "mesh_points": mesh_points, "baseline_tolerances": {"rtol": 1e-6, "atol": 1e-8},
         "tight_tolerances": {"rtol": 1e-8, "atol": 1e-10}, "refined_mesh_points": mesh_points * 2,

@@ -27,13 +27,13 @@ from typing import Any
 from ols_client import iri_to_curie
 
 ZOOMA_ANNOTATE = "https://www.ebi.ac.uk/spot/zooma/v2/api/services/annotate"
-USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.2"
+USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.4"
 TIMEOUT = 60
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
-# HIGH and GOOD are curator-grade. MEDIUM and LOW are guesses — report them,
-# but do not treat them as ready to write into metadata.
+# Legacy output field ``safe`` means this confidence bucket only. Neither HIGH
+# nor GOOD proves semantic equivalence, curation, currency or correct context.
 SAFE_CONFIDENCE = {"HIGH", "GOOD"}
 
 
@@ -44,13 +44,17 @@ class ZoomaError(RuntimeError):
 def ontology_filter(ontologies: list[str]) -> str:
     """Build the ``filter`` query value ZOOMA requires.
 
-    ``required:[none]`` keeps the call from demanding a datasources list.
-    Ontology ids are lowercase OLS ids (``uberon``, ``cl``), not prefixes.
+    Empty required sources permit all curated sources. Ontology ids are
+    lowercase OLS ids (``uberon``, ``cl``); defining_only excludes imports.
     """
     ids = ",".join(item.strip().lower() for item in ontologies if item.strip())
     if not ids:
         raise ZoomaError("ZOOMA annotate requires at least one ontology id")
-    return f"required:[none],ontologies:[{ids}]"
+    if "none" in ids.split(","):
+        raise ZoomaError("'none' removes the server's ontology restriction; use a real ontology id")
+    if any(not item or not all(c.isalnum() or c in "_.-" for c in item) for item in ids.split(",")):
+        raise ZoomaError("invalid OLS ontology id")
+    return f"ontologies:[{ids}],defining_only:[true]"
 
 
 def annotate(
@@ -96,7 +100,15 @@ def flatten_hit(hit: dict) -> list[dict]:
     """Turn one ZOOMA annotation into one row per semantic tag."""
     confidence = (hit.get("confidence") or "").upper()
     prop = hit.get("annotatedProperty") or {}
-    provenance = hit.get("provenance") or {}
+    chain = []
+    origin = hit
+    while isinstance(origin, dict):
+        if origin.get("provenance"):
+            chain.append(origin["provenance"])
+        origin = origin.get("derivedFrom")
+    # The v2 compatibility wrapper always says INFERRED_FROM_CURATED, even for
+    # lexical or embedding hits. Report the underlying source's evidence.
+    provenance = chain[-1] if chain else {}
     source = provenance.get("source") or {}
     rows = []
     tags = hit.get("semanticTags") or []
@@ -111,6 +123,7 @@ def flatten_hit(hit: dict) -> list[dict]:
                 "source": source.get("name") or "",
                 "property_type": prop.get("propertyType") or "",
                 "property_value": prop.get("propertyValue") or "",
+                "provenance_chain": chain,
             }
         ]
     for iri in tags:
@@ -125,6 +138,7 @@ def flatten_hit(hit: dict) -> list[dict]:
                 "source": source.get("name") or "",
                 "property_type": prop.get("propertyType") or "",
                 "property_value": prop.get("propertyValue") or "",
+                "provenance_chain": chain,
             }
         )
     return rows

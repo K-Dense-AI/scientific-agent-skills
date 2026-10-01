@@ -1,7 +1,7 @@
 # Analysis: tolerances, computed entries, bands, DOS, and model limits
 
-This reference targets `pymatgen==2026.5.4` with
-`pymatgen-core==2026.7.16`. An analysis object returning a value does not
+This reference targets `pymatgen==2026.9.24` with
+`pymatgen-core==2026.9.23`. An analysis object returning a value does not
 establish convergence, uncertainty, experimental agreement, or suitability of
 the underlying model.
 
@@ -74,6 +74,12 @@ matches = matcher.fit(first, second)
 Record every tolerance and option. A match is equivalence under the chosen
 algorithm, reductions, scaling, and species comparator—not identity of files,
 provenance, defects, magnetic states, or experimental phases.
+
+`fit()` is directional. For order-independent grouping use
+`matcher.group_structures(structures, symmetric=True)` in this snapshot;
+the new option is ignored for anonymous matching. Current mixed-functional
+entry processing also sorts inputs and uses symmetric grouping, fixing earlier
+hash-seed-dependent hulls. Recompute old mixed hulls when comparing versions.
 
 ## Local environments
 
@@ -163,13 +169,15 @@ hull.
 ```python
 from pymatgen.analysis.phase_diagram import PDPlotter
 
-plotter = PDPlotter(diagram, show_unstable=0.2)
+plotter = PDPlotter(diagram, show_unstable=0.2, backend="matplotlib")
 plotter.write_image("phase.new.svg", image_format="svg")
 ```
 
 Plot to a new path, bound unstable points and output size, and preserve the
 machine-readable entry table. Plotting backends and image export can introduce
-optional dependencies.
+optional dependencies. The default Plotly backend needs its image-export stack;
+the bundled CLI selects Matplotlib so PNG/PDF/SVG export works with the tested
+package set.
 
 ## Chemical-potential and Pourbaix analyses
 
@@ -180,6 +188,9 @@ solvent convention. Do not reuse a solid-state entry set as a valid aqueous
 thermodynamic model without the required transformations and references.
 
 ## Electronic band structures
+
+The following VASP snippets are illustrative because they require the user's
+calculation files; the current method signatures were verified.
 
 ```python
 from pymatgen.io.vasp import Vasprun
@@ -245,6 +256,10 @@ Check:
 
 Do not compare integrated/projected DOS across calculations until these
 conventions match.
+
+For individual d orbitals, use `Orbital.dx2_y2`. `Orbital.dx2` remains a
+deprecated alias until 2027-08-17; this snapshot still serializes the legacy
+`dx2` key while accepting both spellings on read.
 
 ## VASP parse cost
 
@@ -340,7 +355,7 @@ quality. Mechanical-stability criteria depend on crystal class and conditions.
 - method-specific caveats
 - no claim of experimental truth from computed output alone
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-09-30)
 
 - [pymatgen analysis API](https://pymatgen.org/pymatgen.analysis.html)
 - [pymatgen symmetry API](https://pymatgen.org/pymatgen.symmetry.html)

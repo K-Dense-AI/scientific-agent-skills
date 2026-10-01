@@ -1,6 +1,6 @@
 # Authoritative Sources
 
-This skill was refreshed on **2026-07-23** against the sources below. Examples
+This skill was refreshed on **2026-09-30** against the sources below. Examples
 target the current stable package release at that date: **FlowIO 1.4.0**,
 published **2025-05-09**.
 
@@ -19,7 +19,7 @@ version.
 - [All FlowIO releases](https://github.com/whitews/FlowIO/releases) — migration
   and bug-fix history.
 - [FlowIO 1.4.0 tagged source](https://github.com/whitews/FlowIO/tree/1.4.0) —
-  immutable implementation baseline used to verify edge behavior.
+  release-tagged implementation baseline used to verify edge behavior.
 - [FlowIO 1.4.0 package metadata](https://github.com/whitews/FlowIO/blob/1.4.0/pyproject.toml)
   — supported Python versions and NumPy dependency.
 
@@ -61,6 +61,14 @@ FlowIO reads FCS 2.0/3.0/3.1 and writes FCS 3.1. The standard publications are
 needed when byte offsets, keywords, spillover metadata, or representation
 details affect scientific interpretation.
 
+## Array and Table Behavior
+
+- [NumPy mean](https://numpy.org/doc/stable/reference/generated/numpy.mean.html)
+  — accumulator dtype and precision; runtime fixtures also checked overflow.
+- [pandas duplicate labels](https://pandas.pydata.org/docs/user_guide/duplicates.html)
+  — duplicate columns are permitted by default, so exports explicitly create
+  unique labels and retain positional source-label provenance.
+
 ## Higher-Level Analysis Boundary
 
 - [FlowKit project](https://github.com/whitews/FlowKit) — related package for
@@ -82,8 +90,19 @@ During this refresh:
   `write_fcs()`.
 - The tagged implementation was used where generated API prose omitted details,
   especially metadata normalization and writer behavior.
-- No FlowIO-specific Context7 documentation entry was available; official
-  Read the Docs, tagged source, PyPI, and GitHub releases were used instead.
+- Current checks ran on Python 3.13 with FlowIO 1.4.0, NumPy 2.5.3, and
+  pandas 3.0.6 using local synthetic FCS 2.0/3.0/3.1 integer, float, double,
+  and multiple-dataset files. No scientific service credentials are needed.
+- FlowIO reads DATA without enforcing the declared `$TOT`; the inspector now
+  checks loaded value count before `as_array()`. Integer range masking occurs
+  before optional preprocessing, and recognized Time-channel gain is forced
+  to one. Tagged source and independent binary fixtures verify these details.
+- Generated DataFrame names now avoid collisions with existing suffixed names;
+  extreme finite doubles no longer overflow the inspector's mean calculation.
+- The inspector rejects unsupported mode/type metadata and reports truncated
+  DATA parsing failures cleanly. Its limits are not a process-memory sandbox.
+- This is local file-format functionality, not a hosted API. There are no
+  runtime HTTP endpoints, authentication, pagination, or paid service calls.
 - Big-endian writer portability remains unverified. The 1.4.0 writer declares
   little-endian output while using Python's native-endian `array('f')` bytes;
   validate exports on big-endian hardware rather than assuming portability.

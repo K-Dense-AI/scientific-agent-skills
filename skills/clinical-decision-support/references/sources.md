@@ -1,8 +1,10 @@
 # Authoritative Source Ledger
 
-Research cutoff and link check: **2026-07-23**.
+Documentation review: **2026-09-30**.
 
-Research used `parallel-cli search` and `parallel-cli extract`, constrained to official agencies, standards groups, guideline hosts, and primary publications. Status labels below reflect the source on the cutoff date. A link in this ledger is not an endorsement of an artifact or a substitute for checking the current source before use.
+Reviewed official agencies, standards/guideline hosts, and primary publications using web search/read and fresh `parallel-cli extract` fallbacks. This skill has no runtime service endpoints, authentication, pagination, or external SDK dependencies: its seven CLIs consume local JSON. The optional collection-citation lookup is separate from artifact processing.
+
+Status labels below reflect this review date. Some publisher/Bookshelf pages blocked direct reads; their indexed primary records, official guideline catalogues, or fresh extracts supplied the cited scope. A link is not an endorsement or a substitute for checking a living source before use. Tests use synthetic aggregates and establish helper behavior only, not clinical validity or compliance.
 
 ## FDA: CDS and AI-Enabled Devices
 
@@ -12,12 +14,12 @@ Research used `parallel-cli search` and `parallel-cli extract`, constrained to o
   https://www.fda.gov/regulatory-information/search-fda-guidance-documents/marketing-submission-recommendations-predetermined-change-control-plan-artificial-intelligence
 - **AI-Enabled Device Software Functions: Lifecycle Management and Marketing Submission Recommendations** — FDA draft guidance, January 2025; explicitly draft/not for implementation on the cutoff date. Used only as clearly labeled draft lifecycle context.
   https://www.fda.gov/regulatory-information/search-fda-guidance-documents/artificial-intelligence-enabled-device-software-functions-lifecycle-management-and-marketing
-- **Good Machine Learning Practice for Medical Device Development: Guiding Principles** — FDA page current December 19, 2025, linking the January 2025 IMDRF final principles. Used for lifecycle, representative data, human-AI team, and independent testing themes.
-  https://www.fda.gov/medical-devices/software-medical-device-samd/good-machine-learning-practice-medical-device-development-guiding-principles
+- **Good Machine Learning Practice for Medical Device Development: Guiding Principles** — FDA page linking the January 2025 IMDRF final principles. Used for lifecycle, representative data, human-AI team, and independent testing themes.
+  https://www.fda.gov/medical-devices/artificial-intelligence-enabled-medical-devices/good-machine-learning-practice-medical-device-development-guiding-principles
 - **Transparency for Machine Learning-Enabled Medical Devices: Guiding Principles** — FDA/Health Canada/MHRA, June 13, 2024. Used for intended users, limitations, data characterization, uncertainty, human factors, monitoring, and update communication.
-  https://www.fda.gov/medical-devices/software-medical-device-samd/transparency-machine-learning-enabled-medical-devices-guiding-principles
-- **Artificial Intelligence in Software as a Medical Device** — FDA topic page, content current March 25, 2025 in search results. Used to cross-check the guidance sequence.
-  https://www.fda.gov/medical-devices/software-medical-device-samd/artificial-intelligence-software-medical-device
+  https://www.fda.gov/medical-devices/artificial-intelligence-enabled-medical-devices/transparency-machine-learning-enabled-medical-devices-guiding-principles
+- **Artificial Intelligence-Enabled Medical Devices** — current FDA topic page (redirect from the former software-as-a-medical-device route). Used to cross-check the guidance sequence.
+  https://www.fda.gov/medical-devices/digital-health-center-excellence/artificial-intelligence-enabled-medical-devices
 
 ## ONC / HTI-1
 
@@ -30,6 +32,11 @@ Research used `parallel-cli search` and `parallel-cli extract`, constrained to o
 - **HTI-1 Final Rule landing page** — ONC. Used to verify official supporting materials and current resource location.
   https://healthit.gov/regulations/hti-rules/hti-1-final-rule
 
+- **Current DSI certification text** — 45 CFR 170.315(b)(11); predictive DSI source-attribute and risk-management provisions remain in the current text.
+  https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-D/part-170/subpart-C/section-170.315
+- **HTI-5 proposed rule** — proposal to remove AI model-card requirements; not treated as effective law.
+  https://healthit.gov/resources/health-data-technology-and-interoperability-astp-onc-deregulatory-actions-to-unleash-prosperity-hti-5-proposed-rule/
+
 ## GRADE
 
 - **GRADE Working Group** — official overview and minimum requirements. Used for outcome-specific certainty, explicit domain judgments, evidence profiles, and Evidence-to-Decision separation.
@@ -39,12 +46,19 @@ Research used `parallel-cli search` and `parallel-cli extract`, constrained to o
 - **GRADE Handbook** — legacy/current transition resource. Retained for comparison where a GRADE Book chapter is not yet available; verify against the GRADE Book.
   https://gradepro.org/handbook
 
+- **GRADE Book: Imprecision** — current chapter permits human judgments of serious, very serious, and extremely serious imprecision; supports explicit thresholds and uncertainty, not automatic grading.
+  https://book.gradepro.org/guideline/imprecision
+- **GRADE Book: Dissemination bias** — current terminology broadens the legacy publication-bias assessment to selective availability. The local schema retains `publication_bias` as its field name.
+  https://book.gradepro.org/guideline/dissemination-bias
+
 ## AI and Clinical-Study Reporting
 
 - **TRIPOD+AI** — Collins et al., BMJ 2024;385:e078378, published April 16, 2024. Reporting of prediction-model development/evaluation using regression or machine learning.
   https://www.bmj.com/content/385/bmj-2023-078378
 - **TRIPOD+AI EQUATOR record** — scope, checklist, and related materials.
   https://www.equator-network.org/reporting-guidelines/tripod-statement
+- **TRIPOD-LLM** — Gallifant et al., Nature Medicine 2025;31:60-69, published January 8, 2025. Modular reporting guidance for LLM development, tuning, and evaluation; not a quality appraisal tool.
+  https://www.nature.com/articles/s41591-024-03425-5
 - **CONSORT-AI** — Liu et al., Nature Medicine 2020;26:1364-1374, published September 9, 2020. AI-intervention randomized-trial reports.
   https://www.nature.com/articles/s41591-020-1034-x
 - **CONSORT 2025** — Hopewell et al., BMJ 2025;389:e081123, published April 14, 2025. Current generic base statement used with CONSORT-AI.
@@ -59,6 +73,11 @@ Research used `parallel-cli search` and `parallel-cli extract`, constrained to o
   https://www.equator-network.org/reporting-guidelines/reporting-guideline-for-the-early-stage-clinical-evaluation-of-decision-support-systems-driven-by-artificial-intelligence-decide-ai/
 - **STARD-AI** — Sounderajah et al., Nature Medicine, published September 15, 2025, DOI 10.1038/s41591-025-03953-8. Final reporting guideline for AI diagnostic-accuracy studies.
   https://www.nature.com/articles/s41591-025-03953-8
+- **STARD-AI author correction** — July 13, 2026; adds an omitted steering-committee author, with no checklist revision stated.
+  https://www.nature.com/articles/s41591-026-04570-9
+- **SPIRIT-CONSORT official site and extension catalogue** — confirms current 2025 bases; AI extensions remain listed under the 2013/2010 bases, requiring an item-content crosswalk.
+  https://www.consort-spirit.org/
+  https://www.consort-spirit.org/extensions
 - **STARD-AI EQUATOR record** — final status, scope, citation, and checklist location.
   https://www.equator-network.org/reporting-guidelines/the-stard-ai-reporting-guideline-for-diagnostic-accuracy-studies-using-artificial-intelligence/
 
@@ -71,7 +90,7 @@ Research used `parallel-cli search` and `parallel-cli extract`, constrained to o
 
 ## Privacy and De-identification
 
-- **HHS Guidance Regarding Methods for De-identification of PHI** — official OCR guidance; page current March 20, 2026 in extraction. Used for Expert Determination, Safe Harbor, actual knowledge, derivatives, and free-text cautions.
+- **HHS Guidance Regarding Methods for De-identification of PHI** — official OCR guidance, checked with current 45 CFR 164.514. Used for Expert Determination, Safe Harbor, actual knowledge, derivatives, and free-text cautions.
   https://www.hhs.gov/hipaa/for-professionals/special-topics/de-identification/index.html
 - **45 CFR 164.514** — current eCFR text for de-identification and related requirements.
   https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164/subpart-E/section-164.514
@@ -95,16 +114,19 @@ Research used `parallel-cli search` and `parallel-cli extract`, constrained to o
   https://www.equator-network.org/reporting-guidelines/reporting-recommendations-for-tumour-marker-prognostic-studies-remark
 - **FDA-NIH BEST Resource** — living biomarker and endpoint terminology resource, 2016 onward.
   https://www.ncbi.nlm.nih.gov/books/NBK326791/
-- **External validation of clinical prediction models** — Riley et al., BMJ 2024;384:e074820, published January 15, 2024. Used for locked-model evaluation, calibration, discrimination, utility, and transparent reporting.
+- **BEST Glossary** — revision January 16, 2025; includes multicomponent and response terminology. Direct Bookshelf reads returned a browser challenge; the indexed official glossary and FDA companion resource were used.
+  https://www.ncbi.nlm.nih.gov/books/NBK338448/
+  https://www.fda.gov/drugs/biomarker-qualification-program/about-biomarkers-and-qualification
+- **Evaluation of clinical prediction models (part 2): how to undertake an external validation study** — Riley et al., BMJ 2024;384:e074820, published January 15, 2024. Used for locked-model evaluation, calibration, discrimination, utility, and transparent reporting.
   https://www.bmj.com/content/384/bmj-2023-074820
-- **External-validation sample size** — Riley et al., Statistics in Medicine 2021. Used to reject blanket event-count rules and emphasize precision targets.
+- **External validation of clinical prediction models: simulation-based sample size calculations were more reliable than rules-of-thumb** — Snell et al., Journal of Clinical Epidemiology 2021;135:79-89. Used to reject blanket event-count rules and emphasize precision targets.
   https://pmc.ncbi.nlm.nih.gov/articles/PMC8352630
 - **Calibration: the Achilles heel of predictive analytics** — Van Calster et al., BMC Medicine 2019. Used for calibration assessment and interpretation.
   https://pubmed.ncbi.nlm.nih.gov/31842878
 - **Restricted mean survival time** — Royston and Parmar, BMC Medical Research Methodology 2013;13:152. Used as an alternative population-level summary when proportional hazards is doubtful.
   https://pubmed.ncbi.nlm.nih.gov/24314264/
 - **Competing risks introduction** — Austin, Lee, and Fine, Circulation 2016;133:601-609. Used to distinguish cause-specific hazards, subdistribution hazards, and cumulative incidence.
-  https://pubmed.ncbi.nlm.nih.gov/26858290/
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC4741409/
 - **Fine-Gray reporting recommendations** — Austin and Fine, Statistics in Medicine 2017;36:4391-4400. Used for careful interpretation of subdistribution hazard models.
   https://pmc.ncbi.nlm.nih.gov/articles/PMC5698744
 

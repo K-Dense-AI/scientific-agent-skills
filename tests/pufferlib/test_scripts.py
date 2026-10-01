@@ -34,6 +34,20 @@ def run_script(name: str, *arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 class SyntheticEnvironmentTests(unittest.TestCase):
+    def test_episode_end_requires_reset_and_preserves_reason(self) -> None:
+        env = env_template.SyntheticGymEnv(max_steps=1)
+        with self.assertRaises(RuntimeError):
+            env.step(1)
+        env.reset(seed=7, options={"position": 0.0, "target": 0.75})
+        _, _, terminated, truncated, _ = env.step(1)
+        self.assertEqual((terminated, truncated), (False, True))
+        with self.assertRaises(RuntimeError):
+            env.step(1)
+        env.reset(seed=7, options={"position": 0.625, "target": 0.75})
+        _, reward, terminated, truncated, _ = env.step(2)
+        self.assertEqual((reward, terminated, truncated), (1.0, True, False))
+        env.close()
+
     def test_seeded_trace_is_deterministic(self) -> None:
         first = env_template.SyntheticGymEnv(max_steps=8)
         second = env_template.SyntheticGymEnv(max_steps=8)
@@ -122,6 +136,7 @@ class CliTests(unittest.TestCase):
             "wandb",
             "--enable-external-logging",
             "--acknowledge-external-disclosure",
+            "--upload-checkpoints",
             "--compact",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -129,19 +144,47 @@ class CliTests(unittest.TestCase):
         self.assertEqual(report["credential"]["environment_variable"], "WANDB_API_KEY")
         self.assertFalse(report["credential"]["value_read_or_logged"])
 
-    def test_source_profile_rejects_neptune(self) -> None:
+    def test_all_profiles_reject_retired_neptune(self) -> None:
+        for profile in validate_plan.PROFILES:
+            with self.subTest(profile=profile):
+                result = run_script(
+                    "train_template.py", "--profile", profile,
+                    "--logger", "neptune", "--enable-external-logging",
+                    "--acknowledge-external-disclosure", "--compact",
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("shut down on 2026-03-05", result.stdout)
+
+    def test_wandb_requires_artifact_opt_in(self) -> None:
         result = run_script(
-            "train_template.py",
-            "--profile",
-            "source-4.0",
-            "--logger",
-            "neptune",
-            "--enable-external-logging",
-            "--acknowledge-external-disclosure",
+            "train_template.py", "--logger", "wandb",
+            "--enable-external-logging", "--acknowledge-external-disclosure",
             "--compact",
         )
         self.assertEqual(result.returncode, 1)
-        self.assertIn("not a current source-4.0 integration", result.stdout)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["command_preview"], [])
+        self.assertTrue(any("uploads model artifacts" in e for e in report["errors"]))
+
+    def test_preview_uses_version_specific_horizon_and_seed(self) -> None:
+        for profile, horizon_flag in (
+            ("pypi-3.0.0", "--train.bptt-horizon"),
+            ("source-4.0", "--train.horizon"),
+        ):
+            with self.subTest(profile=profile):
+                result = run_script(
+                    "train_template.py", "--profile", profile,
+                    "--environment", "reviewed-env", "--adapter", "native-ocean",
+                    "--provenance-verified", "--horizon", "8",
+                    "--minibatch-size", "32", "--seed", "17", "--compact",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                command = json.loads(result.stdout)["command_preview"]
+                self.assertEqual(command[command.index(horizon_flag) + 1], "8")
+                self.assertEqual(command[command.index("--train.minibatch-size") + 1], "32")
+                seed_flag = "--vec.seed" if profile == "pypi-3.0.0" else "--seed"
+                self.assertEqual(command[command.index(seed_flag) + 1], "17")
+                self.assertNotIn("--no-model-upload", command)
 
     def test_repro_plan_separates_seeds(self) -> None:
         result = run_script(
@@ -157,6 +200,11 @@ class CliTests(unittest.TestCase):
 
 
 class PlanValidationTests(unittest.TestCase):
+    def test_historical_native_profile_rejects_removed_adapters(self) -> None:
+        plan = validate_plan.default_plan("source-4.0")
+        plan["environment"].update(name="reviewed-env", adapter="gymnasium")
+        self.assertTrue(any("no Gymnasium/PettingZoo" in e for e in validate_plan.validate_plan(plan)))
+
     def test_default_plans_validate(self) -> None:
         for profile in validate_plan.PROFILES:
             with self.subTest(profile=profile):
@@ -200,6 +248,17 @@ class PlanValidationTests(unittest.TestCase):
 
 
 class CheckpointInspectorTests(unittest.TestCase):
+    def test_integrity_mismatch_returns_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.bin").write_bytes(b"synthetic")
+            result = run_script(
+                "inspect_checkpoint.py", "sample.bin", "--root", str(root),
+                "--expected-sha256", "0" * 64, "--compact",
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(json.loads(result.stdout)["expected_sha256_matches"])
+
     def test_inspector_hashes_without_deserialization(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

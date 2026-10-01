@@ -23,7 +23,7 @@ A bare query uses Parallel Search. Parallel Chat remains available through
 ## Setup
 
 ```bash
-uv tool install "parallel-web-tools[cli]==0.7.1"
+uv tool install "parallel-web-tools[cli]==0.9.3"
 parallel-cli login
 parallel-cli auth
 ```
@@ -31,6 +31,8 @@ parallel-cli auth
 CLI login may be replaced by `PARALLEL_API_KEY`. `OPENROUTER_API_KEY` is needed only
 for explicit Perplexity use or an enabled fallback. Explicit Chat requires
 `PARALLEL_API_KEY` in the process environment.
+Both direct HTTP backends need `requests`; the CLI uses its own isolated tool
+environment. Headless login in 0.9.3 is `parallel-cli login --no-browser`.
 
 ## Manuscript packet
 
@@ -61,6 +63,9 @@ Packet artifacts include:
 
 The target is not padded. If 60 credible references cannot be verified, the packet
 reports the shortfall.
+`verified_references` means nonempty excerpts were retrieved by Extract, excluding
+flagged retractions. DOI/PMID detection alone does not count. Review identity, claim
+support, and correction/retraction status yourself before using the bibliography.
 
 ## Preserved compatibility
 
@@ -104,3 +109,7 @@ This skill compiles external evidence. It does not generate the user's unpublish
 Results or guarantee a PRISMA-complete systematic review. Use `literature-review` for
 formal database searching, screening, exclusion tracking, and risk-of-bias procedures;
 use `scientific-writing` to turn the packet into manuscript prose.
+
+API contracts were reviewed on 2026-09-30 against official schemas, CLI 0.9.3,
+and public OpenRouter model metadata. Service examples are illustrative; regression
+tests mock paid calls. See [API contracts](references/api-contracts.md).

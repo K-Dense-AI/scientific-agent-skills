@@ -47,6 +47,17 @@ def _literal(value: Any) -> str:
 def render_script(config: dict[str, Any]) -> str:
     """Render a script with a dry-run default and explicit execution gate."""
 
+    config = normalized_copy(config)
+    init_type = config["parameters"].get("init_fields", {}).get("type")
+    if init_type in {"in_script", "from_simul"}:
+        raise ToolError("in_script/from_simul initialization requires a separately implemented scientific script")
+    forcing = config["parameters"].get("forcing", {})
+    if forcing.get("enable") and forcing.get("type") in {"in_script", "in_script_coarse", "pseudo_spectral"}:
+        raise ToolError("this forcing requires an explicitly implemented forcing callback")
+    restart = config["provenance"].get("restart")
+    if init_type == "from_file":
+        if not restart or restart["path"] != config["parameters"]["init_fields"]["from_file"]["path"]:
+            raise ToolError("from_file requires matching restart path and SHA-256 provenance")
     solver = config["solver"]
     module_name = SOLVER_IMPORTS[solver]
     assignments = []
@@ -81,8 +92,10 @@ def render_script(config: dict[str, Any]) -> str:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+from importlib.metadata import version
 from pathlib import Path
 
 
@@ -91,6 +104,7 @@ CONFIG_ID = {provenance["config_id"]!r}
 OUTPUT_ROOT = {execution["output_root"]!r}
 EXPECTED_RANKS = {expected_ranks}
 MODE = {execution["mode"]!r}
+RESTART = {restart!r}
 
 
 def _detected_mpi_size() -> int:
@@ -120,15 +134,45 @@ def run() -> None:
         raise RuntimeError("serial plan detected an MPI launcher")
     if MODE == "mpi-preview" and size != EXPECTED_RANKS:
         raise RuntimeError("launch manually with exactly the reviewed MPI rank count")
+    for package in ("fluidsim", "fluidfft"):
+        if version(package) != PLAN[package]:
+            raise RuntimeError("installed package version differs from the reviewed plan: " + package)
+    for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        os.environ[name] = {str(resources["threads_per_rank"])!r}
+    restart_path = None
+    if RESTART:
+        base = Path(__file__).resolve().parent
+        restart_path = base / RESTART["path"]
+        for part in (restart_path, *restart_path.parents):
+            if part.is_symlink():
+                raise RuntimeError("restart path contains a symlink")
+        restart_path = restart_path.resolve(strict=True)
+        if not restart_path.is_relative_to(base):
+            raise RuntimeError("restart path escaped the script directory")
+        if not restart_path.is_file() or restart_path.stat().st_nlink != 1:
+            raise RuntimeError("restart must be a singly linked regular file")
+        if restart_path.stat().st_size > 8 * 1024**3:
+            raise RuntimeError("restart exceeds the reviewed eight-GiB hash limit")
+        digest = hashlib.sha256()
+        with restart_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024**2), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != RESTART["sha256"]:
+            raise RuntimeError("restart SHA-256 differs from the reviewed checkpoint")
     _prepare_output_root()
-    os.environ.setdefault("OMP_NUM_THREADS", {str(resources["threads_per_rank"])!r})
 
     import numpy as np
     from {module_name} import Simul
+    from fluiddyn.util import mpi
+
+    if mpi.nb_proc != EXPECTED_RANKS:
+        raise RuntimeError("actual MPI rank count differs from the reviewed plan")
 
     np.random.seed({int(execution["random_seed"])})
     params = Simul.create_default_params()
 {assignment_block}
+    if restart_path is not None:
+        params.init_fields.from_file.path = str(restart_path)
     sim = Simul(params)
     sim.time_stepping.start()
 

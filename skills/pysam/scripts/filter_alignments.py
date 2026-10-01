@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Iterator, Optional
 
 import pysam
+import pysam.samtools
 
 
 def positive_int(value: str) -> int:
@@ -102,6 +103,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="index output; requires coordinate sort order and BAM/CRAM",
     )
     parser.add_argument(
+        "--csi",
+        action="store_true",
+        help="use CSI for BAM output (requires --index); supports large contigs",
+    )
+    parser.add_argument(
         "--summary",
         type=Path,
         help="write JSON summary to a new file instead of stdout",
@@ -169,25 +175,38 @@ def validate_destinations(
         raise FileNotFoundError(
             f"output parent does not exist: {output_path.parent}"
         )
-    if output_path.exists():
+    if output_path.exists() or output_path.is_symlink():
         raise FileExistsError(f"output already exists: {output_path}")
     if input_path.resolve() == output_path.resolve():
         raise ValueError("output must not be the input file")
+
+    # Stale sidecars can be silently opened for a newly written alignment;
+    # samtools index can also overwrite them. Refuse both naming conventions.
+    suffixes = (".crai",) if output_path.suffix.lower() == ".cram" else (".bai", ".csi")
+    sidecars = {
+        candidate
+        for suffix in suffixes
+        for candidate in (Path(str(output_path) + suffix), output_path.with_suffix(suffix))
+    }
+    for candidate in sidecars:
+        if candidate.exists() or candidate.is_symlink():
+            raise FileExistsError(f"output index already exists: {candidate}")
 
     if summary_path is not None:
         if not summary_path.parent.exists():
             raise FileNotFoundError(
                 f"summary parent does not exist: {summary_path.parent}"
             )
-        if summary_path.exists():
+        if summary_path.exists() or summary_path.is_symlink():
             raise FileExistsError(
                 f"summary output already exists: {summary_path}"
             )
         if summary_path.resolve() in {
             input_path.resolve(),
             output_path.resolve(),
+            *(candidate.resolve() for candidate in sidecars),
         }:
-            raise ValueError("summary path must differ from input and output")
+            raise ValueError("summary path must differ from input, output, and indexes")
 
 
 def filter_file(args: argparse.Namespace) -> dict[str, Any]:
@@ -215,6 +234,8 @@ def filter_file(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("CRAM input or output requires --reference")
     if args.index and output_mode == "w":
         raise ValueError("SAM output cannot be indexed")
+    if args.csi and (not args.index or output_mode != "wb"):
+        raise ValueError("--csi requires --index and BAM output")
 
     input_kwargs: dict[str, Any] = {
         "threads": args.threads,
@@ -234,6 +255,7 @@ def filter_file(args: argparse.Namespace) -> dict[str, Any]:
     written = 0
     excluded = 0
     sort_order: Optional[str] = None
+    output_created = False
 
     try:
         with pysam.AlignmentFile(
@@ -248,28 +270,31 @@ def filter_file(args: argparse.Namespace) -> dict[str, Any]:
                     "this script preserves order but does not sort"
                 )
 
-            with pysam.AlignmentFile(
-                str(output_path),
-                output_mode,
-                template=source,
-                **output_kwargs,
-            ) as destination:
-                for read in selected_reads(source, args.region):
-                    selected += 1
-                    reasons = exclusion_reasons(read, args)
-                    if reasons:
-                        excluded += 1
-                        reason_counts.update(reasons)
-                        continue
-                    destination.write(read)
-                    written += 1
+            with output_path.open("xb") as output_handle:
+                output_created = True
+                with pysam.AlignmentFile(
+                    output_handle,
+                    output_mode,
+                    template=source,
+                    **output_kwargs,
+                ) as destination:
+                    for read in selected_reads(source, args.region):
+                        selected += 1
+                        reasons = exclusion_reasons(read, args)
+                        if reasons:
+                            excluded += 1
+                            reason_counts.update(reasons)
+                            continue
+                        destination.write(read)
+                        written += 1
     except Exception:
-        if output_path.exists():
+        if output_created and output_path.exists():
             output_path.unlink()
         raise
 
     if args.index:
         pysam.samtools.index(
+            *(["-c"] if args.csi else []),
             "-@",
             str(args.threads),
             str(output_path),
@@ -309,9 +334,12 @@ def filter_file(args: argparse.Namespace) -> dict[str, Any]:
             "exclusion_reasons": dict(sorted(reason_counts.items())),
         },
         "indexed_output": args.index,
+        "index_format": ("CSI" if args.csi else "BAI" if output_mode == "wb" else "CRAI") if args.index else None,
         "semantics": (
             "Exclusion reason counts can exceed excluded_records because one "
-            "record can fail multiple filters. Counts are alignment records."
+            "record can fail multiple filters. Counts are alignment records. "
+            "Filtering is per record: mates outside the selection are not "
+            "retrieved, and mate flags/coordinates/TLEN are not recomputed."
         ),
     }
 

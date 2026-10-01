@@ -1,401 +1,111 @@
-# DiffDock Workflows and Examples
+# DiffDock workflow recipes
 
-This document provides practical workflows and usage examples for common DiffDock tasks.
+These target v1.1.3 user-complex inference. Input generation and local helper tests
+were executed with synthetic fixtures; pretrained docking and external GNINA/GUI
+commands were source-checked, not executed. Replace illustrative filenames with
+prepared inputs. Run upstream commands from its repository root.
 
-## Installation and Setup
+## Generate a traceable screening batch
 
-### Conda Installation (Recommended)
-
-```bash
-# Clone repository
-git clone https://github.com/gcorso/DiffDock.git
-cd DiffDock
-
-# Create conda environment
-conda env create --file environment.yml
-conda activate diffdock
-```
-
-### Docker Installation
-
-```bash
-# Pull Docker image
-docker pull rbgcsail/diffdock
-
-# Run container with GPU support
-docker run -it --gpus all --entrypoint /bin/bash rbgcsail/diffdock
-
-# Inside container, activate environment
-micromamba activate diffdock
-```
-
-### First Run
-The first execution pre-computes SO(2) and SO(3) lookup tables, taking a few minutes. Subsequent runs start immediately.
-
-## Workflow 1: Single Protein-Ligand Docking
-
-### Using PDB File and SMILES String
-
-```bash
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_path examples/protein.pdb \
-  --ligand_description "COc1ccc(C(=O)Nc2ccccc2)cc1" \
-  --out_dir results/single_docking/
-```
-
-**Output Structure**:
-```
-results/single_docking/
-└── complex_0/
-    ├── rank1.sdf                    # Convenience copy of top-ranked prediction
-    ├── rank1_confidence0.87.sdf     # Top-ranked prediction with confidence
-    ├── rank2_confidence0.42.sdf     # Second-ranked prediction
-    ├── ...
-    └── rank10_confidence-1.23.sdf   # 10th prediction (if samples_per_complex=10)
-```
-
-Current upstream `inference.py` uses `--ligand_description`; avoid the older `--ligand` spelling unless your local checkout has added an alias.
-
-### Using Ligand Structure File
-
-```bash
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_path protein.pdb \
-  --ligand_description ligand.sdf \
-  --out_dir results/ligand_file/
-```
-
-**Supported ligand formats**: SDF, MOL2, or any format readable by RDKit
-
-## Workflow 2: Protein Sequence to Structure Docking
-
-### Using ESMFold for Protein Folding
-
-```bash
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_sequence "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK" \
-  --ligand_description "CC(C)Cc1ccc(cc1)C(C)C(=O)O" \
-  --out_dir results/sequence_docking/
-```
-
-**Use Cases**:
-- Protein structure not available in PDB
-- Modeling mutations or variants
-- De novo protein design validation
-
-**Note**: ESMFold folding adds computation time (30s-5min depending on sequence length)
-
-## Workflow 3: Batch Processing Multiple Complexes
-
-### Prepare CSV File
-
-Create `complexes.csv` with required columns:
-
-```csv
-complex_name,protein_path,ligand_description,protein_sequence
-complex1,proteins/protein1.pdb,CC(=O)Oc1ccccc1C(=O)O,
-complex2,,COc1ccc(C#N)cc1,MSKGEELFTGVVPILVELDGDVNGHKF...
-complex3,proteins/protein3.pdb,ligands/ligand3.sdf,
-```
-
-**Column Descriptions**:
-- `complex_name`: Unique identifier for the complex
-- `protein_path`: Path to PDB file (leave empty if using sequence)
-- `ligand_description`: SMILES string or path to ligand file
-- `protein_sequence`: Amino acid sequence (leave empty if using PDB)
-
-### Run Batch Docking
-
-```bash
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_ligand_csv complexes.csv \
-  --out_dir results/batch_predictions/ \
-  --batch_size 10
-```
-
-**Output Structure**:
-```
-results/batch_predictions/
-├── complex1/
-│   ├── rank1.sdf
-│   ├── rank1_confidence0.87.sdf
-│   ├── rank2_confidence0.42.sdf
-│   └── ...
-├── complex2/
-│   ├── rank1.sdf
-│   └── ...
-└── complex3/
-    └── ...
-```
-
-## Workflow 4: High-Throughput Virtual Screening
-
-### Setup for Screening Large Ligand Libraries
+This Python recipe expects a CSV with `compound_id,smiles`, unique IDs, and a prepared
+`target_protein.pdb`. It preserves source identifiers instead of relabeling filtered
+rows. Generated names must pass the helper's safe-name rule. Screening here produces
+poses for later assessment, not a validated affinity ranking.
 
 ```python
-# generate_screening_csv.py
-import pandas as pd
-
-# Load ligand library
-ligands = pd.read_csv("ligand_library.csv")  # Contains SMILES
-
-# Create DiffDock input
-screening_data = {
-    "complex_name": [f"screen_{i}" for i in range(len(ligands))],
-    "protein_path": ["target_protein.pdb"] * len(ligands),
-    "ligand_description": ligands["smiles"].tolist(),
-    "protein_sequence": [""] * len(ligands)
-}
-
-df = pd.DataFrame(screening_data)
-df.to_csv("screening_input.csv", index=False)
-```
-
-### Run Screening
-
-```bash
-# Pre-compute ESM embeddings for faster screening
-python datasets/esm_embedding_preparation.py \
-  --protein_ligand_csv screening_input.csv \
-  --out_file protein_embeddings.pt
-
-# Run docking with pre-computed embeddings
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_ligand_csv screening_input.csv \
-  --esm_embeddings_path protein_embeddings.pt \
-  --out_dir results/virtual_screening/ \
-  --batch_size 32
-```
-
-### Post-Processing: Extract Top Hits
-
-```python
-# analyze_screening_results.py
-import pandas as pd
-import re
+import csv
 from pathlib import Path
-
-results = []
-results_dir = Path("results/virtual_screening/")
-
-for complex_dir in results_dir.iterdir():
-    if not complex_dir.is_dir():
-        continue
-
-    scores = []
-    for sdf_file in complex_dir.glob("rank*_confidence*.sdf"):
-        match = re.search(r"confidence(-?\d+(?:\.\d+)?)", sdf_file.name)
-        if match:
-            scores.append(float(match.group(1)))
-
-    if scores:
-        results.append({"complex": complex_dir.name, "top_confidence": max(scores)})
-
-# Sort by confidence
-df = pd.DataFrame(results)
-df_sorted = df.sort_values("top_confidence", ascending=False)
-
-# Get top 100 hits
-top_hits = df_sorted.head(100)
-top_hits.to_csv("top_hits.csv", index=False)
-```
-
-## Workflow 5: Ensemble Docking with Protein Flexibility
-
-### Prepare Protein Ensemble
-
-```python
-# For proteins with known flexibility, use multiple conformations
-# Example: Using MD snapshots or crystal structures
-
-# create_ensemble_csv.py
 import pandas as pd
 
-conformations = [
-    "protein_conf1.pdb",
-    "protein_conf2.pdb",
-    "protein_conf3.pdb",
-    "protein_conf4.pdb"
-]
+library = Path("ligand_library.csv")
+with library.open(newline="") as handle:
+    header = next(csv.reader(handle))
+if len(header) != len(set(header)):
+    raise ValueError("Duplicate library columns")
+ligands = pd.read_csv(library, dtype=str, keep_default_na=False)
+if ligands.empty or ligands["compound_id"].eq("").any() or ligands["compound_id"].duplicated().any():
+    raise ValueError("Require nonempty library and unique nonempty compound IDs")
+rows = pd.DataFrame({
+    "complex_name": "compound_" + ligands["compound_id"],
+    "protein_path": str(Path("target_protein.pdb").resolve()),
+    "ligand_description": ligands["smiles"],
+    "protein_sequence": "",
+})
+rows.to_csv("screening.csv", index=False)
+```
 
-ligand = "CC(C)Cc1ccc(cc1)C(C)C(=O)O"
+```bash
+python /path/to/diffdock-skill/scripts/prepare_batch_csv.py screening.csv --validate
+python -m inference --config default_inference_args.yaml \
+  --protein_ligand_csv screening.csv --out_dir results/screening_001/ --loglevel INFO
+python /path/to/diffdock-skill/scripts/analyze_results.py results/screening_001/ --export all_poses.csv
+```
 
-data = {
+Reconcile every `complex_name` with output directories and expected ranks. A missing
+output is a failed/skipped result, not a nonbinder. Preserve input CSV, configuration,
+checkpoint identity, source revision, logs, and raw outputs together.
+
+## Receptor ensemble
+
+Use one row per known conformation, retaining the same ligand state. This illustrative
+input generator does not perform protein preparation:
+
+```python
+from pathlib import Path
+import pandas as pd
+
+conformations = ["conf1.pdb", "conf2.pdb", "conf3.pdb"]
+pd.DataFrame({
     "complex_name": [f"ensemble_{i}" for i in range(len(conformations))],
-    "protein_path": conformations,
-    "ligand_description": [ligand] * len(conformations),
-    "protein_sequence": [""] * len(conformations)
-}
-
-pd.DataFrame(data).to_csv("ensemble_input.csv", index=False)
+    "protein_path": [str(Path(name).resolve()) for name in conformations],
+    "ligand_description": ["CC(=O)Oc1ccccc1C(=O)O"] * len(conformations),
+    "protein_sequence": [""] * len(conformations),
+}).to_csv("ensemble.csv", index=False)
 ```
 
-### Run Ensemble Docking
+Copy the bundled config and edit `samples_per_complex` to 20 if increased sampling is
+justified. The YAML value wins over CLI values. Run with the copied config, ensemble
+CSV and a fresh output directory. Inspect all conformations; score differences are
+not relative binding free energies.
+
+## GNINA as a separate step
+
+The [official GNINA CLI](https://github.com/gnina/gnina) supports receptor/ligand input
+and `--score_only`. This illustrative loop scores existing poses without relaxation:
 
 ```bash
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_ligand_csv ensemble_input.csv \
-  --out_dir results/ensemble_docking/ \
-  --samples_per_complex 20  # More samples per conformation
-```
-
-## Workflow 6: Integration with Downstream Analysis
-
-### Example: DiffDock + GNINA Rescoring
-
-```bash
-# 1. Run DiffDock
-python -m inference \
-  --config default_inference_args.yaml \
-  --protein_path protein.pdb \
-  --ligand_description "CC(=O)OC1=CC=CC=C1C(=O)O" \
-  --out_dir results/diffdock_poses/ \
-  --save_visualisation
-
-# 2. Rescore with GNINA
-for pose in results/diffdock_poses/complex_0/*confidence*.sdf; do
-    gnina -r protein.pdb -l "$pose" --score_only -o "${pose%.sdf}_gnina.sdf"
+for pose in results/screening_001/compound_001/rank*_confidence*.sdf; do
+    test -f "$pose" || continue
+    gnina --receptor target_protein.pdb --ligand "$pose" --score_only > "${pose%.sdf}_gnina.txt"
 done
 ```
 
-### Example: DiffDock + OpenMM Energy Minimization
+Keep different score fields, units, versions and model identities separate. An affinity
+model's output is an estimate requiring appropriate validation; confidence is not its
+substitute. `score_only` does not relax a pose. For subsequent minimization, preserve
+raw coordinates and ligand stereochemistry, specify a compatible protein/ligand force
+field and protonation model, and recheck the result.
 
-```python
-# minimize_poses.py
-from openmm import app, LangevinIntegrator, Platform
-from openmm.app import ForceField, Modeller, PDBFile
-from rdkit import Chem
-from pathlib import Path
+A generic OpenMM `ForceField('amber14-all.xml', ...)` does not parameterize an arbitrary
+ligand. A valid minimization workflow must add the ligand topology/coordinates, obtain
+its parameters, build the combined system, set positions in the Context, and validate
+atom mapping/units before minimization. No incomplete OpenMM snippet is supplied here.
 
-# Load protein
-protein = PDBFile('protein.pdb')
-forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
-
-# Process each DiffDock pose
-pose_dir = Path('results/diffdock_poses/complex_0')
-for pose_path in pose_dir.glob('*confidence*.sdf'):
-    # Load ligand
-    mol = Chem.SDMolSupplier(str(pose_path))[0]
-
-    # Combine protein + ligand
-    modeller = Modeller(protein.topology, protein.positions)
-    # ... add ligand to modeller ...
-
-    # Create system and minimize
-    system = forcefield.createSystem(modeller.topology)
-    integrator = LangevinIntegrator(300, 1.0, 0.002)
-    simulation = app.Simulation(modeller.topology, system, integrator)
-    simulation.minimizeEnergy(maxIterations=1000)
-
-    # Save minimized structure
-    positions = simulation.context.getState(getPositions=True).getPositions()
-    PDBFile.writeFile(simulation.topology, positions,
-                      open(f"minimized_{pose_path.stem}.pdb", 'w'))
-```
-
-## Workflow 7: Using the Graphical Interface
-
-### Launch Web Interface
+## Local GUI
 
 ```bash
 python app/main.py
 ```
 
-### Access Interface
-Navigate to `http://localhost:7860` in web browser
+Upstream documents `http://localhost:7860`. The released interface takes a PDB ID or
+uploaded receptor and ligand SMILES/file; sequence input is supported by inference CLI,
+not this GUI. The application may download a structure given a PDB ID, so record the
+retrieved structure and its biological interpretation. Hosted demo operations and
+network transfer of private inputs require the user's intended destination.
 
-### Features
-- Upload protein PDB or enter sequence
-- Input ligand SMILES or upload structure
-- Adjust inference parameters via GUI
-- Visualize results interactively
-- Download predictions directly
+## Sources
 
-### Online Alternative
-Use the Hugging Face Spaces demo without local installation:
-- URL: https://huggingface.co/spaces/reginabarzilaygroup/DiffDock-Web
-
-## Advanced Configuration
-
-### Custom Inference Settings
-
-Create custom YAML configuration:
-
-```yaml
-# custom_inference.yaml
-# Model settings
-model_dir: ./workdir/v1.1/score_model
-confidence_model_dir: ./workdir/v1.1/confidence_model
-
-# Sampling parameters
-samples_per_complex: 20  # More samples for better coverage
-inference_steps: 25      # More steps for accuracy
-
-# Temperature adjustments (increase for more diversity)
-temp_sampling_tr: 1.3
-temp_sampling_rot: 2.2
-temp_sampling_tor: 7.5
-
-# Output
-save_visualisation: true
-```
-
-Use custom configuration:
-
-```bash
-python -m inference \
-  --config custom_inference.yaml \
-  --protein_path protein.pdb \
-  --ligand_description "CC(=O)OC1=CC=CC=C1C(=O)O" \
-  --out_dir results/custom_config/
-```
-
-## Troubleshooting Common Issues
-
-### Issue: Out of Memory Errors
-
-**Solution**: Reduce batch size
-```bash
-python -m inference ... --batch_size 2
-```
-
-### Issue: Slow Performance
-
-**Solution**: Ensure GPU usage
-```python
-import torch
-print(torch.cuda.is_available())  # Should return True
-```
-
-### Issue: Poor Predictions for Large Ligands
-
-**Solution**: Increase sampling diversity
-```bash
-python -m inference ... --samples_per_complex 40 --temp_sampling_tor 9.0
-```
-
-### Issue: Protein with Many Chains
-
-**Solution**: Limit chains or isolate binding site
-```bash
-python -m inference ... --chain_cutoff 4
-```
-
-Or pre-process PDB to include only relevant chains.
-
-## Best Practices Summary
-
-1. **Start Simple**: Test with single complex before batch processing
-2. **GPU Essential**: Use GPU for reasonable performance
-3. **Multiple Samples**: Generate 10-40 samples for robust predictions
-4. **Validate Results**: Use molecular visualization and complementary scoring
-5. **Consider Confidence**: Use confidence scores for initial ranking, not final decisions
-6. **Iterate Parameters**: Adjust temperature/steps for specific systems
-7. **Pre-compute Embeddings**: For repeated use of same protein
-8. **Combine Tools**: Integrate with scoring functions and energy minimization
+- [Inference and configuration](https://github.com/gcorso/DiffDock/blob/v1.1.3/inference.py)
+- [Released web interface](https://github.com/gcorso/DiffDock/blob/v1.1.3/app/main.py)
+- [GNINA CLI reference](https://github.com/gnina/gnina)
+- [OpenMM application guide](https://docs.openmm.org/latest/userguide/application/02_running_sims.html)

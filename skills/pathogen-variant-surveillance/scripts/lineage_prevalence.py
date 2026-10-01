@@ -13,9 +13,8 @@ the data version printed in the provenance block.
     python3 lineage_prevalence.py XFG --sublineages --weeks 12 --growth
     python3 lineage_prevalence.py 2.3.4.4b --instance h5n1 --where country=USA --weeks 52
 
-Proportions carry Wilson intervals because surveillance weeks are small, and
-recent weeks are flagged ``low`` when their denominator has not filled in yet
--- see reporting_lag.py for the measured filling-in curve.
+Proportions carry Wilson intervals. Low-count/age flags are heuristics, not
+measured completeness; reporting_lag.py separately describes observed delays.
 """
 from __future__ import annotations
 
@@ -38,6 +37,7 @@ from lapis_client import (
     pick_lineage_field,
     range_keys,
     resolve_base_url,
+    surveillance_filters,
     top_values,
     week_range,
     wilson_interval,
@@ -77,12 +77,14 @@ def parse_where(pairs: list[str], schema: dict) -> dict[str, str]:
 
 
 def weekly_counts(
-    base_url: str, filters: dict, date_field: str, weeks: list[str]
+    base_url: str, filters: dict, date_field: str, weeks: list[str], upper_field: str | None = None
 ) -> tuple[dict[str, int], int]:
     """Weekly counts over the requested window, zero-filled for empty weeks."""
-    rows = aggregated(base_url, filters, [date_field])
+    rows = aggregated(base_url, filters, [date_field] + ([upper_field] if upper_field else []))
+    excluded = sum(int(r.get("count") or 0) for r in rows if upper_field and r.get(upper_field) != r.get(date_field))
+    rows = [r for r in rows if not upper_field or r.get(upper_field) == r.get(date_field)]
     binned, undated = bin_weekly(rows, date_field)
-    return {week: binned.get(week, 0) for week in weeks}, undated
+    return {week: binned.get(week, 0) for week in weeks}, undated + excluded
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,11 +109,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--until", help="window end, YYYY-MM-DD (default: today)")
     parser.add_argument("--sublineages", action="store_true", help="include descendant lineages")
     parser.add_argument("--growth", action="store_true",
-                        help="also fit a weighted log-odds slope over the trusted weeks")
+                        help="also fit a descriptive weighted log-odds slope")
+    parser.add_argument("--lag-days", type=int, default=0,
+                        help="flag weeks ending within this many days of today (set from lag review)")
     parser.add_argument("--include-incomplete", action="store_true",
                         help="let low-coverage weeks into the growth fit")
     parser.add_argument("--coverage-fraction", type=float, default=0.4,
-                        help="flag weeks below this fraction of the settled median (default: 0.4)")
+                        help="flag weeks below this fraction of older-half median (default: 0.4)")
     parser.add_argument("--format", choices=("table", "tsv", "json"), default="table")
     parser.add_argument("-o", "--output", help="write to a file instead of stdout")
     return parser
@@ -121,21 +125,25 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
+        if args.weeks < 1 or args.lag_days < 0 or not 0 <= args.coverage_fraction <= 1:
+            raise LapisError("--weeks must be positive, --lag-days nonnegative, --coverage-fraction in [0, 1]")
         base_url = resolve_base_url(args.instance, args.base_url)
         schema = describe_instance(base_url)
         lineage_field, has_index = pick_lineage_field(schema, args.lineage_field)
         date_field = pick_date_field(schema, "collection", args.date_field)
-        where = parse_where(args.where, schema)
-    except LapisError as exc:
+        where = surveillance_filters(schema, parse_where(args.where, schema))
+        reserved = {date_field, *range_keys(date_field), lineage_field}
+        if any(k.split('.')[0] in reserved for k in where):
+            raise LapisError("use --since/--until and positional lineages instead of --where date/lineage overrides")
+        upper_field = date_field.replace("RangeLower", "RangeUpper") if date_field.endswith("RangeLower") else None
+        if upper_field and upper_field not in schema["types"]:
+            raise LapisError("collection range lacks an upper bound; cannot identify exact dates")
+        requested_until = date.fromisoformat(args.until) if args.until else date.today()
+        requested_since = date.fromisoformat(args.since) if args.since else requested_until - timedelta(weeks=args.weeks)
+    except (LapisError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    requested_until = date.fromisoformat(args.until) if args.until else date.today()
-    requested_since = (
-        date.fromisoformat(args.since)
-        if args.since
-        else requested_until - timedelta(weeks=max(1, args.weeks))
-    )
     if requested_since > requested_until:
         print("error: --since is after --until", file=sys.stderr)
         return 2
@@ -159,19 +167,32 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         version = data_version(base_url)
-        totals, undated = weekly_counts(base_url, window, date_field, weeks)
+        totals, undated = weekly_counts(base_url, window, date_field, weeks, upper_field)
 
         rows: list[dict] = []
         notes: list[str] = []
         fits: dict[str, dict] = {}
         coverage = flag_low_coverage(totals, args.coverage_fraction)
+        recent_boundary = date.today() - timedelta(days=args.lag_days)
+        for week in weeks:
+            if date.fromisoformat(week) + timedelta(days=6) >= recent_boundary:
+                coverage[week] = True
+        notes.append("coverage is a count/age heuristic, not measured completeness; choose --lag-days after reviewing reporting lag")
 
         targets = list(args.lineages)
         if args.top is not None or not targets:
             wanted = args.top or 10
-            discovered = top_values(
-                aggregated(base_url, window, [lineage_field]), lineage_field, wanted
-            )
+            discovery_fields = [lineage_field] + ([date_field, upper_field] if upper_field else [])
+            grouped = aggregated(base_url, window, discovery_fields)
+            if upper_field:
+                # Rank the same exact-date subset used by weekly denominators.
+                by_label: dict[str, int] = {}
+                for row in grouped:
+                    if row.get(date_field) and row.get(date_field) == row.get(upper_field):
+                        label = row.get(lineage_field)
+                        by_label[label] = by_label.get(label, 0) + int(row.get("count") or 0)
+                grouped = [{lineage_field: label, "count": n} for label, n in by_label.items()]
+            discovered = top_values(grouped, lineage_field, wanted)
             if not discovered:
                 print(
                     f"error: no sequences in {since} to {until}"
@@ -190,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         for name in targets:
             value = lineage_filter(name, has_index, args.sublineages)
             counts, _ = weekly_counts(
-                base_url, {**window, lineage_field: value}, date_field, weeks
+                base_url, {**window, lineage_field: value}, date_field, weeks, upper_field
             )
 
             if has_index and not value.endswith("*"):
@@ -209,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
 
             for week in weeks:
                 k, n = counts[week], totals[week]
+                if k > n:
+                    raise LapisError("lineage count exceeds denominator; inconsistent filters or snapshot")
                 low, high = wilson_interval(k, n)
                 rows.append(
                     {
@@ -257,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 "window": [since.isoformat(), until.isoformat()],
                 "filters": where,
                 "undated_sequences": undated,
+                "lag_days": args.lag_days,
                 "notes": notes,
             },
             "rows": rows,
@@ -273,36 +297,35 @@ def main(argv: list[str] | None = None) -> int:
         print(text)
 
     sys.stdout.flush()
-    if args.format != "json":
+    print(
+        f"\n# {schema['name']} via {base_url}"
+        f"\n# data version {version} | {lineage_field}"
+        f"{' (lineage-indexed)' if has_index else ' (no lineage index)'}"
+        f" | dates from {date_field}"
+        f"\n# window {since} to {until}"
+        + (f" (widened from {requested_since}..{requested_until} to whole ISO weeks)"
+           if snapped else "")
+        + (f" | filters {where}" if where else "")
+        + (f"\n# {undated} returned records excluded for missing/imprecise collection date" if undated else ""),
+        file=sys.stderr,
+    )
+    for note in notes:
+        print(f"# note: {note}", file=sys.stderr)
+    if any(coverage.values()):
+        flagged = [w for w, bad in coverage.items() if bad]
         print(
-            f"\n# {schema['name']} via {base_url}"
-            f"\n# data version {version} | {lineage_field}"
-            f"{' (lineage-indexed)' if has_index else ' (no lineage index)'}"
-            f" | dates from {date_field}"
-            f"\n# window {since} to {until}"
-            + (f" (widened from {requested_since}..{requested_until} to whole ISO weeks)"
-               if snapped else "")
-            + (f" | filters {where}" if where else "")
-            + (f"\n# {undated} matching sequences carry no usable collection date" if undated else ""),
+            f"# {len(flagged)} week(s) flagged low by denominator/age heuristic "
+            f"(earliest {min(flagged)}). Other weeks are not certified complete.",
             file=sys.stderr,
         )
-        for note in notes:
-            print(f"# note: {note}", file=sys.stderr)
-        if any(coverage.values()):
-            flagged = [w for w, bad in coverage.items() if bad]
-            print(
-                f"# {len(flagged)} week(s) flagged low: denominator still filling in "
-                f"(earliest {min(flagged)}). Treat their proportions as unstable.",
-                file=sys.stderr,
-            )
-        for name, fit in fits.items():
-            print(
-                f"# growth {name}: log-odds slope {fit['slope_per_week']:+.3f}/week "
-                f"(95% CI {fit['ci_low']:+.3f} to {fit['ci_high']:+.3f}, "
-                f"{int(fit['n_weeks'])} weeks, dispersion {fit['dispersion']:.1f}). "
-                f"Descriptive only -- confounded by sampling and reporting changes.",
-                file=sys.stderr,
-            )
+    for name, fit in fits.items():
+        print(
+            f"# growth {name}: log-odds slope {fit['slope_per_week']:+.3f}/week "
+            f"(95% CI {fit['ci_low']:+.3f} to {fit['ci_high']:+.3f}, "
+            f"{int(fit['n_weeks'])} weeks, dispersion {fit['dispersion']:.1f}). "
+            f"Descriptive only -- confounded by sampling and reporting changes.",
+            file=sys.stderr,
+        )
     return 0
 
 

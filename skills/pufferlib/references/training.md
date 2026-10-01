@@ -1,6 +1,7 @@
 # Training, Evaluation, Configuration, and Logging
 
-Research snapshot: **2026-07-23**.
+Review: **2026-10-01**. Native 5.0 guidance is in [native-5.md](native-5.md);
+3.0 and the pinned 4.0 snapshot below are historical profiles.
 
 ## Choose a version profile first
 
@@ -20,13 +21,13 @@ The uploaded metadata depends on NumPy `<2.0`, Gym `<=0.23`, Gymnasium
 packages without a complete transitive lock. It does not declare a CUDA
 version or a minimum Torch version. Do not invent compatibility guarantees.
 
-### Current source line
+### Reviewed 4.0 source line
 
-The upstream default branch is `4.0`; its `pyproject.toml` says version `4.0.0`,
+The historical branch is `4.0`; its `pyproject.toml` says version `4.0.0`,
 Python `>=3.10`, and Torch `>=2.9`. As of the research date, this source line
 is not the latest stable PyPI artifact.
 
-The current PufferTank Dockerfile uses:
+The historical PufferTank 4.0 Dockerfile uses:
 
 - Ubuntu 24.04
 - NVIDIA CUDA `13.0.2` cuDNN development image
@@ -39,6 +40,10 @@ commit, or every apt package. It is an upstream convenience environment, not a
 complete reproducibility lock.
 
 ## Reproducible uv workflow
+
+Installation/native training commands in this reference are illustrative and
+were not executed in this review. Source signatures below were checked against
+the hash-verified PyPI sdist, which differs from branch `3.0`.
 
 Do not use an unpinned `uv pip install pufferlib`. Work in a disposable,
 project-specific environment and commit `pyproject.toml` plus `uv.lock`.
@@ -112,14 +117,14 @@ from pufferlib import pufferl
 
 args = pufferl.load_config("puffer_breakout")
 vecenv = pufferl.load_env("puffer_breakout", args)
-policy = pufferl.load_policy(args, vecenv, "puffer_breakout")
-trainer = pufferl.PuffeRL(args["train"], vecenv, policy)
+policy = pufferl.load_policy(args, vecenv)
+train_config = dict(args["train"], env="puffer_breakout")
+trainer = pufferl.PuffeRL(train_config, vecenv, policy)
 
 try:
     while trainer.epoch < trainer.total_epochs:
         trainer.evaluate()
         trainer.train()
-        trainer.mean_and_log()
 finally:
     trainer.close()
 ```
@@ -133,12 +138,35 @@ the Python trainer is a relatively low-level implementation surface.
 - Make rollout/batch relationships explicit; do not rely on `auto` in a
   published experiment.
 - Record environment, vector, policy, recurrent, and train sections verbatim.
-- Fix `seed` in both `[vec]` and `[train]`, then run multiple independent seeds.
+- Seed Python, NumPy and Torch **before constructing the policy**, in addition
+  to environment/action-space seeds. The sdist trainer reads `[train] seed` for
+  vector reset but leaves Python/NumPy/Torch seeding commented out. A config seed
+  alone does not seed initial weights.
 - Record `torch_deterministic`, precision, compile settings, optimizer, horizon,
   minibatch, and total timesteps.
 - Keep evaluation seeds, instances, and metrics separate from training.
 
-## Current 4.0 training
+### Important 3.0 learner limitations
+
+The sdist allocates a truncation tensor but does not populate it in rollouts;
+it leaves a TODO for separate truncation handling and explicitly notes that
+masks are not yet handled in the learner. Preserving adapter flags does not
+prove correct time-limit targets or exclusion of inactive PettingZoo slots.
+Audit/fix the learner and run a short analytic terminal/truncation/mask test
+before using those cases for scientific conclusions. `evaluate()` collects
+training rollouts; it is not held-out evaluation. The stock `puffer eval` path
+is a rendering loop, not a bounded multi-episode statistical evaluator.
+
+The planner's `horizon` maps to `--train.bptt-horizon` in 3.0 and
+`--train.horizon` in 4.0. Its preview leaves environment-specific rollout size,
+zero-copy/start-method selection and native build/device selection to the
+caller. In 3.0, record `batch_size` explicitly, ensure it is at least the
+minibatch and provides enough horizon segments for every agent. CLI booleans
+in the historical parsers use Python `bool(string)`: `False` is truthy. Set
+false-valued booleans in INI or the Python argument mapping, not textual CLI
+`False`, then inspect the resolved config.
+
+## Historical 4.0 training
 
 Build one audited environment, then use:
 
@@ -151,7 +179,7 @@ puffer match breakout \
   --load-enemy-model-path trusted-b.bin
 ```
 
-Current modes are `train`, `eval`, `sweep`, `paretosweep`, and `match`.
+Historical modes are `train`, `eval`, `sweep`, `paretosweep`, and `match`.
 Native training is the default. `--slowly` selects the Torch fallback.
 Configuration uses sections such as:
 
@@ -172,7 +200,7 @@ encoder = DefaultEncoder
 decoder = DefaultDecoder
 ```
 
-Current source validates that `minibatch_size` is divisible by `horizon` and
+Reviewed 4.0 source validates that `minibatch_size` is divisible by `horizon` and
 does not exceed `horizon * total_agents`. Multi-GPU launch uses spawn. Do a
 small CPU/local build and contract test before CUDA training.
 
@@ -231,7 +259,7 @@ pickle, opens archive members, or extracts files.
 
 ## External logging
 
-Local logging is the default. W&B and Neptune are optional network services
+Local logging is the default. W&B is an optional network service
 that may transmit configuration, metrics, source metadata, hardware telemetry,
 stdout/stderr, and explicitly uploaded checkpoints/artifacts. They can create
 storage, seat, compute, or retention costs and are subject to vendor privacy,
@@ -241,7 +269,8 @@ Credential rules:
 
 - W&B: use the named environment variable `WANDB_API_KEY` or an approved secret
   manager.
-- Neptune: use `NEPTUNE_API_TOKEN` or an approved secret manager.
+- Neptune historically used `NEPTUNE_API_TOKEN`; its hosted service shut down
+  on 2026-03-05. The planner rejects Neptune for both profiles.
 - Never pass either secret as a CLI argument, INI/JSON value, logger config,
   tag, run name, or chat/tool input.
 - Never print the value or include it in a broad environment dump.
@@ -251,17 +280,29 @@ Credential rules:
   password, credential, authorization, private key, or API key.
 - Disable checkpoint/source upload unless separately approved.
 
-PufferLib 3.0 supports both `--wandb` and `--neptune`; its sweep mode requires
-one. Current 4.0 source exposes W&B but no Neptune CLI integration. In either
-profile, require explicit logging opt-in and disclosure acknowledgment. The
-bundled training planner enforces this without reading credential values:
+The 3.0 source contains both logger flags; only W&B remains a candidate for a
+new hosted run. Its SDK handles authentication, requests, uploads, retries and
+pagination; this skill implements no REST endpoint or manual HTTP payload.
+W&B's official SDK reads `WANDB_API_KEY` and uses `https://api.wandb.ai` by default
+(or a reviewed deployment selected by `WANDB_BASE_URL`). No authenticated W&B
+run was performed in this review; SDK source inspection is not live-service
+verification.
+
+The **actual PyPI 3.0.0 sdist** calls `log_artifact` unconditionally at W&B close;
+there is no `--no-model-upload` option. The pinned 4.0 ordinary W&B training path
+also uploads its model. Use local logging, or approve model upload explicitly;
+metrics-only use needs a reviewed custom logger/patch. The planner rejects a
+W&B plan that omits this artifact opt-in:
 
 ```bash
 python3 scripts/train_template.py \
   --logger wandb \
   --enable-external-logging \
-  --acknowledge-external-disclosure
+  --acknowledge-external-disclosure \
+  --upload-checkpoints
 ```
+
+The helper remains a dry-run and never reads credentials or contacts the service.
 
 ## Sources
 
@@ -270,18 +311,19 @@ python3 scripts/train_template.py \
 - [PyPI 3.0.0 JSON metadata](https://pypi.org/pypi/pufferlib/3.0.0/json) —
   package requirements and digest; accessed 2026-07-23.
 - [PufferLib 3.0 trainer](https://github.com/PufferAI/PufferLib/blob/3.0/pufferlib/pufferl.py)
-  — stable CLI, logger, and checkpoint source; accessed 2026-07-23.
+  — moving branch; API claims above use the [exact 3.0.0 sdist](https://files.pythonhosted.org/packages/7c/e1/5292f9b69c6263707b40ba04a87e6b9bcc177281d31092f77afd90c412f1/pufferlib-3.0.0.tar.gz), verified 2026-10-01.
 - [PufferLib 3.0 default config](https://github.com/PufferAI/PufferLib/blob/3.0/pufferlib/config/default.ini)
   — stable parameters; accessed 2026-07-23.
-- [PufferLib 4.0 docs](https://puffer.ai/docs.html) — current CLI and
-  architecture; accessed 2026-07-23.
-- [PufferLib 4.0 trainer](https://github.com/PufferAI/PufferLib/blob/4.0/pufferlib/pufferl.py)
-  — current modes/config/checkpoints; accessed 2026-07-23.
-- [PufferLib 4.0 package metadata](https://github.com/PufferAI/PufferLib/blob/4.0/pyproject.toml)
-  — current Python/Torch requirements; accessed 2026-07-23.
+- [PufferLib live 5.0 docs](https://puffer.ai/docs.html) — current native workflow;
+  rechecked 2026-10-01. Historical 4.0 claims use its pinned source below.
+- [PufferLib 4.0 trainer](https://github.com/PufferAI/PufferLib/blob/25647630e1b15330bb3153a5a0d3ff8d234c3acf/pufferlib/pufferl.py)
+  — historical modes/config/checkpoints; accessed 2026-07-23.
+- [PufferLib 4.0 package metadata](https://github.com/PufferAI/PufferLib/blob/25647630e1b15330bb3153a5a0d3ff8d234c3acf/pyproject.toml)
+  — historical Python/Torch requirements; accessed 2026-07-23.
 - [PufferTank 4.0 Dockerfile](https://github.com/PufferAI/PufferTank/blob/4.0/puffertank.dockerfile)
   — CUDA/Python reference environment; accessed 2026-07-23.
-- [Neptune Run API](https://docs.neptune.ai/run) — token and offline-mode
-  guidance; accessed 2026-07-23.
-- [W&B documentation](https://docs.wandb.ai/) — logging and credential
-  guidance; accessed 2026-07-23.
+- [Neptune shutdown notice](https://docs.neptune.ai/) — permanent 2026-03-05
+  shutdown; checked 2026-10-01.
+- [W&B official login source](https://github.com/wandb/wandb/blob/main/wandb/sdk/wandb_login.py)
+  and [environment variable names](https://github.com/wandb/wandb/blob/main/wandb/env.py)
+  — checked 2026-10-01; hosted docs redirected during review.

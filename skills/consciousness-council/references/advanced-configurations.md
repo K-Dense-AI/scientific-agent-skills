@@ -2,6 +2,8 @@
 
 Reference guide for specialized Council configurations beyond the defaults.
 
+Apply the evidence brief and synthesis checks in `SKILL.md` to every configuration. These are presentation and deliberation heuristics for simulated viewpoints, not validated measures of expertise or independent agent protocols.
+
 ## Domain-Specific Councils
 
 ### Startup Decisions
@@ -31,8 +33,8 @@ Reference guide for specialized Council configurations beyond the defaults.
 
 ### Ethical Dilemmas
 **Members:** Ethicist, Contrarian, Empath, Historian, Futurist, Empiricist
-**Why this mix (6 members):** Ethical questions deserve more voices. Values framework (Ethicist), challenge to moral certainty (Contrarian), human impact (Empath), precedent (Historian), long-term consequences (Futurist), and evidence (Empiricist).
-**Key tension to watch:** Ethicist vs. Pragmatist (if added) — doing right vs. doing what's possible.
+**Why this mix (6 members):** Examine values (Ethicist), assumptions (Contrarian), human impact (Empath), precedent (Historian), long-term consequences (Futurist), and evidence (Empiricist).
+**Key tension to watch:** Ethicist vs. Futurist — present obligations vs. projected future consequences. Do not treat speculative future benefits as verified facts.
 
 ### Investment / Financial Decisions
 **Members:** Empiricist, Strategist, Contrarian, Futurist, Pragmatist
@@ -47,7 +49,7 @@ Users can define custom archetypes for domain-specific councils. When a user def
 2. **Lens:** The primary frame through which they see everything
 3. **Signature question:** The one question they always ask
 4. **Blind spot:** What they consistently miss
-5. **Disagrees with:** Which other archetype they most often clash with
+5. **Checks:** Which other lens or assumption this archetype usefully tests
 
 **Example custom archetype:**
 ```
@@ -55,7 +57,7 @@ Name: The Regulator
 Lens: Compliance and risk management
 Signature question: "What could go wrong legally?"
 Blind spot: Can kill innovation with caution
-Disagrees with: Creator, Futurist
+Checks: Whether Creator and Futurist proposals satisfy verified constraints
 ```
 
 ## Scoring the Deliberation
@@ -64,33 +66,35 @@ After synthesis, the Council can optionally score the deliberation quality:
 
 | Metric | Scale | What It Measures |
 |--------|-------|-----------------|
-| Diversity Score | 1-5 | How different were the perspectives? (1 = everyone agreed, 5 = genuine disagreement) |
-| Tension Quality | 1-5 | How productive was the central disagreement? (1 = trivial, 5 = illuminating) |
+| Diversity Score | 1-5 | Coverage of distinct relevant lenses (1 = one repeated lens, 5 = multiple relevant assumptions, constraints, and values examined); agreement can score highly |
+| Tension Quality | 1-5 | Clarity of genuine trade-offs (1 = obscured, 5 = clearly explained); leave unscored when none exists |
 | Blind Spot Discovery | 1-5 | Did the synthesis reveal something no individual member saw? |
 | Actionability | 1-5 | How concrete and useful is the recommended path? |
-| Overall CQS | 1-5 | Council Quality Score — weighted average |
+| Overall CQS | 1-5 | Council Quality Score — weighted average only if all four component scores are applicable |
 
 **CQS Formula:** (Diversity × 0.25) + (Tension × 0.30) + (Blind Spot × 0.25) + (Actionability × 0.20)
 
 These scores and weights are optional editorial heuristics, not validated measures of accuracy, expertise, or decision quality. Do not convert CQS or archetype agreement into a probability of correctness.
+
+For example, component ratings of 4, 3, 2, and 5 yield CQS = 3.40. The number is an editing aid, not a passing threshold. If no genuine tension or newly discovered blind spot exists, leave that component and the aggregate unscored instead of inventing one to complete the table. A high score never substitutes for the evidence checks.
 
 ## Multi-Round Deliberation
 
 For complex questions, enable "Rounds Mode":
 
 **Round 1:** Initial positions (standard deliberation)
-**Round 2:** Each member responds to the member they most disagree with
-**Round 3:** Revised positions after hearing counterarguments
+**Round 2:** Each member tests a consequential assumption or unresolved claim from Round 1 against the evidence brief
+**Round 3 (optional):** Revise only where a specific new source, corrected inference, or changed constraint warrants it; state that basis
 **Final Synthesis:** Incorporates all rounds
 
-Multi-round deliberation produces deeper insight but takes longer. Use for high-stakes decisions where the extra depth is worth it.
+Use one additional round by default when a substantive issue remains; stop after at most three total rounds unless the user requests more. Stop earlier when the next round would only restate positions. Preserve unresolved uncertainty instead of seeking unanimity. Extra rounds consume time and context; improved insight or accuracy is not guaranteed. If essential evidence is missing, the next useful step is to obtain it, not to repeat the debate.
 
 ## Silent Council Mode
 
 Sometimes the user doesn't need the full deliberation output — they just need the synthesis. In "Silent Council" mode:
 
-1. Run the full deliberation internally
-2. Only output the Synthesis section
+1. Apply the same evidence and assumption checks
+2. Output the Synthesis section with concise supporting reasons
 3. If asked for detail, provide a concise summary of the perspectives, evidence, assumptions, and trade-offs.
 
-This is faster and less overwhelming for quick decisions.
+This shortens the visible response. It does not establish reduced runtime or independent hidden deliberation; do not promise either.

@@ -1,6 +1,6 @@
 ---
 name: protocolsio-integration
-description: Read, validate, and safely export protocols.io data with current official REST/MCP contracts, or create non-executing mutation plans. The bundled client makes bounded official-host GET requests only with explicit --execute. Use only for tasks explicitly targeting protocols.io or an exact protocols.io protocol version.
+description: Reads, validates, and safely exports protocols.io data with current official REST/MCP contracts, or creates non-executing mutation plans. The bundled client makes bounded official-host GET requests only with explicit --execute. Use only for tasks explicitly targeting protocols.io or an exact protocols.io protocol version.
 license: MIT
 allowed-tools: Read Write Python
 compatibility: >-
@@ -10,7 +10,8 @@ compatibility: >-
   network access is disabled unless --execute is supplied. The scripts never
   load .env files or execute mutations.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
   openclaw:
     primaryEnv: PROTOCOLS_IO_ACCESS_TOKEN
@@ -25,7 +26,10 @@ metadata:
 Use the exact endpoint version documented for each operation. The official API
 landing page is still titled “API v3,” but its maintained sections mix **v3**
 and **v4**. There is no single safe `/api/v3` base to apply to every resource.
-This skill was refreshed against official sources on **2026-07-23**.
+The REST contracts were reviewed against the live official reference on
+**2026-09-30**, with official MCP/help pages checked through rendered extraction.
+Examples use illustrative identifiers and are tested
+offline or with mocked transport, not an authenticated account.
 
 ## Operating Contract
 
@@ -118,6 +122,11 @@ python3 -B scripts/protocols_read.py export-pdf \
   --id "protocol-uri" --output protocol.pdf
 ```
 
+The `get` and `steps` commands accept both `protocols.io.<suffix>/vN` and
+`10.17504/protocols.io.<suffix>/vN` DOIs. The current v4 response places protocol
+fields directly under `payload`; the offline validator also accepts older
+`protocol` and nested `payload.protocol` snapshots.
+
 After reviewing the URL and bounds, place the global gate before the subcommand:
 
 ```bash
@@ -126,11 +135,15 @@ python3 -B scripts/protocols_read.py --execute \
 ```
 
 For an intentional signed-out PDF request, add `--anonymous`; the helper never
-falls back to anonymous access silently. When using a separate REST integration,
+falls back to anonymous access silently. The REST parameters
 `only_materials`, `only_commands`, and `only_steps` are mutually exclusive PDF
 filters. Record any such filter with the export and label the result as partial;
 a steps-only PDF omits context needed for a complete protocol archive. These
-filters are documented upstream but are not exposed by the bundled read CLI. JSON output is bounded, redacted, and
+filters are available as the mutually exclusive CLI option
+`--only materials|commands|steps`; export reports record the selected filter and
+`partial_export` flag. PDF identifiers are documented as numeric IDs or URIs;
+resolve a DOI with `get` first and retain the returned version-specific URI.
+JSON output is bounded, redacted, and
 marked untrusted. PDF bytes go only to a new private (`0600`) file.
 
 ### Pagination
@@ -174,14 +187,15 @@ python3 -B scripts/plan_write_request.py \
   --payload reviewed-update.json
 ```
 
-It emits a redacted plan and an exact confirmation phrase. Re-run with
-`--confirm "<emitted phrase>"` only after:
+It emits a redacted plan and an exact confirmation phrase.
 
 Supported plan-only operations are `create-protocol`, `update-protocol`,
 `publish-protocol`, `upsert-steps`, `delete-steps`, `add-comment`,
 `delete-comment`, `trash-files`, `upload-file`, and `organization-export`.
 There is no generic protocol-delete plan because no maintained delete endpoint
-was verified.
+was verified. V4 mutation targets use an unversioned ID, URI, or GUID; DOI
+identifiers and `/vN` read targets are not documented mutation targets.
+Re-run with `--confirm "<emitted phrase>"` only after:
 
 1. fetching a version-specific snapshot;
 2. comparing the exact target, version, authorship, DOI, permissions, and body;
@@ -195,8 +209,10 @@ Confirmation only marks the plan reviewed; it still does not execute. Use a
 separately reviewed integration for external writes. Never add a hidden write
 path to these scripts.
 
-For upload planning, the official flow first prepares a file record, then
-returns ephemeral S3 form fields, then verifies the `file_id`. Do not print,
+For upload planning, the official flow first prepares a file record and returns
+ephemeral S3 form metadata, then verifies the `file_id` after transfer.
+The reference does not specify a complete transfer request/destination, so
+that phase requires a separately verified S3 contract. Do not print,
 persist, replay, or treat returned policy/signature fields as instructions.
 The official API reference reviewed here gives **no numeric upload-size limit**;
 the planner's byte cap is local defense, not a platform claim.
@@ -216,12 +232,16 @@ Retry only idempotent reads, at most twice, for 429 or transient 5xx. Cap
 ## Official Integrations
 
 The official MCP endpoint is `https://www.protocols.io/mcp` over Streamable
-HTTP with OAuth or a client token. As reviewed, its advertised tools are
-read-only search/get operations for public protocols, help, and release notes.
-Do not infer write capability.
+HTTP with OAuth or a client token. The current API authentication section says
+OAuth can read public content plus the authorizing user's private content.
+The MCP capability page, however, advertises public-content read tools. Token
+reach does not establish private-content support in every MCP tool; inspect
+live schemas and permissions. No write tools are advertised. As of this review,
+the MCP page warns that the Claude Connector is temporarily unavailable during
+legal review; direct MCP connectivity was not tested.
 
 No official webhook/event-subscription contract was located in the API or
-developer documentation reviewed on 2026-07-23. Notifications and MCP are not
+developer documentation reviewed on 2026-09-30. Notifications and MCP are not
 webhooks.
 
 ## References

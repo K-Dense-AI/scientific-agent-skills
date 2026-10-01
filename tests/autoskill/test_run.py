@@ -219,6 +219,41 @@ def test_run_redacts_secrets_from_event_text_before_any_llm_call(tmp_path):
         assert "sk-abcdefghijklmnopqrstuvwxyz012345" not in prompt
 
 
+def test_app_and_title_patterns_are_redacted_in_dry_run_plan(tmp_path):
+    events = _events_two_sessions(app="alice@example.com")
+    for event in events:
+        event["window_title"] = "LM_API_TOKEN=synthetic-auth-value"
+    out = run(_base_config(), start_time="s", end_time="e", out_dir=tmp_path,
+              screenpipe_client=_screenpipe_client_with_events(events),
+              backend=None, embedder=None, skills_dir=tmp_path, now=lambda: "plan", dry_run=True)
+    text = (out / "plan.md").read_text()
+    assert "alice@example.com" not in text
+    assert "synthetic-auth-value" not in text
+    assert "[REDACTED:email]" in text
+
+
+def test_cli_passes_offline_embedding_choice_without_loading_weights(tmp_path, monkeypatch):
+    import sys
+    import types
+    import yaml
+    from run import main
+    calls = []
+    class FakeModel:
+        def __init__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+    monkeypatch.setitem(sys.modules, "sentence_transformers",
+                        types.SimpleNamespace(SentenceTransformer=FakeModel))
+    monkeypatch.setattr("backends.make_backend", lambda _: None)
+    client = _screenpipe_client_with_events([])
+    monkeypatch.setattr("run.httpx.Client", lambda **kwargs: client)
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"embeddings": {
+        "model": "cached-fixture-model", "local_files_only": True}}))
+    assert main(["--start", "s", "--end", "e", "--config", str(path),
+                 "--out", str(tmp_path / "out"), "--skills-dir", str(tmp_path)]) == 0
+    assert calls == [(('cached-fixture-model',), {"local_files_only": True})]
+
+
 def test_run_raises_actionable_error_when_screenpipe_unreachable(tmp_path):
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "any", "any")

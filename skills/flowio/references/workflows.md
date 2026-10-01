@@ -1,7 +1,8 @@
 # FlowIO Workflows
 
-These patterns target `flowio==1.4.0`. Keep raw files immutable and write
-derived outputs to a separate location.
+These patterns target `flowio==1.4.0`. Examples below were exercised with
+synthetic files; placeholder filenames and `source_events` must be supplied for
+real data. Keep raw files immutable and write derived outputs separately.
 
 ## 1. Inventory a File Without Loading Events
 
@@ -52,47 +53,60 @@ flow = FlowData("sample.fcs")
 # Gain/log/time scaling from FCS metadata.
 scaled = flow.as_array(preprocess=True)
 
-# Values reshaped as encoded in DATA.
+# Decoded DATA values without gain/log/time scaling (integer masks remain).
 encoded = flow.as_array(preprocess=False)
 
 assert scaled.shape == (flow.event_count, flow.channel_count)
 assert encoded.shape == scaled.shape
 ```
 
-Neither array is compensated or gated. Name output variables to preserve this
-distinction; avoid generic names such as `processed`.
+Check shape against both declared counts: FlowIO infers the number of rows from
+DATA rather than validating `$TOT`. Integer DATA has already been masked to its
+PnR range even with `preprocess=False`. Neither array is compensated or gated.
+Name output variables to preserve this distinction; avoid generic names such
+as `processed`.
 
 ## 3. Build a DataFrame
 
 This example assumes pandas is already present in the project environment.
 Add and lock an environment-compatible pandas release only when tabular
-integration is required; FlowIO itself does not depend on pandas.
+integration is required; FlowIO itself does not depend on pandas. The tested
+pandas 3.0.6 stack is for standalone FlowIO. FlowKit has separate dependency
+constraints, so retain the compatible pandas version in its environment.
 
 FCS files can contain duplicate or empty labels. Make DataFrame names unique
 instead of silently assuming PnN values are valid columns:
 
 ```python
-from collections import Counter
-
 import pandas as pd
 from flowio import FlowData
 
 
 def unique_labels(labels):
-    counts = Counter()
+    bases = [value.strip() or f"channel_{i + 1}" for i, value in enumerate(labels)]
+    reserved = set(bases)  # Do not steal a later detector's existing name.
+    used = set()
     result = []
-    for index, value in enumerate(labels):
-        base = value.strip() or f"channel_{index + 1}"
-        counts[base] += 1
-        suffix = "" if counts[base] == 1 else f"__{counts[base]}"
-        result.append(f"{base}{suffix}")
+    for base in bases:
+        name = base
+        if name in used:
+            suffix = 2
+            while f"{base}__{suffix}" in reserved or f"{base}__{suffix}" in used:
+                suffix += 1
+            name = f"{base}__{suffix}"
+        used.add(name)
+        result.append(name)
     return result
 
 
 flow = FlowData("sample.fcs")
 columns = unique_labels(flow.pnn_labels)
+assert len(columns) == len(set(columns))
+values = flow.as_array(preprocess=True)
+if values.shape != (flow.event_count, flow.channel_count):
+    raise ValueError("DATA shape disagrees with declared event/channel counts")
 frame = pd.DataFrame(
-    flow.as_array(preprocess=True),
+    values,
     columns=columns,
 )
 
@@ -106,6 +120,10 @@ frame.attrs.update(
     }
 )
 ```
+
+For example, `["A", "A", "A__2"]` becomes `["A", "A__3", "A__2"]`.
+The position-to-source-label mapping is authoritative; never use renamed export
+labels to align a spillover matrix.
 
 DataFrame attributes are not preserved by every export format. Store a
 sidecar JSON provenance record for durable pipelines.
@@ -124,6 +142,8 @@ from flowio import FlowData
 source = Path("sample.fcs")
 flow = FlowData(source)
 values = flow.as_array(preprocess=False)
+if values.shape != (flow.event_count, flow.channel_count):
+    raise ValueError("DATA shape disagrees with declared event/channel counts")
 
 frame = pd.DataFrame(
     values,
@@ -137,7 +157,7 @@ provenance = {
     "source_file": source.name,
     "flowio_version": "1.4.0",
     "fcs_version": flow.version,
-    "event_semantics": "encoded DATA values reshaped; preprocess=False",
+    "event_semantics": "decoded DATA values; preprocess=False; integer range masks retained",
     "pnn_labels": flow.pnn_labels,
     "pns_labels": flow.pns_labels,
     "event_count": flow.event_count,
@@ -245,7 +265,7 @@ with destination.open("xb") as handle:
         channel_names,
         opt_channel_names=stain_names,
         metadata_dict={
-            "date": "23-JUL-2026",
+            "date": "30-SEP-2026",
             "src": "Derived event matrix",
         },
     )
@@ -347,7 +367,10 @@ uv run --no-project --with "flowio==1.4.0" \
 Statistics require full event loading and another float64 array. Estimate
 memory before using `--stats` on a large file. The inspector's
 `--max-array-bytes` guard limits the estimated float64 array; this estimate
-does not include the encoded event container.
+does not include the decoded event container, temporary arrays, or metadata.
+It uses declared counts before loading; inconsistent loaded counts are rejected
+before the float64 allocation. A resource-limited process is needed for a hard
+peak-memory cap.
 
 ## 11. Hand Off to Higher-Level Analysis
 

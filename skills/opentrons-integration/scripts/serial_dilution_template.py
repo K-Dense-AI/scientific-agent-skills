@@ -4,6 +4,7 @@ Physical setup:
 - Put at least 12 mL diluent in reservoir A1.
 - Put 200 µL stock in every well of plate column 1.
 - Leave plate columns 2-12 empty.
+- Leave reservoir A12 empty for 800 µL of liquid waste.
 
 The protocol fills columns 2-12 with 100 µL diluent, serially transfers
 100 µL across the plate, and removes 100 µL from column 12 so every well
@@ -39,14 +40,14 @@ def run(protocol: protocol_api.ProtocolContext) -> None:
     reservoir = protocol.load_labware(
         "nest_12_reservoir_15ml",
         "D2",
-        label="Diluent Reservoir",
+        label="Diluent and Liquid Waste Reservoir",
     )
     plate = protocol.load_labware(
         "corning_96_wellplate_360ul_flat",
         "C2",
         label="Dilution Plate",
     )
-    trash = protocol.load_trash_bin("A3")
+    protocol.load_trash_bin("A3")
 
     pipette = protocol.load_instrument(
         instrument_name="flex_8channel_1000",
@@ -74,6 +75,7 @@ def run(protocol: protocol_api.ProtocolContext) -> None:
         volume=200,
         liquid=stock,
     )
+    reservoir.load_empty(wells=["A12"])
 
     # With a full 8-channel pipette, A-row wells address entire columns.
     column_anchors = plate.rows()[0]
@@ -107,7 +109,8 @@ def run(protocol: protocol_api.ProtocolContext) -> None:
     ):
         pipette.pick_up_tip()
         pipette.aspirate(100, column_anchors[11])
-        pipette.dispense(100, trash)
+        # All eight channels dispense into one separate reservoir trough.
+        pipette.dispense(100, reservoir["A12"])
         pipette.drop_tip()
 
     protocol.comment("Serial dilution complete: columns 1-12 contain 100 µL per well.")

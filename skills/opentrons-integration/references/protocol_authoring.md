@@ -55,11 +55,11 @@ documentation label.
 4. Raise the level further only for a specific fix or behavior that the method
    needs.
 
-At the 2026-07-23 baseline:
+At the 2026-10-01 baseline:
 
-- Flex maximum: 2.29.
+- Flex documented maximum: 2.30; bundled templates use 2.29 for step grouping.
 - OT-2 maximum: 2.28.
-- A shared Flex/OT-2 code generator must not assume API 2.29.
+- A shared Flex/OT-2 code generator must not assume API 2.29 or later.
 
 Do not declare an unsupported API level just because a newer local Python
 package can simulate it.
@@ -242,8 +242,9 @@ Constraints:
 - CSV cells are initially strings; parse and validate every row, column, well
   name, and numeric value before issuing commands.
 
-Use defaults that simulate successfully. Do not make a hazardous setting the
-default.
+Use defaults that simulate successfully. A parameter named `dry_run` has only
+the behavior your code implements: the bundled template shortens incubation
+but still aspirates and dispenses. It is not a hardware-disable switch.
 
 ## 8. Structure the Protocol
 
@@ -286,7 +287,9 @@ report a live sensor value that only exists during physical execution.
 
 Define a policy before choosing `new_tip`:
 
-- `"always"`: isolate samples or source-destination pairs.
+- `"always"` with `transfer()`: a new tip before each aspiration, including
+  refills. Standard `distribute()` and `consolidate()` still use just one tip
+  for the command, even with `"always"`; they do not isolate samples.
 - `"once"`: one tip for an entire complex command; safe only when all contacts
   share a contamination domain.
 - `"never"`: caller must already hold a tip and must handle disposal.

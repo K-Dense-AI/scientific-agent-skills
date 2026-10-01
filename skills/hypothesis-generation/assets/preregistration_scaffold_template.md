@@ -2,7 +2,7 @@
 
 > **UNREGISTERED DRAFT — NOT AN APPROVAL OR SCIENTIFIC ENDORSEMENT**
 >
-> Generated locally on {{GENERATED_ON}} from a validated structural record. Complete repository-specific fields, obtain required human/ethics/safety/regulatory review, and verify every statement before registration.
+> Generated locally from a structurally validated record last updated {{UPDATED_ON}}. This date is supplied by the record; it is not a generation or registration timestamp. Complete repository-specific fields, obtain required human/ethics/safety/regulatory review, and verify every statement before registration.
 
 ## 1. Administrative record
 

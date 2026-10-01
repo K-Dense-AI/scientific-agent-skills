@@ -1,11 +1,11 @@
 # Visualization
 
-Qiskit visualizes circuits, sampled counts, ideal states, and backend layouts. Plotting is analysis support, not a substitute for numerical validation.
+Qiskit visualizes circuits, sampled counts, ideal states, and backend layouts. The local Matplotlib/text/Bloch examples were executed; LaTeX, notebook displays, and backend maps are illustrative. Plotting is analysis support, not a substitute for numerical validation.
 
 ## Install Plotting Dependencies
 
 ```bash
-uv pip install "qiskit[visualization]==2.5.0"
+uv pip install "qiskit[visualization]==2.5.2"
 ```
 
 The text circuit drawer works with the core package. Matplotlib, Pillow, LaTeX helpers, and notebook integrations depend on the selected output.
@@ -167,12 +167,12 @@ Do not construct a dense state solely to make a plot when the system size is not
 ## Single Bloch Vector
 
 ```python
-from qiskit.quantum_info import Statevector
+from qiskit.quantum_info import Pauli, Statevector
 from qiskit.visualization import plot_bloch_vector
 
 state = Statevector.from_label("+")
 figure = plot_bloch_vector(
-    state.to_bloch(),
+    [float(state.expectation_value(Pauli(axis)).real) for axis in "XYZ"],
     title="|+>",
 )
 ```
@@ -317,7 +317,7 @@ Do not use:
 - nonexistent `plot_state_density` helpers,
 - V1 quasi-distribution examples presented as Sampler V2 output.
 
-`qiskit.pulse` was removed in Qiskit 2.0. Use current fractional-gate or Qiskit Dynamics documentation for control-model research.
+`qiskit.pulse` was removed in Qiskit 2.0. Use fractional-gate documentation for IBM hardware. Qiskit Dynamics is archived; do not treat it as a maintained replacement for new control-model research.
 
 ## Troubleshooting
 
@@ -326,7 +326,7 @@ Do not use:
 Install the pinned visualization extra and verify the active interpreter:
 
 ```bash
-uv pip install "qiskit[visualization]==2.5.0"
+uv pip install "qiskit[visualization]==2.5.2"
 python -c "import sys, matplotlib; print(sys.executable, matplotlib.__version__)"
 ```
 

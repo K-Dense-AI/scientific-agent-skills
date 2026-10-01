@@ -1,6 +1,6 @@
 # Microscopy and Scientific Imaging Formats
 
-**Reviewed:** 2026-07-23
+**Reviewed:** 2026-09-30
 **Executable scope:** Metadata-only PNG/JPEG and TIFF/OME-TIFF inspection.
 Pixels are never decoded by bundled tools.
 
@@ -9,8 +9,8 @@ Pixels are never decoded by bundled tools.
 | Format | Bundled inspection | Depth |
 |---|---|---|
 | `.png`, `.jpg`, `.jpeg` | Optional, `pillow==12.3.0` | Width, height, mode, frame count, format, and metadata-entry count |
-| `.tif`, `.tiff` | Optional, `tifffile==2026.7.14` | Bounded page/series structure, axes, shape, dtype class, BigTIFF/OME flags |
-| `.ome.tif`, `.ome.tiff` | Optional, `tifffile==2026.7.14` | Same structural metadata; OME-XML values are not emitted or semantically validated |
+| `.tif`, `.tiff` | Optional, `tifffile==2026.9.20` | Bounded pages and generic series, shape/dtype, BigTIFF/OME flags |
+| `.ome.tif`, `.ome.tiff` | Optional, `tifffile==2026.9.20` | Same structural metadata; OME-XML values are not emitted or semantically validated |
 | ND2/CZI/LIF and other vendor microscopy | No | Reference-only vendor/Bio-Formats workflow |
 | DICOM/NIfTI/MRC | No | Reference-only medical/neuro/EM workflow |
 | SVS/NDPI and other whole-slide formats | No | Reference-only WSI workflow |
@@ -70,14 +70,21 @@ microscopy or OME conformance.
 
 The bundled tifffile inspector reports:
 
-- page and series counts, bounded to 1,000 and 128;
+- main-page and generic-series counts, bounded to 1,000 and 128;
 - per-series shape, axes, element count, and dtype kind/item size;
 - classic TIFF versus BigTIFF; and
 - whether tifffile identifies OME metadata.
 
-It does not read tag values, decode compressed segments, validate every IFD,
-open external storage, or establish that axes/series interpretation is
-scientifically correct.
+The current public `tiff.series(kind="generic")` API groups local pages without
+reconstructing OME/vendor dimensions or discovering companion files. The pinned
+`_multifile=False` argument adds an upstream internal safeguard; recheck it when
+upgrading tifffile. Shape and axes describe generic page groups, not validated
+OME XYZCT dimensions. Main pages plus declared immediate SubIFDs share the
+1,000-entry limit. Nested pyramids are not exhaustively validated.
+
+The reader necessarily parses structural tag values internally but never emits
+raw tags or OME-XML. It does not decode compressed segments, validate every IFD,
+open companion storage, or establish scientifically correct axis semantics.
 
 ## OME-TIFF
 
@@ -162,23 +169,25 @@ before tile generation to prevent leakage.
 ```bash
 uv pip install \
   "pillow==12.3.0" \
-  "tifffile==2026.7.14" \
-  "numpy==2.5.1"
+  "tifffile==2026.9.20" \
+  "numpy==2.5.3"
 ```
 
 Pillow 12.3.0 was released 2026-07-01 and requires Python 3.10+.
-tifffile 2026.7.14 was released 2026-07-14 and requires Python 3.12+.
+tifffile 2026.9.20 was released 2026-09-21 and requires Python 3.12+.
 Imagecodecs is not installed or invoked by the metadata-only inspector.
 
 ## Authoritative sources
 
-All links accessed 2026-07-23.
+Current parser APIs and format guidance reviewed 2026-09-30. Historical
+methodology citations are retained as source context.
 
 - Pillow, [`Image` module and decompression-bomb protection](https://pillow.readthedocs.io/en/stable/reference/Image.html).
 - [Pillow PyPI](https://pypi.org/project/pillow/), version 12.3.0,
   released 2026-07-01.
-- [tifffile PyPI](https://pypi.org/project/tifffile/), version 2026.7.14,
-  released 2026-07-14; upstream notes that codecs are required for decoding
+- tifffile, [current API and generic-series examples](https://www.cgohlke.com/docs/tifffile/).
+- [tifffile PyPI](https://pypi.org/project/tifffile/), version 2026.9.20,
+  released 2026-09-21; upstream notes that codecs are required for decoding
   compressed segments.
 - Library of Congress, [TIFF, Revision 6.0 format description](https://www.loc.gov/preservation/digital/formats/fdd/fdd000022.shtml)
   and the ITU-hosted [TIFF 6.0 specification](https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf).

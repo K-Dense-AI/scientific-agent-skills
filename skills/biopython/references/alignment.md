@@ -43,14 +43,14 @@ aligner.open_gap_score = -2.0
 aligner.extend_gap_score = -0.5
 
 # Set internal gap scores separately
-aligner.internal_open_gap_score = -2.0
-aligner.internal_extend_gap_score = -0.5
+aligner.open_internal_gap_score = -2.0
+aligner.extend_internal_gap_score = -0.5
 
 # Set end gap scores (for semi-global alignment)
-aligner.left_open_gap_score = 0.0
-aligner.left_extend_gap_score = 0.0
-aligner.right_open_gap_score = 0.0
-aligner.right_extend_gap_score = 0.0
+aligner.open_left_gap_score = 0.0
+aligner.extend_left_gap_score = 0.0
+aligner.open_right_gap_score = 0.0
+aligner.extend_right_gap_score = 0.0
 ```
 
 ### Alignment Modes
@@ -260,10 +260,12 @@ alignment = MultipleSeqAlignment(sorted_alignment)
 
 ```python
 def pairwise_identity(seq1, seq2):
-    """Calculate percent identity between two sequences."""
+    """Return identity fraction over aligned, nongap pairs (NaN if none)."""
+    if len(seq1) != len(seq2):
+        raise ValueError("Sequences must already be aligned to equal lengths")
     matches = sum(a == b for a, b in zip(seq1, seq2) if a != '-' and b != '-')
     length = sum(1 for a, b in zip(seq1, seq2) if a != '-' and b != '-')
-    return matches / length if length > 0 else 0
+    return matches / length if length > 0 else float("nan")
 
 # Calculate all pairwise identities
 for i, record1 in enumerate(alignment):
@@ -297,7 +299,7 @@ subprocess.run(cmd, check=True)
 alignment = AlignIO.read("alignment.aln", "clustal")
 ```
 
-### MUSCLE (via subprocess)
+### MUSCLE 5 (via subprocess; MUSCLE 3 uses different flags)
 
 ```python
 import subprocess
@@ -370,7 +372,7 @@ conserved_positions = []
 for i in range(alignment.get_alignment_length()):
     column = alignment[:, i]
     most_common = max(set(column), key=column.count)
-    if column.count(most_common) / len(column) > 0.8:
+    if most_common != "-" and column.count(most_common) / len(column) > 0.8:
         conserved_positions.append(i)
 
 print(f"Conserved positions: {conserved_positions}")

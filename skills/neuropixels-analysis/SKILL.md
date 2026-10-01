@@ -1,9 +1,11 @@
 ---
 name: neuropixels-analysis
-description: Analyze Neuropixels extracellular recordings end-to-end with SpikeInterface. Covers loading SpikeGLX/Open Ephys/NWB data, preprocessing, drift/motion correction, Kilosort4 (and CPU) spike sorting, quality metrics, and unit curation (threshold-based, model-based UnitRefine, and AI-assisted visual review). Use when working with Neuropixels 1.0/2.0 recordings, spike sorting, or extracellular electrophysiology analysis.
+description: Analyzes Neuropixels extracellular recordings end-to-end with SpikeInterface. Covers loading SpikeGLX/Open Ephys/NWB data, preprocessing, drift/motion correction, Kilosort4 (and CPU) spike sorting, quality metrics, and unit curation (threshold-based, model-based UnitRefine, and AI-assisted visual review). Use when working with Neuropixels 1.0/2.0 recordings, spike sorting, or extracellular electrophysiology analysis.
 license: MIT license
+compatibility: Requires Python 3.10+ with SpikeInterface, ProbeInterface, Neo, NumPy, SciPy, pandas, matplotlib, numba and scikit-learn. Optional sorters and models need separate dependencies and network access.
 metadata:
-  version: "2.5"
+  version: "2.6"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: ANTHROPIC_API_KEY
@@ -20,7 +22,10 @@ metadata:
 Toolkit for analyzing Neuropixels high-density neural recordings using current best
 practices from [SpikeInterface](https://spikeinterface.readthedocs.io/), the Allen
 Institute, and the International Brain Laboratory (IBL). It covers the full workflow from
-raw data to publication-ready curated units.
+raw data to reviewed, curated units. Targets SpikeInterface 0.105.0,
+ProbeInterface 0.4.0 and Neo 0.14.5 (reviewed 2026-10-01). Synthetic tests cover
+recording contracts, preprocessing, analyzers, metrics and exports; real acquisition
+files, native sorters, GPU execution and pretrained models remain illustrative.
 
 All examples use the real SpikeInterface API (`spikeinterface.full as si`) plus the
 companion curation module (`spikeinterface.curation as sc`). The skill ships runnable
@@ -44,8 +49,8 @@ This skill should be used when:
 
 | Probe | Electrodes | Channels | Notes |
 |-------|-----------|----------|-------|
-| Neuropixels 1.0 | 960 | 384 | Use `phase_shift` for ADC correction |
-| Neuropixels 2.0 (single) | 1280 | 384 | Denser geometry |
+| Neuropixels 1.0 | 960 | 384 | Use acquisition ADC timing metadata |
+| Neuropixels 2.0 (single) | 1280 | 384 | Verify part number and timing metadata |
 | Neuropixels 2.0 (4-shank) | 5120 | 384 | Multi-region recording |
 
 | Format | Extension | Reader |
@@ -73,14 +78,14 @@ stream_names, stream_ids = si.get_neo_streams("spikeglx", "/path/to/run_g0/")
 print(stream_names)  # e.g. ['imec0.ap', 'imec0.lf', 'nidq']
 
 # SpikeGLX (most common) — select the AP stream by name
-recording = si.read_spikeglx("/path/to/run_g0/", stream_name="imec0.ap", load_sync_channel=False)
+recording = si.read_spikeglx("/path/to/run_g0/", stream_name="imec0.ap")
 
 # Open Ephys
 recording = si.read_openephys("/path/to/Record_Node_101/")
 
 # For quick iteration, slice the first 60 s
 fs = recording.get_sampling_frequency()
-recording_sub = recording.frame_slice(0, int(60 * fs))
+recording_sub = recording.frame_slice(0, min(int(60 * fs), recording.get_num_samples()))
 ```
 
 ### Full pipeline (bundled script)
@@ -92,25 +97,32 @@ python scripts/neuropixels_pipeline.py /path/to/spikeglx/data output/ --sorter k
 ```
 
 It performs load → preprocess → drift check → optional motion correction → sorting →
-postprocessing → quality metrics → curation → export. Read the steps below to run them
+postprocessing → quality metrics → curation → export. Phy and the report retain all
+units for review with curation labels; `sorting_curated/` contains selected good units. Read the steps below to run them
 interactively or customize the pipeline.
 
 ## Standard Analysis Workflow
 
 ### 1. Preprocessing
 
-Recommended chain, following the SpikeInterface Neuropixels how-to (IBL-style destriping
-with channel removal + common reference):
+Validate AP stream, calibration, channel order, probe geometry and segment boundaries
+first. This filter/reference chain is not full IBL destriping. Apply ADC timing
+correction only from valid acquisition metadata and reference each shank separately:
 
 ```python
 rec = si.highpass_filter(recording, freq_min=400.0)
 bad_channel_ids, channel_labels = si.detect_bad_channels(rec)
 rec = rec.remove_channels(bad_channel_ids)
-rec = si.phase_shift(rec)  # ADC phase correction (Neuropixels 1.0)
-rec = si.common_reference(rec, operator="median", reference="global")
+rec = si.phase_shift(rec)  # Requires valid inter_sample_shift property.
+rec = si.common_reference(rec, operator="median", reference="global")  # Single shank only.
 ```
 
-Save the preprocessed recording (Kilosort needs a binary file, and it speeds up reuse):
+For multiple shanks, use the bundled `reference_by_shank` helper described in
+[PREPROCESSING.md](references/PREPROCESSING.md). Trace arrays are samples × channels;
+`get_traces(return_in_uV=True)` needs calibrated gain/offset. The bundled commands
+reject uncalibrated, empty or multisegment input instead of guessing.
+
+Cache preprocessed data when storage and repeated use justify it:
 
 ```python
 rec = rec.save(folder="preprocessed/", format="binary")
@@ -125,8 +137,7 @@ from spikeinterface.sortingcomponents.peak_detection import detect_peaks
 from spikeinterface.sortingcomponents.peak_localization import localize_peaks
 
 noise_levels = si.get_noise_levels(rec, return_in_uV=False)
-peaks = detect_peaks(rec, method="locally_exclusive", noise_levels=noise_levels,
-                     detect_threshold=5, radius_um=50.0)
+peaks = detect_peaks(rec, method='locally_exclusive', method_kwargs={'noise_levels': noise_levels, 'detect_threshold': 5, 'radius_um': 50.0})
 peak_locations = localize_peaks(rec, peaks, method="center_of_mass")
 
 # Visualize the drift raster
@@ -135,7 +146,7 @@ si.plot_drift_raster_map(peaks=peaks, peak_locations=peak_locations,
 ```
 
 Apply correction if needed (presets: `rigid_fast`, `kilosort_like`,
-`nonrigid_accurate`, `nonrigid_fast_and_accurate`, `dredge`, `dredge_fast`):
+`nonrigid_accurate`, `nonrigid_fast_and_accurate`, `dredge`, `dredge_fast`, `medicine`):
 
 ```python
 rec_corrected = si.correct_motion(rec, preset="nonrigid_fast_and_accurate", folder="motion/")
@@ -153,10 +164,10 @@ pipeline estimates/corrects motion when requested; inspect its saved motion outp
 
 
 ```python
-# Kilosort4 (recommended, requires a CUDA GPU)
+# Kilosort4 (external install; CUDA recommended, CPU mode also supported)
 sorting = si.run_sorter("kilosort4", rec_corrected, folder="ks4_output", do_correction=False)
 
-# CPU alternatives (internally developed, no external install)
+# CPU alternatives (SC2/TDC2 need SI optional dependencies; MS5 needs mountainsort5)
 sorting = si.run_sorter("spykingcircus2", rec_corrected, folder="sc2_output", apply_motion_correction=False)
 sorting = si.run_sorter("tridesclous2", rec_corrected, folder="tdc2_output")
 sorting = si.run_sorter("mountainsort5", rec_corrected, folder="ms5_output")
@@ -180,6 +191,7 @@ analyzer.compute("waveforms", ms_before=1.0, ms_after=2.0)
 analyzer.compute("templates", operators=["average", "std"])
 analyzer.compute("noise_levels")
 analyzer.compute("spike_amplitudes")
+analyzer.compute("amplitude_scalings")
 analyzer.compute("correlograms", window_ms=50.0, bin_ms=1.0)
 analyzer.compute("unit_locations", method="monopolar_triangulation")
 analyzer.compute("template_similarity")
@@ -192,21 +204,25 @@ metrics = analyzer.get_extension("quality_metrics").get_data()
 ### 5. Curation by metric thresholds
 
 ```python
-# Allen-style query (note: column is isi_violations_ratio)
+# Example screen, not a guarantee of single-neuron isolation.
 query = "(amplitude_cutoff < 0.1) & (isi_violations_ratio < 0.5) & (presence_ratio > 0.9)"
 good_unit_ids = metrics.query(query).index.values
 ```
 
-For reusable, multi-threshold logic with `allen` / `ibl` / `strict` presets, use the
+For reusable local screening with `allen` / legacy `ibl` / `strict` presets, use the
 bundled `scripts/compute_metrics.py`. See
 [references/AUTOMATED_CURATION.md](references/AUTOMATED_CURATION.md) for details and the
-Bombcell / UnitMatch tools.
+Bombcell / UnitMatch tools. The legacy `ibl` preset is not the IBL classifier.
+Missing/nonfinite metrics remain `unsorted`, and boundary values fail the strict
+thresholds. All bundled entry points now use the same screening criteria.
 
 ### 6. Model-based curation (UnitRefine)
 
 SpikeInterface can apply pretrained machine-learning classifiers from Hugging Face via the
 `spikeinterface.curation` module. The UnitRefine models were trained on real Neuropixels
-data (V1, SC, ALM):
+data (V1, SC, ALM). The public model metadata currently requests SI 0.102.0 and
+scikit-learn 1.4.2, with empty metric-parameter metadata; compatibility with this
+0.105.0 environment is untested. Inspect model requirements/features first:
 
 ```python
 import spikeinterface.curation as sc
@@ -216,6 +232,7 @@ noise_labels = sc.model_based_label_units(
     sorting_analyzer=analyzer,
     repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
     trust_model=True,
+    enforce_metric_params=True,
 )
 neural = analyzer.remove_units(noise_labels[noise_labels["prediction"] == "noise"].index)
 
@@ -224,18 +241,20 @@ sua_mua_labels = sc.model_based_label_units(
     sorting_analyzer=neural,
     repo_id="SpikeInterface/UnitRefine_sua_mua_classifier",
     trust_model=True,
+    enforce_metric_params=True,
 )
 ```
 
 Each call returns a DataFrame with `prediction` and `probability` (confidence) per unit.
 `trust_model=True` (or an explicit `trusted=[...]` list) is required to load the `.skops`
-model — only load models from sources you trust. Models trained on other brain
+model — only load models from sources you trust. Parameter enforcement cannot
+validate training settings absent from model metadata. Models trained on other brain
 areas/datasets may not transfer; validate against a manually labelled subset.
 
 ### 7. AI-assisted curation (for uncertain units)
 
 When running inside an agent such as Cursor or Claude Code, the agent can directly inspect
-waveform/correlogram plots and give an expert read — no API setup required. Generate plots
+waveform/correlogram plots and suggest review questions — no API setup required. Generate plots
 and ask the agent to assess isolation quality.
 
 For programmatic vision-model access, **read API keys from the environment — never hardcode
@@ -249,7 +268,7 @@ client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])  # set this in your 
 ```
 
 See [references/AI_CURATION.md](references/AI_CURATION.md) for the full pattern (rendering a
-unit summary image, building the prompt, and parsing the response).
+unit summary image, building the prompt, and retaining the response as advisory evidence).
 
 ### 8. Export results
 
@@ -264,20 +283,26 @@ si.export_to_phy(analyzer_clean, output_folder="phy_export/",
 # Figures report
 si.export_report(analyzer_clean, "report/", format="png")
 
-# NWB
-from spikeinterface.exporters import export_to_nwb
-export_to_nwb(analyzer_clean, "output.nwb")
-
 # Metrics table
 metrics.to_csv("quality_metrics.csv")
 ```
 
+SpikeInterface 0.105.0 has no `export_to_nwb` exporter. Use the source-specific
+[NeuroConv NWBConverter workflow](https://neuroconv.readthedocs.io/en/main/user_guide/nwbconverter.html),
+with session metadata, electrodes, calibration and aligned unit times; validate
+the resulting NWB file. This optional conversion was not executed here.
+
+SpikeInterface 0.105.0 has an observed `read_phy` bug for exported nonnumeric
+unit IDs (`np.isnan` TypeError). Phy export preserves `cluster_si_unit_ids.tsv`;
+keep that mapping and use a validated importer/fixed release for string-ID
+readback. Numeric-ID Phy export/reload was tested on synthetic data.
+
 ## Common Pitfalls and Best Practices
 
-1. **Always check drift** before spike sorting — drift > ~10 μm meaningfully degrades quality.
-2. **Use `phase_shift`** for Neuropixels 1.0 to correct ADC sampling offsets.
-3. **Save the preprocessed recording** with `rec.save(folder=...)` to avoid recomputation (Kilosort also needs a binary file).
-4. **Use a GPU** for Kilosort4 — it is far faster than CPU sorters.
+1. **Inspect drift** before and after correction; no universal displacement cutoff proves quality.
+2. **Use acquisition timing metadata** for ADC phase correction; do not assume NP2 needs none.
+3. **Budget disk space** before caching with `rec.save(folder=...)`; retain original data.
+4. **Check sorter requirements**; Kilosort4 supports CPU but CUDA is recommended at this scale.
 5. **Review uncertain units** — automated/model-based curation is a starting point, not a verdict.
 6. **Combine approaches** — thresholds for clear cases, model/AI for borderline units.
 7. **Document thresholds and model repo IDs** for reproducibility.
@@ -290,7 +315,7 @@ metrics.to_csv("quality_metrics.csv")
 - `detect_bad_channels`: returns `(bad_channel_ids, channel_labels)`
 
 ### Motion Correction
-- `preset`: `nonrigid_fast_and_accurate` (balanced), `nonrigid_accurate` (severe drift), `dredge` (state of the art)
+- `preset`: `nonrigid_fast_and_accurate` (balanced), `nonrigid_accurate` (severe drift), `dredge` (validate on the experiment)
 
 ### Spike Sorting (Kilosort4)
 - `batch_size`: samples per batch (60000 default)
@@ -341,6 +366,7 @@ Complete end-to-end pipeline (see [Quick Start](#full-pipeline-bundled-script)).
 Complete, editable analysis template. Copy and customize:
 ```bash
 cp assets/analysis_template.py my_analysis.py
+# Copy scripts/ alongside it as neuropixels_scripts/ (template helper path)
 # Edit the PARAMETERS section, then run
 python my_analysis.py
 ```
@@ -366,11 +392,11 @@ Requires Python ≥ 3.10. Using [uv](https://docs.astral.sh/uv/) is recommended.
 
 ```bash
 # Core packages (SpikeInterface bundles the curation/model tooling)
-uv pip install "spikeinterface[full]" probeinterface neo
+uv pip install "spikeinterface==0.105.0" "probeinterface==0.4.0" "neo==0.14.5" numpy scipy pandas matplotlib numba scikit-learn
 
 # Spike sorters
-uv pip install kilosort          # Kilosort4 (CUDA GPU required)
-uv pip install spykingcircus     # SpykingCircus (legacy; SpykingCircus2 ships with SpikeInterface)
+uv pip install kilosort          # Separate environment; follow upstream PyTorch/CUDA setup
+# Spykingcircus2/Tridesclous2: install SI sorting extras in the chosen sorter environment
 uv pip install mountainsort5     # Mountainsort5 (CPU)
 
 # Model-based curation (UnitRefine) downloads from Hugging Face
@@ -383,9 +409,9 @@ uv pip install anthropic
 uv pip install ibl-neuropixel ibllib bombcell
 ```
 
-For reproducible environments, pin versions (current as of 2026-06: `spikeinterface==0.104.3`,
-`kilosort==4.1.7`, `probeinterface==0.3.2`, `neo==0.14.4`). Unpinned installs are fine for
-quick experimentation but should be pinned in production pipelines.
+The tested core environment used Python 3.13 and the pins above; native sorters,
+models and optional tool installations were not executed. Pin and record their
+versions separately. SpikeInterface 0.105.0 still requires `zarr>=2.18,<3`.
 
 ## Project Structure
 

@@ -8,9 +8,9 @@ This reference provides comprehensive color palette options for creating accessi
 
 These palettes are designed to be distinguishable by people with various forms of color vision deficiency.
 
-### Wong's Palette (7 Colors)
+### Okabe-Ito / Wong Palette (7 Chromatic Colors Plus Black)
 
-The most widely recommended colorblind-safe palette, developed by Bang Wong for scientific visualization.
+The [Okabe-Ito palette](https://jfly.uni-koeln.de/color/), popularized by [Bang Wong](https://doi.org/10.1038/nmeth.1618), provides seven chromatic colors and black. It does not guarantee contrast between every pair.
 
 | Name | Hex | RGB | Usage |
 |------|-----|-----|-------|
@@ -31,9 +31,9 @@ bluish green (#009E73), and blue (#0072B2) for data categories"
 
 ---
 
-### IBM Colorblind-Safe Palette (8 Colors)
+### Legacy IBM Preset (5 Data Colors Plus Optional Neutrals)
 
-IBM's accessible color palette designed for data visualization.
+The `ibm` CLI preset retains the five historical data colors below. Black, white, and gray are supporting neutrals, not additional categorical colors. Treat this as a legacy preset rather than a current IBM design-system specification.
 
 | Name | Hex | RGB | Usage |
 |------|-----|-----|-------|
@@ -73,9 +73,9 @@ Developed by Masataka Okabe and Kei Ito, widely used in scientific publications.
 
 ---
 
-### Tol's Qualitative Palette (12 Colors)
+### Tol's Muted Qualitative Palette (9 Colors)
 
-Paul Tol's extended colorblind-safe palette for more categories.
+[Paul Tol's muted scheme](https://sronpersonalpages.nl/~pault/#fig:scheme_muted) contains nine categorical colors; pale gray is reserved for missing data. Gray and black are not extra categories in this scheme.
 
 | Name | Hex | RGB |
 |------|-----|-----|
@@ -88,9 +88,7 @@ Paul Tol's extended colorblind-safe palette for more categories.
 | Rose | `#CC6677` | 204, 102, 119 |
 | Wine | `#882255` | 136, 34, 85 |
 | Purple | `#AA4499` | 170, 68, 153 |
-| Light Gray | `#DDDDDD` | 221, 221, 221 |
-| Gray | `#888888` | 136, 136, 136 |
-| Black | `#000000` | 0, 0, 0 |
+| Pale Gray (missing data only) | `#DDDDDD` | 221, 221, 221 |
 
 ---
 
@@ -388,35 +386,39 @@ flowing top to bottom, modern clean design"
 
 ## Contrast Checking
 
-### WCAG 2.1 Requirements
+### WCAG 2.2 Requirements
+
+See [text contrast](https://www.w3.org/TR/WCAG22/#contrast-minimum) and
+[non-text contrast](https://www.w3.org/TR/WCAG22/#non-text-contrast). Ratios below
+are computed from the stated sRGB hex colors; actual rendered colors must be checked.
 
 | Contrast Ratio | Requirement |
 |----------------|-------------|
 | 4.5:1 | Normal text (under 18pt) |
 | 3:1 | Large text (18pt+ or 14pt bold) |
-| 3:1 | Graphics and UI components |
+| 3:1 | Essential graphical objects and UI components against adjacent colors, subject to WCAG exceptions |
 
 ### Common Safe Combinations
 
 **On White Background (#FFFFFF):**
 | Text Color | Hex | Contrast Ratio |
 |------------|-----|----------------|
-| Black | `#000000` | 21:1 ✓ |
+| Black | `#000000` | 21.0:1 ✓ |
 | Dark Gray | `#333333` | 12.6:1 ✓ |
-| Navy | `#1E3A5F` | 11.2:1 ✓ |
-| Dark Green | `#1B4332` | 10.9:1 ✓ |
-| Dark Blue | `#0072B2` | 5.7:1 ✓ |
+| Navy | `#1E3A5F` | 11.5:1 ✓ |
+| Dark Green | `#1B4332` | 11.1:1 ✓ |
+| Dark Blue | `#0072B2` | 5.2:1 ✓ |
 | Medium Gray | `#666666` | 5.7:1 ✓ |
-| Red | `#CC0000` | 5.5:1 ✓ |
+| Red | `#CC0000` | 5.9:1 ✓ |
 
 **On Dark Background (#1A1A2E):**
 | Text Color | Hex | Contrast Ratio |
 |------------|-----|----------------|
 | White | `#FFFFFF` | 17.1:1 ✓ |
-| Light Gray | `#E5E5E5` | 13.8:1 ✓ |
-| Light Cyan | `#90E0EF` | 10.2:1 ✓ |
-| Yellow | `#F0E442` | 12.5:1 ✓ |
-| Light Blue | `#56B4E9` | 7.8:1 ✓ |
+| Light Gray | `#E5E5E5` | 13.5:1 ✓ |
+| Light Cyan | `#90E0EF` | 11.4:1 ✓ |
+| Yellow | `#F0E442` | 12.9:1 ✓ |
+| Light Blue | `#56B4E9` | 7.4:1 ✓ |
 
 ### Colors to Avoid Together
 
@@ -489,7 +491,7 @@ Copy-paste these phrases into your prompts:
 
 ### Quick Grayscale Test
 
-Convert your infographic to grayscale. If all elements are still distinguishable, your color choices are accessible.
+Convert the infographic to grayscale as one diagnostic. Distinguishability alone does not establish accessibility: check color-vision simulations, actual contrast, direct labels, and a complete text alternative. An image model may not reproduce the requested hex colors exactly.
 
 ---
 

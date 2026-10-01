@@ -1,4 +1,4 @@
-"""Pinned, network-free synthetic physics tests for QuTiP 5.3.0."""
+"""Pinned, network-free synthetic physics tests for QuTiP 5.3.1."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ import two_level_simulation  # noqa: E402
 
 class VersionAndApiTests(unittest.TestCase):
     def test_exact_version_and_current_solver_boundaries(self) -> None:
-        self.assertEqual(qutip.__version__, "5.3.0")
+        self.assertEqual(qutip.__version__, "5.3.1")
         self.assertFalse(hasattr(qutip, "Options"))
 
         sesolve_parameters = inspect.signature(qutip.sesolve).parameters

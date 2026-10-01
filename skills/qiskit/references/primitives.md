@@ -1,5 +1,6 @@
 # V2 Primitives and PUBs
 
+Cloud authentication, QPU, session, and batch snippets are illustrative and were not executed in this refresh. Local evidence is listed in [sources.md](sources.md).
 Qiskit primitives standardize two core tasks:
 
 - **Sampler** executes measured circuits and returns shot-resolved classical data.
@@ -14,7 +15,7 @@ Use V2 interfaces. Their unit of work is a **Primitive Unified Bloc (PUB)**.
 | `StatevectorSampler` | Exact statevector evolution plus finite-shot sampling on the local CPU |
 | `StatevectorEstimator` | Local statevector expectation values |
 | Aer `SamplerV2` / `EstimatorV2` | High-performance and noisy local simulation |
-| Runtime `SamplerV2` / `EstimatorV2` | IBM QPUs and IBM Runtime services |
+| Runtime client-side `Sampler` / `Estimator` (V2 API) | IBM QPUs and IBM Runtime services |
 | `BackendSamplerV2` / `BackendEstimatorV2` | Adapt a `BackendV2` that lacks native primitives |
 
 The V2 `run()` structure is shared, but options are implementation-specific. Do not pass Runtime resilience options to statevector or Aer primitives.
@@ -25,6 +26,9 @@ A Sampler PUB contains:
 
 1. One circuit with measurements.
 2. Optional parameter values.
+3. Optional per-PUB shots: `(circuit, values, shots)`.
+
+The core SDK supports per-PUB shots. Runtime 0.50 client-side primitives require equal shot budgets across PUBs in one call; split unequal budgets into separate jobs.
 
 Pass shots at the `run()` level unless a specific current API requires otherwise.
 
@@ -121,7 +125,15 @@ left_counts = pub_result.data.left.get_counts()
 right_counts = pub_result.data.right.get_counts()
 ```
 
-Do not assume every result has `.data.meas`. Inspect `circuit.cregs` or `pub_result.data`.
+Do not assume every result has `.data.meas`. Inspect `circuit.cregs` or `pub_result.data`. Register counts are marginals. Preserve their paired shots with:
+
+```python
+joint_counts = pub_result.join_data(["left", "right"]).get_counts()
+# Qiskit 2.5.2 BitArray: first listed register occupies least-significant bits.
+assert set(joint_counts) <= {"00", "11"}
+```
+
+Do not multiply marginal frequencies to estimate cross-register correlations. In executed Qiskit 2.5.2, `left=1`, `right=0` with `join_data(["left", "right"])` yields `"01"`. The current API docstring claims the opposite displayed order; the released implementation calls `BitArray.concatenate_bits`, which puts the first input in the least-significant bits. Keep an asymmetric known-state test when upgrading; Bell `00`/`11` alone cannot detect reversal.
 
 ## Estimator PUBs
 
@@ -130,6 +142,9 @@ An Estimator PUB contains:
 1. One circuit, normally without final measurements.
 2. One observable or an array of observables.
 3. Optional parameter values.
+4. Optional per-PUB precision: `(circuit, observables, values, precision)`.
+
+Use one precision per Runtime call; heterogeneous budgets are implementation-specific.
 
 ### One Circuit and Observable
 
@@ -206,7 +221,7 @@ Estimator V2 broadcasts observable and parameter arrays. For nontrivial shapes, 
 
 - Sampler controls finite sampling with `shots`.
 - Estimator controls target accuracy with `precision`.
-- `StatevectorEstimator` is exact at its default precision of zero for supported circuits and Pauli observables.
+- `StatevectorEstimator` is exact at precision zero for unitary circuits and Pauli observables; reset can make trajectories stochastic. Positive precision injects synthetic Gaussian noise, not device or shot-level measurement noise. Its `stds` remain zero and are not hardware confidence intervals.
 - Runtime may translate requested precision into a shot and randomization budget.
 - Runtime twirling settings can affect how shots are allocated.
 
@@ -226,7 +241,8 @@ Runtime circuits must already satisfy the selected backend's ISA:
 ```python
 from qiskit import QuantumCircuit
 from qiskit.transpiler import generate_preset_pass_manager
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 service = QiskitRuntimeService()
 backend = service.least_busy(
@@ -260,12 +276,18 @@ Sampler noise-management options include dynamical decoupling, twirling, executi
 
 ## Runtime Estimator V2
 
-Map observables through the final circuit layout:
+Use an unmeasured preparation circuit; do not reuse the preceding measured Sampler circuit. Map observables through its final layout:
 
 ```python
+from qiskit import QuantumCircuit
+from qiskit.transpiler import generate_preset_pass_manager
 from qiskit.quantum_info import SparsePauliOp
-from qiskit_ibm_runtime import EstimatorV2 as Estimator
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+isa_circuit = generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=11).run(circuit)
 observable = SparsePauliOp.from_list([("ZZ", 1.0)])
 isa_observable = observable.apply_layout(isa_circuit.layout)
 
@@ -291,10 +313,11 @@ pub_result = estimator.run([pub], precision=0.02).result()[0]
 
 ## Runtime Options
 
-Set options with a dictionary, an options dataclass, direct attributes, or `.update()`:
+Set options with a dictionary, an `options_models` Pydantic model, direct attributes, or `.update()`:
 
 ```python
-from qiskit_ibm_runtime import EstimatorOptions, EstimatorV2 as Estimator
+from qiskit_ibm_runtime.options_models import EstimatorOptions
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 options = EstimatorOptions(
     resilience_level=2,
@@ -316,17 +339,16 @@ estimator.options.update(
 
 Current Estimator resilience levels are `0`, `1`, and `2`; there is no level 3. Advanced features can be incompatible with each other, especially fractional gates, gate twirling, PEA, PEC, and gate-folding ZNE. Consult the current options guide before combining them.
 
+Use `qiskit_ibm_runtime.options_models` with the new client-side primitives. Top-level `EstimatorOptions`/`SamplerOptions` belong to the deprecated implementation. Record `estimator.finalize_options().model_dump()` to include resolved resilience/twirling defaults. Put `max_execution_time` at the top level; `environment.max_execution_time` is deprecated.
+
 Do not use the old shared `Options()` object or `.set_options()`.
 
 ## Job, Batch, and Session Modes
 
 ```python
-from qiskit_ibm_runtime import (
-    Batch,
-    EstimatorV2 as Estimator,
-    SamplerV2 as Sampler,
-    Session,
-)
+from qiskit_ibm_runtime import Batch, Session
+from qiskit_ibm_runtime.executor_estimator import Estimator
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 # Job mode
 sampler = Sampler(mode=backend)
@@ -362,7 +384,7 @@ sampler = BackendSamplerV2(backend=backend)
 estimator = BackendEstimatorV2(backend=backend)
 ```
 
-Provider behavior, result quality, and options differ. Transpile for the backend target and read the provider documentation.
+`BackendSamplerV2` requires a backend supporting `memory=True` for shot-resolved output. Provider behavior, result quality, and options differ. Transpile for the backend target and read the provider documentation.
 
 ## Result Handling Checklist
 
@@ -384,7 +406,7 @@ For every result:
 | `.quasi_dists` | Shot-resolved `BitArray`, such as `.data.meas.get_counts()` |
 | `.values` | `.result()[i].data.evs` |
 | Parallel circuit/observable/value lists | One or more PUB tuples |
-| Shared `Options()` | `SamplerOptions`, `EstimatorOptions`, dictionaries, or `.options.update()` |
+| Shared `Options()` | `options_models.SamplerOptions`, `options_models.EstimatorOptions`, dictionaries, or `.options.update()` |
 | `backend=` / `session=` primitive arguments | `mode=` |
 | Runtime auto-transpilation | Explicit ISA circuit preparation |
 | Unmapped observables | `observable.apply_layout(isa_circuit.layout)` |

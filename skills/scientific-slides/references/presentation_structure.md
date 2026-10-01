@@ -4,6 +4,11 @@
 
 Effective scientific presentations follow a clear narrative structure that guides the audience through your research story. This guide provides structure templates for different talk lengths and contexts, helping you organize content for maximum impact and clarity.
 
+Treat the section ranges below as planning options, not additive time budgets.
+Choose one concrete allocation whose sum includes transitions, buffer, and any in-slot
+Q&A. The [timing guide](../assets/timing_guidelines.md) gives checked 5-, 15-, and
+45-minute budgets; rehearsal, not slide count, determines whether the deck fits.
+
 ## Core Narrative Structure
 
 All scientific presentations should follow a story arc that engages, informs, and persuades:

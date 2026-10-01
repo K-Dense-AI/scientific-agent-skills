@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/sessions
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi auto-saves conversations to `~/.pi/agent/sessions/`, organized by working directory. Each session is a JSONL tree.
 
 ## Session Commands

@@ -1,10 +1,10 @@
 # IDC REST API Guide
 
-**Tested with:** API `3.0.0b3` (build `0640860`), IDC data version v24, `idc_index_data_version` 24.2.2
+**Verified 2026-09-30:** all 21 REST routes, OpenAPI request/response contracts, and representative validation errors. API `3.0.0b3` (build `0640860`), IDC data version v24, `idc_index_data_version` 24.2.2
 
 IDC operates a hosted REST API that exposes discovery, cohort building, metadata SQL, and
 download manifests over plain HTTP. No authentication, account, or credentials are required —
-every example on this page can be run from any terminal with `curl`.
+HTTP examples use `curl`; the download step separately requires `idc-index` or a transfer tool.
 
 The API and the [MCP server](mcp_guide.md) are the same service behind two transports: the MCP
 tools wrap these endpoints. Both are hosted against a current IDC release, independently of the
@@ -78,7 +78,9 @@ version, so consistency is an exact check rather than a guess:
 import idc_index_data
 import requests
 
-api = requests.get("https://api.imaging.datacommons.cancer.gov/v3/version", timeout=30).json()
+response = requests.get("https://api.imaging.datacommons.cancer.gov/v3/version", timeout=30)
+response.raise_for_status()
+api = response.json()
 api_version, local_version = api["idc_index_data_version"], idc_index_data.__version__
 
 if api_version.split(".")[0] != local_version.split(".")[0]:
@@ -91,14 +93,15 @@ elif api_version != local_version:
 **The major is the IDC data release; the rest is the index build.** `idc-index-data` `24.x.y`
 serves IDC `v24` — 24.0.0 shipped with the v24 release, and 24.1.0 / 24.2.x are later builds of
 the *same* release. What differs between them is the index itself (added tables and columns,
-corrected metadata), never which series IDC contains.
+corrected metadata). Pin the full index build and compare requested UUIDs; matching
+release labels alone do not establish that two queries or exported manifests are identical.
 
 So read a mismatch by its position:
 
 | Difference | Means | Consequence |
 |------------|-------|-------------|
 | Major (24.x.y vs 25.x.y) | Different IDC data release | Series added, revised, or removed. Counts legitimately differ, and `idc-index` **cannot download** what its index does not list |
-| Minor or patch (24.2.0 vs 24.2.2) | Same data release, different index build | Same series everywhere; downloads are unaffected. A metadata query can still differ if it touches a column that was added or corrected |
+| Minor or patch (24.2.0 vs 24.2.2) | Same data release, different index build | Same intended data release; verify selected UUIDs. Metadata corrections can change query results |
 
 Comparing `idc_version` alone cannot make this distinction in the other direction either — the
 `vNN` label is exactly the major, so matching `v24` on both sides tells you the release agrees
@@ -177,7 +180,7 @@ All paths are relative to `https://api.imaging.datacommons.cancer.gov/v3`.
 | `POST /citations` | Citations for a cohort | `format`, `citations[]`, `idc_acknowledgment`, `recommendation` |
 | `POST /licenses` | License breakdown for a cohort | `licenses[{license_short_name,series,size_TB}]` |
 
-`GET /health` and `GET /v3` (API root) also exist for liveness checks.
+`GET /v3/health` and `GET /v3` (API root) also exist for liveness checks.
 
 ## Filter Syntax
 
@@ -219,7 +222,8 @@ values are matched case-sensitively.
 
 ### The server reports what it filtered on
 
-Every filtered response echoes `filters_applied` and `warnings`, and misuse is refused rather
+Filtered JSON responses echo `filters_applied` and `warnings` (nested under `counts` in a
+manifest response), and misuse is refused rather
 than ignored. Together these make a result self-describing, so you do not have to sanity-check a
 count against a number you happen to remember.
 
@@ -258,7 +262,7 @@ B=https://api.imaging.datacommons.cancer.gov/v3
 
 curl -s $B/version                      # data release + API build
 curl -s $B/stats                        # headline totals
-curl -s $B/collections                  # all 176 collections
+curl -s $B/collections                  # collection array (176 in the reviewed snapshot)
 curl -s $B/collections/rider_pilot      # one collection: counts, modalities, licenses
 curl -s $B/analysis_results             # derived datasets (segmentations, annotations)
 curl -s $B/attributes                   # what can be filtered, and how
@@ -351,14 +355,28 @@ counts = post("/cohort/counts", {"filters": filters})
 assert not counts["warnings"], counts["warnings"]   # nothing was silently dropped
 print(counts)
 
-manifest = post("/cohort/manifest", {"filters": filters, "page": 0, "page_size": 100})
-uids = [row["SeriesInstanceUID"] for row in manifest["series"]]
+uids = []
+series_rows = []
+page = 0
+while True:
+    manifest = post("/cohort/manifest", {"filters": filters, "page": page, "page_size": 100})
+    assert not manifest["counts"]["warnings"], manifest["counts"]["warnings"]
+    assert manifest["total_series"] == counts["series"], "Cohort changed during pagination"
+    batch = [row["SeriesInstanceUID"] for row in manifest["series"]]
+    uids.extend(batch)
+    series_rows.extend(manifest["series"])
+    if len(uids) >= manifest["total_series"]:
+        break
+    if not batch:
+        raise RuntimeError("Manifest pagination ended before the declared total")
+    page += 1
+assert len(set(uids)) == counts["series"]
 
 # 4. Hand off to idc-index for the download (see "Handing Off to idc-index" below)
 ```
 
-Error responses raise through `raise_for_status()`; read `r.json()["error"]["message"]` for the
-reason before retrying.
+Error responses raise through `raise_for_status()`. HTTP 400 commonly uses
+`error.message`; HTTP 422 uses `detail[]`. Inspect the actual body before retrying.
 
 ## The SQL Surface
 
@@ -405,7 +423,8 @@ SELECT SeriesInstanceUID, license_short_name, series_aws_url
 FROM index WHERE collection_id = 'rider_pilot'
 ```
 
-For bulk series, still prefer `cohort/manifest.txt` — it is not subject to the SQL row cap.
+For bulk series, `cohort/manifest.txt` has a separate limit. Compare its nonempty URL-line
+count with `cohort/counts.series`; it has no response-level truncation flag.
 
 ### Clinical data
 
@@ -439,14 +458,18 @@ The API returns manifests; a client moves the bytes. Every URL points at public 
 buckets and needs no credentials.
 
 ```bash
-# save the full manifest
-curl -s $B/cohort/manifest.txt \
+# save a manifest after checking the cohort count
+curl --fail -sS $B/cohort/manifest.txt \
   -H 'content-type: application/json' \
   -d '{"filters": {"terms": {"collection_id": ["rider_pilot"]}}}' > idc_manifest.txt
 
 # download it (needs idc-index installed)
-idc download-from-manifest idc_manifest.txt --download-dir ./idc-data
+idc download-from-manifest --manifest-file idc_manifest.txt --download-dir ./idc-data
 ```
+
+The reviewed server also emits a positional `download-from-manifest idc_manifest.txt`
+command in `download.idc_commands`; that command is incompatible with idc-index 0.12.5.
+Use the explicit `--manifest-file` form above, or `idc download idc_manifest.txt`.
 
 For a filter that is a single `collection_id`, the `download` payload of `cohort/manifest`
 emits the simpler `idc download <collection_id> --download-dir ./idc-data` form.
@@ -454,8 +477,8 @@ emits the simpler `idc download <collection_id> --download-dir ./idc-data` form.
 ### When the local index is a data release behind the API
 
 This applies when the two `idc-index-data` **majors** differ — the API serving `25.x.y` against
-a local `24.x.y`, say. A newer build of the same release (24.2.2 vs 24.2.0) covers the same
-series, so manifests from it resolve locally and downloads are unaffected.
+a local `24.x.y`, say. Builds of the same release usually resolve the same series, but
+verify selected CRDC UUIDs before treating metadata or download manifests as equivalent.
 
 `idc download-from-manifest` does not simply hand the URLs to a transfer client: it extracts
 each `crdc_series_uuid` from the manifest and joins it against the **local** index (then
@@ -475,8 +498,9 @@ The corresponding files could not be downloaded.
 ```
 
 The result is a partial download that otherwise looks successful. `download_from_selection(seriesInstanceUID=…)`
-has the same blind spot from the other direction: it filters the local index, so UIDs it does
-not contain are silently dropped from the selection.
+filters the local index: missing UIDs in a partially matched list can be omitted, while
+an entirely unmatched list raises `ValueError` in 0.12.5. Check the requested-minus-found
+UID set before transferring.
 
 **Fix it one of two ways:**
 
@@ -510,14 +534,14 @@ S3-compatible endpoint, never a `gs://` URL. That is why `idc download-from-mani
 recognizes `s3://` lines. Driving `s5cmd` yourself, use `--no-sign-request`, and for
 `source=gcs` add `--endpoint-url https://storage.googleapis.com`.
 
-IDC is ~99 TB across 176 collections. Always report `series` and `size_TB` from
-`cohort/counts` and confirm with the user before starting a broad download.
+Report `series` and `size_TB` from `cohort/counts` before a broad download and keep the
+transfer within the user-authorized scope (the reviewed v24 API reports ~99 TB archive-wide).
 
 ## Limits, Defaults, and Errors
 
-Measured against `3.0.0b3`. Values above a cap are silently clamped — the response echoes the
-value actually used (`max_rows`, `page_size`), so read it back rather than assuming the request
-was honored.
+Verified against `3.0.0b3`. POST SQL and manifest page sizes are clamped; GET query
+parameters outside their OpenAPI bounds return HTTP 422. Read the response limits rather
+than assuming the requested size was honored.
 
 | Endpoint | Parameter | Default | Cap |
 |----------|-----------|---------|-----|
@@ -527,18 +551,20 @@ was honored.
 | `POST /cohort/manifest` | `page_size` | 100 | 5000 |
 | `POST /cohort/manifest` | `page` | 0 | — |
 | `POST /cohort/manifest` | `include_rows` | `true` | — |
-| `POST /cohort/manifest.txt` | `limit` | 100000 | — |
+| `POST /cohort/manifest.txt` | `limit` | 100000 | No enforced ceiling in reviewed source; keep requests bounded |
 | `POST /cohort/manifest.txt` | `source` | `aws` | — |
 | `POST /citations` | `citation_format` | `apa` | — |
 
-`cohort/manifest.txt` is the surface that is not *row*-capped the way `/sql` is — it returned all
-774 lines for `rider_pilot` with no `limit` set, and enumerates up to 100 000 series. That is why
-bulk series belong there rather than in a `/sql` dump.
+`cohort/manifest.txt` defaults to 100 000 URL lines and silently drops overflow from the
+text response. It has no pagination or `truncated` field. Compare line count against the
+matching cohort count, then explicitly set a bounded `limit` or partition the cohort.
+The JSON manifest paginates `series[]`; its `download.manifest_truncated` concerns the
+default full-manifest limit, not whether the current page is complete.
 
-There is **no per-caller rate limit or quota** and no `429`. What is bounded is the individual
-request: a 30 s SQL statement timeout, 4 GB query memory, and the caps above. A burst is absorbed
-by autoscaling and surfaces as slower responses or a `503` — back off and retry rather than
-treating it as permanent. For sustained heavy metadata access, query the `idc-index` Parquet files
+The reviewed server source has no application-level per-caller rate limiter. This does
+not guarantee unlimited infrastructure capacity or exclude HTTP 429 from a gateway.
+Source defaults include a 30 s SQL timeout and 4 GB query memory; deployed settings can differ.
+Honor `Retry-After` on 429 and retry transient 503 responses with bounded backoff. For sustained heavy metadata access, query the `idc-index` Parquet files
 (`references/parquet_access_guide.md`) or BigQuery instead of driving this API hard.
 
 Size-capped responses carry a `truncated` boolean: `false` means the result is complete, `true`
@@ -566,10 +592,16 @@ The boundary artifact is a list of `SeriesInstanceUID` values (or a saved `manif
 
 ```python
 # UIDs from a cohort/manifest or /sql response
-series_uids = [row["SeriesInstanceUID"] for row in manifest["series"]]
+series_uids = uids  # all pages collected above, not just the last manifest page
 
 from idc_index import IDCClient
 client = IDCClient()
+local = client.index[client.index["SeriesInstanceUID"].isin(series_uids)]
+local_uuids = dict(zip(local["SeriesInstanceUID"], local["crdc_series_uuid"]))
+mismatched = [r["SeriesInstanceUID"] for r in series_rows
+              if local_uuids.get(r["SeriesInstanceUID"]) != r["crdc_series_uuid"]]
+if mismatched:
+    raise ValueError(f"{len(mismatched)} series absent or revised locally; use the pinned URL manifest")
 
 client.download_from_selection(
     downloadDir="./data",
@@ -583,11 +615,11 @@ discovery happened over the API — the two version independently. Compare
 `idc_index_data_version` on both sides first (see *Checking the API against a local
 idc-index*).
 
-**This handoff is only valid while the two are on the same IDC data release** — the same
-`idc-index-data` major. `idc-index` can only download series its own index lists, so when the
+**This UID handoff must resolve to the same CRDC series versions on both sides.**
+`idc-index` can only select series its local index lists, so when the
 API is a release ahead, UIDs and manifest URLs it returned may resolve to nothing locally:
-`download_from_selection` silently drops them and `download-from-manifest` logs them as
-unrecognized and skips them. Do not report that as "no data": name both versions, then either
+`download_from_selection` can omit a missing subset (or raise when none match), and
+`download-from-manifest` logs unrecognized entries and skips them. Do not report that as "no data": name both versions, then either
 upgrade `idc-index` or download straight from the bucket, as described in *When the local index
 is a data release behind the API*.
 
@@ -596,7 +628,7 @@ is a data release behind the API*.
 - **Image bytes.** The API returns URLs and manifests only; files transfer from S3/GCS.
 - **Pixel data access and DICOMweb.** Use `references/dicomweb_guide.md`.
 - **Full DICOM metadata, per-segment detail, SR quantitative/qualitative measurements, private
-  DICOM elements.** Still BigQuery-only — see `references/bigquery_guide.md`.
+  DICOM elements.** Use BigQuery or full public metadata Parquet exports — see `references/bigquery_guide.md`.
 - **Writes.** The service is read-only by construction; there are no POST endpoints that mutate
   state, and the SQL connection rejects anything but `SELECT`.
 - **Local analysis.** DataFrames, plotting, pydicom/SimpleITK, pathology tiling all stay with

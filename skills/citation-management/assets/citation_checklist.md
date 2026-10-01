@@ -56,8 +56,7 @@ Use this checklist to ensure your citations are accurate, complete, and properly
 ### ✓ BibTeX Syntax
 
 - [ ] All entries have balanced braces {}
-- [ ] Fields separated by commas
-- [ ] No comma after last field in each entry
+- [ ] Fields are separated by commas (a trailing comma is valid)
 - [ ] Valid entry types (@article, @book, etc.)
 - [ ] Run: `python scripts/validate_citations.py references.bib`
 
@@ -97,7 +96,7 @@ python scripts/validate_citations.py clean_references.bib \
 
 **What this does**:
 - Checks required fields
-- Verifies DOIs resolve
+- Checks DOI registration; investigate `doi_unverified` warnings separately
 - Detects duplicates
 - Validates syntax
 - Generates detailed report
@@ -216,7 +215,7 @@ For your most important citations, manually verify:
 
 ### Excellent Bibliography
 
-- ✓ 100% of entries have DOIs (for modern papers)
+- ✓ Assigned DOIs included; DOI-less publications explicitly verified
 - ✓ Zero validation errors
 - ✓ Zero missing required fields
 - ✓ Zero broken DOIs
@@ -226,7 +225,7 @@ For your most important citations, manually verify:
 
 ### Acceptable Bibliography
 
-- ✓ 90%+ of modern entries have DOIs
+- ✓ Available DOI metadata checked against authoritative records
 - ✓ Zero high-severity errors
 - ✓ Minor warnings only (e.g., missing recommended fields)
 - ✓ Key citations manually verified

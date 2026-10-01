@@ -48,7 +48,7 @@ Parameters:
 - `track` -- track name (required)
 - `chrom` -- chromosome (optional, limits to one chrom)
 - `start`, `end` -- 0-based half-open coordinates (optional, requires chrom)
-- `maxItemsOutput` -- limit number of items returned (default 1000 for some tracks)
+- `maxItemsOutput` -- limit number of items returned (default and maximum 1,000,000; still request a smaller bounded result)
 
 ### Get sequence
 ```

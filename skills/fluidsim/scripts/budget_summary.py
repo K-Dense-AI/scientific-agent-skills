@@ -44,7 +44,8 @@ except ImportError:  # Direct script execution.
 TOOL = "fluidsim-budget-summary"
 _ASSIGNMENT = re.compile(
     r"^\s*([A-Za-z][A-Za-z0-9_.-]{0,127})\s*=\s*"
-    r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)\s*(?:$|;)"
+    r"([-+]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?|nan|inf(?:inity)?))\s*$",
+    re.IGNORECASE,
 )
 _SPECTRAL_PREFIXES = (
     "budget",
@@ -67,12 +68,18 @@ class OnlineStats:
         self.minimum = math.inf
         self.maximum = -math.inf
         self.mean = 0.0
+        self.nonfinite_count = 0
 
     def add(self, value: Any) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return
-        number = float(value)
+        try:
+            number = float(value)
+        except OverflowError:
+            self.nonfinite_count += 1
+            return
         if not math.isfinite(number):
+            self.nonfinite_count += 1
             return
         if self.first is None:
             self.first = number
@@ -91,6 +98,7 @@ class OnlineStats:
             "max": self.maximum if self.count else None,
             "mean": self.mean if self.count and math.isfinite(self.mean) else None,
             "min": self.minimum if self.count else None,
+            "nonfinite_count": self.nonfinite_count,
         }
 
 
@@ -132,21 +140,25 @@ def summarize_scalar_file(path: Path, *, max_records: int) -> dict[str, Any]:
                     continue
                 metrics.setdefault(key, OnlineStats()).add(value)
         else:
-            match = _ASSIGNMENT.match(line)
-            if match is None:
+            matches = [_ASSIGNMENT.fullmatch(part) for part in line.split(";") if part.strip()]
+            if not matches or any(match is None for match in matches):
                 continue
             parsed_lines += 1
-            key, text = match.groups()
-            metrics.setdefault(key, OnlineStats()).add(float(text))
+            for match in matches:
+                key, text = match.groups()
+                metrics.setdefault(key, OnlineStats()).add(float(text))
+        if len(metrics) > 1024:
+            raise ToolError("scalar metric-count limit exceeded")
     return {
         "format": "json-lines" if json_lines else "FluidSim key-value text",
         "metrics": {
             key: metrics[key].report()
             for key in sorted(metrics)
-            if metrics[key].count
+            if metrics[key].count or metrics[key].nonfinite_count
         },
         "parsed_lines": parsed_lines,
         "raw_records_emitted": False,
+        "averaging": "finite saved-sample mean, not time-weighted or budget closure",
     }
 
 
@@ -208,13 +220,18 @@ def summarize_spectral_file(
     external_links = 0
     try:
         with h5py.File(path, "r") as handle:
-            if "times" in handle and isinstance(handle["times"], h5py.Dataset):
+            times_link = handle.get("times", getlink=True)
+            if isinstance(times_link, h5py.HardLink) and isinstance(handle["times"], h5py.Dataset):
                 times = handle["times"]
-                if times.ndim == 1 and times.shape[0]:
+                if times.is_virtual or times.external:
+                    raise ToolError("external or virtual dataset storage is not read")
+                if times.ndim == 1 and times.shape[0] and times.dtype.kind in "iuf":
                     time_range = [
                         float(times[0]),
                         float(times[times.shape[0] - 1]),
                     ]
+                    if not all(math.isfinite(value) for value in time_range):
+                        raise ToolError("spectral timestamps must be finite")
             stack = [(handle, "/")]
             seen: set[int] = set()
             while stack:
@@ -248,6 +265,8 @@ def summarize_spectral_file(
                         continue
                     if len(results) >= max_datasets:
                         raise ToolError("spectral dataset-count limit exceeded")
+                    if obj.is_virtual or obj.external:
+                        raise ToolError("external or virtual dataset storage is not read")
                     shape = tuple(int(size) for size in obj.shape)
                     if not shape or math.prod(shape) == 0:
                         continue

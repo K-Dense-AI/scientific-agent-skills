@@ -1,5 +1,10 @@
 # Research Poster Content Guide
 
+Reviewed 2026-09-30. Design numbers are starting points, not measured guarantees.
+Code fragments are illustrative; use the bundled tested templates as the executable
+starting point. Replace example names, statistics, citations, URLs, and assets with
+verified project content.
+
 ## Overview
 
 Content is king in research posters. This guide covers writing strategies, section-specific guidance, visual-text balance, and best practices for communicating research effectively in poster format.
@@ -8,7 +13,7 @@ Content is king in research posters. This guide covers writing strategies, secti
 
 ### 1. The 3-5 Minute Rule
 
-**Reality**: Most viewers spend 3-5 minutes at your poster
+**Planning assumption**: Design a brief overview that can be read in 3-5 minutes
 - **1 minute**: Scanning from distance (title, figures)
 - **2-4 minutes**: Reading key points up close
 - **5+ minutes**: Engaged conversation (if interested)
@@ -64,11 +69,13 @@ Hook (Problem) → Approach → Discovery → Impact
 | References/Acknowledgments | 50-100 | 10% |
 
 **Counting Tool**:
-```latex
-% Add word count to poster (remove for final)
-\usepackage{texcount}
-% Compile with: texcount -inc poster.tex
+```bash
+# TeXcount is a Perl command-line program, not a LaTeX package.
+texcount -inc -sum poster.tex
 ```
+
+[TeXcount](https://ctan.org/pkg/texcount) may need macro rules for poster-class
+commands. Cross-check visible text and captions; text inside images is not counted.
 
 ### 4. Visual-to-Text Ratio
 
@@ -187,10 +194,10 @@ Example: "Urban Heat Islands: A Machine Learning Framework for Mitigation"
 2. **Knowledge gap** (1-2 sentences): What's unknown/unsolved?
 3. **Research objective** (1 sentence): What did you do?
 
-**Example** (95 words):
+**Illustrative wording** (replace bracketed facts with current cited evidence):
 ```
-Antibiotic resistance causes 700,000 deaths annually, projected to reach 
-10 million by 2050. Current diagnostic methods require 48-72 hours, 
+Antibiotic resistance causes a substantial burden [cite current estimate].
+The relevant diagnostic workflow requires [measured turnaround time],
 delaying appropriate treatment. Machine learning offers potential for 
 rapid resistance prediction, but existing models lack generalizability 
 across bacterial species. 
@@ -226,7 +233,8 @@ improve cross-species accuracy.
 **Visual Methods (Highly Recommended)**:
 ```latex
 % Flowchart of study design
-\begin{tikzpicture}[node distance=2cm]
+\begin{tikzpicture}[node distance=3cm,
+  box/.style={draw,rectangle,align=center},arrow/.style={->,thick}]
   \node (start) [box] {Data Collection\\n=1,000 samples};
   \node (process) [box, below of=start] {Preprocessing\\Quality Control};
   \node (analysis) [box, below of=process] {Statistical Analysis\\Mixed Models};
@@ -320,6 +328,8 @@ Key Findings
 
 **1. Bar Charts**: Comparing categories
 ```latex
+% Preamble: \usepackage{pgfplots} and \pgfplotsset{compat=1.18}
+% Illustrative values only; replace with verified analysis output.
 \begin{tikzpicture}
   \begin{axis}[
     ybar,
@@ -385,7 +395,7 @@ Limitations
 Next Steps
 • Expand to 20+ additional species
 • Develop point-of-care sequencing integration
-• Launch multi-center clinical validation study (2025)
+• Plan prospective multi-center clinical validation
 ```
 
 **Avoid**:
@@ -537,9 +547,9 @@ We used machine learning (ML) to analyze... Later, ML predicted...
 ### Numbers and Statistics
 
 **Present Statistics Clearly**:
-- Always include measure of variability (SD, SE, CI)
+- Include the appropriate uncertainty or variability measure; distinguish SD, SE, and CI
 - Report sample sizes: n=50
-- Indicate significance: p<0.05, p<0.01, p<0.001
+- Report effect sizes and uncertainty; report exact p-values when appropriate, plus multiplicity handling
 - Use symbols consistently: * for p<0.05, ** for p<0.01
 
 **Format Numbers**:

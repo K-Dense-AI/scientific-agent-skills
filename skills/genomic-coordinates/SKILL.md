@@ -1,11 +1,12 @@
 ---
 name: genomic-coordinates
-description: Convert genomic intervals between coordinate conventions, normalise and compare variant representations, and detect assembly or contig-naming mismatches before they corrupt an analysis. Use whenever coordinates cross a format, tool, or assembly boundary - converting between BED, GFF/GTF, VCF, SAM/BAM, WIG, PSL, genePred, Picard interval_list, or region strings; reconciling 0-based half-open with 1-based inclusive; left-aligning or trimming indels; checking whether two variant records describe the same change; mapping genomic to transcript, CDS, or protein positions; auditing a BED/GTF/VCF for convention violations; or diagnosing GRCh37 vs hg19 vs GRCh38 vs T2T, chr-prefix, and liftover problems. Triggers include "off by one", "0-based", "1-based", "half-open", "coordinate system", "left-align", "normalize variant", "bcftools norm", "chr prefix", "wrong genome build", "liftover", "REF mismatch", and "HGVS".
+description: Converts genomic intervals between coordinate conventions, normalises and compares variant representations, and detects assembly or contig-naming mismatches before they corrupt an analysis. Used whenever coordinates cross a format, tool, or assembly boundary - converting between BED, GFF/GTF, VCF, SAM/BAM, WIG, PSL, genePred, Picard interval_list, or region strings; reconciling 0-based half-open with 1-based inclusive; left-aligning or trimming indels; checking whether two variant records describe the same change; mapping genomic to transcript, CDS, or protein positions; auditing a BED/GTF/VCF for convention violations; or diagnosing GRCh37 vs hg19 vs GRCh38 vs T2T, chr-prefix, and liftover problems. Triggers include "off by one", "0-based", "1-based", "half-open", "coordinate system", "left-align", "normalize variant", "bcftools norm", "chr prefix", "wrong genome build", "liftover", "REF mismatch", and "HGVS".
 license: MIT
-compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages and no network access. Variant normalisation needs a reference FASTA, and uses its .fai index when one is present.
+compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages and no network access. Variant normalisation needs an uncompressed reference FASTA with exact contig names; .fai enables indexed access. Without .fai the entire FASTA is loaded into memory.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -39,14 +40,15 @@ whenever a reference is available.
 0-based half-open  ->  1-based inclusive :  start + 1,  end
 ```
 
-The end coordinate never moves. If a conversion changed both numbers, it is wrong.
+These formulas apply to nonempty spans on the same reference and strand. They do
+not encode insertions, circular wraparound, liftover, or transcript mapping.
 
 ## Which format is which
 
 | 0-based, half-open | 1-based, inclusive |
 | --- | --- |
 | BED, bedGraph, bigWig, narrowPeak | GFF3, GTF, VCF |
-| BAM/CRAM (binary POS) | SAM (text POS) |
+| BAM (binary POS), BCF (binary POS) | SAM text POS, CRAM absolute alignment start |
 | PSL, genePred, refFlat | WIG, Picard interval_list |
 | MAF (UCSC multiple alignment) | MAF (TCGA mutation annotation) |
 | PyRanges, pybedtools | GRanges/IRanges, samtools & UCSC & Ensembl region strings |
@@ -70,13 +72,22 @@ chr7    chr7:5530601-5530625  5530600-5530625  25      ok
 ```
 
 Zero-length BED features (`chromStart == chromEnd`, a legal insertion point) are
-reported as `unrepresentable` rather than converted to `end = start - 1`. Exit
-code is 1 when any interval is degenerate or invalid.
+reported as `unrepresentable` for an inclusive target because the converter lacks
+feature semantics. GFF3 can encode insertion sites with equal endpoints and a
+feature type; that is different from an ordinary single-base interval. Exit code
+is 1 for invalid or unrepresentable output; valid zero-length half-open output
+exits 0. Output is a diagnostic TSV/JSON table, not a rewritten GFF/VCF.
+
+`--input` parses BED/bedGraph, GFF/GTF, literal-allele VCF REF spans, explicit
+region strings, and three-column GRanges/PyRanges/Python TSVs. Other table rows
+are conventions only: extract an interval with a native parser and pass a triple.
+All bundled text readers expect uncompressed files.
 
 ## Variants are not intervals
 
-A VCF `POS` for an indel is the **anchor base** — the base *before* the event,
-itself unchanged. And the same change can be written many ways:
+For a simple VCF indel, `POS` normally identifies the unchanged padding base
+before the event. At contig position 1 the padding can follow the event. Complex
+substitutions need not have an unchanged anchor. And the same change can be written many ways:
 `chr1:7:CAC:C`, `chr1:3:CAC:C` and `chr1:2:GCA:G` are one deletion. Joining,
 deduplicating, or looking up variants before normalising loses real matches
 silently, and it loses them preferentially in repeats, where indels concentrate.
@@ -95,10 +106,18 @@ input         normalized    type      pos_shift  ref_check  changed
 chr1:7:CAC:C  chr1:2:GCA:G  deletion  5          ok         yes
 ```
 
-Every record's `REF` is checked against the FASTA first. A `MISMATCH` means the
-variants and the reference are different assemblies — stop and run
-`check_contigs.py` rather than adjusting coordinates. Multi-allelic records must
-be split with `--split` **before** normalising, never after.
+Literal alleles are checked against the FASTA using exact contig names. A
+`MISMATCH` can indicate an assembly, sequence, strand, or coordinate error; stop
+and investigate with `check_contigs.py` and sequence provenance. The helper
+rejects unsplit ALT lists: use `--split` for independently normalized allele keys.
+Its TSV discards genotypes and annotations; use `bcftools norm` for production
+VCF rewriting. Symbolic/breakend/missing/spanning-deletion alleles are passed
+through as `skipped`, without REF or structural validation.
+
+The default left-shift window is 1,000 bp. If it prevents completion, the helper
+returns `incomplete`, exits 1, and refuses an equivalence verdict. Increase
+`--window` and rerun. Matching normalized keys tests individual literal alleles,
+not haplotype equivalence across multiple records.
 
 [HGVS applies the 3'-most rule](https://hgvs-nomenclature.org/stable/recommendations/general/)
 to the reference sequence being described. For transcript `c.`/`n.` notation,
@@ -122,11 +141,14 @@ ref.fa.fai    sizes   25       plain         GRCh37    24/24 primary chromosome 
 
 The script reads `.fai`, `.chrom.sizes`, VCF headers, SAM headers, FASTA, BED,
 and GTF/GFF, identifies the assembly from primary-chromosome lengths, and reports
-every reason a join between two files would go wrong: naming mismatch, length
+detectable conflicts: naming mismatch, length
 conflict, coordinates past a contig end, contigs present in one file only. Exit
-code 1 on any incompatibility.
+code 1 on a detected conflict. `unknown`/`ambiguous` with exit 0 is not proof of
+compatibility; lengths cannot detect same-length sequence changes or masking.
+Reference contig supersets are expected. VCF header and record extents are both
+checked when comparing; SV/gVCF spans require a native validator.
 
-**GRCh37 and hg19 differ only in the mitochondrion** — 16,569 bp (rCRS) versus
+**GRCh37 and hg19 share primary nuclear coordinates, but differ in mitochondrial reference** — 16,569 bp (rCRS) versus
 16,571 bp. Nuclear coordinates are identical, so a mixed pipeline runs fine and
 only the mtDNA results are wrong. `check_contigs.py` reports which one it found.
 Builds, naming schemes, ALT contigs, and liftover pitfalls:
@@ -142,17 +164,20 @@ python3 audit_intervals.py cohort.vcf --genome GRCh38.fa.fai
 
 Looks for the evidence that a coordinate mistake leaves behind:
 
-| Finding | What it proves |
+| Finding | Interpretation |
 | --- | --- |
-| `start_below_one` in GFF/GTF | 0-based data in a 1-based file; everything is one base left |
-| `many_zero_length` in BED | 1-based single-base features written into a 0-based file |
+| `start_below_one` in GFF/GTF | Invalid start; a convention error is one possible cause |
+| `many_zero_length` in BED | Could be insertion sites or misencoded single-base features |
 | `past_contig_end` | wrong assembly, or an off-by-one at the contig edge |
-| `mixed_contig_naming` | any join will silently match one subset |
+| `mixed_contig_naming` | Review exact names against the intended reference |
 | `first_block_offset` | BED12 `blockStarts` written as absolute coordinates |
 | `not_parsimonious` | untrimmed alleles; normalise before joining |
 | `bad_alt_allele` | Ensembl/VEP `-` notation in a VCF, which has no anchor base |
 
-Exit code 1 on any fatal finding, so it works as a CI gate on a data directory.
+Exit code 1 on any fatal finding. This is a targeted coordinate audit, not a full
+format validator. Special VCF alleles produce `structural_extent_unchecked`;
+circular GFF3 spans need feature-aware validation. The narrowPeak/broadPeak
+readers do not interpret signal columns as BED thickStart/thickEnd.
 
 ## Transcript, CDS, and protein positions
 
@@ -162,14 +187,15 @@ order — decreasing genomic coordinate on the minus strand — and `c.1` is the
 of the initiator `ATG`, not the start of the transcript.
 
 The rules that get mis-remembered: there is no `c.0`; 5' UTR positions are
-negative and 3' UTR positions take a `*`; GFF phase is the bases to *remove* to
-reach the next codon, not `start % 3`; and a `c.` description is meaningless
+negative and 3' UTR positions take a `*`; GFF phase counts bases to skip when locating the next
+complete codon within a CDS segment (retain them when joining coding exons), not `start % 3`; and a `c.` description is meaningless
 without a versioned transcript accession, because the same variant numbers
 differently in each transcript. `references/transcript-coordinates.md` has the
 conversion procedure and the boundary cases.
 
-Do the conversion with a tool that holds the transcript model — VEP,
-`bcftools csq`, Mutalyzer, the `hgvs` package — not by hand.
+Use VEP, Mutalyzer, or the `hgvs` package with the matching transcript model
+for HGVS conversion. `bcftools csq` annotates haplotype-aware coding effects; it
+is not a general genomic-to-HGVS converter.
 
 ## Reporting results
 
@@ -178,6 +204,14 @@ State the assembly next to the coordinates, every time.
 is. Say which convention a coordinate column is in, in the column header or the
 file's documentation. When a conversion produced a result, say which direction it
 went.
+
+## Verified scope
+
+Reviewed the current VCF 4.5, SAM/BAM, CRAM 3, GFF3, UCSC, HGVS, Ensembl REST,
+and bcftools manuals on 2026-10-01. Bundled standard-library helpers are tested
+on synthetic fixtures; normalization is cross-checked against bcftools 1.24.
+Transcript annotation and liftover tools are documented alternatives, not
+executed whole-genome workflows. Source links are in the references below.
 
 ## References
 

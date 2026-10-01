@@ -1,6 +1,7 @@
 # Environment Contracts and Native Environments
 
-Research snapshot: **2026-07-23**.
+Review: **2026-10-01**. Native 5.0 guidance is in [native-5.md](native-5.md);
+3.0 and the pinned 4.0 snapshot below are historical profiles.
 
 ## Start from the Gymnasium contract
 
@@ -30,6 +31,10 @@ Contract requirements:
   separately when sampled actions must be reproducible.
 - Always call `close()`.
 
+Both flags can be true in Gymnasium (for example a terminal at a time limit).
+The synthetic helper deliberately makes its own flags mutually exclusive; that
+is not a universal Gymnasium requirement.
+
 Do not collapse `terminated` and `truncated` during learning. A time-limit
 truncation can still permit value bootstrapping; a true terminal state does not.
 
@@ -41,6 +46,23 @@ python3 scripts/env_contract_validator.py
 
 It validates only the bundled synthetic environment. It intentionally has no
 module-path option, so it cannot dynamically import an untrusted package.
+
+## Autoreset and final observations
+
+Gymnasium 1.3's built-in vector APIs default to `NEXT_STEP`. A reset-only call
+ignores that slot's action and must be excluded from learning transitions.
+`SAME_STEP` returns the reset observation; the terminal observation is in
+`infos["final_obs"]` with the `_final_obs` validity mask. `DISABLED` requires an
+explicit boolean `reset_mask`. Record `metadata["autoreset_mode"]`, wrapper
+compatibility and the resolved version. Bootstrap truncations from the final
+pre-reset observation, not the next episode; terminals suppress bootstrapping.
+
+PufferLib 3.0 pins Gymnasium `<=0.29.1`, and its own `Serial`/worker machinery
+resets an already-done adapter on the next send. This is not Gymnasium 1.3's
+VectorEnv contract. Do not inject a current Gymnasium vectorizer or assume its
+`final_obs` key exists in PufferLib. Inspect returned arrays and exclude
+reset-only transitions. Native PufferEnv implementations own their autoresets.
+The bundled validator checks only the synthetic single-environment contract.
 
 ## Published PufferLib 3.0.0 native contract
 
@@ -162,9 +184,9 @@ feature engineering. Check:
 - policy-side unflattening;
 - padding/mask handling for variable populations.
 
-## Current 4.0 Ocean contract
+## Historical 4.0 Ocean contract
 
-The 4.0 default branch focuses on first-party C environments. It no longer
+The reviewed 4.0 source focuses on first-party C environments. It no longer
 provides the 3.0 Python emulation/vector modules. The official starting points
 are:
 
@@ -240,6 +262,10 @@ approval.
 
 ## Sources
 
+- [Gymnasium vector API](https://gymnasium.farama.org/api/vector/) and
+  [autoreset modes](https://farama.org/Vector-Autoreset-Mode) — checked 2026-10-01.
+
+
 - [Gymnasium Env API](https://gymnasium.farama.org/api/env/) — current reset,
   step, spaces, and seeding contract; accessed 2026-07-23.
 - [Gymnasium terminated/truncated explanation](https://farama.org/Gymnasium-Terminated-Truncated-Step-API)
@@ -252,9 +278,9 @@ approval.
   — stable example; accessed 2026-07-23.
 - [PufferLib 3.0 PettingZoo example](https://github.com/PufferAI/PufferLib/blob/3.0/examples/pettingzoo_env.py)
   — stable example; accessed 2026-07-23.
-- [PufferLib 4.0 Squared template](https://github.com/PufferAI/PufferLib/tree/4.0/ocean/squared)
-  — current single-agent native template; accessed 2026-07-23.
-- [PufferLib 4.0 Target template](https://github.com/PufferAI/PufferLib/tree/4.0/ocean/target)
-  — current multi-agent native template; accessed 2026-07-23.
+- [PufferLib 4.0 Squared template](https://github.com/PufferAI/PufferLib/tree/25647630e1b15330bb3153a5a0d3ff8d234c3acf/ocean/squared)
+  — historical single-agent native template; accessed 2026-07-23.
+- [PufferLib 4.0 Target template](https://github.com/PufferAI/PufferLib/tree/25647630e1b15330bb3153a5a0d3ff8d234c3acf/ocean/target)
+  — historical multi-agent native template; accessed 2026-07-23.
 - [PufferLib Ocean](https://puffer.ai/ocean.html) — current first-party
   collection; accessed 2026-07-23.

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -117,8 +119,9 @@ class RoutingTests(unittest.TestCase):
         )
         request = post.call_args
         self.assertEqual(
-            request.args[0], "https://api.parallel.ai/chat/completions"
+            request.args[0], "https://api.parallel.ai/v1beta/chat/completions"
         )
+        self.assertEqual(request.kwargs["headers"]["x-api-key"], "test-key")
         self.assertEqual(request.kwargs["json"]["model"], "core")
         self.assertFalse(request.kwargs["json"]["stream"])
 
@@ -255,6 +258,150 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(result["fallback_from"], "search")
         self.assertIn("search unavailable", result["fallback_reason"])
 
+    @patch("research_lookup.shutil.which", return_value=None)
+    @patch.dict("research_lookup.os.environ", {"OPENROUTER_API_KEY": "test-key"}, clear=True)
+    def test_key_alone_never_switches_to_perplexity_when_cli_is_missing(self, _which):
+        lookup = ResearchLookup()
+        lookup._run_parallel_cli = Mock(side_effect=RuntimeError("CLI missing"))
+        lookup._perplexity_lookup = Mock()
+
+        result = lookup.lookup("topic")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["backend"], "search")
+        lookup._perplexity_lookup.assert_not_called()
+
+    @patch("research_lookup.shutil.which", return_value=None)
+    @patch.dict("research_lookup.os.environ", {"OPENROUTER_API_KEY": "test-key"}, clear=True)
+    def test_opt_in_fallback_still_handles_missing_cli(self, _which):
+        lookup = ResearchLookup(allow_perplexity_fallback=True)
+        lookup._run_parallel_cli = Mock(side_effect=RuntimeError("CLI missing"))
+        lookup._perplexity_lookup = Mock(return_value={"success": True, "backend": "perplexity"})
+
+        result = lookup.lookup("topic")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["fallback_from"], "search")
+        lookup._perplexity_lookup.assert_called_once_with("topic")
+
+    @patch("research_lookup.shutil.which", return_value="parallel-cli")
+    def test_mixed_extract_results_preserve_errors_session_and_evidence(self, _which):
+        lookup = ResearchLookup(extract_limit=3)
+        candidates = [source(index) for index in range(3)]
+        lookup._run_parallel_cli = Mock(return_value={
+            "extract_id": "extract_mixed",
+            "session_id": "session_shared",
+            "results": [
+                {"url": candidates[0]["url"], "excerpts": ["Retrieved evidence showed a different effect."]},
+                {"url": candidates[2]["url"], "excerpts": []},
+            ],
+            "errors": [{"url": candidates[1]["url"], "error_type": "FETCH_ERROR", "http_status_code": 403}],
+            "warnings": [{"type": "warning", "message": "Partial retrieval"}],
+        })
+        ledger = []
+
+        records, _ = lookup._extract_sources(candidates, ledger, "session_shared")
+        packet = build_manuscript_packet(query="topic", sources=records, search_ledger=ledger, target_references=3)
+
+        self.assertEqual(packet["coverage"]["verified_references"], 1)
+        self.assertEqual(packet["coverage"]["shortfall"], 2)
+        self.assertEqual(ledger[0]["status"], "partial")
+        self.assertEqual(len(ledger[0]["unresolved_urls"]), 2)
+        self.assertEqual(ledger[0]["errors"][0]["http_status_code"], 403)
+        self.assertTrue(ledger[0]["warnings"])
+        args = lookup._run_parallel_cli.call_args.args[0]
+        self.assertEqual(args[args.index("--session-id") + 1], "session_shared")
+        extracted = next(ref for ref in packet["references"] if ref["verification_status"] == "extracted")
+        self.assertEqual(extracted["supporting_excerpts"], ["Retrieved evidence showed a different effect."])
+        self.assertNotIn("20% improvement", " ".join(extracted["key_findings"]))
+
+    @patch("research_lookup.shutil.which", return_value="parallel-cli")
+    def test_research_reads_saved_markdown_and_preserves_basis(self, _which):
+        lookup = ResearchLookup(force_backend="research", previous_interaction_id="trun_previous")
+
+        def fake_cli(args, *, timeout=None):
+            del timeout
+            output_base = Path(args[args.index("-o") + 1])
+            output_base.with_suffix(".md").write_text("A short research report.", encoding="utf-8")
+            self.assertEqual(args[args.index("--previous-interaction-id") + 1], "trun_previous")
+            return {
+                "run_id": "trun_new", "interaction_id": "trun_new", "status": "completed",
+                "output": {"type": "text", "content_file": "report.md", "basis": [
+                    {"citations": [{"url": "https://example.org/study", "title": "Study"}]}
+                ]},
+            }
+
+        lookup._run_parallel_cli = fake_cli
+        result = lookup.lookup("topic")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["response"], "A short research report.")
+        self.assertEqual(result["run_id"], "trun_new")
+        self.assertEqual(result["sources"][0]["title"], "Study")
+
+    @patch("research_lookup.shutil.which", return_value="parallel-cli")
+    def test_research_rejects_noncompleted_empty_and_oversized_requests(self, _which):
+        lookup = ResearchLookup(force_backend="research")
+        for payload in (
+            {"status": "failed", "run_id": "trun_bad", "output": {}},
+            {"status": "completed", "output": {"basis": [{"reasoning": "Not a report. " * 20}]}},
+        ):
+            with self.subTest(payload=payload):
+                lookup._run_parallel_cli = Mock(return_value=payload)
+                self.assertFalse(lookup.lookup("topic")["success"])
+        lookup._run_parallel_cli = Mock()
+        result = lookup.lookup("x" * 15000)
+        self.assertIn("15,000", result["error"])
+        lookup._run_parallel_cli.assert_not_called()
+        self.assertEqual(ResearchLookup._find_report_text({"output": {"content": "Short."}}), "Short.")
+
+    @patch("research_lookup.shutil.which", return_value="parallel-cli")
+    @patch.dict("research_lookup.os.environ", {"OPENROUTER_API_KEY": "test-key"}, clear=True)
+    def test_openrouter_request_and_standard_annotations(self, _which):
+        lookup = ResearchLookup(force_backend="perplexity")
+        response = Mock()
+        response.json.return_value = {
+            "choices": [{"message": {"content": "A cited finding.", "annotations": [
+                {"type": "url_citation", "url_citation": {
+                    "url": "https://example.org/study", "title": "Study", "content": "Source excerpt",
+                    "start_index": 0, "end_index": 15,
+                }}
+            ]}}],
+            "citations": ["https://example.org/study"],
+            "usage": {"total_tokens": 30},
+        }
+        with patch("requests.post", return_value=response) as post:
+            result = lookup.lookup("topic")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(result["sources"]), 1)
+        self.assertEqual(result["sources"][0]["snippet"], "Source excerpt")
+        self.assertEqual(result["raw_response"], response.json.return_value)
+        self.assertEqual(post.call_args.args[0], "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test-key")
+        body = post.call_args.kwargs["json"]
+        self.assertEqual(body["model"], "perplexity/sonar-pro-search")
+        self.assertEqual(body["web_search_options"], {"search_context_size": "high"})
+        self.assertNotIn("search_mode", body)
+        self.assertNotIn("search_context_size", body)
+
+    @patch("research_lookup.shutil.which", return_value="parallel-cli")
+    def test_cli_response_errors_and_nonobjects_fail(self, _which):
+        lookup = ResearchLookup()
+        for payload in ([], {"type": "error", "error": {"message": "unavailable"}}):
+            with self.subTest(payload=payload), patch("research_lookup.subprocess.run", return_value=
+                    subprocess.CompletedProcess([], 0, stdout=json.dumps(payload), stderr="")):
+                with self.assertRaises(RuntimeError):
+                    lookup._run_parallel_cli(["search", "topic", "--json"])
+
+    @patch("research_lookup.shutil.which", return_value="parallel-cli")
+    def test_current_modes_and_extract_batch_limit(self, _which):
+        self.assertEqual(build_parser().parse_args(["topic", "--search-mode", "fast"]).search_mode, "fast")
+        self.assertEqual(ResearchLookup(search_mode="fast").search_mode, "fast")
+        for size in (0, 21):
+            with self.subTest(size=size), self.assertRaises(ValueError):
+                ResearchLookup(extract_batch_size=size)
+
 
 class PacketTests(unittest.TestCase):
     def test_deduplication_merges_doi_url_and_title_records(self):
@@ -335,6 +482,21 @@ class PacketTests(unittest.TestCase):
         self.assertEqual(reference["evidence_quality"], "exclude")
         self.assertEqual(packet["coverage"]["verified_references"], 0)
         self.assertEqual(packet["claim_source_map"], [])
+        self.assertEqual(packet["synthesis"]["consensus_evidence"], [])
+        self.assertTrue(all(not brief["reference_ids"] for brief in packet["section_briefs"].values()))
+
+    def test_identifiers_and_empty_extracts_do_not_count_as_verification(self):
+        packet = build_manuscript_packet(
+            query="topic", sources=[
+                source(1),
+                {"url": "https://doi.org/10.1234/example", "title": "A DOI is only a candidate identifier"},
+                {"url": "https://example.org/empty", "title": "Empty extraction", "extracted": True, "excerpts": []},
+            ], search_ledger=[], target_references=3,
+        )
+        self.assertEqual(packet["coverage"]["verified_references"], 0)
+        self.assertEqual(packet["coverage"]["shortfall"], 3)
+        self.assertEqual(packet["coverage"]["verification_mix"], {"search-only": 3})
+        self.assertTrue(all(claim["status"] == "unverified-source" for claim in packet["claim_source_map"]))
 
     def test_save_packet_writes_all_expected_artifacts(self):
         packet = build_manuscript_packet(

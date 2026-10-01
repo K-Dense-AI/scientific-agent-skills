@@ -4,6 +4,8 @@ This reference follows the
 [TorchDrug 0.2.1 data API](https://torchdrug.ai/docs/api/data.html),
 [quick start](https://torchdrug.ai/docs/quick_start.html), and
 [notes](https://torchdrug.ai/docs/notes/).
+External-file and checkpoint examples require user-supplied trusted inputs;
+they are illustrative unless listed in [review evidence](review.md).
 
 ## Component hierarchy
 
@@ -83,6 +85,10 @@ print(sequence_protein.to_sequence())
 For sequence-only work, setting `atom_feature=None` and `bond_feature=None`
 avoids constructing unnecessary atom-level features and can substantially reduce
 loading cost.
+The fast path has no bonds: `to_sequence()` consequently inserts dots between
+residues. Preserve the input sequence and chain boundaries separately. Unknown
+symbols become glycine with a warning; reject or explicitly map ambiguous
+residues before construction. See [protein modeling](protein_modeling.md).
 
 Documented protein constructors and conversions include:
 
@@ -184,6 +190,8 @@ train/validation/test sets. This matters because tasks may infer target
 statistics or metadata during preprocessing.
 
 ```python
+import torch
+
 optimizer = torch.optim.Adam(task.parameters(), lr=1e-3)
 solver = core.Engine(
     task,
@@ -220,12 +228,19 @@ restored_solver.load("solver.pth")
 For transfer learning, a solver checkpoint stores model state under `"model"`:
 
 ```python
-checkpoint = torch.load("pretrained.pth")["model"]
-task.load_state_dict(checkpoint, strict=False)
+checkpoint = torch.load("pretrained.pth", map_location="cpu")["model"]
+transfer = task.load_state_dict(checkpoint, strict=False)
+print(transfer.missing_keys, transfer.unexpected_keys)
 ```
 
 Use `strict=False` only when intentionally transferring a compatible subset, such
 as a pretrained encoder into a property-prediction task.
+Verify that encoder keys actually matched: InfoGraph introduces an additional
+`model.` nesting level compared with AttributeMasking. Never count a successful
+`strict=False` call as proof of weight transfer. PyTorch 2.0 checkpoint loading
+uses pickle; only load files from trusted sources. The special `Retrosynthesis`
+task requires the two individual subtask checkpoints, not a generic combined
+round trip (see [retrosynthesis](retrosynthesis.md#checkpoint-loading)).
 
 ## Feature naming in 0.2.1
 

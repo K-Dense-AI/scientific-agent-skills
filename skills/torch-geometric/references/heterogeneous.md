@@ -71,10 +71,12 @@ data = T.NormalizeFeatures()(data)  # Normalize features across all types
 Write a standard homogeneous GNN, then convert:
 
 ```python
+import torch
 from torch_geometric.nn import SAGEConv, to_hetero
 import torch_geometric.transforms as T
 from torch_geometric.datasets import OGB_MAG
 
+# Illustrative large download; preserve the OGB split and embedding provenance.
 dataset = OGB_MAG(root='./data', preprocess='metapath2vec', transform=T.ToUndirected())
 data = dataset[0]
 
@@ -170,20 +172,28 @@ class HGT(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HGTConv(hidden_channels, hidden_channels, data.metadata(),
-                           num_heads, group='sum')
+                           heads=num_heads)
             self.convs.append(conv)
 
         self.lin = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict):
-        for node_type, x in x_dict.items():
-            x_dict[node_type] = self.lin_dict[node_type](x).relu_()
+        x_dict = {key: self.lin_dict[key](x).relu()
+                  for key, x in x_dict.items()}
         for conv in self.convs:
             x_dict = conv(x_dict, edge_index_dict)
         return self.lin(x_dict['paper'])
 ```
 
+`HGTConv` uses `heads=`, not `num_heads=` or `group=`; hidden width must be divisible by the head count. Every node type needed in the next layer must receive messages. Add semantically justified reverse relations (and pair them during link splits), or explicitly handle missing outputs. `HeteroConv`/HGT examples here return paper logits directly; `to_hetero` returns a dictionary.
+
 ## Training with HeteroData
+
+These loops use the `to_hetero` model from Option 1, which returns a dict. With Option 2/3, use its tensor output directly instead of indexing `["paper"]`. Move the model and batch to the same device before optimization; select models on validation labels only.
+
+```python
+import torch.nn.functional as F
+```
 
 ### Full-batch
 
@@ -239,3 +249,7 @@ from torch_geometric.loader import HGTLoader
 loader = HGTLoader(data, num_samples=[512] * 2, batch_size=128,
                    input_nodes=('paper', data['paper'].train_mask))
 ```
+
+Sampling examples require optional backends (`pyg-lib`/`torch-sparse` for NeighborLoader, `torch-sparse` for HGTLoader); homogeneous NeighborLoader sampling was exercised with pyg-lib; these heterogeneous sampling snippets and HGTLoader were source-checked only. Do not use target labels as node features. Pretrained structural features can also encode topology unavailable in an inductive/temporal task.
+
+Source: [heterogeneous tutorial](https://pytorch-geometric.readthedocs.io/en/latest/tutorial/heterogeneous.html), [HGTConv](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.nn.conv.HGTConv.html).

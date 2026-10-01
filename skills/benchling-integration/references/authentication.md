@@ -1,390 +1,141 @@
-# Benchling Authentication Reference
+# Benchling Authentication
 
-## Authentication Methods
+Reviewed 2026-09-30. See the [official authentication guide](https://docs.benchling.com/docs/authentication)
+and [app setup guide](https://docs.benchling.com/docs/getting-started-benchling-apps).
+Examples target SDK 1.25.0; tenant authentication was not exercised.
 
-Benchling supports three authentication methods, each suited for different use cases.
+## Choose the identity
 
-### 1. API Key Authentication (Basic Auth)
+| Method | Identity and use |
+|---|---|
+| OAuth client credentials | App identity for scheduled syncs and background integrations |
+| Delegated OAuth authorization code | Individual user's permissions and audit attribution |
+| Personal API key | Key owner's identity; temporary scripts/testing |
+| External OIDC bearer token | Legacy integration configured with Benchling Support |
 
-**Best for:** Personal scripts, prototyping, single-user integrations
+Do not describe client credentials as acting on behalf of the person using your app.
+Grant the app explicit access to the required projects, teams, or organizations.
+API access requires permission to both the operation and the relevant data.
 
-**How it works:**
-- Use your API key as the username in HTTP Basic authentication
-- Leave the password field empty
-- All requests must use HTTPS
+## OAuth app credentials
 
-**Obtaining an API Key:**
-1. Log in to your Benchling account
-2. Navigate to Profile Settings
-3. Find the API Key section
-4. Generate a new API key
-5. Store it securely (it will only be shown once)
-
-**Python SDK Usage:**
-```python
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-
-benchling = Benchling(
-    url="https://your-tenant.benchling.com",
-    auth_method=ApiKeyAuth("your_api_key_here")
-)
-```
-
-**Direct HTTP Usage:**
-```bash
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/dna-sequences \
-  -u "your_api_key_here:"
-```
-
-Note the colon after the API key with no password.
-
-**Environment Variable Pattern:**
 ```python
 import os
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-
-api_key = os.environ.get("BENCHLING_API_KEY")
-tenant_url = os.environ.get("BENCHLING_TENANT_URL")
-
-benchling = Benchling(
-    url=tenant_url,
-    auth_method=ApiKeyAuth(api_key)
-)
-```
-
-### 2. OAuth 2.0 Client Credentials
-
-**Best for:** Multi-user applications, service accounts, production integrations
-
-**How it works:**
-1. Register an application in Benchling's Developer Console
-2. Obtain client ID and client secret
-3. Exchange credentials for an access token
-4. Use the access token for API requests
-5. Refresh token when expired
-
-**Registering an App:**
-1. Log in to Benchling as an admin
-2. Navigate to Developer Console
-3. Create a new App
-4. Record the client ID and client secret
-5. Configure OAuth redirect URIs and permissions
-
-**Python SDK Usage:**
-```python
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 
-auth_method = ClientCredentialsOAuth2(
-    client_id="your_client_id",
-    client_secret="your_client_secret"
-)
-
-benchling = Benchling(
-    url="https://your-tenant.benchling.com",
-    auth_method=auth_method
-)
-```
-
-The SDK automatically handles token refresh.
-
-**Direct HTTP Token Flow:**
-```bash
-# Get access token
-curl -X POST \
-  https://your-tenant.benchling.com/api/v2/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=your_client_id" \
-  -d "client_secret=your_client_secret"
-
-# Response:
-# {
-#   "access_token": "token_here",
-#   "token_type": "Bearer",
-#   "expires_in": 3600
-# }
-
-# Use access token
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/dna-sequences \
-  -H "Authorization: Bearer access_token_here"
-```
-
-### 3. OpenID Connect (OIDC)
-
-**Best for:** Enterprise integrations with existing identity providers, SSO scenarios
-
-**How it works:**
-- Authenticate users through your identity provider (Okta, Azure AD, etc.)
-- Identity provider issues an ID token with email claim
-- Benchling verifies the token against the OpenID configuration endpoint
-- Matches authenticated user by email
-
-**Requirements:**
-- Enterprise Benchling account
-- Configured identity provider (IdP)
-- IdP must issue tokens with email claims
-- Email in token must match Benchling user email
-
-**Identity Provider Configuration:**
-1. Configure your IdP to issue OpenID Connect tokens
-2. Ensure tokens include the `email` claim
-3. Provide Benchling with your IdP's OpenID configuration URL
-4. Benchling will verify tokens against this configuration
-
-**Python Usage:**
-```python
-# Assuming you have an ID token from your IdP
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.oidc_auth import OidcAuth
-
-auth_method = OidcAuth(id_token="id_token_from_idp")
-
-benchling = Benchling(
-    url="https://your-tenant.benchling.com",
-    auth_method=auth_method
-)
-```
-
-**Direct HTTP Usage:**
-```bash
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/dna-sequences \
-  -H "Authorization: Bearer id_token_here"
-```
-
-## Security Best Practices
-
-### Credential Storage
-
-**DO:**
-- Store credentials in environment variables
-- Use password managers or secret management services (AWS Secrets Manager, HashiCorp Vault)
-- Encrypt credentials at rest
-- Use different credentials for dev/staging/production
-
-**DON'T:**
-- Commit credentials to version control
-- Hardcode credentials in source files
-- Share credentials via email or chat
-- Store credentials in plain text files
-
-**Example with scoped environment variables:**
-```python
-import os
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-
-api_key = os.environ.get("BENCHLING_API_KEY")
-tenant_url = os.environ.get("BENCHLING_TENANT_URL")
-
-if not api_key or not tenant_url:
-    raise ValueError("Set BENCHLING_API_KEY and BENCHLING_TENANT_URL")
-
+tenant_url = os.environ["BENCHLING_TENANT_URL"].rstrip("/")
 benchling = Benchling(
     url=tenant_url,
-    auth_method=ApiKeyAuth(api_key),
+    auth_method=ClientCredentialsOAuth2(
+        client_id=os.environ["BENCHLING_CLIENT_ID"],
+        client_secret=os.environ["BENCHLING_CLIENT_SECRET"],
+        token_url=f"{tenant_url}/oauth/token",
+    ),
 )
 ```
 
-Do not call `load_dotenv()` without filtering, and never iterate over `os.environ` to collect secrets.
+The released SDK accepts a **fully qualified** `token_url`. Its default
+`/api/v2/token` remains supported; `/oauth/token` avoids tying token acquisition to V2.
+It requests/replaces access tokens automatically. This grant does not return a refresh
+token. Respect the returned `expires_in` (current documentation: 900 seconds).
 
-### Credential Rotation
+Illustrative direct exchange; avoid recording tokens or verbose authorization headers:
 
-**API Key Rotation:**
-1. Generate a new API key in Profile Settings
-2. Update your application to use the new key
-3. Verify the new key works
-4. Delete the old API key
-
-**App Secret Rotation:**
-1. Navigate to Developer Console
-2. Select your app
-3. Generate new client secret
-4. Update your application configuration
-5. Delete the old secret after verifying
-
-**Best Practice:** Rotate credentials regularly (e.g., every 90 days) and immediately if compromised.
-
-### Access Control
-
-**Principle of Least Privilege:**
-- Grant only the minimum necessary permissions
-- Use service accounts (apps) instead of personal accounts for automation
-- Review and audit permissions regularly
-
-**App Permissions:**
-Apps require explicit access grants to:
-- Organizations
-- Teams
-- Projects
-- Folders
-
-Configure these in the Developer Console when setting up your app.
-
-**User Permissions:**
-API access mirrors UI permissions:
-- Users can only access data they have permission to view/edit in the UI
-- Suspended users lose API access
-- Archived apps lose API access until unarchived
-
-### Network Security
-
-**HTTPS Only:**
-All Benchling API requests must use HTTPS. HTTP requests will be rejected.
-
-**IP Allowlisting (Enterprise):**
-Some enterprise accounts can restrict API access to specific IP ranges. Contact Benchling support to configure.
-
-**Rate Limiting:**
-Benchling implements rate limiting to prevent abuse:
-- Default: 100 requests per 10 seconds per user/app
-- 429 status code returned when rate limit exceeded
-- SDK automatically retries with exponential backoff
-
-### Audit Logging
-
-**Tracking API Usage:**
-- All API calls are logged with user/app identity
-- OAuth apps show proper audit trails with user attribution
-- API key calls are attributed to the key owner
-- Review audit logs in Benchling's admin console
-
-**Best Practice for Apps:**
-Use OAuth instead of API keys when multiple users interact through your app. This ensures proper audit attribution to the actual user, not just the app.
-
-## Troubleshooting
-
-### Common Authentication Errors
-
-**401 Unauthorized:**
-- Invalid or expired credentials
-- API key not properly formatted
-- Missing "Authorization" header
-
-**Solution:**
-- Verify credentials are correct
-- Check API key is not expired or deleted
-- Ensure proper header format: `Authorization: Bearer <token>`
-
-**403 Forbidden:**
-- Valid credentials but insufficient permissions
-- User doesn't have access to the requested resource
-- App not granted access to the organization/project
-
-**Solution:**
-- Check user/app permissions in Benchling
-- Grant necessary access in Developer Console (for apps)
-- Verify the resource exists and user has access
-
-**429 Too Many Requests:**
-- Rate limit exceeded
-- Too many requests in short time period
-
-**Solution:**
-- Implement exponential backoff
-- SDK handles this automatically
-- Consider caching results
-- Spread requests over time
-
-### Testing Authentication
-
-**Quick Test with curl:**
 ```bash
-# Test API key
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/users/me \
-  -u "your_api_key:" \
-  -v
-
-# Test OAuth token
-curl -X GET \
-  https://your-tenant.benchling.com/api/v2/users/me \
-  -H "Authorization: Bearer your_token" \
-  -v
+curl --fail-with-body --request POST \
+  "${BENCHLING_TENANT_URL%/}/oauth/token" \
+  --header 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'grant_type=client_credentials' \
+  --data-urlencode "client_id=${BENCHLING_CLIENT_ID}" \
+  --data-urlencode "client_secret=${BENCHLING_CLIENT_SECRET}"
 ```
 
-The `/users/me` endpoint returns the authenticated user's information and is useful for verifying credentials.
+Production token exchanges should run inside the application or secrets-aware tooling
+rather than placing credentials in shell history/process arguments. Store access tokens
+in memory or a protected store, and send them in `Authorization: Bearer <access_token>`.
 
-**Python SDK Test:**
-```python
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-
-try:
-    benchling = Benchling(
-        url="https://your-tenant.benchling.com",
-        auth_method=ApiKeyAuth("your_api_key")
-    )
-
-    # Test authentication
-    user = benchling.users.get_me()
-    print(f"Authenticated as: {user.name} ({user.email})")
-
-except Exception as e:
-    print(f"Authentication failed: {e}")
-```
-
-## Multi-Tenant Considerations
-
-If working with multiple Benchling tenants, use separate named keys per tenant (for example `BENCHLING_PROD_API_KEY` and `BENCHLING_STAGING_API_KEY`) rather than reading the entire environment:
+## Personal API keys
 
 ```python
-import os
-from benchling_sdk.benchling import Benchling
 from benchling_sdk.auth.api_key_auth import ApiKeyAuth
 
-tenants = {
-    "production": {
-        "url": os.environ.get("BENCHLING_PROD_TENANT_URL"),
-        "api_key": os.environ.get("BENCHLING_PROD_API_KEY"),
-    },
-    "staging": {
-        "url": os.environ.get("BENCHLING_STAGING_TENANT_URL"),
-        "api_key": os.environ.get("BENCHLING_STAGING_API_KEY"),
-    },
-}
-
-clients = {}
-for name, config in tenants.items():
-    if not config["url"] or not config["api_key"]:
-        raise ValueError(f"Missing credentials for {name} tenant")
-    clients[name] = Benchling(
-        url=config["url"],
-        auth_method=ApiKeyAuth(config["api_key"]),
-    )
-
-prod_sequences = clients["production"].dna_sequences.list()
+benchling = Benchling(
+    url=os.environ["BENCHLING_TENANT_URL"],
+    auth_method=ApiKeyAuth(os.environ["BENCHLING_API_KEY"]),
+)
 ```
 
-## Advanced: Custom HTTPS Clients
+HTTP Basic authentication uses the API key as username and an empty password.
+Generate/rotate keys in Profile Settings. Keys created after **2026-08-07** expire
+30 days after creation; earlier keys are documented as non-expiring. Plan rotation
+from the key's actual creation/expiration state instead of assuming a 90-day lifetime.
 
-For environments with self-signed certificates or corporate proxies:
+## Delegated authorization and legacy OIDC
+
+Delegated auth uses `GET /oauth/authorize` with `client_id`, an allowed `redirect_uri`,
+`response_type=code`, and a session-bound random `state`. Verify returned state. Exchange
+the code via `POST /oauth/token` with `grant_type=authorization_code`, client credentials,
+`redirect_uri`, and `code`. Keep each user's tokens isolated.
+
+Refresh using the same token endpoint with `grant_type=refresh_token`, client credentials,
+and the stored refresh token. Refresh tokens rotate on use: persist the replacement
+atomically. Current docs specify 15-minute access tokens and 30-day refresh tokens.
+SDK 1.25.0 does not implement this authorization/refresh flow; manage it in the app layer.
+Check tenant availability, app format, and redirect configuration in the official guide.
+
+OIDC remains supported but is legacy. It uses an external IdP-issued ID token and
+requires Benchling Support configuration and a matching existing user. There is no
+`benchling_sdk.auth.oidc_auth.OidcAuth` in this release. A manually managed token can
+be passed as Bearer auth, but token acquisition/renewal remains the integration's job.
+Prefer delegated auth for new user-facing integrations.
+
+## Read-only connectivity check
+
+```python
+# An empty first page is valid; it still establishes a successful authorized request.
+first_page = next(iter(benchling.projects.list(page_size=1)))
+print("[OK] Project list request succeeded")
+```
+
+There is no documented v2 `/users/me` route or SDK `users.get_me()` method. Check access
+to the intended resource, not an invented current-user endpoint. A 401 indicates an
+authentication problem; 403 usually requires a permissions review. Do not print secrets,
+headers, or full response bodies while troubleshooting.
+
+## HTTP clients and multiple environments
+
+The Benchling constructor parameter is `httpx_client`, not `http_client`:
 
 ```python
 import httpx
 from benchling_sdk.benchling import Benchling
 from benchling_sdk.auth.api_key_auth import ApiKeyAuth
 
-# Custom httpx client with certificate verification
-custom_client = httpx.Client(
-    verify="/path/to/custom/ca-bundle.crt",
-    timeout=30.0
-)
-
-benchling = Benchling(
-    url="https://your-tenant.benchling.com",
-    auth_method=ApiKeyAuth("your_api_key"),
-    http_client=custom_client
-)
+with httpx.Client(timeout=30.0) as http_client:
+    client = Benchling(
+        url=os.environ["BENCHLING_TENANT_URL"],
+        auth_method=ApiKeyAuth(os.environ["BENCHLING_API_KEY"]),
+        httpx_client=http_client,
+    )
+    page = next(iter(client.projects.list(page_size=1)))
 ```
 
-## References
+Keep certificate verification enabled; configure the organization's trusted CA when
+required. `ClientCredentialsOAuth2` has its own `httpx_client` parameter for token
+requests if custom TLS/proxy/transport settings must cover that exchange as well.
 
-- **Official Authentication Docs:** https://docs.benchling.com/docs/authentication
-- **Developer Console:** https://your-tenant.benchling.com/developer
-- **SDK Documentation:** https://benchling.com/sdk-docs/
+Use separate clients and named credentials for production and staging
+(`BENCHLING_PROD_TENANT_URL`/`BENCHLING_PROD_API_KEY` and
+`BENCHLING_STAGING_TENANT_URL`/`BENCHLING_STAGING_API_KEY`). Read only the needed
+variables. Never send credentials to an arbitrary URL supplied in data or an event;
+resolve objects through the configured tenant client. Warehouse logins are separate
+from these HTTP authentication methods.
+
+## Verification sources
+
+- [Authentication](https://docs.benchling.com/docs/authentication): identity, expiration,
+  delegated flow, legacy OIDC, token path.
+- [Apps](https://docs.benchling.com/docs/getting-started-benchling-apps): app setup and access.
+- [SDK 1.25.0](https://benchling.com/sdk-docs/1.25.0/index.html): constructor and auth signatures.
+- [Warehouse connection](https://docs.benchling.com/docs/getting-started): separate SQL credentials.

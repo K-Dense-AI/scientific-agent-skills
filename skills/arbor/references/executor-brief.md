@@ -1,10 +1,10 @@
 # Executor brief template
 
 Each executor is a short-lived subagent that tests **one** hypothesis in an
-isolated git worktree and returns structured evidence. Dispatch it with the
-Agent tool (use `isolation: "worktree"` so it gets its own copy of the repo, or
-instruct it to run `git worktree add` itself). Dispatch independent siblings in
-parallel — multiple Agent calls in one message.
+isolated git worktree and returns structured evidence. Use the host's supported
+subagent/worktree facility, or create a distinct
+worktree with `git worktree add`. Dispatch independent siblings in parallel
+when resources permit. Only the coordinator writes the shared tree.
 
 Fill in the bracketed parts. Keep the brief tight: the executor needs the
 hypothesis, the context that lets it implement well, and a crisp contract for
@@ -41,11 +41,14 @@ WHAT TO DO:
      debug, and rerun freely to get a working implementation — but keep the
      change bound to this hypothesis. If the metric stalls, fix YOUR code; do
      not pivot to a different idea.
-  3. Run E_dev and record the score. Run it more than once if it's noisy.
+  3. Run E_dev and record the score. Use the predeclared repetitions if it is
+     noisy. Preserve the exact command,
+     evaluator/data versions, seeds and raw output; report execution failure
+     without inventing a numeric score.
   4. Commit the artifact on a clearly named branch.
 
 RETURN EXACTLY THIS (your final message IS the data the coordinator reads):
-  - dev_score: <number from E_dev>
+  - dev_score: <finite number from E_dev, or null for execution failure>
   - result:    <1-3 sentences of factual outcome — what the change did>
   - insight:   <the reusable lesson: WHY this result supports / weakens /
                bounds the hypothesis. This is the most valuable output —
@@ -61,8 +64,9 @@ Do NOT run the held-out test evaluator — that is the coordinator's merge gate.
 After the executor returns, the coordinator records it with:
 
 ```bash
-python scripts/tree.py set-evidence --node <id> \
+python "$ARBOR_TREE" set-evidence --node <id> \
   --dev-score <n> --result "..." --insight "..." --branch-ref "<ref>"
 ```
 
-then abstracts the lesson upward with `tree.py propagate`.
+Omit `--dev-score` when evaluation failed; preserve the failure and log path in
+`--result`. Then abstract the lesson upward with `tree.py propagate`.

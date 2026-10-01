@@ -1,6 +1,6 @@
 # Electrooculography
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable source/runtime
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable source/runtime
 and the official EOG API/example.
 
 ## Scope and orientation
@@ -145,7 +145,7 @@ complete validated correction pipeline here. With MNE:
 
 Avoid circularly selecting correction settings to maximize an experimental result.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official EOG API](https://neuropsychology.github.io/NeuroKit/functions/eog.html)
 - [Official EOG example](https://neuropsychology.github.io/NeuroKit/examples/eog_analyze/eog_analyze.html)

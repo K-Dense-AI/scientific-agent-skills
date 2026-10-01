@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 
@@ -336,6 +337,76 @@ class StaticSafetyTests(unittest.TestCase):
 
 
 class StructureAndBoundsTests(unittest.TestCase):
+    def test_malformed_enum_members_are_reported_without_crashing(self) -> None:
+        for value in ([], {}, 1, None):
+            document = load_asset("intended_use_handoff_template.json")
+            document["intended_use"]["prohibited_uses"][0] = value
+            codes = {issue.code for issue in _common.validate_document(document)}
+            self.assertIn("SCHEMA_TYPE_STRING", codes)
+            self.assertIn("PROHIBITED_USE_SET_CHANGED", codes)
+
+    def test_parser_failures_are_minimized(self) -> None:
+        cases = (
+            ('{"nested":' + '[' * 2000 + '0' + ']' * 2000 + '}',
+             "JSON_MAX_DEPTH_EXCEEDED"),
+            ('{"number":' + '9' * 10000 + '}', "JSON_NUMBER_INVALID"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.json"
+            for content, code in cases:
+                path.write_text(content, encoding="utf-8")
+                with self.assertRaisesRegex(_common.ValidationError, code):
+                    _common.read_json(path)
+
+    def test_unknown_keys_and_document_types_are_not_echoed(self) -> None:
+        document = load_asset("source_fact_manifest_template.json")
+        marker = "SYNTHETIC-PRIVATE-KEY-OR-TYPE"
+        document[marker] = True
+        self.assertNotIn(marker, str(_common.validate_document(document)))
+        document["document_type"] = marker
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "record.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            report = validate_treatment_plan.validate_target(str(path))
+        self.assertEqual(report["status"], "fail")
+        self.assertNotIn(marker, json.dumps(report))
+
+    def test_datetime_requires_extended_calendar_format(self) -> None:
+        for value in (
+            "2026-W30-4T12:00:00+00:00", "20260723T12:00:00+00:00",
+            "2026-07-23X12:00:00+00:00", "2026-07-23T12:00:00",
+            "2026-07-23T12:00:00+00:99", "2026-07-23T12:00:00+24:00",
+        ):
+            self.assertIsNone(_common.parse_iso_datetime(value))
+        for value in ("2026-07-23T12:00:00Z", "2026-07-23T12:00:00.123-07:00"):
+            self.assertIsNotNone(_common.parse_iso_datetime(value))
+
+    def test_blank_required_text_is_rejected(self) -> None:
+        document = complete_synthetic_documents()["clinician_authored_intervention_record"]
+        document["interventions"][0]["owner_role"] = "   "
+        self.assertIn("SCHEMA_STRING_BLANK", {
+            issue.code for issue in _common.validate_document(document)
+        })
+
+    def test_forward_slash_network_path_is_rejected(self) -> None:
+        with self.assertRaisesRegex(_common.ValidationError, "NETWORK_SHARE_PATH_REJECTED"):
+            _common.read_json("//host/share/record.json")
+
+    def test_competing_output_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "result.json"
+            real_link = _common.os.link
+
+            def competing_writer(source, target):
+                Path(target).write_text("existing output", encoding="utf-8")
+                return real_link(source, target)
+
+            with patch.object(_common.os, "link", side_effect=competing_writer):
+                with self.assertRaisesRegex(_common.ValidationError, "OUTPUT_ALREADY_EXISTS"):
+                    _common.atomic_write_json(destination, {"synthetic": True})
+            self.assertEqual(destination.read_text(), "existing output")
+            self.assertEqual(list(Path(directory).glob("*.tmp")), [])
+
     def test_template_is_structurally_valid_but_incomplete(self) -> None:
         document = load_asset("source_fact_manifest_template.json")
         self.assertEqual(_common.validate_document(document), [])
@@ -416,6 +487,29 @@ class StructureAndBoundsTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_schedule_rejects_mixed_subjects_and_reversed_dates(self) -> None:
+        documents = complete_synthetic_documents()
+        documents["source_fact_manifest"]["subject_ref"] = "SYNTHETIC-OTHER"
+        report, schedule = timeline_generator.build_schedule(documents)
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(schedule, {})
+        documents = complete_synthetic_documents()
+        documents["clinician_authored_intervention_record"]["interventions"][0]["end_date"] = "2026-07-01"
+        report, schedule = timeline_generator.build_schedule(documents)
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(schedule, {})
+
+    def test_schedule_filters_require_full_calendar_dates(self) -> None:
+        for value in ("20260723", "2026-W30-4"):
+            with self.assertRaisesRegex(_common.ValidationError, "FROM_DATE_INVALID"):
+                timeline_generator.build_schedule(complete_synthetic_documents(), from_date=value)
+
+    def test_completeness_does_not_claim_handoff_authority(self) -> None:
+        report = check_completeness.check_completeness(complete_synthetic_documents())
+        self.assertTrue(report["documentation_declarations_complete"])
+        self.assertFalse(report["handoff_authorized_by_script"])
+        self.assertNotIn("ready_for_authorized_documentation_handoff", report)
+
     def test_generator_creates_six_blocked_templates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "package"

@@ -1,6 +1,6 @@
 # Fail-Closed Evidence Review
 
-Research basis: **2026-07-23**, extended **2026-07-26** for laboratory lanes. This
+Research basis: **2026-10-01**; current-source details are in `references/source-ledger.md`. This
 checklist organizes evidence questions; it is not ISO or IEC text, an audit, an
 assessment, a legal determination, or a compliance score.
 
@@ -268,9 +268,10 @@ current control framework.
 
 ## Methods, validity of results, and reporting (`iso-17025`, `iso-15189`)
 
-- [ ] Each scope item is classified: standard method as published, standard method
-      requiring verification, modified method, or laboratory-developed method — with
-      the evidence that classification demands.
+- [ ] Each scope item is classified: standard method used as published, modified or
+      out-of-scope standard method, non-standard method, or laboratory-developed
+      method. An unmodified standard method still needs laboratory performance
+      verification; record validation for the intended use where applicable.
 - [ ] Verification or validation records show performance characteristics evaluated,
       acceptance criteria, data, and authorized approval to put into service.
 - [ ] Methods are revisited after instrument, reagent, personnel, or issue changes.

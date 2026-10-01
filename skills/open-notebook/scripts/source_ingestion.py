@@ -1,160 +1,144 @@
-"""
-Open Notebook - Source Ingestion Example
+"""Source ingestion helpers; CLI lists sources without creating demo records.
 
-Demonstrates ingesting various content types (URLs, files, text) into
-Open Notebook and monitoring processing status.
-
-Prerequisites:
-    uv pip install requests
-
-Usage:
-    export OPEN_NOTEBOOK_URL="http://localhost:5055"
-    python source_ingestion.py
+Requires requests and a running Open Notebook backend with a processing worker.
+Set OPEN_NOTEBOOK_URL and, when enabled, OPEN_NOTEBOOK_PASSWORD.
 """
 
-import os
+import argparse
+import json
+import math
+from pathlib import Path
 import time
-import requests
 
-BASE_URL = os.getenv("OPEN_NOTEBOOK_URL", "http://localhost:5055") + "/api"
-
-
-def add_url_source(notebook_id, url, process_async=True):
-    """Add a web URL as a source to a notebook."""
-    response = requests.post(f"{BASE_URL}/sources", data={
-        "url": url,
-        "notebook_id": notebook_id,
-        "process_async": str(process_async).lower(),
-    })
-    response.raise_for_status()
-    source = response.json()
-    print(f"Added URL source: {source['id']} - {url}")
-    return source
+from _common import record_path, request_json
 
 
-def add_text_source(notebook_id, title, text):
-    """Add raw text as a source."""
-    response = requests.post(f"{BASE_URL}/sources", data={
-        "text": text,
-        "notebook_id": notebook_id,
-        "process_async": "false",
-    })
-    response.raise_for_status()
-    source = response.json()
-    print(f"Added text source: {source['id']} - {title}")
-    return source
+def _source_fields(notebook_id, source_type, process_async, embed):
+    return {
+        "type": source_type,
+        "notebooks": json.dumps([notebook_id]),
+        "async_processing": str(process_async).lower(),
+        "embed": str(embed).lower(),
+    }
 
 
-def upload_file_source(notebook_id, file_path, process_async=True):
-    """Upload a file (PDF, DOCX, audio, video) as a source."""
-    filename = os.path.basename(file_path)
-    with open(file_path, "rb") as f:
-        response = requests.post(
-            f"{BASE_URL}/sources",
-            data={
-                "notebook_id": notebook_id,
-                "process_async": str(process_async).lower(),
-            },
-            files={"file": (filename, f)},
-        )
-    response.raise_for_status()
-    source = response.json()
-    print(f"Uploaded file source: {source['id']} - {filename}")
-    return source
+def add_url_source(notebook_id, url, process_async=True, embed=False):
+    data = _source_fields(notebook_id, "link", process_async, embed)
+    data["url"] = url
+    return request_json("POST", "/sources", data=data)
+
+
+def add_text_source(notebook_id, title, text, process_async=False, embed=False):
+    data = _source_fields(notebook_id, "text", process_async, embed)
+    data.update(title=title, content=text)
+    return request_json("POST", "/sources", data=data)
+
+
+def upload_file_source(notebook_id, file_path, process_async=True, embed=False):
+    path = Path(file_path)
+    with path.open("rb") as handle:
+        return request_json("POST", "/sources",
+                            data=_source_fields(notebook_id, "upload", process_async, embed),
+                            files={"file": (path.name, handle)})
 
 
 def wait_for_processing(source_id, poll_interval=5, timeout=300):
-    """Poll source processing status until completion or timeout."""
-    elapsed = 0
-    while elapsed < timeout:
-        response = requests.get(f"{BASE_URL}/sources/{source_id}/status")
-        response.raise_for_status()
-        status = response.json()
-        current_status = status.get("status", "unknown")
-        print(f"  Source {source_id}: {current_status}")
+    """Return completed status; raise on failure, unknown legacy state or timeout.
 
-        if current_status in ("completed", "failed"):
+    Status=None with no command can describe synchronous/legacy sources. Confirm
+    full_text exists before treating those as complete. Embeddings need a separate
+    embedded_chunks check if vector retrieval is required.
+    """
+    if not all(math.isfinite(value) and value > 0 for value in (timeout, poll_interval)):
+        raise ValueError("timeout and poll_interval must be finite and positive")
+    deadline = time.monotonic() + timeout
+    path = f"/sources/{record_path(source_id)}"
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Source {source_id} processing timed out")
+        status = request_json("GET", path + "/status", timeout=min(30, remaining))
+        state = status.get("status")
+        if state == "completed":
             return status
-        time.sleep(poll_interval)
-        elapsed += poll_interval
+        if state in {"failed", "error", "canceled", "cancelled"}:
+            raise RuntimeError(f"Source {source_id} processing {state}: {status.get('message', '')}")
+        if state is None and not status.get("command_id"):
+            source = request_json("GET", path, timeout=max(0.001, min(30, deadline - time.monotonic())))
+            if source.get("full_text"):
+                return status
+            raise RuntimeError(f"Source {source_id} has no command and no extracted text")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Source {source_id} processing timed out")
+        time.sleep(min(poll_interval, remaining))
 
-    print(f"  Source {source_id}: timed out after {timeout}s")
-    return None
 
-
-def list_sources(notebook_id=None, limit=20):
-    """List sources, optionally filtered by notebook."""
-    params = {"limit": limit}
+def list_sources(notebook_id=None, limit=20, offset=0):
+    """Return one page. /sources supports 1..100 rows and zero-based offsets."""
+    if not 1 <= limit <= 100 or offset < 0:
+        raise ValueError("limit must be 1..100 and offset must be nonnegative")
+    params = {"limit": limit, "offset": offset, "sort_by": "created", "sort_order": "asc"}
     if notebook_id:
         params["notebook_id"] = notebook_id
-    response = requests.get(f"{BASE_URL}/sources", params=params)
-    response.raise_for_status()
-    sources = response.json()
-    print(f"Found {len(sources)} source(s):")
-    for src in sources:
-        print(f"  - {src['id']}: {src.get('title', 'Untitled')}")
-    return sources
+    return request_json("GET", "/sources", params=params)
+
+
+def iter_sources(notebook_id=None, page_size=100, max_pages=1000):
+    """Paginate a stable collection, raising on malformed/repeated pages or the cap.
+
+    Writes during iteration may shift pages. Discard partial results after an error;
+    an empty or short page is required to establish completion within max_pages.
+    """
+    if not isinstance(max_pages, int) or isinstance(max_pages, bool) or max_pages < 1:
+        raise ValueError("max_pages must be a positive integer")
+    offset = 0
+    seen_ids = set()
+    for _ in range(max_pages):
+        page = list_sources(notebook_id, page_size, offset)
+        if not isinstance(page, list) or len(page) > page_size:
+            raise RuntimeError("Invalid source page: expected a list within the requested limit")
+        page_ids = []
+        for source in page:
+            source_id = source.get("id") if isinstance(source, dict) else None
+            if not isinstance(source_id, str) or not source_id:
+                raise RuntimeError("Invalid source page: each record must have a nonempty string id")
+            page_ids.append(source_id)
+        if len(set(page_ids)) != len(page_ids) or seen_ids.intersection(page_ids):
+            raise RuntimeError("Repeated source IDs: collection changed or pagination did not advance")
+        seen_ids.update(page_ids)
+        yield from page
+        if len(page) < page_size:
+            return
+        offset += len(page)
+    raise RuntimeError("Source pagination reached max_pages; completeness is unknown")
 
 
 def get_source_insights(source_id):
-    """Retrieve AI-generated insights for a source."""
-    response = requests.get(f"{BASE_URL}/sources/{source_id}/insights")
-    response.raise_for_status()
-    return response.json()
+    return request_json("GET", f"/sources/{record_path(source_id)}/insights")
 
 
 def retry_failed_source(source_id):
-    """Retry processing for a failed source."""
-    response = requests.post(f"{BASE_URL}/sources/{source_id}/retry")
-    response.raise_for_status()
-    print(f"Retrying source: {source_id}")
-    return response.json()
+    """Retry once after inspecting failure; upstream retry always requests embedding."""
+    path = f"/sources/{record_path(source_id)}"
+    status = request_json("GET", path + "/status")
+    if status.get("status") not in {"failed", "error"}:
+        raise ValueError("Retry only a confirmed failed source; inspect active/unknown jobs first")
+    return request_json("POST", path + "/retry")
 
 
 def delete_source(source_id):
-    """Delete a source."""
-    response = requests.delete(f"{BASE_URL}/sources/{source_id}")
-    response.raise_for_status()
-    print(f"Deleted source: {source_id}")
+    return request_json("DELETE", f"/sources/{record_path(source_id)}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--notebook-id")
+    parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--offset", type=int, default=0)
+    args = parser.parse_args()
+    print(json.dumps(list_sources(args.notebook_id, args.limit, args.offset), indent=2))
 
 
 if __name__ == "__main__":
-    print("=== Source Ingestion Demo ===\n")
-
-    # Create a notebook first
-    notebook = requests.post(f"{BASE_URL}/notebooks", json={
-        "name": "Source Ingestion Demo",
-        "description": "Testing various source types",
-    }).json()
-    notebook_id = notebook["id"]
-    print(f"Created notebook: {notebook_id}\n")
-
-    # Add a URL source
-    url_source = add_url_source(
-        notebook_id,
-        "https://en.wikipedia.org/wiki/CRISPR_gene_editing",
-    )
-
-    # Add a text source
-    text_source = add_text_source(
-        notebook_id,
-        "Research Notes",
-        "CRISPR-Cas9 is a genome editing tool that allows researchers to "
-        "alter DNA sequences and modify gene function. It has transformed "
-        "biological research and offers potential for treating genetic diseases.",
-    )
-
-    # Wait for async processing
-    print("\nWaiting for processing...")
-    wait_for_processing(url_source["id"])
-
-    # List all sources in the notebook
-    print()
-    list_sources(notebook_id)
-
-    # Clean up
-    print()
-    delete_source(url_source["id"])
-    delete_source(text_source["id"])
-    requests.delete(f"{BASE_URL}/notebooks/{notebook_id}")
-    print("Cleanup complete")
+    main()

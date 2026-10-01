@@ -1,5 +1,7 @@
 # NetworkX Graph Visualization
 
+API patterns assume suitable graphs and imports; examples use simple graphs unless stated. Geometric layout distance is not an observed physical or statistical distance. See [review.md](review.md) for executed rendering checks and optional integration limits.
+
 ## Basic Drawing with Matplotlib
 
 ### Simple Visualization
@@ -44,6 +46,8 @@ plt.show()
 # With parameters
 pos = nx.spring_layout(G, k=0.5, iterations=50, seed=42)
 ```
+
+`spring_layout(method="auto")` uses force below 500 nodes and energy otherwise. Energy uses absolute edge weights and component gravity; force can behave differently on signed graphs. Set `method`, `weight` and `seed` when comparing layouts. Large weights attract nodes more strongly, unlike shortest-path costs.
 
 ### Circular Layout
 ```python
@@ -102,6 +106,7 @@ if nx.is_planar(G):
 ```python
 # For tree graphs
 if nx.is_tree(G):
+    # Requires pygraphviz (verify its Graphviz runtime availability)
     pos = nx.nx_agraph.graphviz_layout(G, prog='dot')
     nx.draw(G, pos=pos, with_labels=True)
     plt.show()
@@ -119,9 +124,12 @@ node_colors = ['red' if G.degree(n) > 5 else 'blue' for n in G.nodes()]
 nx.draw(G, node_color=node_colors)
 
 # Color by attribute
-colors = [G.nodes[n].get('value', 0) for n in G.nodes()]
-nx.draw(G, node_color=colors, cmap=plt.cm.viridis)
-plt.colorbar()
+pos = nx.spring_layout(G, seed=42)
+colors = [G.degree(n) for n in G]
+fig, ax = plt.subplots()
+nx.draw_networkx_edges(G, pos, ax=ax)
+artist = nx.draw_networkx_nodes(G, pos, node_color=colors, cmap="viridis", ax=ax)
+fig.colorbar(artist, ax=ax, label="Degree")
 plt.show()
 ```
 
@@ -328,10 +336,10 @@ plt.show()
 
 ### High Resolution Export
 ```python
-plt.figure(figsize=(12, 8))
+fig, ax = plt.subplots(figsize=(12, 8))
 pos = nx.spring_layout(G, seed=42)
 
-nx.draw(G, pos=pos,
+nx.draw(G, pos=pos, ax=ax,
         node_color='lightblue',
         node_size=500,
         edge_color='gray',
@@ -401,12 +409,13 @@ node_trace = go.Scatter(
         showscale=True,
         colorscale='YlGnBu',
         size=10,
-        colorbar=dict(thickness=15, title='Node Connections'),
+        colorbar=dict(thickness=15, title=dict(text='Node Connections')),
         line_width=2))
 
 # Color by degree
 node_adjacencies = [len(list(G.neighbors(node))) for node in G.nodes()]
 node_trace.marker.color = node_adjacencies
+node_trace.text = [f"{node}: degree {degree}" for node, degree in zip(G, node_adjacencies)]
 
 fig = go.Figure(data=[edge_trace, node_trace],
                 layout=go.Layout(
@@ -422,17 +431,22 @@ fig.show()
 from pyvis.network import Network
 
 # Create network
-net = Network(notebook=True, height='750px', width='100%')
+net = Network(notebook=False, height="750px", width="100%", directed=G.is_directed(),
+              cdn_resources="in_line")
 
 # Add nodes and edges from NetworkX
-net.from_nx(G)
+# pyvis can modify passed attribute dicts; copy input first
+from copy import deepcopy
+net.from_nx(deepcopy(G))
 
 # Customize
 net.show_buttons(filter_=['physics'])
 
 # Save
-net.show('graph.html')
+net.write_html("graph.html", notebook=False, open_browser=False)
 ```
+
+PyVis accepts integer/string IDs and does not faithfully represent keyed parallel edges; prepare an explicit simple-graph projection or edge-table visualization. This standalone export bundles resources and does not open a browser. Treat HTML labels/tooltips as markup and sanitize user-supplied content. Plotly's line-trace recipe above has no arrowheads, so it is illustrative for undirected topology.
 
 ### Graphviz (via pydot)
 ```python
@@ -478,7 +492,7 @@ plt.show()
 ### 3D Network Plot
 ```python
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
 
 # 3D spring layout
 pos = nx.spring_layout(G, dim=3, seed=42)
@@ -499,8 +513,8 @@ for vizedge in edge_xyz:
 ax.scatter(*node_xyz.T, s=100, c='lightblue', edgecolors='black')
 
 # Labels
-for i, (x, y, z) in enumerate(node_xyz):
-    ax.text(x, y, z, str(i))
+for node, (x, y, z) in zip(G, node_xyz):
+    ax.text(x, y, z, str(node))
 
 ax.set_axis_off()
 plt.show()

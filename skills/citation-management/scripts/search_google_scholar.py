@@ -13,6 +13,7 @@ import json
 import time
 import random
 from typing import List, Dict, Optional
+from itertools import islice
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 
@@ -37,7 +38,7 @@ class GoogleScholarSearcher:
         Initialize searcher.
         
         Args:
-            use_proxy: Use free proxy (helps avoid rate limiting)
+            use_proxy: Use an optional scholarly proxy provider (does not authorize bypassing blocks)
         """
         if not SCHOLARLY_AVAILABLE:
             raise ImportError('scholarly library required. Install with: uv pip install scholarly')
@@ -79,18 +80,16 @@ class GoogleScholarSearcher:
         
         try:
             # Perform search
-            search_query = scholarly.search_pubs(query)
+            search_query = scholarly.search_pubs(query, year_low=year_start, year_high=year_end)
             
-            for i, result in enumerate(search_query):
-                if i >= max_results:
-                    break
+            for i, result in enumerate(islice(search_query, max_results)):
                 
                 print(f'Retrieved {i+1}/{max_results}', file=sys.stderr)
                 
                 # Extract metadata
                 metadata = {
                     'title': result.get('bib', {}).get('title', ''),
-                    'authors': ', '.join(result.get('bib', {}).get('author', [])),
+                    'authors': ' and '.join(result.get('bib', {}).get('author', [])),
                     'year': result.get('bib', {}).get('pub_year', ''),
                     'venue': result.get('bib', {}).get('venue', ''),
                     'abstract': result.get('bib', {}).get('abstract', ''),
@@ -117,6 +116,7 @@ class GoogleScholarSearcher:
             
         except Exception as e:
             print(f'Error during search: {e}', file=sys.stderr)
+            return []  # A blocked or failed iterator is not a complete search.
         
         # Sort if requested
         if sort_by == 'citations' and results:
@@ -131,10 +131,7 @@ class GoogleScholarSearcher:
         entry built from one is a starting point: run it through the metadata
         enrichment pass before citing it.
         """
-        # Scholar gives authors as a list; `search` joined it with ', '.
-        authors = ' and '.join(
-            part.strip() for part in metadata.get('authors', '').split(',') if part.strip()
-        )
+        authors = metadata.get('authors', '')
 
         key = citation_key(authors, metadata.get('year', ''), metadata.get('title', ''))
 
@@ -197,13 +194,13 @@ def main():
         '--sort-by',
         choices=['relevance', 'citations'],
         default='relevance',
-        help='Sort order (default: relevance)'
+        help='Order within retrieved results; citations is a local sort (default: relevance)'
     )
     
     parser.add_argument(
         '--use-proxy',
         action='store_true',
-        help='Use free proxy to avoid rate limiting'
+        help='Use scholarly free-proxy support; respect upstream access restrictions'
     )
     
     parser.add_argument(
@@ -219,6 +216,8 @@ def main():
     )
     
     args = parser.parse_args()
+    if args.limit < 1:
+        parser.error('--limit must be positive')
     
     if not SCHOLARLY_AVAILABLE:
         print('\nError: scholarly library not installed', file=sys.stderr)
@@ -265,4 +264,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

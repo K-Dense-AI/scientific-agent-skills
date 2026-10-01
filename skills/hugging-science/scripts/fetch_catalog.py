@@ -25,7 +25,7 @@ Usage examples:
     fetch_catalog.py topic chemistry --tag "drug discovery"
     fetch_catalog.py all                             # dump llms-full.txt
     fetch_catalog.py search "protein language"      # substring search across llms-full.txt
-    fetch_catalog.py json topic biology              # structured JSON output
+    fetch_catalog.py topic biology --format json     # structured JSON output
 
 Stdlib only — no external deps required.
 """
@@ -102,6 +102,8 @@ def fetch(url: str) -> str:
         sys.exit(f"HTTP {e.code} fetching {url}: {e.reason}")
     except urllib.error.URLError as e:
         sys.exit(f"Network error fetching {url}: {e.reason}")
+    except TimeoutError:
+        sys.exit(f"Timeout fetching {url}")
 
 
 def parse_markdown(md: str) -> list[Entry]:
@@ -161,6 +163,25 @@ def parse_markdown(md: str) -> list[Entry]:
 
     finalize(current, desc_lines)
     return entries
+
+
+def unique_entries(entries: Iterable[Entry]) -> list[Entry]:
+    """Collapse repeated topic listings, keeping different resource types distinct.
+
+    llms-full.txt concatenates overlapping topics. Counting their repeated
+    resource URLs as independent candidates overstates search coverage.
+    Entries without URLs are retained because their identity is unknown.
+    """
+    seen: set[tuple[str, str]] = set()
+    result = []
+    for entry in entries:
+        identity = (entry.section, entry.url)
+        if entry.url and identity in seen:
+            continue
+        if entry.url:
+            seen.add(identity)
+        result.append(entry)
+    return result
 
 
 #: Hosts a catalog URL is expected to point at. An entry pointing anywhere else
@@ -268,10 +289,12 @@ def cmd_topic(args: argparse.Namespace) -> None:
 def cmd_all(args: argparse.Namespace) -> None:
     md = fetch(f"{BASE}/llms-full.txt")
     if args.raw:
+        print(UNTRUSTED_BANNER.format(source=f"{BASE}/llms-full.txt") + "\n")
         print(md)
         return
     entries = parse_markdown(md)
     entries = [e for e in entries if e.matches_filter(args.filter, args.tag)]
+    entries = unique_entries(entries)
     if args.format == "json":
         print(json.dumps([asdict(e) for e in entries], indent=2))
     else:
@@ -293,6 +316,7 @@ def cmd_search(args: argparse.Namespace) -> None:
         or any(needle in t.lower() for t in e.tags)
     ]
     matched = [e for e in matched if e.matches_filter(args.filter, args.tag)]
+    matched = unique_entries(matched)
     if args.format == "json":
         print(json.dumps([asdict(e) for e in matched], indent=2))
     else:
@@ -333,7 +357,7 @@ def main() -> None:
     sp.set_defaults(func=cmd_topic)
 
     sp = sub.add_parser("all", help="fetch the full llms-full.txt")
-    sp.add_argument("--raw", action="store_true", help="print the raw file untouched")
+    sp.add_argument("--raw", action="store_true", help="print unparsed content after a provenance banner")
     sp.add_argument("--filter", choices=["datasets", "models", "blogs"], help="restrict to one section")
     sp.add_argument("--tag", help="restrict to entries with a tag substring")
     sp.add_argument("--format", choices=["markdown", "json"], default="markdown")

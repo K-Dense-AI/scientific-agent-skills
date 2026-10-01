@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
 Literature Database Search Script
-Searches multiple literature databases and aggregates results.
+Processes normalized search records locally; does not query databases.
 """
 
+import argparse
 import json
+import math
+import re
 import sys
+from pathlib import Path
+from urllib.parse import unquote
 from typing import Dict, List
 from datetime import datetime
 
@@ -25,7 +30,7 @@ def format_search_results(results: List[Dict], output_format: str = 'json') -> s
 
     elif output_format == 'markdown':
         md = f"# Literature Search Results\n\n"
-        md += f"**Search Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        md += f"**Export Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         md += f"**Total Results**: {len(results)}\n\n"
 
         for i, result in enumerate(results, 1):
@@ -43,7 +48,7 @@ def format_search_results(results: List[Dict], output_format: str = 'json') -> s
             if result.get('url'):
                 md += f"**URL**: {result['url']}\n\n"
 
-            if result.get('citations'):
+            if result.get('citations') is not None:
                 md += f"**Citations**: {result['citations']}\n\n"
 
             md += "---\n\n"
@@ -52,9 +57,16 @@ def format_search_results(results: List[Dict], output_format: str = 'json') -> s
 
     elif output_format == 'bibtex':
         bibtex = ""
+        used_keys = set()
         for i, result in enumerate(results, 1):
             entry_type = result.get('type', 'article')
-            cite_key = f"{result.get('first_author', 'unknown')}{result.get('year', '0000')}"
+            base_key = re.sub(r'[^a-zA-Z0-9_-]', '',
+                              f"{result.get('first_author') or 'unknown'}{result.get('year') or '0000'}")
+            cite_key, suffix = base_key, 2
+            while cite_key in used_keys:
+                cite_key = f'{base_key}_{suffix}'
+                suffix += 1
+            used_keys.add(cite_key)
 
             bibtex += f"@{entry_type}{{{cite_key},\n"
             bibtex += f"  title = {{{result.get('title', '')}}},\n"
@@ -82,7 +94,10 @@ def format_search_results(results: List[Dict], output_format: str = 'json') -> s
 
 def deduplicate_results(results: List[Dict]) -> List[Dict]:
     """
-    Remove duplicate results based on DOI or title.
+    Keep the first occurrence of a DOI; use title only among DOI-less records.
+
+    Exact title matches still require review. Preserve raw exports to recover
+    metadata from duplicate records; this helper does not identify studies.
 
     Args:
         results: List of search results
@@ -95,8 +110,9 @@ def deduplicate_results(results: List[Dict]) -> List[Dict]:
     unique_results = []
 
     for result in results:
-        doi = result.get('doi', '').lower().strip()
-        title = result.get('title', '').lower().strip()
+        doi = unquote(re.sub(r'^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)', '',
+                            str(result.get('doi') or '').strip(), flags=re.I)).lower()
+        title = str(result.get('title') or '').lower().strip()
 
         # Check DOI first (more reliable)
         if doi and doi in seen_dois:
@@ -109,7 +125,7 @@ def deduplicate_results(results: List[Dict]) -> List[Dict]:
         # Add to results
         if doi:
             seen_dois.add(doi)
-        if title:
+        if title and not doi:
             seen_titles.add(title)
 
         unique_results.append(result)
@@ -127,14 +143,16 @@ def rank_results(results: List[Dict], criteria: str = 'citations') -> List[Dict]
     Returns:
         Ranked list
     """
-    if criteria == 'citations':
-        return sorted(results, key=lambda x: x.get('citations', 0), reverse=True)
-    elif criteria == 'year':
-        return sorted(results, key=lambda x: x.get('year', '0'), reverse=True)
-    elif criteria == 'relevance':
-        return sorted(results, key=lambda x: x.get('relevance_score', 0), reverse=True)
-    else:
+    field = {'citations': 'citations', 'year': 'year', 'relevance': 'relevance_score'}.get(criteria)
+    if field is None:
         return results
+    def score(record):
+        try:
+            value = float(record.get(field))
+            return value if math.isfinite(value) else float('-inf')
+        except (ValueError, TypeError):
+            return float('-inf')
+    return sorted(results, key=score, reverse=True)
 
 def filter_by_year(results: List[Dict], start_year: int = None, end_year: int = None) -> List[Dict]:
     """
@@ -152,7 +170,7 @@ def filter_by_year(results: List[Dict], start_year: int = None, end_year: int = 
 
     for result in results:
         try:
-            year = int(result.get('year', 0))
+            year = int(result.get('year'))
             if start_year and year < start_year:
                 continue
             if end_year and year > end_year:
@@ -194,9 +212,11 @@ def generate_search_summary(results: List[Dict]) -> Dict:
         summary['year_distribution'][year] = summary['year_distribution'].get(year, 0) + 1
 
         # Collect citations
-        if result.get('citations'):
+        if result.get('citations') is not None:
             try:
-                citations.append(int(result['citations']))
+                value = int(result['citations'])
+                if value >= 0:
+                    citations.append(value)
             except (ValueError, TypeError):
                 pass
 
@@ -207,97 +227,40 @@ def generate_search_summary(results: List[Dict]) -> Dict:
     return summary
 
 def main():
-    """Command-line interface for search result processing."""
-    if len(sys.argv) < 2:
-        print("Usage: python search_databases.py <results.json> [options]")
-        print("\nOptions:")
-        print("  --format FORMAT          Output format (json, markdown, bibtex)")
-        print("  --output FILE            Output file (default: stdout)")
-        print("  --rank CRITERIA          Rank by (citations, year, relevance)")
-        print("  --year-start YEAR        Filter by start year")
-        print("  --year-end YEAR          Filter by end year")
-        print("  --deduplicate            Remove duplicates")
-        print("  --summary                Show summary statistics")
-        sys.exit(1)
-
-    # Load results
-    results_file = sys.argv[1]
+    """Process a JSON array; refuse raw provider envelopes and unknown options."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('results_file', type=Path)
+    parser.add_argument('--format', choices=['json', 'markdown', 'bibtex'], default='markdown')
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--rank', choices=['citations', 'year', 'relevance'])
+    parser.add_argument('--year-start', type=int)
+    parser.add_argument('--year-end', type=int)
+    parser.add_argument('--deduplicate', action='store_true')
+    parser.add_argument('--summary', action='store_true')
+    args = parser.parse_args()
+    if args.year_start and args.year_end and args.year_start > args.year_end:
+        parser.error('--year-start must not exceed --year-end')
     try:
-        with open(results_file, 'r', encoding='utf-8') as f:
-            results = json.load(f)
-    except Exception as e:
-        print(f"Error loading results: {e}")
-        sys.exit(1)
-
-    # Parse options
-    output_format = 'markdown'
-    output_file = None
-    rank_criteria = None
-    year_start = None
-    year_end = None
-    do_dedup = False
-    show_summary = False
-
-    i = 2
-    while i < len(sys.argv):
-        arg = sys.argv[i]
-
-        if arg == '--format' and i + 1 < len(sys.argv):
-            output_format = sys.argv[i + 1]
-            i += 2
-        elif arg == '--output' and i + 1 < len(sys.argv):
-            output_file = sys.argv[i + 1]
-            i += 2
-        elif arg == '--rank' and i + 1 < len(sys.argv):
-            rank_criteria = sys.argv[i + 1]
-            i += 2
-        elif arg == '--year-start' and i + 1 < len(sys.argv):
-            year_start = int(sys.argv[i + 1])
-            i += 2
-        elif arg == '--year-end' and i + 1 < len(sys.argv):
-            year_end = int(sys.argv[i + 1])
-            i += 2
-        elif arg == '--deduplicate':
-            do_dedup = True
-            i += 1
-        elif arg == '--summary':
-            show_summary = True
-            i += 1
+        results = json.loads(args.results_file.read_text(encoding='utf-8'))
+        if not isinstance(results, list) or any(not isinstance(r, dict) for r in results):
+            raise ValueError('input must be a normalized JSON array of record objects, not a provider response')
+        if args.deduplicate:
+            results = deduplicate_results(results)
+        if args.year_start is not None or args.year_end is not None:
+            results = filter_by_year(results, args.year_start, args.year_end)
+        if args.rank:
+            results = rank_results(results, args.rank)
+        if args.summary:
+            print(json.dumps(generate_search_summary(results), indent=2), file=sys.stderr)
+        output = format_search_results(results, args.format)
+        if args.output:
+            args.output.write_text(output, encoding='utf-8')
+            print(f'[OK] Results saved to: {args.output}', file=sys.stderr)
         else:
-            i += 1
+            print(output)
+    except (OSError, ValueError, TypeError) as exc:
+        parser.exit(1, f'[FAIL] {exc}\n')
 
-    # Process results
-    if do_dedup:
-        results = deduplicate_results(results)
-        print(f"After deduplication: {len(results)} results")
 
-    if year_start or year_end:
-        results = filter_by_year(results, year_start, year_end)
-        print(f"After year filter: {len(results)} results")
-
-    if rank_criteria:
-        results = rank_results(results, rank_criteria)
-        print(f"Ranked by: {rank_criteria}")
-
-    # Show summary
-    if show_summary:
-        summary = generate_search_summary(results)
-        print("\n" + "="*60)
-        print("SEARCH SUMMARY")
-        print("="*60)
-        print(json.dumps(summary, indent=2))
-        print()
-
-    # Format output
-    output = format_search_results(results, output_format)
-
-    # Write output
-    if output_file:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(output)
-        print(f"[OK] Results saved to: {output_file}")
-    else:
-        print(output)
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

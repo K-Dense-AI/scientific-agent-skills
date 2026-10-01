@@ -322,6 +322,8 @@ def audit_document(
 ) -> dict[str, Any]:
     """Audit one recognized portable report."""
 
+    if type(document.get("schema_version")) is not int or document["schema_version"] != 1:
+        raise CliError("schema_version must be the integer 1")
     report_type = document.get("report_type")
     if report_type == "qutip.two_level_simulation":
         checks = _audit_simulation(document, tolerance=tolerance)
@@ -350,6 +352,11 @@ def audit_document(
         "audited_report_type": report_type,
         "tolerance": tolerance,
         "status": status,
+        "interpretation": (
+            "Status describes report consistency, not physical validity or "
+            "convergence. Review analytic error, invariant audits, and the "
+            "original simulation or sweep acceptance status separately."
+        ),
         "checks": checks,
         "summary": {
             "passed": sum(check["passed"] for check in checks),

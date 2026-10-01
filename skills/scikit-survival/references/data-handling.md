@@ -1,6 +1,6 @@
 # Data handling and leakage-safe preprocessing
 
-Verified for scikit-survival 0.28.0 on 2026-07-23.
+Verified for scikit-survival 0.28.0 on 2026-10-01.
 
 ## Standard right-censored outcome
 
@@ -46,7 +46,8 @@ event_code = frame["status"].to_numpy(dtype=int)
 observed_time = frame["time"].to_numpy(dtype=float)
 ```
 
-Positive cause codes must be understood before modeling. Do not collapse them to
+Validate integer cause codes before the integer cast: `.to_numpy(dtype=int)` can
+silently truncate fractional labels. Positive cause codes must be understood before modeling. Do not collapse them to
 boolean until the estimand explicitly requires all-cause event status or a
 cause-specific hazard outcome. See `competing-risks.md`.
 
@@ -61,10 +62,16 @@ Before splitting:
 - outcomes are not included among predictors;
 - feature names are unique and schema roles are explicit;
 - repeated entities, temporal ordering, or sites are identified for the split;
-- every planned training/CV fold contains events and censored observations;
+- every planned training/CV fold contains events and enough comparable pairs;
+  event-stratified CV in the bundled trainer also requires censored rows;
 - missingness is described, but imputation is not yet fitted.
 
-The bundled validator performs these checks on bounded local CSV input:
+The bundled validator checks outcome coding, positive finite times, feature exclusion,
+and the local CSV schema. Group independence, fold support, temporal ordering and
+missingness interpretation require the study-specific review above. Strictly positive
+times are a helper policy; some native nonparametric APIs permit zero.
+
+Validate bounded local CSV input:
 
 ```bash
 python skills/scikit-survival/scripts/validate_survival_csv.py \
@@ -240,6 +247,11 @@ real study datasets. The bundled CLIs and tests do not use them; they use synthe
 data only. Do not treat examples as clinical advice or a substitute for data-use
 review.
 
+`load_arff_files_standardized(..., path_testing=...)` concatenates train/test
+features to standardize and harmonize categories. Do not use its default transforms
+for independent validation. Read raw ARFF tables with `sksurv.io.loadarff`, extract
+outcomes explicitly, and fit preprocessing only on training folds.
+
 In 0.28, dataset loaders accept an `output_type` option where documented, allowing
 pandas (default) or Polars feature output.
 
@@ -269,7 +281,7 @@ contract match the observation process.
 
 ## Sources
 
-Official sources checked 2026-07-23:
+Official sources checked 2026-10-01:
 
 - [Surv API](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.util.Surv.html)
 - [OneHotEncoder API](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.preprocessing.OneHotEncoder.html)

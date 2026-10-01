@@ -1,6 +1,7 @@
 # Building Quantum Circuits
 
-This guide covers circuit construction in Cirq, including qubits, gates, operations, and circuit patterns.
+This guide covers circuit construction in Cirq 1.7.0. The code blocks build on
+the imports and qubits introduced earlier; the complete sequence is locally tested.
 
 ## Basic Circuit Construction
 
@@ -8,6 +9,7 @@ This guide covers circuit construction in Cirq, including qubits, gates, operati
 
 ```python
 import cirq
+import numpy as np
 
 # Create a circuit
 circuit = cirq.Circuit()
@@ -57,7 +59,8 @@ cirq.Z(qubit)
 # Hadamard
 cirq.H(qubit)
 
-# Rotation gates
+# Rotation angles are radians; XPowGate/YPowGate/ZPowGate exponents are half-turns.
+angle = np.pi / 4  # requires import numpy as np
 cirq.rx(angle)(qubit)  # Rotation around X-axis
 cirq.ry(angle)(qubit)  # Rotation around Y-axis
 cirq.rz(angle)(qubit)  # Rotation around Z-axis
@@ -71,6 +74,7 @@ cirq.T(qubit)  # ⁴√Z gate
 
 ```python
 # CNOT (Controlled-NOT)
+control, target = q0, q1
 cirq.CNOT(control, target)
 cirq.CX(control, target)  # Alias
 
@@ -133,7 +137,8 @@ unitary = np.array([
     [0, 1, 0, 0],
     [0, 0, 0, 1],
     [0, 0, 1, 0]
-]) / np.sqrt(2)
+], dtype=complex)
+assert np.allclose(unitary.conj().T @ unitary, np.eye(4))
 
 # Create gate from unitary
 gate = cirq.MatrixGate(unitary)
@@ -183,12 +188,16 @@ for i, moment in enumerate(circuit):
 
 ```python
 # Concatenate circuits
+circuit1 = cirq.Circuit(cirq.H(q0))
+circuit2 = cirq.Circuit(cirq.CNOT(q0, q1))
 circuit3 = circuit1 + circuit2
 
 # Insert operations
+index, operation = 0, cirq.X(q0)
 circuit.insert(index, operation)
 
 # Append with strategy
+operations = [cirq.X(q1)]
 circuit.append(operations, strategy=cirq.InsertStrategy.NEW_THEN_INLINE)
 ```
 
@@ -236,6 +245,10 @@ def qft_circuit(qubits):
 ## Circuit Import/Export
 
 ### OpenQASM
+
+The import parser requires `ply` (`uv pip install ply`). Export/import supports
+only representable gates; arbitrary custom gates may need decomposition. The
+following uses OpenQASM 2; Cirq 1.7 also has expanded QASM 3 support.
 
 ```python
 # Export to QASM
@@ -305,3 +318,16 @@ obs = 0.5 * cirq.X(q0) + 0.3 * cirq.Z(q1)
 3. **Use symbolic parameters**: For parameter sweeps and optimization
 4. **Label measurements clearly**: Use descriptive keys for measurement results
 5. **Document custom gates**: Include circuit diagram information for visualization
+
+## Ordering and validation
+
+Pass an explicit `qubit_order` to simulation/unitary calculations and build the
+observable qubit map from that same list. `measure(q0, q1)` packs histogram
+integers big-endian: q0 is the most significant bit. Keep raw measurement columns
+in this argument order. `GridQubit` coordinates alone do not enforce connectivity;
+validate against a device after routing and compilation.
+
+Official references: [circuits](https://quantumai.google/cirq/build/circuits),
+[qubits](https://quantumai.google/cirq/build/qubits),
+[MatrixGate](https://quantumai.google/reference/python/cirq/MatrixGate),
+[QFT](https://quantumai.google/reference/python/cirq/qft).

@@ -1,400 +1,169 @@
-# Multimodal and Multi-omics Integration Models
+# Multimodal integration and sample-aware RNA models
 
-This document covers models for joint analysis of multiple data modalities in scvi-tools.
+Targets scvi-tools 1.5.1. Examples are illustrative unless covered by the limited
+synthetic checks recorded in SKILL.md. Verify cell/feature alignment and modality
+measurement provenance before setup; missing measurements are not observed zeros.
 
-## totalVI (Total Variational Inference)
+## TOTALVI: CITE-seq RNA and antibody counts
 
-**Purpose**: Joint analysis of CITE-seq data (simultaneous RNA and protein measurements from same cells).
+Use raw RNA counts in a layer and raw protein counts in an `.obsm` DataFrame whose
+index exactly matches `adata.obs_names`. Protein columns preserve antibody names.
 
-**Key Features**:
-- Jointly models gene expression and protein abundance
-- Learns shared low-dimensional representations
-- Enables protein imputation from RNA data
-- Performs differential expression for both modalities
-- Handles batch effects in both RNA and protein layers
-
-**When to Use**:
-- Analyzing CITE-seq or REAP-seq data
-- Joint RNA + surface protein measurements
-- Imputing missing proteins
-- Integrating protein and RNA information
-- Multi-batch CITE-seq integration
-
-**Data Requirements**:
-- AnnData with gene expression in `.X` or a layer
-- Protein measurements in `.obsm["protein_expression"]`
-- Same cells measured for both modalities
-
-**Basic Usage**:
 ```python
 import scvi
 
-# Setup data - specify both RNA and protein layers
 scvi.model.TOTALVI.setup_anndata(
-    adata,
-    layer="counts",  # RNA counts
-    protein_expression_obsm_key="protein_expression",  # Protein counts
-    batch_key="batch"
+    adata, layer="counts", protein_expression_obsm_key="protein_expression",
+    batch_key="batch",
 )
-
-# Train model
 model = scvi.model.TOTALVI(adata)
 model.train()
-
-# Get joint latent representation
-latent = model.get_latent_representation()
-
-# Get normalized values for both modalities
-rna_normalized = model.get_normalized_expression()
-protein_normalized = model.get_normalized_expression(
-    transform_batch="batch1",
-    protein_expression=True
+adata.obsm["X_totalVI"] = model.get_latent_representation()
+rna_normalized, protein_normalized = model.get_normalized_expression(
+    n_samples=25, return_mean=True,
 )
-
-# Differential expression (works for both RNA and protein)
-rna_de = model.differential_expression(groupby="cell_type")
+foreground_probability = model.get_protein_foreground_probability()
+rna_de = model.differential_expression(
+    groupby="cell_type", group1="T cells", group2="B cells",
+    mode="change", use_field=["rna"],
+)
 protein_de = model.differential_expression(
-    groupby="cell_type",
-    protein_expression=True
+    groupby="cell_type", group1="T cells", group2="B cells",
+    mode="change", use_field=["protein"],
 )
 ```
 
-**Key Parameters**:
-- `n_latent`: Latent space dimensionality (default: 20)
-- `n_layers_encoder`: Number of encoder layers (default: 1)
-- `n_layers_decoder`: Number of decoder layers (default: 1)
-- `protein_dispersion`: Protein dispersion handling ("protein" or "protein-batch")
-- `empirical_protein_background_prior`: Use empirical background for proteins
+`get_normalized_expression()` returns a **tuple** `(RNA, protein)` and has no
+`protein_expression` argument. `transform_batch` changes decoder conditioning;
+it does not select the protein return. RNA library scaling and protein scaling
+have distinct semantics (`library_size` versus `scale_protein`). Protein foreground
+probability is a mixture probability, not protein abundance.
 
-**Advanced Features**:
+DE defaults to both modalities. In 1.5.1, `use_field=['rna']` or `['protein']`
+selects one; protein feature names in the DE index receive a `_protein` suffix.
+Do not compare antibody and gene effects without preserving those identities.
 
-**Protein Imputation**:
+TOTALVI can integrate RNA-only cells or partially overlapping antibody panels using
+its documented batch/panel missing-protein handling. Do not fabricate a zero-count
+protein panel and interpret imputed values as measurements. Background is modeled
+rather than simply subtracted. Validate imputation using held-out measured proteins
+and batches with adequate reference overlap; no automatic benefit over RNA-only
+clustering is guaranteed.
+
+## TOTALANVI: partially labeled CITE-seq
+
 ```python
-# Impute missing proteins for RNA-only cells
-# (useful for mapping RNA-seq to CITE-seq reference)
-protein_foreground = model.get_protein_foreground_probability()
-imputed_proteins = model.get_normalized_expression(
-    protein_expression=True,
-    n_samples=25
+scanvi_total = scvi.external.TOTALANVI.from_totalvi_model(
+    model, labels_key="cell_type", unlabeled_category="Unknown",
 )
+scanvi_total.train()
+labels = scanvi_total.predict()
+class_probabilities = scanvi_total.predict(soft=True)
 ```
 
-**Denoising**:
+Alternatively register with `TOTALANVI.setup_anndata` including the same count and
+protein keys plus `labels_key`/`unlabeled_category`, then initialize it. The current
+class also supports MuData. Missing cell types and label quality limit transfer;
+validate on independent samples and allow unassigned query cells.
+
+## MULTIVI: RNA, ATAC and optional protein modalities
+
+Use `MULTIVI.setup_mudata`. The old `setup_anndata` is a deprecated no-op in
+1.5.1, not a functioning alternative. The input must encode cells and modalities
+as required by the model, not merely contain two arbitrary AnnData objects.
+
+### Fully paired example
+
 ```python
-# Get denoised counts for both modalities
-denoised_rna = model.get_normalized_expression(n_samples=25)
-denoised_protein = model.get_normalized_expression(
-    protein_expression=True,
-    n_samples=25
-)
-```
-
-**Best Practices**:
-1. Use empirical protein background prior for datasets with ambient protein
-2. Consider protein-specific dispersion for heterogeneous protein data
-3. Use joint latent space for clustering (better than RNA alone)
-4. Validate protein imputation with known markers
-5. Check protein QC metrics before training
-
-## totalANVI (Semi-supervised CITE-seq)
-
-**Purpose**: The semi-supervised counterpart to totalVI -- joint RNA + protein
-modeling that also propagates cell-type labels (totalVI is to scVI as totalANVI
-is to scANVI). Lives in `scvi.external`.
-
-**When to Use**:
-- CITE-seq integration where some cells are labeled and you want annotation transfer
-- Query-to-reference mapping on CITE-seq data
-
-**Basic Usage**:
-```python
-scvi.external.TOTALANVI.setup_anndata(
-    adata,
-    protein_expression_obsm_key="protein_expression",
-    batch_key="batch",
-    labels_key="cell_type",
-    unlabeled_category="Unknown",
-)
-model = scvi.external.TOTALANVI(adata)
-model.train()
-predictions = model.predict()  # cell-type predictions
-```
-
-## DIAGVI (Diagonal Integration of Unpaired Data)
-
-**Purpose**: Integrate unpaired single-cell datasets (diagonal integration --
-datasets that do not share the same feature space or paired cells). Added in
-scvi-tools 1.4.3; lives in `scvi.external`. Consult the
-[scvi-tools API](https://docs.scvi-tools.org/en/stable/api/index.html) for the
-current setup signature, then follow the standard
-`setup -> train -> get_latent_representation` workflow.
-
-## MultiVI (Multi-modal Variational Inference)
-
-**Purpose**: Integration of paired and unpaired multi-omic data (e.g., RNA + ATAC, paired and unpaired cells).
-
-**Key Features**:
-- Handles paired data (same cells) and unpaired data (different cells)
-- Integrates multiple modalities: RNA, ATAC, proteins, etc.
-- Missing modality imputation
-- Learns shared representations across modalities
-- Flexible integration strategy
-
-**When to Use**:
-- 10x Multiome data (paired RNA + ATAC)
-- Integrating separate RNA-seq and ATAC-seq experiments
-- Some cells with both modalities, some with only one
-- Cross-modality imputation tasks
-
-**Data Requirements**:
-- A `MuData` object with one modality per `.mod` (e.g. `"rna"`, `"atac"`, optional `"protein"`)
-- Can handle:
-  - All cells with both modalities (fully paired)
-  - Mix of paired and unpaired cells
-  - Completely unpaired datasets
-
-> **Breaking change (v1.3):** `MULTIVI.setup_anndata` was removed. Configure the
-> model from a `MuData` object via `setup_mudata`. For a single concatenated
-> multiome matrix, split it into per-modality AnnData with
-> `scvi.data.organize_multiome_anndatas` first.
-
-**Basic Usage**:
-```python
-import scvi
 from mudata import MuData
 
-# rna_adata: gene-expression counts; atac_adata: peak/region counts.
-# For a concatenated multiome matrix, split it first:
-#   rna_adata, atac_adata = scvi.data.organize_multiome_anndatas(
-#       multiome_adata, rna_indices_end=n_genes
-#   )
+assert rna_adata.obs_names.equals(atac_adata.obs_names)
+assert rna_adata.obs_names.is_unique
 mdata = MuData({"rna": rna_adata, "atac": atac_adata})
-
-# Configure from the MuData object (modalities maps model args -> mod keys)
+# Explicit global batch metadata; do not rely on automatic obs-column pulling.
+mdata.obs["batch"] = rna_adata.obs["batch"].reindex(mdata.obs_names)
 scvi.model.MULTIVI.setup_mudata(
-    mdata,
-    batch_key="batch",
+    mdata, rna_layer="counts", atac_layer="counts", batch_key="batch",
     modalities={"rna_layer": "rna", "atac_layer": "atac"},
 )
-
-model = scvi.model.MULTIVI(
-    mdata,
-    n_genes=rna_adata.n_vars,
-    n_regions=atac_adata.n_vars,
-)
-model.train()
-
-# Get joint latent representation
-mdata.obsm["X_multiVI"] = model.get_latent_representation()
-
-# Get normalized expression / accessibility
-rna_normalized = model.get_normalized_expression()
-atac_normalized = model.get_accessibility_estimates()
+model_multi = scvi.model.MULTIVI(mdata, n_latent=20, fully_paired=True)
+model_multi.train()
+mdata.obsm["X_multiVI"] = model_multi.get_latent_representation()
+rna_estimates = model_multi.get_normalized_expression()
+atac_estimates = model_multi.get_normalized_accessibility()
 ```
 
-**Key Parameters**:
-- `n_genes`: Number of gene features (required)
-- `n_regions`: Number of accessibility regions (required)
-- `n_latent`: Latent dimensionality (default: 20)
+With MuData, `n_genes` and `n_regions` are inferred; they are not required constructor
+arguments. `get_accessibility_estimates` is not the current method. Latent defaults
+are data-dependent (`n_latent=None`), so specify a value when reproducibility matters.
 
-**Integration Scenarios** (handled by how you build the MuData / organize inputs):
+### Partially paired inputs
 
-**Scenario 1: Fully Paired (10x Multiome)**:
-```python
-# Every cell measured in both modalities -- the two .mod objects share obs_names
-mdata = MuData({"rna": rna_adata, "atac": atac_adata})
-```
+Represent all cells in a common order in each registered modality, with absent
+modality blocks zero-filled according to the upstream MultiVI workflow. Keep a
+separate provenance column for measured RNA/ATAC; exclude true empty libraries
+before zero-padding so that a failed assay is not mistaken for an unmeasured modality.
+Maintain a common peak coordinate system/genome assembly and gene naming scheme.
+Independent modalities with disjoint `obs_names` in MuData alone are not a complete
+working setup for the required registration.
 
-**Scenario 2 & 3: Partially or Completely Unpaired**:
-```python
-# Combine a paired multiome matrix with RNA-only and/or ATAC-only experiments.
-# organize_multiome_anndatas pads missing features and tracks per-cell modality.
-joint = scvi.data.organize_multiome_anndatas(
-    multi_anndata=paired_multiome_adata,  # cells with both modalities (or None)
-    rna_anndata=rna_only_adata,           # expression-only cells (optional)
-    atac_anndata=atac_only_adata,         # accessibility-only cells (optional)
-)
-```
+`scvi.data.organize_multiome_anndatas(multi_anndata, rna_anndata, atac_anndata)`
+returns **one concatenated AnnData**, not a tuple of RNA and ATAC objects. It needs
+a real multiome object (the source calls `.copy()` on it); `multi_anndata=None`
+does not create a completely unpaired workflow. It has no `rna_indices_end`
+argument. Features not in the multiome object are discarded. If using the helper,
+do not use its unpaired-concatenation branch with AnnData 0.13.4: it calls
+the removed `AnnData.concatenate` method and raises `AttributeError` (reproduced).
+Construct the aligned zero-filled object explicitly with `anndata.concat` instead,
+audit feature types and modality provenance, then split by reliable feature metadata
+and register the aligned MuData. The fully paired example above was exercised
+natively and does not call this helper.
 
-**Advanced Use Cases**:
+Fully unpaired integration needs a carefully specified common feature/missingness
+representation and adequate biological overlap. Evaluate held-out cross-modality
+prediction rather than assuming the alignment is identifiable without anchors.
 
-**Cross-Modality Prediction**:
-```python
-# Predict peaks from gene expression
-accessibility_from_rna = model.get_accessibility_estimates(
-    indices=rna_only_cells
-)
+## MRVI: biological-sample variation
 
-# Predict genes from accessibility
-expression_from_atac = model.get_normalized_expression(
-    indices=atac_only_cells
-)
-```
+MRVI is a **single-modality RNA** model for multiple samples, not an RNA/ATAC
+joint model. Its 1.5.1 implementation is PyTorch; JAX support was removed in 1.5.
 
-**Modality-Specific Analysis**:
-```python
-# Each modality is accessible as its own AnnData on the MuData object
-rna_subset = mdata.mod["rna"]
-atac_subset = mdata.mod["atac"]
-```
-
-## MrVI (Multi-resolution Variational Inference)
-
-**Purpose**: Multi-sample analysis accounting for sample-specific and shared variation.
-
-**Key Features**:
-- Simultaneously analyzes multiple samples/conditions
-- Decomposes variation into:
-  - Shared variation (common across samples)
-  - Sample-specific variation
-- Enables sample-level comparisons
-- Identifies sample-specific cell states
-
-**When to Use**:
-- Comparing multiple biological samples or conditions
-- Identifying sample-specific vs. shared cell states
-- Disease vs. healthy sample comparisons
-- Understanding inter-sample heterogeneity
-- Multi-donor studies
-
-**Basic Usage** (MrVI lives in `scvi.external`; the default backend is now PyTorch):
 ```python
 scvi.external.MRVI.setup_anndata(
-    adata,
-    batch_key="batch",
-    sample_key="sample",  # Critical: defines biological samples
+    adata, layer="counts", sample_key="sample", batch_key="batch",
 )
-
-model = scvi.external.MRVI(adata)
-model.train()
-
-# Cell-state (u) representation, shared across samples
-shared_latent = model.get_latent_representation()
-
-# Per-cell, sample-resolved representation and sample-sample distances
-local_sample_repr = model.get_local_sample_representation()
-sample_distances = model.get_local_sample_distances()
+mrvi = scvi.external.MRVI(adata)
+mrvi.train()
+shared_latent = mrvi.get_latent_representation()
+local_sample_repr = mrvi.get_local_sample_representation()
+sample_distances = mrvi.get_local_sample_distances()
+da_results = mrvi.differential_abundance(sample_cov_keys=["condition"])
 ```
 
-**Key Parameters**:
-- `sample_key`: Column in `adata.obs` defining biological samples (required)
-- `batch_key`: Technical batch covariate
-- `n_latent` / `n_latent_u`: Dimensionalities of the cell-state and sample-aware latent spaces
+Sample covariates must be constant within sample and the design must distinguish
+technical batches from the biological contrast. Local sample representations and
+distances can be large; subset cells or aggregate when warranted. DA returns an
+xarray Dataset containing sample/covariate log probabilities. MRVI's separate
+`differential_expression(sample_cov_keys=[...])` performs multivariate analysis
+across sample-conditioned cell-state shifts; do not pass SCVI's `group1/group2`
+arguments or interpret DA as gene DE.
 
-**Analysis Workflow**:
-```python
-# 1. Identify shared cell states across samples
-adata.obsm["X_MrVI"] = model.get_latent_representation()
-sc.pp.neighbors(adata, use_rep="X_MrVI")
-sc.tl.umap(adata)
-sc.tl.leiden(adata, key_added="shared_clusters")
+## DIAGVI: two unpaired modalities
 
-# 2. Sample-resolved representation and pairwise sample distances
-local_sample_repr = model.get_local_sample_representation()
-distances = model.get_local_sample_distances()
+DIAGVI remains at `scvi.external.DIAGVI` in 1.5.1 but ongoing development moved to
+scVIVA-tools. Its `setup_mudata(mdata, modalities=['rna', 'protein'], ...)` takes a
+**list of two modality names**, unlike MULTIVI's argument-to-modality mapping.
+Alternatively register each AnnData with `setup_anndata` and initialize with a
+modality dictionary. The constructor accepts `guidance_graph` and/or `mapping_df`
+for prior feature relationships. Install `scvi-tools[diagvi]` for `geomloss` and
+`torch-geometric`. Choose modality-appropriate likelihoods and documented feature
+relationships; arbitrary unpaired datasets cannot be assumed identifiable.
+Follow the official workflow for graph construction and evaluation before training.
 
-# 3. Test how a sample covariate shifts abundance / expression
-de_results = model.differential_abundance(sample_cov_keys=["condition"])
-```
-
-**Use Cases**:
-- **Multi-donor studies**: Separate donor effects from cell type variation
-- **Disease studies**: Identify disease-specific vs. shared biology
-- **Time series**: Separate temporal from stable variation
-- **Batch + biology**: Disentangle technical and biological variation
-
-## totalVI vs. MultiVI vs. MrVI: When to Use Which?
-
-### totalVI
-**Use for**: CITE-seq (RNA + protein, same cells)
-- Paired measurements
-- Single modality type per feature
-- Focus: protein imputation, joint analysis
-
-### MultiVI
-**Use for**: Multiple modalities (RNA + ATAC, etc.)
-- Paired, unpaired, or mixed
-- Different feature types
-- Focus: cross-modality integration and imputation
-
-### MrVI
-**Use for**: Multi-sample RNA-seq
-- Single modality (RNA)
-- Multiple biological samples
-- Focus: sample-level variation decomposition
-
-## Integration Best Practices
-
-### For CITE-seq (totalVI)
-1. **Quality control proteins**: Remove low-quality antibodies
-2. **Background subtraction**: Use empirical background prior
-3. **Joint clustering**: Use joint latent space, not RNA alone
-4. **Validation**: Check known markers in both modalities
-
-### For Multiome/Multi-modal (MultiVI)
-1. **Feature filtering**: Filter genes and peaks independently
-2. **Balance modalities**: Ensure reasonable representation of each
-3. **Modality weights**: Consider if one modality dominates
-4. **Imputation validation**: Validate imputed values carefully
-
-### For Multi-sample (MrVI)
-1. **Sample definition**: Carefully define biological samples
-2. **Sample size**: Need sufficient cells per sample
-3. **Covariate handling**: Properly account for batch vs. sample
-4. **Interpretation**: Distinguish technical from biological variation
-
-## Complete Example: CITE-seq Analysis with totalVI
-
-```python
-import scvi
-import scanpy as sc
-
-# 1. Load CITE-seq data
-adata = sc.read_h5ad("cite_seq.h5ad")
-
-# 2. QC and filtering
-sc.pp.filter_genes(adata, min_cells=3)
-sc.pp.highly_variable_genes(adata, n_top_genes=4000)
-
-# Protein QC
-protein_counts = adata.obsm["protein_expression"]
-# Remove low-quality proteins
-
-# 3. Setup totalVI
-scvi.model.TOTALVI.setup_anndata(
-    adata,
-    layer="counts",
-    protein_expression_obsm_key="protein_expression",
-    batch_key="batch"
-)
-
-# 4. Train
-model = scvi.model.TOTALVI(adata, n_latent=20)
-model.train(max_epochs=400)
-
-# 5. Extract joint representation
-latent = model.get_latent_representation()
-adata.obsm["X_totalVI"] = latent
-
-# 6. Clustering on joint space
-sc.pp.neighbors(adata, use_rep="X_totalVI")
-sc.tl.umap(adata)
-sc.tl.leiden(adata, resolution=0.5)
-
-# 7. Differential expression for both modalities
-rna_de = model.differential_expression(
-    groupby="leiden",
-    group1="0",
-    group2="1"
-)
-
-protein_de = model.differential_expression(
-    groupby="leiden",
-    group1="0",
-    group2="1",
-    protein_expression=True
-)
-
-# 8. Save model
-model.save("totalvi_model")
-```
+Sources: [TOTALVI source](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_totalvi.py),
+[TOTALANVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/totalanvi/_model.py),
+[MULTIVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_multivi.py),
+[multiome helper](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/data/_preprocessing.py),
+[MRVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/mrvi/_model.py),
+[DIAGVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/diagvi/_model.py),
+[DIAGVI maintenance](https://docs.scvi-tools.org/en/stable/user_guide/models/diagvi.html).

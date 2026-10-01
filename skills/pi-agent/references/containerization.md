@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/containerization
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi runs with all permissions by default. Two general approaches: run the whole `pi` process inside an isolated environment, or run `pi` on the host and route tool execution into an isolated environment.
 
 | Pattern | What is isolated | Best for | Notes |
@@ -11,6 +13,8 @@ Pi runs with all permissions by default. Two general approaches: run the whole `
 | OpenShell | Whole `pi` process | Local or remote policy-controlled sandbox | Requires an OpenShell gateway |
 
 Extensions run wherever the `pi` process runs. If host Pi routes built-ins into a VM, other custom extension tools still run on the host unless they delegate too.
+
+The commands below follow Pi 0.99.2 documentation and are illustrative: Docker, Gondolin, and OpenShell runtimes were not started during this review.
 
 ## Gondolin
 

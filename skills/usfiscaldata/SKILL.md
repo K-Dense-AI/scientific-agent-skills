@@ -1,10 +1,12 @@
 ---
 name: usfiscaldata
-description: Query the U.S. Treasury Fiscal Data REST API for federal financial data. No API key required. Use for national debt (Debt to the Penny), Daily Treasury Statements, Monthly Treasury Statements, Treasury securities auctions, interest rates, foreign exchange rates, savings bonds, or U.S. government revenue and spending statistics.
+description: Queries the U.S. Treasury Fiscal Data REST API for federal financial data. No API key required. Use for national debt (Debt to the Penny), Daily Treasury Statements, Monthly Treasury Statements, Treasury securities auctions, interest rates, foreign exchange rates, savings bonds, or U.S. government revenue and spending statistics.
 license: MIT
+compatibility: Requires Python 3.10+ with requests and pandas for Python examples; R with httr and jsonlite for R examples. Requires network access; no credentials.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -14,7 +16,7 @@ Free, open REST API from the U.S. Department of the Treasury for federal financi
 
 **Base URL:** `https://api.fiscaldata.treasury.gov/services/api/fiscal_service`
 
-Browse [54 datasets and 179 data tables](https://fiscaldata.treasury.gov/datasets/) via the dataset search. Verify endpoint paths on each dataset's API Quick Guide — paths change over time.
+Browse [the current dataset catalog](https://fiscaldata.treasury.gov/datasets/) via the dataset search. Verify endpoint paths on each dataset's API Quick Guide — paths change over time.
 
 ## Installation
 
@@ -34,19 +36,21 @@ BASE_URL = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
 resp = requests.get(f"{BASE_URL}/v2/accounting/od/debt_to_penny", params={
     "sort": "-record_date",
     "page[size]": 1
-})
+}, timeout=30)
+resp.raise_for_status()
 data = resp.json()["data"][0]
 print(f"Total public debt as of {data['record_date']}: ${float(data['tot_pub_debt_out_amt']):,.0f}")
 ```
 
 ```python
-# Get Treasury exchange rates for recent quarters
+# Preview Treasury exchange-rate rows for recent quarters (first page only)
 resp = requests.get(f"{BASE_URL}/v1/accounting/od/rates_of_exchange", params={
-    "fields": "country_currency_desc,exchange_rate,record_date",
+    "fields": "country_currency_desc,exchange_rate,record_date,effective_date",
     "filter": "record_date:gte:2024-01-01",
     "sort": "-record_date",
     "page[size]": 100
-})
+}, timeout=30)
+resp.raise_for_status()
 df = pd.DataFrame(resp.json()["data"])
 ```
 
@@ -132,7 +136,7 @@ None required. The API is fully open and free.
 }
 ```
 
-**Note:** All values are returned as strings. Convert as needed (e.g., `float()`, `pd.to_datetime()`). Null values appear as the string `"null"`.
+**Note:** Data-row values are returned as strings; metadata counts are JSON numbers. Convert as needed (e.g., `float()`, `pd.to_datetime()`). Null values appear as the string `"null"`.
 
 ## Common Patterns
 
@@ -143,7 +147,8 @@ Use the bounded `fetch_all()` helper in [parameters.md](references/parameters.md
 ```python
 # Single-page fetch when total-pages == 1
 params = {"sort": "-record_date", "page[size]": 10000}
-resp = requests.get(f"{BASE_URL}/v2/accounting/od/debt_outstanding", params=params)
+resp = requests.get(f"{BASE_URL}/v2/accounting/od/debt_outstanding", params=params, timeout=30)
+resp.raise_for_status()
 result = resp.json()
 if result["meta"]["total-pages"] > 1:
     raise ValueError("Use fetch_all() from parameters.md for multi-page results")
@@ -152,14 +157,24 @@ df = pd.DataFrame(result["data"])
 
 ### Aggregation (automatic sum)
 
-Omitting grouping fields triggers automatic aggregation:
+Selecting fewer fields can aggregate non-unique rows. It can also sum balances or rates that should not be added, and combine statement totals with their components. Inspect the full row grain first:
 
 ```python
-# Sum all deposits/withdrawals by record_date and transaction type
+# Preview full DTS rows, preserving account and category dimensions
 resp = requests.get(f"{BASE_URL}/v1/accounting/dts/deposits_withdrawals_operating_cash", params={
-    "fields": "record_date,transaction_type,transaction_today_amt"
-})
+    "filter": "record_date:eq:2024-01-16", "page[size]": 1000
+}, timeout=30)
+resp.raise_for_status()
 ```
+
+## Interpretation checks
+
+- DTS amounts are in millions. Since April 18, 2022, find the `Treasury General Account (TGA) Closing Balance` row and read `open_today_bal`; `close_today_bal` is null.
+- MTS tables have different amount fields and row hierarchies. The compact monthly summary uses `mil_amt` (millions); do not assign that scale to every MTS field.
+- Interest expense uses `month_expense_amt` and `fytd_expense_amt`. Never sum FYTD values across months.
+- Auctions use `auction_date` for event timing; `record_date` is publication date. I Bond rates require the bond's `issue_year_month` as well as earning period.
+
+Reviewed against the [official API guide](https://fiscaldata.treasury.gov/api-documentation/), dataset data dictionaries, and unauthenticated live GET responses on 2026-09-30. See references for table-specific caveats.
 
 ## Reference Files
 

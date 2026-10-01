@@ -1,21 +1,32 @@
 # Current Matplotlib, Seaborn, and Plotly Patterns
 
-Verified 2026-07-23 against Matplotlib 3.11.1, Seaborn 0.13.2, Plotly 6.9.0, Kaleido 1.3.0, Pillow 12.3.0, and pypdf 6.14.2. Source IDs resolve in `sources.md`.
+Verified 2026-10-01 against Matplotlib 3.11.2, Seaborn 0.13.2, Plotly 7.1.0, Kaleido 1.4.0, Pillow 12.3.0, and pypdf 6.19.0. Source IDs resolve in `sources.md`.
 
 Run examples from the skill directory with pinned direct dependencies:
 
 ```bash
 uv run --isolated --no-project --python 3.13 \
-  --with "matplotlib==3.11.1" \
+  --with "matplotlib==3.11.2" \
   --with "seaborn==0.13.2" \
-  --with "plotly==6.9.0" \
-  --with "kaleido==1.3.0" \
+  --with "plotly==7.1.0" \
+  --with "kaleido==1.4.0" \
   --with "pillow==12.3.0" \
-  --with "pypdf==6.14.2" \
+  --with "pypdf==6.19.0" \
   python your_figure.py
 ```
 
-These pins are a dated direct-dependency snapshot, not a lock of all transitive artifacts. Keep a project lock when exact environment replay is required.
+These pins are a dated direct-dependency snapshot, not a lock of all transitive artifacts. Keep a lock in the consuming project for exact replay. The snippets share imports/variables: supply your scientific `frame`, `x`, and `y`. They were exercised with synthetic fixtures; they do not validate an analysis of your data.
+
+Start `your_figure.py` with this bootstrap when running from the skill directory:
+
+```python
+from pathlib import Path
+import sys
+
+skill_root = Path.cwd()
+sys.path[:0] = [str(skill_root / "scripts"), str(skill_root / "assets")]
+Path("outputs").mkdir(exist_ok=True)
+```
 
 ## Rendering and hardcopy backends
 
@@ -59,7 +70,7 @@ You can also use the bundled parseable style:
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-skill_root = Path("skills/scientific-visualization")
+skill_root = Path(".")  # run from the skill directory
 with plt.style.context(skill_root / "assets" / "publication.mplstyle"):
     fig, ax = plt.subplots(layout="constrained")
 ```
@@ -108,7 +119,10 @@ signal = np.array([1.0, 1.4, np.nan, np.nan, 2.1, 2.0, 2.4, 2.7])
 
 fig, ax = plt.subplots(layout="constrained")
 ax.plot(time, signal, marker="o", label="Observed")  # gaps remain gaps
-ax.scatter([2, 3], [0.9, 0.9], marker="x", color="0.35", label="Missing")
+ax.scatter(
+    [2, 3], [0.04, 0.04], transform=ax.get_xaxis_transform(),
+    marker="x", color="0.35", label="Missing (axis strip)",
+)
 ax.set(xlabel="Time (days)", ylabel="Signal (unit)")
 ax.legend()
 ```
@@ -223,6 +237,7 @@ report = export_figure(
     fig,
     "outputs/microscopy_panel",
     formats=["tiff"],
+    tiff_rgb=True,  # remove alpha only after verifying every rendered pixel is opaque
     dpi=300,
     facecolor="white",
     overwrite=False,
@@ -270,19 +285,22 @@ with style_context("default", palette_name="okabe_ito_on_white"):
     ax.set(xlabel="Time (hours)", ylabel="Response (unit)")
 ```
 
+Seaborn line plots can drop rows with missing values and join the remaining points. Use the explicit Matplotlib gap example above when gaps carry scientific meaning.
+
 Current `errorbar` choices include `"sd"`, `"se"`, `"pi"`, `"ci"`, tuples, callables, or `None`. The old `ci=` interface is not the current general API [SEABORN-ERROR].
 
 For categorical axes whose numeric/datetime values must retain their real spacing, use supported functions with `native_scale=True`. Do not assume every categorical plot uses native coordinates by default.
 
-## Plotly 6.9 and Kaleido 1.3
+## Plotly 7.1 and Kaleido 1.4
 
-Interactive HTML:
+Interactive HTML (the supplied `fig` here is a Plotly figure):
 
 ```python
 fig.write_html(
     "outputs/exploration.html",
     include_plotlyjs=True,  # self-contained, larger file
     full_html=True,
+    config={"modeBarButtonsToRemove": ["shareChart"]},
 )
 ```
 
@@ -308,26 +326,28 @@ pio.write_images(
 )
 ```
 
-Current facts [PLOTLY-STATIC] [KALEIDO]:
+Current facts [PLOTLY-STATIC] [PLOTLY-7] [KALEIDO]:
 
 - Kaleido v1 requires a compatible Chrome/Chromium installation; Chrome is no longer bundled.
 - Plotly `write_image` supports PNG, JPEG, WebP, SVG, and PDF.
 - EPS was supported only by Kaleido versions earlier than 1.0.
-- `engine=` and Orca are deprecated; do not use them in new code.
-- `plotly.io.kaleido.scope` is deprecated; use `plotly.io.defaults`.
+- `engine=` and Orca are removed in Plotly 7. Kaleido <1 is unsupported.
+- `plotly.io.kaleido.scope` is removed; use `plotly.io.defaults`. MathJax must be version 3 or 4.
 - Width/height are logical pixels and `scale` multiplies output pixels; `scale=3` is **not inherently “300 DPI.”**
 - WebGL traces embed raster content inside vector exports.
 - Fully offline MathJax/topojson use requires local resources; do not assume a network-independent export when a figure references external assets.
+
+Plotly 7 adds a Share Chart modebar button; remove it when a local deliverable should not offer upload/sharing. Embedding Plotly.js does not package externally referenced tiles, images, MathJax, or topojson.
 
 An interactive HTML file does not replace a static fallback, caption, alt text, keyboard review, or accessible data table.
 
 ## Font and transparency checks
 
-Matplotlib 3.11.1 defaults PDF/PS to Type 3 and SVG text to paths. The bundled presets instead use PDF/PS Type 42 and leave SVG text as text [MPL-STYLE]. Verify the actual PDF:
+Matplotlib 3.11.2 defaults PDF/PS to Type 3 and SVG text to paths. The bundled presets instead use PDF/PS Type 42 and leave SVG text as text [MPL-STYLE]. Verify the actual PDF:
 
 ```bash
 uv run --isolated --no-project --python 3.13 \
-  --with "pypdf==6.14.2" \
+  --with "pypdf==6.19.0" \
   python scripts/image_metadata.py outputs/figure1.pdf
 ```
 

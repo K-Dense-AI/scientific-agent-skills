@@ -11,16 +11,17 @@ Historical data on Treasury securities auctions including bills, notes, bonds, T
 **Key fields:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `record_date` | DATE | Auction date |
-| `security_type` | STRING | Bill, Note, Bond, TIPS, FRN |
+| `record_date` | DATE | Publication date; do not use as auction date |
+| `auction_date` | DATE | Date auction was held |
+| `security_type` | STRING | Basic security type; inspect `inflation_index_security` and `floating_rate` flags for TIPS/FRNs |
 | `security_term` | STRING | e.g., "4-Week", "2-Year", "10-Year" |
 | `cusip` | STRING | CUSIP identifier |
-| `offering_amt` | CURRENCY | Amount offered |
-| `high_yield` | PERCENTAGE | High accepted yield (notes/bonds/TIPS; bills use `high_discnt_rate`) |
-| `int_rate` | PERCENTAGE | Coupon/interest rate of the security |
+| `offering_amt` | CURRENCY0 | Amount offered |
+| `high_yield` | NUMBER | High accepted yield (notes/bonds/TIPS; bills use `high_discnt_rate`) |
+| `int_rate` | NUMBER | Coupon/interest rate of the security |
 | `bid_to_cover_ratio` | NUMBER | Bid-to-cover ratio |
-| `total_accepted` | CURRENCY | Total accepted amount (USD) |
-| `indirect_bidder_accepted` | CURRENCY | Indirect bidder amount accepted (USD) |
+| `total_accepted` | NUMBER | Total accepted amount (USD) |
+| `indirect_bidder_accepted` | NUMBER | Indirect bidder amount accepted (USD) |
 | `issue_date` | DATE | Issue/settlement date |
 | `maturity_date` | DATE | Maturity date |
 
@@ -29,22 +30,27 @@ Historical data on Treasury securities auctions including bills, notes, bonds, T
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/auctions_query",
     params={
-        "filter": "security_type:eq:Note,security_term:eq:10-Year",
-        "sort": "-record_date",
+        "filter": "security_type:eq:Note,original_security_term:eq:10-Year,inflation_index_security:eq:No,floating_rate:eq:No",
+        "sort": "-auction_date",
         "page[size]": 10
-    }
+    },
+    timeout=30,
 )
+resp.raise_for_status()
 df = pd.DataFrame(resp.json()["data"])
 
 # Get all auctions in 2024
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/auctions_query",
     params={
-        "filter": "record_date:gte:2024-01-01,record_date:lte:2024-12-31",
-        "sort": "-record_date",
+        "filter": "auction_date:gte:2024-01-01,auction_date:lte:2024-12-31",
+        "sort": "-auction_date",
         "page[size]": 10000
-    }
+    },
+    timeout=30,
 )
+resp.raise_for_status()
+assert resp.json()["meta"]["total-pages"] <= 1, "Use fetch_all for more pages"
 ```
 
 ## Treasury Securities Upcoming Auctions
@@ -53,7 +59,7 @@ resp = requests.get(
 **Frequency:** As Needed  
 **Date Range:** March 2024 to present
 
-Announced but not yet settled auction schedule.
+Schedule data can include historical rows. Filter `auction_date:gte:<today>` for future auction dates, or `issue_date` for settlement timing. Do not assume an unfiltered response contains only upcoming events.
 
 **Key fields:**
 | Field | Type | Description |
@@ -61,16 +67,23 @@ Announced but not yet settled auction schedule.
 | `auction_date` | DATE | Scheduled auction date |
 | `security_type` | STRING | Security type |
 | `security_term` | STRING | Maturity term |
-| `offering_amt` | CURRENCY | Announced offering amount |
+| `offering_amt` | CURRENCY0 | Announced offering amount |
 
 ```python
 # Get upcoming auctions
+from datetime import date
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions",
-    params={"sort": "auction_date"}
+    params={"filter": f"auction_date:gte:{date.today().isoformat()}", "sort": "auction_date", "page[size]": 1000},
+    timeout=30,
 )
+resp.raise_for_status()
+assert resp.json()["meta"]["total-pages"] <= 1, "Use fetch_all for more pages"
 upcoming = pd.DataFrame(resp.json()["data"])
-print(upcoming[["auction_date", "security_type", "security_term", "offering_amt"]])
+if upcoming.empty:
+    print("No upcoming rows returned for the requested date range")
+else:
+    print(upcoming[["auction_date", "security_type", "security_term", "offering_amt"]])
 ```
 
 ## Record-Setting Treasury Securities Auction Data
@@ -95,8 +108,10 @@ Data on Treasury's secondary market buyback (repurchase) operations. Active sinc
 # Recent buyback operations
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/buybacks_operations",
-    params={"sort": "-operation_date", "page[size]": 10}
+    params={"sort": "-operation_date", "page[size]": 10},
+    timeout=30,
 )
+resp.raise_for_status()
 df = pd.DataFrame(resp.json()["data"])
 print(df[["operation_date", "settlement_date"]].head())
 ```
@@ -114,24 +129,19 @@ Composite interest rates for Series I Savings Bonds, including fixed rate and in
 **Key fields:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `earning_period_start` | DATE | Start of six-month earning period |
-| `earning_period_end` | DATE | End of six-month earning period |
+| `issue_year_month` | STRING | Bond issue month (`YYYY-MM`); fixes the bond vintage |
+| `earning_period_start` | DATE | Start of published earning period |
+| `earning_period_end` | DATE | End of published earning period |
 | `fixed_rate` | PERCENTAGE | Fixed rate component |
 | `semi_annual_inflation_rate` | PERCENTAGE | Semi-annual CPI-U inflation rate |
 | `combined_rate` | PERCENTAGE | Combined composite rate |
 
-```python
-# Current I Bond rates
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/i_bonds_interest_rates",
-    params={"sort": "-earning_period_start", "page[size]": 5}
-)
-df = pd.DataFrame(resp.json()["data"])
-latest = df.iloc[0]
-print(f"Current I Bond rate: {latest['combined_rate']}%")
-print(f"  Fixed rate: {latest['fixed_rate']}%")
-print(f"  Inflation component: {latest['semi_annual_inflation_rate']}%")
-```
+Do not take the first row sorted only by earning period: many issue-month
+vintages share that period and have different fixed rates. Filter
+`issue_year_month` for the bond, and choose the earning period appropriate to the
+reporting date. The first period may be shorter than six months. The current
+rate for newly issued bonds is not the rate for every outstanding I Bond.
+See [examples.md](examples.md) for a query that names its issue vintage.
 
 ## U.S. Treasury Savings Bonds: Issues, Redemptions & Maturities
 
@@ -139,24 +149,24 @@ Three data tables under `/v1/accounting/od/`:
 
 | Table | Endpoint | Description |
 |-------|----------|-------------|
-| Issues, Redemptions & Maturities | `/v1/accounting/od/savings_bonds_report` | Monthly statistics by series |
+| Issues, Redemptions & Maturities | `/v1/accounting/od/savings_bonds_report` | Paper-bond counts by series |
 | Matured Unredeemed Debt | `/v1/accounting/od/savings_bonds_mud` | Matured unredeemed debt |
 | Piece Information by Series | `/v1/accounting/od/savings_bonds_pcs` | Piece information by series |
 
 **Frequency:** Monthly  
 **Date Range:** September 1998 to present
 
-Monthly statistics on Series EE, Series I, and Series HH savings bonds outstanding, issued, and redeemed.
+The `savings_bonds_report` table counts paper bonds by series; its fields are not dollar amounts. Its API coverage starts in January 2019; the other tables have different start dates. These counts should not be interpreted as all electronic and paper savings-bond sales.
 
 **Key fields (savings_bonds_report):**
 | Field | Type | Description |
 |-------|------|-------------|
 | `record_date` | DATE | Month end date |
 | `series_cd` | STRING | Bond series (EE, I, HH) |
-| `issued_amt` | CURRENCY | Amount issued |
-| `redeemed_amt` | CURRENCY | Amount redeemed |
-| `matured_amt` | CURRENCY | Amount matured |
-| `outstanding_amt` | CURRENCY | Total outstanding |
+| `bonds_issued_cnt` | NUMBER | Count of paper bonds issued |
+| `bonds_redeemed_cnt` | NUMBER | Count redeemed |
+| `bonds_matured_cnt` | NUMBER | Count matured |
+| `bonds_out_cnt` | NUMBER | Count outstanding |
 
 ## Savings Bonds Value Files
 
@@ -175,6 +185,8 @@ Monthly redemption value tables for historical savings bonds.
 
 ## Savings Bonds Securities Sold (Discontinued)
 
+**Endpoint:** `/v1/accounting/od/slgs_savings_bonds` (despite its name, this is historical savings-bond statistics, not SLGS interest rates).
+
 **Frequency:** Discontinued  
 **Date Range:** October 1998 – June 2022
 
@@ -182,13 +194,15 @@ Monthly redemption value tables for historical savings bonds.
 
 ## State and Local Government Series (SLGS) Securities
 
-**Endpoint:** `/v2/accounting/od/slgs_statistics`  
+**Endpoint:** `/v1/accounting/od/slgs_securities`
 **Frequency:** Daily  
 **Date Range:** October 1998 to present
 
 SLGS securities outstanding data — non-marketable special purpose securities sold to state and local governments.
 
 ## Monthly State and Local Government Series (SLGS) Securities Program
+
+**Endpoint:** `/v2/accounting/od/slgs_statistics`
 
 **Frequency:** Monthly  
 **Date Range:** March 2014 to present
@@ -202,7 +216,7 @@ Monthly statistics on the SLGS program.
 **Frequency:** Monthly (8 data tables)  
 **Date Range:** January 2000 to present
 
-Electronic book-entry transactions for Treasury securities in the TRADES (Treasury/Reserve Automated Debt Entry System) system.
+Counts of sales, transfers, redemptions, outstanding securities and accounts in TreasuryDirect. These transaction tables do not provide bond values or yields; do not describe them as TRADES settlement data.
 
 ---
 
@@ -212,7 +226,7 @@ Electronic book-entry transactions for Treasury securities in the TRADES (Treasu
 **Frequency:** Monthly  
 **Date Range:** October 2001 to present
 
-Monthly interest cost by government trust fund for invested federal funds.
+Monthly interest components by Federal Investments Program account/Treasury Account Symbol, including premiums, discounts, interest payments and inflation compensation.
 
 ### Principal Outstanding
 **Frequency:** Monthly (2 tables)  
@@ -237,3 +251,14 @@ Monthly interest cost by government trust fund for invested federal funds.
 ### Summary General Ledger Balances Report
 **Frequency:** Monthly (2 tables)  
 **Date Range:** October 2005 to present
+
+## Official sources
+
+Reviewed 2026-09-30 against the current dataset dictionaries and live API responses.
+
+- [Treasury Securities Auctions Data](https://fiscaldata.treasury.gov/datasets/treasury-securities-auctions-data/)
+- [Upcoming Auctions](https://fiscaldata.treasury.gov/datasets/upcoming-auctions/)
+- [I Bonds Interest Rates](https://fiscaldata.treasury.gov/datasets/i-bonds-interest-rates/)
+- [Savings Bonds Issues Redemptions Maturities By Series](https://fiscaldata.treasury.gov/datasets/savings-bonds-issues-redemptions-maturities-by-series/)
+- [Slgs Securities](https://fiscaldata.treasury.gov/datasets/slgs-securities/)
+- [Slgs Securities Program Stats](https://fiscaldata.treasury.gov/datasets/slgs-securities-program-stats/)

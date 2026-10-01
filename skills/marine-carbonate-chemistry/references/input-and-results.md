@@ -52,19 +52,27 @@ Calculated columns use PyCO2SYS v1 names:
   TA and DIC have no `_out` columns because this is a closed-sample correction.
 - `u_pH_total`, `u_pCO2`, `u_saturation_aragonite` and their `_out` forms when any
   uncertainties were supplied. These are standard uncertainties, not 95% intervals.
-- `qc_flags`: semicolon-separated carbonic-constant calibration-range flags.
+- `qc_flags`: semicolon-separated `outside_k_carbonic_input_range` / `_output_range`
+  and `gas_pressure_correction_disabled_input` / `_output` flags. A gas flag is emitted
+  whenever the corresponding sea pressure is greater than zero.
 
-An empty flag field means only that the range checks passed; it is not a measurement
+An empty flag field means the helper's checks found no flags; it is not a measurement
 QC grade. Values outside a range are retained and visibly flagged so the analyst can
 reconsider the constant set. They should not be reported as validated predictions.
 
 `provenance.json` records the input filename and SHA-256, sample count, software versions,
 parameter types, explicit solver options, zero-solute assumptions, uncertainty sources,
-units, and sample-specific range flags. Archive it with the input and output tables.
+units, gas-pressure convention, and sample-specific flags. Archive it with the input and output tables.
 All rows are validated before output creation. Existing output directories are refused.
 
 The helper's fixed options are bisulfate 1, fluoride 1, gas constant 3, buffer mode 1,
 atmospheric pressure 1 atm, and `opt_pressured_kCO2=0`. It records these explicitly.
-The last option follows the v1 default convention for CO2 solubility; if a study requires
-hydrostatic-pressure-corrected solubility or different atmospheric pressure, use a
-separately tested direct call and document that difference when comparing gas results.
+The last option disables hydrostatic corrections to **both CO2 solubility and fugacity**,
+while pressure still affects acid dissociation and mineral saturation. Nonzero-pressure
+pCO2/fCO2 are therefore not fully pressure-corrected in situ gas values. If a study requires
+those corrections, use a separately tested direct call with `opt_pressured_kCO2=1` and
+the correct sea pressure. Do not substitute water-column pressure into
+`pressure_atmosphere`, which is barometric pressure in atm. Record the convention for
+both measured and calculated gas quantities before comparing them. This behavior is
+confirmed by the [v1.8 release notes](https://pyco2sys.readthedocs.io/en/latest/versions/)
+and [pinned fugacity implementation](https://github.com/mvdh7/PyCO2SYS/blob/v1.8.3.4/PyCO2SYS/gas.py).

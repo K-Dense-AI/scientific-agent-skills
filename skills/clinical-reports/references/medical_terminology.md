@@ -21,7 +21,7 @@ Do not infer a code from narrative text.
 ## MedDRA
 
 - ICH developed MedDRA for regulatory information about human medical products.
-- MedDRA 29.0 was released in March 2026, with a transition date of 4 May 2026.
+- The current released English guide is MedDRA 29.1, September 2026; a release date is not a universal study or regulatory implementation date.
 - MedDRA uses a multiaxial hierarchy and version-specific currency/relationships.
 - State exact version and language.
 - Use the study/sponsor-authorized version, official licensed files, and current Points to Consider.
@@ -31,7 +31,7 @@ The aggregate adverse-event formatter accepts SOC and PT labels as supplied and 
 
 ## LOINC
 
-LOINC identifies health observations, measurements, and documents. LOINC 2.82 was released 24 February 2026 and was current when checked.
+LOINC identifies health observations, measurements, and documents. LOINC 2.83 was released 19 August 2026 and is the current release at this review. Planned monthly releases are a future cadence change; verify actual release files before selecting a version.
 
 - A valid-looking `number-checkdigit` string is only syntactic evidence.
 - The method, property, timing, system/specimen, scale, and version can affect meaning.
@@ -51,7 +51,7 @@ SNOMED CT concept identifiers are not clinically validated by their numeric shap
 
 ICD-10-CM changes by fiscal-year release and may require encounter, laterality, or placeholder characters.
 
-- Record the exact release and applicable jurisdiction.
+- Record the exact release, applicable jurisdiction, and service-date range. CDC lists FY27 files for services from 1 October 2026; on this review date (30 September 2026), the FY26 April update still applies to services in its stated date window. File availability does not make a future effective version applicable early.
 - Verify with official CDC/CMS files and coding guidance.
 - A regex match cannot establish billability, specificity, sequencing, or clinical correctness.
 - This skill does not support billing or reimbursement decisions.
@@ -68,7 +68,7 @@ Any conversion must have:
 - precision/rounding rule;
 - source-fact and reviewer traceability.
 
-The consistency checker flags missing or inconsistent unit labels but performs no clinical conversion.
+The consistency checker flags missing or inconsistent unit labels but performs no clinical conversion. The terminology checker uses a restricted character screen for UCUM, not the complete UCUM grammar or semantic parser. Do not change a verified expression merely to satisfy that screen; record the limitation for qualified review.
 
 ## Optional local dictionary
 

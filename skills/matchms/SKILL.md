@@ -1,11 +1,12 @@
 ---
 name: matchms
-description: Process, clean, compare, and search tandem mass spectra with matchms. Use for MS/MS file I/O, metadata harmonization, peak filtering, spectral similarity, library matching, score matrices, and molecular-similarity networks. Use pyopenms instead for LC-MS feature detection or proteomics pipelines.
+description: Processes, cleans, compares, and searches tandem mass spectra with matchms. Use for MS/MS file I/O, metadata harmonization, peak filtering, spectral similarity, library matching, score matrices, and molecular-similarity networks. Use pyopenms instead for LC-MS feature detection or proteomics pipelines.
 allowed-tools: Read Write Edit Bash
 license: Apache-2.0
 compatibility: Requires Python >=3.10,<3.15, uv, and matchms 0.33.1. Local file workflows need no credentials; metabolomics-USI loading requires network access.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,7 +16,8 @@ metadata:
 
 Matchms is a Python package for importing, cleaning, processing, and comparing
 tandem mass spectra. This skill targets **matchms 0.33.1**, released 2026-06-08,
-and corrects several breaking API changes that older tutorials do not reflect.
+verified again on 2026-10-01. Older tutorials can use removed names; see the
+migration reference.
 
 Use matchms for:
 
@@ -55,8 +57,8 @@ package metadata.
 
 1. **Inspect the inputs.** Record format, spectrum count, MS level, precursor
    coverage, ion mode, peak counts, and identifier fields.
-2. **Load with metadata harmonization enabled** unless preserving source keys is
-   a deliberate requirement.
+2. **Load with metadata harmonization enabled** by default. Retain original
+   files: disabling the flag in 0.33.1 still harmonizes metadata keys.
 3. **Apply the same peak-processing steps** to query and reference spectra.
    Keep metadata enrichment separate when reference annotations are richer.
 4. **Drop invalid spectra explicitly.** Many `require_*` filters return `None`.
@@ -81,7 +83,8 @@ These points prevent the most common failures from pre-0.33 examples:
   `spectrum.losses`, `spectrum.compute_losses(...)`, or
   `NeutralLossesCosine` directly.
 - `SpectrumProcessor` is not callable. Use `process_spectrum()` or
-  `process_spectra()`.
+  `process_spectra()`. The single-spectrum call mutates by default; pass a clone
+  when preserving the original.
 - `process_spectra()` returns `(processed_spectra, processing_report)`.
 - `Scores.scores` is a `StackedSparseArray`, often with separate structured
   fields such as `CosineGreedy_score` and `CosineGreedy_matches`.
@@ -96,11 +99,14 @@ See `references/migration.md` for a complete old-to-current mapping.
 ## Quick Start: Clean and Search a Library
 
 ```python
+from math import isfinite
+
 from matchms import SpectrumProcessor, calculate_scores
 from matchms.filtering import (
     default_filters,
     normalize_intensities,
     require_minimum_number_of_peaks,
+    require_precursor_mz,
     select_by_relative_intensity,
 )
 from matchms.importing import load_spectra
@@ -111,6 +117,7 @@ def load_and_process(path):
     spectra = [default_filters(spectrum) for spectrum in load_spectra(path)]
     processor = SpectrumProcessor(
         [
+            (require_precursor_mz, {"minimum_accepted_mz": 10.0}),
             normalize_intensities,
             (select_by_relative_intensity, {"intensity_from": 0.01}),
             (require_minimum_number_of_peaks, {"n_required": 5}),
@@ -121,7 +128,7 @@ def load_and_process(path):
         progress_bar=False,
         create_report=False,
     )
-    return processed
+    return [s for s in processed if isfinite(s.get("precursor_mz"))]
 
 
 references = load_and_process("library.msp")
@@ -166,21 +173,24 @@ matched_peaks = int(result["matches"])
 ```
 
 Use `calculate_scores()` for matrix-oriented methods such as
-`FlashSimilarity`; its single-pair path is supported but intentionally not the
-optimized path.
+`FlashSimilarity` for larger comparisons; a 1-by-1 `calculate_scores()` call
+still uses `pair()`. Flash also allocates a dense matrix internally even with
+`array_type="sparse"`, so estimate memory before use.
 
 ## Choose a Similarity Method
 
 - `CosineGreedy` — standard peak cosine with greedy peak assignment.
 - `CosineHungarian` — exact assignment; slower, useful for benchmarks.
-- `CosineLinear` — current linear-scaling cosine implementation.
+- `CosineLinear` — linear matching after merging peaks within `2 * tolerance`;
+  its matched-peak count can differ from the original spectrum.
 - `ModifiedCosineGreedy` — permits precursor-delta-shifted matches; common for
   analog search.
 - `ModifiedCosineHungarian` — exact modified-cosine assignment.
 - `NeutralLossesCosine` — compares losses computed from precursor and fragments.
 - `BlinkCosine` — fast BLINK-style cosine approximation for larger matrices.
 - `FlashSimilarity` — optimized matrix scoring using spectral entropy or cosine
-  with fragment, neutral-loss, or hybrid matching.
+  with fragment or hybrid matching. Avoid 0.33.1 entropy with `neutral_loss`: a
+  tested self-score is near 2 due to double counting; see `references/similarity.md`.
 - `BinnedEmbeddingSimilarity` — binned spectral vectors and optional approximate
   nearest-neighbor indexing.
 - `PrecursorMzMatch`, `ParentMassMatch`, `MetadataMatch` — candidate masks or
@@ -208,8 +218,9 @@ scores = calculate_scores(
 ```
 
 For a precursor-gated search, compute and filter `PrecursorMzMatch` first, then
-calculate the spectral metric only on retained coordinates through `Pipeline`
-or `Scores.calculate(...)`. See `references/workflows.md`.
+use `Pipeline` or `Scores.calculate(...)`. In 0.33.1 this avoids full-matrix
+computation only if fewer than half of all coordinates remain (except 1-by-1
+input); see `references/workflows.md` for the exact conditions.
 
 Do not choose a universal "identification threshold." Score distributions
 depend on preprocessing, mass accuracy, collision conditions, library quality,
@@ -232,7 +243,10 @@ uv run python scripts/library_search.py \
 ```
 
 Run `--help` for fast metrics, preprocessing options, identifier fields,
-overwrite control, and the explicit large-matrix override.
+overwrite control, and the explicit large-matrix override. Flash uses the
+requested `--relative-intensity` cutoff, and precursor-dependent modes reject
+missing, non-finite, or nonpositive precursor values. CSV reference names and
+InChIKeys are library candidate annotations, not confirmed query identities.
 
 ## Spectrum Objects and Visualization
 

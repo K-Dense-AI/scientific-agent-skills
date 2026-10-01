@@ -2,11 +2,11 @@
 name: 13c-metabolic-flux
 description: Estimates intracellular metabolic fluxes from steady-state carbon-13 isotope-tracing measurements using validated atom maps, mfapy isotope simulation, constrained multistart fitting, and flux-profile diagnostics. Use for 13C-MFA, carbon tracing, mass isotopomer distributions (MDVs/MIDs), positional isotopomers, parallel tracer experiments, and determining whether labeling data constrain a pathway flux. Distinguishes measured-label inference from COBRA flux balance analysis and flags experiments requiring nonstationary MFA.
 license: MIT
-compatibility: Python 3.11 with uv and Git for installation. Tested with mfapy 0.6.3 at a10433af16682386548b360297e2476152d46ede, NumPy 2.4.6, SciPy 1.17.1, and NLopt 2.11.0. Network access is needed only to install public dependencies. Inference runs locally without credentials; inputs are JSON.
+compatibility: Python 3.12 with uv and Git for installation. Tested with mfapy 0.6.3 at a10433af16682386548b360297e2476152d46ede, NumPy 2.5.3, SciPy 1.18.1, and NLopt 2.11.0. Network access is needed only to install public dependencies. Inference runs locally without credentials; inputs are JSON.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-09-29"
+  last-reviewed: "2026-09-30"
 ---
 
 # Carbon-13 metabolic flux inference
@@ -51,7 +51,7 @@ Run in the user's analysis directory. Set `SKILL_DIR` to this skill's installed 
 using the actual resolved path. Keep environments and generated results outside the skill.
 
 ```bash
-uv venv --python 3.11 .venv-mfa
+uv venv --python 3.12 .venv-mfa
 uv pip install --python .venv-mfa/bin/python -r "$SKILL_DIR/assets/requirements.txt"
 ```
 
@@ -60,6 +60,13 @@ The following commands use `.venv-mfa/bin/python`; on Windows use the environmen
 not distributed on PyPI. Installation executes dependency build code; model inputs
 are data, not user-supplied Python. The adapter restricts identifiers and atom-map
 syntax before they reach mfapy's internally generated numerical functions.
+
+The pinned commit matched upstream `master` on 2026-09-30. Its README labels the
+latest change "064", but its installed distribution still reports `0.6.3`; retain
+the Git commit alongside the package version in an analysis record. The refreshed
+NumPy/SciPy pins require Python 3.12 or later; the commands above use the tested 3.12
+environment. See the reviewed forward-model contract in
+[references/inference.md](references/inference.md).
 
 ## Workflow
 

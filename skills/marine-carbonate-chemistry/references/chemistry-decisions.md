@@ -39,6 +39,11 @@ consistent air/water gas quantities and an appropriate gas-transfer model.
 For a closed sample, convert both known parameters at their actual input conditions
 and request output temperature/pressure. Never set laboratory-measured pH's input
 temperature to the ocean temperature just because the desired result is in situ.
+For subsurface gas observations, also establish whether the measurement includes
+hydrostatic gas corrections. The helper fixes `opt_pressured_kCO2=0` and flags nonzero
+sea pressure; a fully pressure-corrected gas observation needs a verified direct call
+with the matching convention. This option controls solubility and fugacity, not the
+other pressure-dependent equilibria.
 
 ## Uncertainty that matches the claim
 
@@ -56,7 +61,11 @@ For a more complete analysis:
    `uncertainty_into` and `uncertainty_from`, including suitable equilibrium-constant
    uncertainties. Upstream provides `pyco2.uncertainty_OEDG18`; inspect its assumptions
    before adopting it. Input/output constant uncertainties require deliberate treatment
-   of their shared errors; see upstream's `_both` keys.
+   of their shared errors: `pk_carbonic_1_both` applies one shared pK perturbation to
+   input/output conditions, whereas separate `pk_carbonic_1` and `pk_carbonic_1_out`
+   entries are independent. `_both` requires output conditions. `__f` specifies a
+   fractional uncertainty (for example `total_borate__f`); the helper's CSV `u_`
+   columns always specify absolute uncertainties and do not expose these extensions.
 3. With covariance or appreciable nonlinearity, use a scientifically justified joint
    error model, propagate paired Monte Carlo draws through the solver, and check output
    quantiles and invalid draws. Document distributions, correlations, seed, convergence,
@@ -67,6 +76,13 @@ For a more complete analysis:
 Read the [upstream uncertainty guide](https://pyco2sys.readthedocs.io/en/latest/uncertainty/)
 when implementing those extensions. Keep helper u values labeled as **conditional,
 independent-input uncertainty**, not a complete accuracy claim.
+
+For a local linear covariance calculation, request `grads_of` and `grads_wrt` from
+`pyco2.sys`, assemble the gradient in the same variable order and units as the covariance
+matrix, and evaluate `variance = gradient @ covariance @ gradient.T`. The result keys are
+`d_<result>__d_<argument>`, for example `d_pH_total__d_par1`. Check symmetry and positive
+semidefiniteness of the covariance matrix and confirm finite-difference step sensitivity.
+This direct-call extension is not part of the helper's independent-input CSV workflow.
 
 ## Interpret at the right level
 

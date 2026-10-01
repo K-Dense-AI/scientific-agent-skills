@@ -406,6 +406,7 @@ class PinnedRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(instance)
         self.assertFalse(instance.kwargs["include_user_agent"])
         self.assertFalse(instance.kwargs["notify_db_version"])
+        self.assertEqual(instance.kwargs["endpoint"], "https://api.materialsproject.org/")
         self.assertEqual(instance.materials.summary.kwargs["num_chunks"], 1)
         self.assertEqual(instance.materials.summary.kwargs["chunk_size"], 1)
 

@@ -1,9 +1,9 @@
 """Unit tests for the exa-search skill scripts.
 
-These tests mock the Exa SDK so they never hit the live API. Run from the
-skill root:
+These tests mock the SDK or its HTTP transport and never hit the live API.
+Run from the repository root:
 
-    python -m unittest discover -s tests -v
+    python tests/run_all.py --isolated exa-search
 
 Tests cover: CLI argument plumbing, the content-options builder (text /
 highlights), CSV splitting for domain lists, the content fallback
@@ -60,7 +60,7 @@ def _fake_result(**overrides):
 
 
 class BuildContentsTests(unittest.TestCase):
-    """The content-options builder is shared logic across all three scripts."""
+    """Check explicit content selection in both scripts."""
 
     def setUp(self):
         self.search_mod = _load_script("exa_search")
@@ -86,6 +86,10 @@ class BuildContentsTests(unittest.TestCase):
 
     def test_extract_defaults_to_text_when_nothing_specified(self):
         self.assertEqual(self.extract_mod._build_contents(False, False), {"text": True})
+
+    def test_extract_highlights_suppresses_sdk_default_text(self):
+        self.assertEqual(self.extract_mod._build_contents(False, True),
+                         {"highlights": True, "text": False})
 
 
 class SplitCsvTests(unittest.TestCase):
@@ -177,15 +181,30 @@ class IntegrationHeaderAndFlowTests(unittest.TestCase):
             "k-dense-ai--scientific-agent-skills",
         )
 
-    def test_calls_search_and_contents_when_contents_requested(self):
+    def test_uses_current_search_contents_parameter(self):
         _, client, _ = self._run_with_mock(["query", "--text"])
-        client.search_and_contents.assert_called_once()
-        client.search.assert_not_called()
+        client.search.assert_called_once_with(query="query", num_results=10,
+                                              type="auto", contents={"text": True})
+        client.search_and_contents.assert_not_called()
 
     def test_calls_search_when_no_contents_flags(self):
         _, client, _ = self._run_with_mock(["query"])
         client.search.assert_called_once()
+        self.assertIs(client.search.call_args.kwargs["contents"], False)
         client.search_and_contents.assert_not_called()
+
+    def test_legacy_scholarly_category_maps_to_publication(self):
+        _, client, _ = self._run_with_mock(["query", "--category", "research paper"])
+        self.assertEqual(client.search.call_args.kwargs["category"], "publication")
+
+    def test_invalid_filters_fail_before_constructing_client(self):
+        for argv in (["q", "--num-results", "0"], ["q", "--num-results", "101"],
+                     ["q", "--category", "people", "--exclude-domains", "example.com"],
+                     ["q", "--category", "company", "--start-published-date", "2026-01-01T00:00:00Z"]):
+            with self.subTest(argv=argv), patch.object(self.mod, "Exa") as ctor:
+                with self.assertRaises(ValueError):
+                    self.mod.run(self.mod.build_parser().parse_args(argv))
+                ctor.assert_not_called()
 
     def test_domain_filters_are_split_and_passed(self):
         _, client, _ = self._run_with_mock(
@@ -219,6 +238,80 @@ class IntegrationHeaderAndFlowTests(unittest.TestCase):
             payload = json.loads(out.read_text())
             self.assertEqual(payload["num_results"], 1)
             self.assertEqual(payload["results"][0]["title"], "Attention Is All You Need")
+
+
+class RealSdkTransportTests(unittest.TestCase):
+    """Exercise SDK serialization, defaults, headers and result parsing offline."""
+
+    def _run(self, script, argv, response_data):
+        module = _load_script(script)
+        response = MagicMock(status_code=200)
+        response.json.return_value = response_data
+        with patch("exa_py.api.requests.post", return_value=response) as post, \
+             patch.dict(os.environ, {"EXA_API_KEY": "offline-test-key"}):
+            payload = module.run(module.build_parser().parse_args(argv))
+        return payload, post.call_args
+
+    def test_search_serializes_current_filters_and_contents(self):
+        payload, call = self._run("exa_search", [
+            "CRISPR", "--category", "publication", "--type", "deep-reasoning",
+            "--highlights", "--include-domains", "arxiv.org,nature.com",
+            "--start-published-date", "2026-01-01T00:00:00Z", "--user-location", "US",
+        ], {"results": [{"url": "https://arxiv.org/abs/example", "id": "doc",
+                        "publishedDate": "2026-01-02", "highlights": ["Finding"]}]})
+        self.assertEqual(call.args[0], "https://api.exa.ai/search")
+        body = json.loads(call.kwargs["data"])
+        self.assertEqual(body["contents"], {"highlights": True})
+        self.assertEqual(body["category"], "publication")
+        self.assertEqual(body["type"], "deep-reasoning")
+        self.assertEqual(body["includeDomains"], ["arxiv.org", "nature.com"])
+        self.assertEqual(body["startPublishedDate"], "2026-01-01T00:00:00Z")
+        self.assertEqual(body["userLocation"], "US")
+        self.assertEqual(call.kwargs["headers"]["x-api-key"], "offline-test-key")
+        self.assertEqual(call.kwargs["headers"]["x-exa-integration"],
+                         "k-dense-ai--scientific-agent-skills")
+        self.assertEqual(payload["results"][0]["published_date"], "2026-01-02")
+        self.assertIsNone(payload["results"][0]["score"])
+        self.assertEqual(payload["results"][0]["highlight_scores"], [])
+
+    def test_search_without_content_flags_does_not_request_text(self):
+        _, call = self._run("exa_search", ["CRISPR"], {"results": []})
+        self.assertNotIn("contents", json.loads(call.kwargs["data"]))
+
+    def test_extraction_preserves_partial_statuses_and_freshness(self):
+        payload, call = self._run("exa_extract", [
+            "https://example.com/a", "https://example.com/b", "--highlights", "--max-age-hours", "0",
+        ], {"results": [{"url": "https://example.com/a", "id": "https://example.com/a",
+                         "highlights": ["Extract"]}],
+            "statuses": [{"id": "https://example.com/a", "status": "success", "source": "crawled"},
+                         {"id": "https://example.com/b", "status": "error",
+                          "error": {"tag": "CRAWL_TIMEOUT", "httpStatusCode": None}}]})
+        self.assertEqual(call.args[0], "https://api.exa.ai/contents")
+        body = json.loads(call.kwargs["data"])
+        self.assertEqual(body, {"urls": ["https://example.com/a", "https://example.com/b"],
+                                "highlights": True, "text": False, "maxAgeHours": 0})
+        self.assertEqual(payload["num_results"], 1)
+        self.assertEqual(payload["statuses"][0]["source"], "crawled")
+        self.assertEqual(payload["statuses"][1],
+                         {"id": "https://example.com/b", "status": "error", "source": None})
+
+    def test_extract_rejects_oversized_batch_and_invalid_age_without_http(self):
+        module = _load_script("exa_extract")
+        for argv in (["https://example.com"] * 101,
+                     ["https://example.com", "--max-age-hours", "721"],
+                     ["https://example.com", "--max-age-hours", "-2"]):
+            with self.subTest(argv=argv), patch.object(module, "Exa") as ctor:
+                with self.assertRaises(ValueError):
+                    module.run(module.build_parser().parse_args(argv))
+                ctor.assert_not_called()
+
+    def test_extract_accepts_100_urls_and_cache_only(self):
+        urls = [f"https://example.com/{i}" for i in range(100)]
+        _, call = self._run("exa_extract", urls + ["--max-age-hours", "-1"], {"results": []})
+        body = json.loads(call.kwargs["data"])
+        self.assertEqual(body["urls"], urls)
+        self.assertEqual(body["maxAgeHours"], -1)
+        self.assertIs(body["text"], True)
 
 
 # The shared --help contract: every argparse CLI this skill ships answers --help

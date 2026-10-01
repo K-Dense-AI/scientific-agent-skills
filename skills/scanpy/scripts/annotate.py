@@ -31,9 +31,11 @@ def load_mapping(path):
         with open(path) as fh:
             return {str(k): v for k, v in json.load(fh).items()}
     import pandas as pd
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype=str, keep_default_na=False)
     if df.shape[1] < 2:
         die("CSV mapping needs at least two columns: cluster,cell_type")
+    if df.iloc[:, 0].duplicated().any():
+        die("CSV mapping contains duplicate cluster labels")
     return {str(k): v for k, v in zip(df.iloc[:, 0], df.iloc[:, 1])}
 
 

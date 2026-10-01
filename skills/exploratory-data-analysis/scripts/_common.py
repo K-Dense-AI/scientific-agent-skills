@@ -381,6 +381,13 @@ def _reject_json_constant(value: str) -> None:
     raise CliError("non-finite JSON numbers are not accepted")
 
 
+def _finite_json_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise CliError("JSON number exceeds the finite floating-point range")
+    return number
+
+
 def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -405,10 +412,11 @@ def load_strict_json(
                 handle,
                 object_pairs_hook=_unique_json_object,
                 parse_constant=_reject_json_constant,
+                parse_float=_finite_json_float,
             )
     except CliError:
         raise
-    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError, MemoryError) as exc:
         raise CliError("the input is not bounded, valid UTF-8 JSON") from exc
 
 

@@ -1,5 +1,7 @@
 # NetworkX Input/Output
 
+API patterns assume `import networkx as nx`, suitable input files and the optional packages named below. See [review.md](review.md) for tested round trips. Preserve a separate node table, graph class, node-ID schema, units and attribute schema; compare them after every conversion. Edge tables alone omit isolated nodes.
+
 ## Reading Graphs from Files
 
 ### Adjacency List Format
@@ -66,12 +68,14 @@ Example weighted edge list:
 
 ### GML (Graph Modelling Language)
 ```python
-# Read GML (preserves all attributes)
+# Read GML (supported GML attributes; default label="label")
 G = nx.read_gml('graph.gml')
 
 # Write GML
 nx.write_gml(G, 'graph.gml')
 ```
+
+GML is a text format, not XML. It supports a constrained attribute/type schema; reserved keys such as `id`/`label` have structural meanings. It is not an arbitrary Python-object round trip.
 
 ### GraphML Format
 ```python
@@ -85,6 +89,8 @@ nx.write_graphml(G, 'graph.graphml')
 nx.write_graphml(G, 'graph.graphml', encoding='utf-8')
 ```
 
+GraphML supports scalar strings, booleans and numeric attributes, not arbitrary lists/dicts/arrays/None. Node IDs are strings on read unless `node_type=` is specified. Use `force_multigraph=True` and an explicit `edge_key_type` to preserve a multigraph class with no parallel edges. GraphML defaults stay in `G.graph`; they are not filled into every node/edge. Mixed directed/undirected graphs and hyperedges are unsupported.
+
 ### GEXF (Graph Exchange XML Format)
 ```python
 # Read GEXF
@@ -93,6 +99,8 @@ G = nx.read_gexf('graph.gexf')
 # Write GEXF
 nx.write_gexf(G, 'graph.gexf')
 ```
+
+GEXF has reserved attribute names and requires compatible attribute types across nodes/edges; mixed types can raise. Validate dynamic attributes separately. GraphML/GEXF readers use XML parsers: only parse trusted files or sanitize XML before this workflow.
 
 ### Pajek Format
 ```python
@@ -128,7 +136,9 @@ G = nx.from_pandas_edgelist(df,
                             target='target',
                             edge_attr='weight')
 
-# With multiple edge attributes
+# With multiple edge attributes: columns must actually exist
+df["color"] = "blue"
+df["type"] = "interaction"
 G = nx.from_pandas_edgelist(df,
                             source='source',
                             target='target',
@@ -138,22 +148,25 @@ G = nx.from_pandas_edgelist(df,
 G = nx.from_pandas_edgelist(df,
                             source='source',
                             target='target',
+                            edge_attr='weight',
                             create_using=nx.DiGraph())
 ```
+
+Specify `create_using=nx.MultiDiGraph()` and `edge_key="edge_id"` when repeated directed observations are separate edges. Simple graphs overwrite duplicate edge attributes; they do not sum them. Import the node table with `add_nodes_from` to retain isolates and node attributes. Check ID dtypes and missing IDs before conversion, especially mixed numeric tables.
 
 ### To Pandas DataFrame
 ```python
 # Convert graph to edge list DataFrame
 df = nx.to_pandas_edgelist(G)
 
-# With specific edge attributes
+# Rename endpoint columns (this does not select edge attributes)
 df = nx.to_pandas_edgelist(G, source='node1', target='node2')
 ```
 
 ### Adjacency Matrix with Pandas
 ```python
 # Create DataFrame from adjacency matrix
-df = nx.to_pandas_adjacency(G, dtype=int)
+df = nx.to_pandas_adjacency(G, dtype=float)
 
 # Create graph from adjacency DataFrame
 G = nx.from_pandas_adjacency(df)
@@ -168,32 +181,33 @@ G = nx.from_pandas_adjacency(df, create_using=nx.DiGraph())
 ```python
 import numpy as np
 
-# To NumPy adjacency matrix
-A = nx.to_numpy_array(G, dtype=int)
-
-# With specific node order
-nodelist = [1, 2, 3, 4, 5]
-A = nx.to_numpy_array(G, nodelist=nodelist)
-
-# From NumPy array
-G = nx.from_numpy_array(A)
-
-# For directed graphs
-G = nx.from_numpy_array(A, create_using=nx.DiGraph())
+# Simple directed weighted fixture, including a zero-cost edge and an isolate
+G = nx.DiGraph()
+G.add_nodes_from(["A", "B", "isolate"])
+G.add_edge("A", "B", weight=0.0)
+nodelist = list(G)
+A = nx.to_numpy_array(G, nodelist=nodelist, dtype=float, nonedge=np.nan)
+# NetworkX 3.7 supports nonedge= on import too
+H = nx.from_numpy_array(
+    A, nodelist=nodelist, create_using=nx.DiGraph, nonedge=np.nan
+)
+assert H.has_edge("A", "B") and H["A"]["B"]["weight"] == 0.0
+assert set(nx.isolates(H)) == {"isolate"}
 ```
+
+Dense arrays default to zero meaning **no edge**; a different `nonedge` sentinel is needed for genuine zero-weight edges. `dtype=int` truncates fractional weights. Matrices omit most attributes and aggregate parallel weights (sum by default); integer entries become edge counts only with a multigraph plus `parallel_edges=True`. For directed graphs, row i / column j represents i -> j.
 
 ### Sparse Matrix (SciPy)
 ```python
 from scipy import sparse
 
-# To sparse matrix
-A = nx.to_scipy_sparse_array(G)
-
-# With specific format (csr, csc, coo, etc.)
-A_csr = nx.to_scipy_sparse_array(G, format='csr')
-
-# From sparse matrix
-G = nx.from_scipy_sparse_array(A)
+# Preserve ordering and directedness explicitly
+nodelist = list(G)
+A = nx.to_scipy_sparse_array(G, nodelist=nodelist, format="csr")
+H = nx.from_scipy_sparse_array(A, create_using=type(G))
+H = nx.relabel_nodes(H, dict(enumerate(nodelist)))
+# Explicitly stored zeros become edges. Call A.eliminate_zeros() only
+# when those entries really mean absent edges, not zero-weight edges.
 ```
 
 ## JSON Format
@@ -203,21 +217,23 @@ G = nx.from_scipy_sparse_array(A)
 import json
 
 # To node-link format (good for d3.js)
-data = nx.node_link_data(G)
+data = nx.node_link_data(G, edges="edges")
 with open('graph.json', 'w') as f:
     json.dump(data, f)
 
 # From node-link format
 with open('graph.json', 'r') as f:
     data = json.load(f)
-G = nx.node_link_graph(data)
+G = nx.node_link_graph(data, edges="edges")
 
 # Since NetworkX 3.6 the edge list is stored under the "edges" key.
 # Older files (and some d3.js examples) use "links" — pass edges="links"
 # to read or write that layout:
-G = nx.node_link_graph(data, edges="links")
-data = nx.node_link_data(G, edges="links")
+legacy_data = nx.node_link_data(G, edges="links")
+G = nx.node_link_graph(legacy_data, edges="links")
 ```
+
+Node-link includes graph class flags, node records (including isolates), edge keys and attributes. JSON values must be serializable; attribute keys become strings. Reserve `id` for node IDs and `source`/`target`/`key` for edge structure, or choose noncolliding keyword names consistently for both directions. Do not feed an `edges` document to a `links` reader.
 
 ### Adjacency Data Format
 ```python
@@ -234,8 +250,9 @@ G = nx.adjacency_graph(data)
 
 ### Tree Data Format
 ```python
-# For tree graphs
-data = nx.tree_data(G, root=0)
+# Requires a directed outward tree rooted at root (not an arbitrary Graph)
+T = nx.bfs_tree(nx.path_graph(4), source=0)
+data = nx.tree_data(T, root=0)
 with open('tree.json', 'w') as f:
     json.dump(data, f)
 
@@ -244,6 +261,8 @@ with open('tree.json', 'r') as f:
     data = json.load(f)
 G = nx.tree_graph(data)
 ```
+
+Tree JSON preserves node attributes but omits graph/edge attributes. Use node-link when those matter.
 
 ## Pickle Format
 
@@ -268,19 +287,31 @@ Note: `nx.write_gpickle` / `nx.read_gpickle` were removed in NetworkX 3.0 — us
 ```python
 import csv
 
-# Read edges from CSV
+# Read a simple undirected edge table; reject duplicate observations
+import math
 G = nx.Graph()
-with open('edges.csv', 'r') as f:
+with open("edges.csv", newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
+    fields = reader.fieldnames or []
+    if len(fields) != len(set(fields)) or not {"source", "target", "weight"} <= set(fields):
+        raise ValueError("Missing or duplicate CSV headers")
     for row in reader:
-        G.add_edge(row['source'], row['target'], weight=float(row['weight']))
+        u, v = row["source"], row["target"]
+        if None in row or not u or not v or row["weight"] is None:
+            raise ValueError("Malformed edge record")
+        if G.has_edge(u, v):
+            raise ValueError("Repeated edge: choose aggregation or a multigraph explicitly")
+        weight = float(row["weight"])
+        if not math.isfinite(weight):
+            raise ValueError("Nonfinite weight")
+        G.add_edge(u, v, weight=weight)
 
 # Write edges to CSV
 with open('edges.csv', 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['source', 'target', 'weight'])
     for u, v, data in G.edges(data=True):
-        writer.writerow([u, v, data.get('weight', 1.0)])
+        writer.writerow([u, v, data['weight']])
 ```
 
 ## Database Integration
@@ -303,6 +334,7 @@ df = pd.read_sql_query(
     "SELECT source, target, weight FROM edges WHERE weight > ?",
     conn, params=(min_weight,)
 )
+G = nx.from_pandas_edgelist(df, "source", "target", edge_attr="weight")
 conn.close()
 
 # Write to SQL database
@@ -322,7 +354,7 @@ nx.drawing.nx_pydot.write_dot(G, 'graph.dot')
 # Read DOT file
 G = nx.drawing.nx_pydot.read_dot('graph.dot')
 
-# Generate directly to image (requires Graphviz)
+# Generate directly to image (requires pydot and the Graphviz executable)
 from networkx.drawing.nx_pydot import to_pydot
 pydot_graph = to_pydot(G)
 pydot_graph.write_png('graph.png')
@@ -350,8 +382,8 @@ G = nx.cytoscape_graph(data)
 from scipy.io import mmread, mmwrite
 
 # Read Matrix Market
-A = mmread('graph.mtx')
-G = nx.from_scipy_sparse_array(A)
+A = mmread('graph.mtx', spmatrix=False)
+G = nx.from_scipy_sparse_array(A) if sparse.issparse(A) else nx.from_numpy_array(A)
 
 # Write Matrix Market
 A = nx.to_scipy_sparse_array(G)
@@ -367,11 +399,16 @@ import momepy
 
 # Read line geometries from a shapefile and convert to a graph
 gdf = gpd.read_file('roads.shp')
-G = momepy.gdf_to_nx(gdf, approach='primal')
+# Choose an appropriate projected CRS; lengths are in its axis units
+if gdf.crs is None or not gdf.crs.is_projected:
+    raise ValueError("Reproject roads to an appropriate local projected CRS first")
+G = momepy.gdf_to_nx(gdf, approach="primal", preserve_index=True)
 
 # Convert back to GeoDataFrames
 nodes_gdf, edges_gdf = momepy.nx_to_gdf(G)
 ```
+
+This momepy route uses pre-noded LineStrings: crossings are not automatically intersections. It defaults to an undirected MultiGraph and stores segment length as `mm_len` in CRS units. For directed networks, coordinate order sets direction; use the documented `oneway_column` semantics. Geometry and tuple node IDs need conversion before GraphML export.
 
 ## Format Selection Guidelines
 
@@ -380,11 +417,11 @@ nodes_gdf, edges_gdf = momepy.nx_to_gdf(G)
 **Adjacency List** - Simple, human-readable, no attributes
 - Best for: Simple unweighted graphs, quick viewing
 
-**Edge List** - Simple, supports weights, human-readable
+**Edge List** - Simple, supports weights, human-readable; isolates/node metadata need a sidecar
 - Best for: Weighted graphs, importing/exporting data
 
-**GML/GraphML** - Full attribute preservation, XML-based
-- Best for: Complete graph serialization with all metadata
+**GML/GraphML** - Typed text formats; GraphML is XML, GML is not
+- Best for: Interchange of supported scalar attributes after a schema/identity round-trip check
 
 **JSON** - Web-friendly, JavaScript integration
 - Best for: Web applications, d3.js visualizations
@@ -407,12 +444,9 @@ nodes_gdf, edges_gdf = momepy.nx_to_gdf(G)
 For large graphs, consider:
 ```python
 # Use compressed formats
-import gzip
-with gzip.open('graph.adjlist.gz', 'wt') as f:
-    nx.write_adjlist(G, f)
-
-with gzip.open('graph.adjlist.gz', 'rt') as f:
-    G = nx.read_adjlist(f)
+# NetworkX handles compression from the suffix; file handles must be binary
+nx.write_adjlist(G, "graph.adjlist.gz")
+H = nx.read_adjlist("graph.adjlist.gz")
 
 # Use binary formats (faster than text formats)
 with open('graph.pkl', 'wb') as f:
@@ -423,16 +457,18 @@ A = nx.to_scipy_sparse_array(G, format='csr')  # Memory efficient
 ```
 
 ### Incremental Loading
-For very large graphs:
+Linewise parsing reduces temporary input storage, but the final NetworkX graph still resides in memory. This two-column pattern does not preserve attributes or isolates:
 ```python
 # Load graph incrementally from edge list
 G = nx.Graph()
 with open('huge_graph.edgelist') as f:
     for line in f:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
         u, v = line.strip().split()
         G.add_edge(u, v)
 
-        # Process in chunks
+        # Progress only; this does not free a chunk
         if G.number_of_edges() % 100000 == 0:
             print(f"Loaded {G.number_of_edges()} edges")
 ```
@@ -446,10 +482,10 @@ try:
 except nx.NetworkXError as e:
     print(f"Error reading GraphML: {e}")
 except FileNotFoundError:
-    print("File not found")
-    G = nx.Graph()
+    raise  # A missing file is not evidence of an empty network
 
-# Check if file format is supported
+# Illustrative input inspection: parsing errors may include XML/type errors
+import os
 if os.path.exists('graph.txt'):
     with open('graph.txt') as f:
         first_line = f.readline()

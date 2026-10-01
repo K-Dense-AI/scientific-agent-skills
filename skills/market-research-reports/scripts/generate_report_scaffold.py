@@ -23,6 +23,7 @@ from _common import (
     require_text,
     write_json_report,
 )
+from forecast_sensitivity import MAX_HORIZON
 
 PERIOD_RE = re.compile(r"^\d{4}-\d{4}$")
 SOURCE_FIELDS = (
@@ -170,10 +171,15 @@ def validate_manifest(payload: dict[str, Any]) -> dict[str, Any]:
         )
     historical = _period(payload["historical_period"], "historical_period")
     forecast = _period(payload["forecast_period"], "forecast_period")
-    if int(forecast.split("-")[0]) <= int(historical.split("-")[0]):
+    historical_end = int(historical.split("-")[1])
+    forecast_start, forecast_end = (int(year) for year in forecast.split("-"))
+    if forecast_start != historical_end + 1:
         raise ValidationError(
-            "forecast_period must begin after the historical period begins"
+            "forecast_period must begin the year after historical_period ends; "
+            "include any bridge estimates explicitly in the historical input"
         )
+    if forecast_end - historical_end > MAX_HORIZON:
+        raise ValidationError(f"forecast horizon must not exceed {MAX_HORIZON} years")
     return {
         "schema_version": "1.0",
         "report_id": require_identifier(payload["report_id"], "report_id"),
@@ -371,7 +377,10 @@ Render references from `data/source_ledger.csv`; do not cite unmapped sources.
         },
         "start_year": int(manifest["historical_period"].split("-")[1]),
         "start_value": 0,
-        "horizon_years": 5,
+        "horizon_years": (
+            int(manifest["forecast_period"].split("-")[1])
+            - int(manifest["historical_period"].split("-")[1])
+        ),
         "scenarios": [],
         "sensitivity": {
             "base_scenario_id": "base",

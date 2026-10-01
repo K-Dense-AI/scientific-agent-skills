@@ -3,7 +3,7 @@
 ## Retrieving Items
 
 ```python
-# All items in library (100 per call by default)
+# One page of items (100 per call by default; excludes trash)
 items = zot.items()
 
 # Top-level items only (excludes attachments/notes that are children)
@@ -12,8 +12,9 @@ top = zot.top(limit=25)
 # A specific item by key
 item = zot.item('ITEMKEY')
 
-# Multiple specific items (up to 50 per call)
-subset = zot.get_subset(['KEY1', 'KEY2', 'KEY3'])
+# Up to 50 specific items in ONE request
+subset = zot.items(itemKey=','.join(['KEY1', 'KEY2', 'KEY3']))
+# get_subset([...]) instead makes one single-item request per key (up to 50).
 
 # Items from trash
 trash = zot.trash()
@@ -36,10 +37,10 @@ n = zot.num_items()
 Items are returned as dicts. Data lives in `item['data']`:
 
 ```python
-item = zot.item('VDNIEAPH')[0]
-title = item['data']['title']
+item = zot.item('VDNIEAPH')  # a dict, not a one-element list
+title = item['data'].get('title', '')
 item_type = item['data']['itemType']
-creators = item['data']['creators']
+creators = item['data'].get('creators', [])
 tags = item['data']['tags']
 key = item['data']['key']
 version = item['data']['version']
@@ -57,7 +58,7 @@ children = zot.children('PARENTKEY')
 ## Retrieving Collections
 
 ```python
-# All collections (including subcollections)
+# One page of collections (including subcollections)
 collections = zot.collections()
 
 # Top-level collections only
@@ -88,7 +89,7 @@ n = zot.num_collectionitems('COLLECTIONKEY')
 
 ```python
 # All tags in the library
-tags = zot.tags()
+tags = zot.everything(zot.tags())
 
 # Tags from a specific item
 item_tags = zot.item_tags('ITEMKEY')
@@ -100,8 +101,9 @@ col_tags = zot.collection_tags('COLLECTIONKEY')
 ## Retrieving Groups
 
 ```python
-groups = zot.groups()
-# Returns list of group libraries accessible to current key
+# Use a client initialized with the USER ID, not a group ID.
+groups = zot.everything(zot.groups())
+# /users/{userID}/groups: inspect each group's access before writing.
 ```
 
 ## Version Information
@@ -124,7 +126,8 @@ changed_items = zot.item_versions(since=1000)
 
 ```python
 settings = zot.settings()
-# Returns synced settings (feeds, PDF reading progress, etc.)
+# Returns a setting-name mapping; values carry version and value.
+# Available settings depend on the library; do not assume a fixed set.
 # Use 'since' to get only changes:
 new_settings = zot.settings(since=500)
 ```
@@ -135,3 +138,9 @@ new_settings = zot.settings(since=500)
 searches = zot.searches()
 # Retrieves saved search metadata (not results)
 ```
+
+## Endpoint and Sync Boundaries
+
+All library routes use `/users/{userID}` or `/groups/{groupID}` under `https://api.zotero.org`. Item reads use `/items`, `/items/top`, `/items/trash`, `/items/{key}`, and `/items/{key}/children`. Collections use `/collections`, `/collections/top`, `/collections/{key}`, `/collections/{key}/collections`, and `/collections/{key}/items[/top]`. Tags use `/tags`, `/items/{key}/tags`, or `/collections/{key}/tags`. `settings()`, `searches()`, and `deleted(since=...)` use the corresponding library routes. `publications()` uses `/users/{userID}/publications/items`.
+
+`deleted()` returns a dict of deleted keys grouped by object type, not item records. A complete incremental sync needs changed objects **and** deletions, plus `includeTrashed=1` when tracking trash transitions. Save the library version from the completed read sequence, not a later unrelated call; restart/reconcile if versions change during pagination. See [official syncing rules](https://www.zotero.org/support/dev/web_api/v3/syncing). `last_modified_version()` makes its own multi-object read.

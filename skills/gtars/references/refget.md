@@ -1,7 +1,8 @@
 # Refget, sequence digests, stores, and BEDbase
 
-Verified on **2026-07-23** against Python `gtars==0.9.2`,
-`gtars-refget==0.9.1`, and `gtars-cli==0.9.0`.
+Local synthetic FASTA/store tests on **2026-10-01** used Python `gtars==0.10.0`,
+with bundled refget 0.10.0. CLI 0.10.0 and direct Rust refget 0.11.0
+were source reviewed, not compiled or executed.
 
 ## Digest terminology
 
@@ -70,6 +71,7 @@ metadata, was_new = store.add_sequence_collection_from_fasta(
     "reviewed-reference.fa",
     force=False,
     namespaces=["refseq"],
+    collection_alias="local:reference",
 )
 
 store.write_store_to_dir("approved-store")
@@ -91,7 +93,7 @@ unexpected files, output collisions, and unapproved stores.
 Batch import:
 
 ```python
-results = store.add_sequence_collections_from_fastas(
+report = store.add_sequence_collections_from_fastas(
     ["ref-a.fa.gz", "ref-b.fa.gz"],
     file_list=None,
     jobs=1,
@@ -99,6 +101,23 @@ results = store.add_sequence_collections_from_fastas(
     namespaces=["refseq"],
 )
 ```
+
+In 0.10.0 the return is `ImportReport`: iterate `report.collections` for
+`(metadata, was_new)` results. `report.n_collections_new`,
+`report.n_sequences_written`, and `report.n_sequences_deduped` describe this
+import run. `len(report)` is the number of file results. The report itself is
+not a list or iterator. A skipped existing collection may contribute no sequence
+counters if the import short-circuits before reading it.
+
+`store.stats()` instead describes totals and current RAM residency. Its Python
+values are strings: convert counts with `int(...)`. The keys now include
+`n_sequences_in_memory`, `n_collections_in_memory`, and `logical_sequence_bytes`;
+old `*_loaded` names are removed. Logical sequence bytes are encoded data volume,
+not a measured cache-directory size.
+
+`collection_alias="namespace:alias"` applies to the single-FASTA method. An
+invalid syntax raises `ValueError`; alias conflicts require explicit resolution.
+Do not silently overwrite a reference assembly alias.
 
 `fastas` can also accept globs or directories and `jobs=0` means automatic
 concurrency. For controlled runs, enumerate reviewed files explicitly and set a
@@ -115,7 +134,12 @@ one_metadata = store.get_sequence_metadata(sequence_digest)
 collection_metadata = store.get_collection_metadata(collection_digest)
 ```
 
-Data methods:
+`list_collections` returns a dictionary with `results` and `pagination`
+(`page`, `page_size`, `total`); pages are zero-based. Advance the page until the
+collected count reaches `total`. `list_sequences()` returns the full metadata
+list without pagination, so it can still be large.
+
+Data methods (the loop's `consume_bounded` is an application-specific callback):
 
 ```python
 record = store.get_sequence(sequence_digest)
@@ -136,7 +160,7 @@ Substring ranges are 0-based half-open. Validate `0 <= start <= end <= length`.
 `stream_sequence` bounds peak result memory, but downstream accumulation can
 still defeat streaming.
 
-The 0.9.2 runtime also exposes `load_sequence`, `load_collection`,
+The 0.10.0 runtime also exposes `load_sequence`, `load_collection`,
 `load_all_sequences`, and `load_all_collections`. These materialize more data;
 do not call an all-load method without an explicit byte/RAM budget.
 
@@ -151,12 +175,20 @@ remote = RefgetStore.open_remote(
 ```
 
 `open_remote` takes only a cache path and base URL. It fetches remote metadata,
-creates/uses local cache state, and enables persistence by default. In 0.9.2:
+creates/uses local cache state, and enables persistence by default. In 0.10.0:
 
 - `get_substring` can issue remote byte-range reads without downloading the
   whole sequence;
 - `stream_sequence` can stream remote ranges;
 - `load_sequence` is the whole-sequence path and can persist it.
+
+This URL is the base of a **Gtars static store**, not an arbitrary GA4GH
+`/sequence` REST endpoint. Source reads `rgstore.json`, referenced index files,
+`collections/<digest>.rgsi`, and sequence files specified by the store manifest.
+Substring requests use HTTP `Range` over encoded storage bytes, not genomic
+coordinates in the URL; a range response must be HTTP 206. These methods expose
+no auth-header argument. Source review covered this request contract; no public
+remote store was exercised in this audit.
 
 Calling `disable_persistence()` after opening does not undo metadata/cache work
 already performed. There is no constructor parameter for revision, endpoint
@@ -187,7 +219,8 @@ conversion; do not use `load_all_*` reflexively.
 
 ## CLI store build
 
-The only current refget CLI subcommand is local store construction:
+CLI 0.10.0 supports local store construction, export, and writer-lock status.
+The following templates were checked against source, not executed:
 
 ```bash
 gtars refget build reference.fa reference-alt.fa.gz \
@@ -200,8 +233,23 @@ Options:
 - `--file-list/-f PATH`: file of paths/globs/directories;
 - `--output/-o DIR`: required;
 - `--jobs/-j N`: concurrent FASTA files, default `0` (auto);
-- `--raw`: raw instead of default encoded 2-bit storage;
-- `--force`: overwrite existing entries.
+- `--raw`: raw instead of default alphabet-dependent encoded storage;
+- `--force`: overwrite existing entries;
+- `--collection-alias NAMESPACE:ALIAS`: name one input FASTA's collection;
+- `--lock-timeout SECONDS`: bounded wait for writer contention (default 1800).
+
+```bash
+gtars refget lock-status approved-store
+gtars refget export --store approved-store --collection local:reference \
+  --names chr1 --output chr1.fa.gz --line-width 80
+```
+
+Export defaults to the sole collection when `--collection` is omitted and
+otherwise accepts a digest or alias. It loads selected sequences into RAM;
+restrict `--names`, account for sequence bytes, and refuse an existing output.
+The output extension `.gz` enables gzip. `--force-unlock` can break an active
+writer's protection; inspect lock status and confirm the holder is gone before
+using the recovery operation. `--force-alias` replaces conflicting aliases.
 
 There is no current `gtars refget digest` or `verify` CLI matching the old skill.
 Use the Python digest functions, direct Rust API, or a local store build after
@@ -244,7 +292,7 @@ Use Gtars' pinned collection implementation for final seqcol verification.
 
 ## BEDbase and `bbcache`
 
-BEDbase caching is separate from refget. In CLI 0.9.0:
+BEDbase caching is separate from refget. In CLI 0.10.0:
 
 ```text
 gtars bbcache cache-bed
@@ -269,12 +317,22 @@ BEDbase identifier; `cache-bedset` accepts a local directory/list or intended
 BEDbase ID. `rm` deletes files and cache records and can remove member BEDs for a
 BED set.
 
-Important source finding: the v0.9.0 `BBClient.load_bed(id)` delegates a bare ID
+Important source finding: the 0.10.0 release's `BBClient.load_bed(id)` delegates a bare ID
 to `RegionSet::try_from`, while the core source has the bare-BEDbase-ID fallback
 commented out. Therefore, ID-only `cache-bed`/BED-set downloads may fail in this
 release even though the public docs claim support. Do not work around this with
 guessed URLs. Verify the installed help/behavior on a non-sensitive approved
 test, or resolve an explicit official file URL through reviewed BEDbase metadata.
+
+The `gtars-bbcache 0.5.4` source requests
+`GET /v1/bedset/{bedset_id}/bedfiles`, without authentication headers, query
+parameters, or a request body; it extracts string IDs from JSON `results[].id`.
+It neither checks pagination nor follows another page, and malformed member
+records are filtered out. Thus a returned list must not be assumed complete.
+The live OpenAPI probe was blocked (HTTP 403); current server pagination and
+response compatibility were not independently exercised. Consult the
+[official API guide](https://docs.bedbase.org/bedbase/user/bedbase-api-user-guide/)
+for record/object distinctions and resolve explicit file URLs before local use.
 
 The bbcache source does not expose an expected SHA-256/revision parameter. Treat
 downloads as untrusted:
@@ -288,31 +346,36 @@ downloads as untrusted:
 
 ## Rust pin
 
-For the latest direct refget component:
+For the newer direct Rust component (source-reviewed; not compiled here):
 
 ```toml
 [dependencies]
-gtars-refget = "=0.9.1"
+gtars-refget = "=0.11.0"
 ```
 
-For the 0.9.0 wrapper release set:
+For the 0.10.0 wrapper release set:
 
 ```toml
 [dependencies]
-gtars = { version = "=0.9.0", default-features = false, features = ["refget"] }
+gtars = { version = "=0.10.0", default-features = false, features = ["refget"] }
 ```
 
-Do not assume these expose identical refget patch behavior.
+These are different minor versions. In direct refget 0.11.0,
+`list_sequences()` returns `Result<Vec<_>>`; handle its error. It also adds Zstd
+storage and changes loading behavior. Do not substitute the direct 0.11 API for
+the Python 0.10 wheel contract. The wrapper uses compatible dependency ranges;
+retain Cargo.lock to record actual component versions.
 
-## Official sources (accessed 2026-07-23)
+## Official sources (accessed 2026-10-01)
 
-- [Python refget 0.9.2 stubs](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/py_src/gtars/refget/__init__.pyi)
-- [Python 0.9.2 release](https://github.com/databio/gtars/releases/tag/gtars-python-v0.9.2)
-- [gtars-refget 0.9.1 crate](https://crates.io/crates/gtars-refget)
+- [Direct refget 0.11.0 release](https://github.com/databio/gtars/releases/tag/gtars-refget-v0.11.0)
+- [Python refget 0.10.0 stubs](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/py_src/gtars/refget/__init__.pyi)
+- [Python 0.10.0 release](https://github.com/databio/gtars/releases/tag/gtars-python-v0.10.0)
+- [gtars-refget 0.11.0 crate](https://crates.io/crates/gtars-refget)
 - [Gtars refget module guide](https://docs.bedbase.org/gtars/refget/)
 - [Gtars Python refget API](https://docs.bedbase.org/gtars/python/refget-api/)
-- [CLI refget parser](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/src/refget/cli.rs)
-- [BEDbase cache source](https://github.com/databio/gtars/tree/v0.9.0/gtars-bbcache)
+- [CLI refget parser](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/src/refget/cli.rs)
+- [BEDbase cache source](https://github.com/databio/gtars/tree/gtars-v0.10.0/gtars-bbcache)
 - [BEDbase caching guide](https://docs.bedbase.org/gtars/bbcache/)
 - [GA4GH refget sequences v2](https://ga4gh.github.io/refget/sequences)
 - [GA4GH refget sequence collections](https://ga4gh.github.io/refget/seqcols/)

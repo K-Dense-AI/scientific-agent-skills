@@ -1,19 +1,16 @@
 import math
 from pathlib import Path
 
+import yaml
+
 
 def _parse_frontmatter(content: str) -> dict:
-    if not content.startswith("---"):
+    if not content.startswith("---\n"):
         return {}
     _, _, rest = content.partition("---\n")
     block, _, _ = rest.partition("\n---")
-    out = {}
-    for line in block.splitlines():
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        out[key.strip()] = value.strip()
-    return out
+    parsed = yaml.safe_load(block)
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def load_skill_descriptions(skills_dir):
@@ -21,7 +18,7 @@ def load_skill_descriptions(skills_dir):
     skills = []
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
         fm = _parse_frontmatter(skill_md.read_text())
-        if "name" in fm and "description" in fm:
+        if all(isinstance(fm.get(key), str) and fm[key].strip() for key in ("name", "description")):
             skills.append({"name": fm["name"], "description": fm["description"]})
     return skills
 

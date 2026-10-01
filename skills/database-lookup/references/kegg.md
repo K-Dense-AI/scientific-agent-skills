@@ -75,4 +75,6 @@ https://rest.kegg.jp/ddi/D00564+D00110
 Tab-delimited text for list/find/link/conv. Flat-file text for get. **No JSON support.**
 
 ## Rate Limits
-No published limits. Keep to a few requests per second. Batch up to 10 IDs per `/get` with `+`. May return HTTP 403 if too many requests.
+KEGG requests at most 3 calls per second; pace below that and honor failures. Batch up to 10 IDs per `/get` with `+`. May return HTTP 403 if too many requests.
+
+KEGG `conv/pubchem/...` maps to PubChem **Substance IDs (SIDs)**, not Compound IDs (CIDs). Resolve SID to CID through PubChem before joining compound properties. Official contract: https://www.kegg.jp/kegg/rest/keggapi.html

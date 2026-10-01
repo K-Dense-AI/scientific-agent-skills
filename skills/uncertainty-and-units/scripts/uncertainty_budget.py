@@ -91,7 +91,9 @@ def normalize_component(raw: Any, index: int, measurand: float | None) -> dict[s
     if value < 0:
         raise CliError(f"{label}: value must not be negative")
 
-    relative = bool(raw.get("relative", False))
+    relative = raw.get("relative", False)
+    if not isinstance(relative, bool):
+        raise CliError(f"{label}: relative must be a JSON boolean")
     if relative:
         if measurand is None:
             raise CliError(
@@ -101,7 +103,7 @@ def normalize_component(raw: Any, index: int, measurand: float | None) -> dict[s
 
     if distribution == "expanded":
         factor = _common.as_finite(
-            raw.get("coverage_factor", 2.0), label=f"{label}.coverage_factor"
+            raw.get("coverage_factor"), label=f"{label}.coverage_factor"
         )
         if factor <= 0:
             raise CliError(f"{label}: coverage_factor must be greater than zero")
@@ -119,6 +121,8 @@ def normalize_component(raw: Any, index: int, measurand: float | None) -> dict[s
     )
     dof = _common.as_degrees_of_freedom(raw.get("dof"), label=f"{label}.dof")
     standard = value / divisor
+    if distribution == "exact" and value != 0:
+        raise CliError(f"{label}: an exact component must have zero uncertainty")
     note = raw.get("note")
     if note is not None and (not isinstance(note, str) or len(note) > 500):
         raise CliError(f"{label}: note must be a string under 500 chars")
@@ -140,6 +144,8 @@ def normalize_component(raw: Any, index: int, measurand: float | None) -> dict[s
 def build_budget(spec: dict[str, Any], coverage_override: float | None) -> dict[str, Any]:
     """Combine components into u_c, effective degrees of freedom, and U."""
 
+    if spec.get("correlations") or spec.get("covariance") or spec.get("covariance_matrix"):
+        raise CliError("this budget combines independent components only; use a covariance-aware model")
     raw_components = spec.get("components")
     if not isinstance(raw_components, list) or not raw_components:
         raise CliError("the spec must contain a non-empty 'components' list")
@@ -206,6 +212,10 @@ def collect_warnings(budget: dict[str, Any]) -> list[str]:
     """Flag budget defects that change how the result should be reported."""
 
     warnings: list[str] = []
+    warnings.append(
+        "the normal/Student-t coverage approximation requires a suitable output "
+        "distribution; this budget does not verify coverage or measurement-model validity"
+    )
     components = budget["components"]
     for item in components:
         if item["type"] == "A" and not math.isfinite(item["dof"]):
@@ -238,7 +248,7 @@ def collect_warnings(budget: dict[str, Any]) -> list[str]:
             warnings.append(
                 f"{dominant['label']} contributes "
                 f"{dominant['variance_fraction'] * 100:.1f}% of the variance; "
-                "improving any other component cannot change the result"
+                "improving other components has limited effect on the result"
             )
         largest = max(abs(item["contribution"]) for item in components)
         negligible = [
@@ -248,8 +258,8 @@ def collect_warnings(budget: dict[str, Any]) -> list[str]:
         ]
         if negligible:
             warnings.append(
-                "these components are below one third of the largest and change u_c "
-                f"by under 6%: {', '.join(negligible)}"
+                "each of these components is below one third of the largest; "
+                f"their aggregate effect may still matter: {', '.join(negligible)}"
             )
     return warnings
 

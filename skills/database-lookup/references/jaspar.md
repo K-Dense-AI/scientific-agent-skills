@@ -19,7 +19,7 @@ No auth required.
 | `/matrix/{id}/?format=meme` | Profile in MEME format |
 | `/matrix/{id}/?format=transfac` | Profile in TRANSFAC format |
 | `/taxon/` | List taxonomic groups |
-| `/collection/` | List collections (CORE, CNE, etc.) |
+| `/collections/` | List collections (CORE, CNE, etc.) |
 
 ## Filter Parameters
 - `tax_id` — NCBI taxonomy ID (9606 for human)

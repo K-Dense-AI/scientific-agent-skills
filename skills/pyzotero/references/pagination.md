@@ -20,7 +20,7 @@ all_col = zot.everything(zot.collection_items('COLKEY'))
 all_results = zot.everything(zot.items(q='machine learning', itemType='journalArticle'))
 ```
 
-`everything()` works with all Read API calls that can return multiple items.
+Use `everything()` with list-returning endpoints (items, collections, tags, searches) and BibTeX databases. Do not pass dict responses (`format=versions`, `deleted`, `settings`) or bytes (`format=keys`): their iteration semantics differ.
 
 ## follow() — Sequential Pagination
 
@@ -31,7 +31,7 @@ second_batch = zot.follow()   # next 25 items
 third_batch = zot.follow()    # next 25 items
 ```
 
-**Warning**: `follow()` raises `StopIteration` when no more items are available. Not valid after single-item calls like `zot.item()`.
+`follow()` returns `None` when no next-page link exists. `iterfollow()` and `makeiter()` end by raising `StopIteration` through normal generator exhaustion. Do not interleave other reads on the same client while paging: they replace its pagination links.
 
 ## iterfollow() — Generator
 
@@ -51,7 +51,7 @@ third = next(lazy)
 # Create a generator directly from a method call
 gen = zot.makeiter(zot.top(limit=25))
 
-page1 = next(gen)  # first 25 items
+page1 = next(gen)  # first 25 items, fetched AGAIN by makeiter()
 page2 = next(gen)  # next 25 items
 # Raises StopIteration when exhausted
 ```
@@ -75,5 +75,5 @@ while True:
 ## Performance Notes
 
 - `everything()` makes multiple API calls sequentially; large libraries may take time.
-- For libraries with thousands of items, use `since=version` to retrieve only changed items (useful for sync workflows).
-- All of `follow()`, `everything()`, and `makeiter()` are only valid for methods that return multiple items.
+- For incremental synchronization, combine `since=version` with `deleted(since=version)` and account for changes during paging; see [read-api.md](read-api.md).
+- The raw local API has no default limit, but Pyzotero still injects 100 unless you pass `limit=None`. Local reads can use `zot.items(limit=None)`; remote JSON reads remain paginated.

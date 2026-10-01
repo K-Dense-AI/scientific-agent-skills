@@ -1,5 +1,7 @@
 # Dask Futures
 
+Reviewed with Dask/distributed 2026.8.0. File paths, deployment settings, and undefined application functions are illustrative; executed local checks and current official sources are in [review.md](review.md).
+
 ## Overview
 
 Dask futures extend Python's `concurrent.futures` interface, enabling immediate (non-lazy) task execution. Unlike delayed computations (used in DataFrames, Arrays, and Bags), futures provide more flexibility in situations where computations may evolve over time or require dynamic workflow construction.
@@ -7,7 +9,7 @@ Dask futures extend Python's `concurrent.futures` interface, enabling immediate 
 ## Core Concept
 
 Futures represent real-time task execution:
-- Tasks execute immediately when submitted (not lazy)
+- Tasks are scheduled immediately when submitted; execution waits for dependencies and resources
 - Each future represents a remote computation result
 - Automatic dependency tracking between futures
 - Enables dynamic, evolving workflows
@@ -16,7 +18,7 @@ Futures represent real-time task execution:
 ## Key Capabilities
 
 ### Real-Time Execution
-- Tasks run immediately when submitted
+- Submission schedules work without a separate compute call
 - No need for explicit `.compute()` call
 - Get results with `.result()` method
 
@@ -117,7 +119,8 @@ future = client.submit(expensive_function, arg)
 print(future.done())  # False or True
 
 # Check status
-print(future.status)  # 'pending', 'running', 'finished', or 'error'
+print(future.status)  # e.g. pending, finished, error, cancelled, or lost
+# Use client.processing() for tasks executing on workers.
 ```
 
 ### Non-Blocking Result Retrieval
@@ -184,12 +187,12 @@ Pre-scatter important data to avoid repeated transfers:
 
 ```python
 # Upload data to cluster once
-large_dataset = client.scatter(big_data)  # Returns future
+[large_dataset] = client.scatter([big_data])  # One future, even for a list/dict
 
 # Use scattered data in multiple tasks
 futures = [client.submit(process, large_dataset, i) for i in range(100)]
 
-# Each task uses the same scattered data without re-transfer
+# Dask transfers dependencies to workers that need them; scatter is not zero-copy.
 results = client.gather(futures)
 ```
 
@@ -216,10 +219,11 @@ def log_to_database(data):
     database.write(data)
 
 # Submit without keeping reference
-future = client.submit(log_to_database, data)
+future = client.submit(log_to_database, data, pure=False)
 fire_and_forget(future)
 
-# Dask won't abandon this computation even without active future reference
+# Retains interest after this Future is released; this is not exactly-once delivery.
+# External writes must be idempotent because tasks can be re-executed.
 ```
 
 ## Performance Characteristics
@@ -231,7 +235,7 @@ fire_and_forget(future)
 
 ### Worker-to-Worker Communication
 - Direct worker-to-worker data transfer
-- Roundtrip latency: ~1ms
+- Roundtrip latency depends on hardware, serialization, and network
 - Efficient for task dependencies
 
 ### Memory Management
@@ -268,10 +272,14 @@ def consumer():
     return results
 
 # Submit tasks
-client.submit(producer)
-result_future = client.submit(consumer)
+producer_future = client.submit(producer, pure=False)
+result_future = client.submit(consumer, pure=False)
 results = result_future.result()
+producer_future.result()
+queue.close()
 ```
+
+Retain both futures and provide at least two runnable worker threads for blocking producer/consumer or event examples. Use finite timeouts in production; a blocked waiter can starve its setter. Queues send small messages or Futures through the scheduler.
 
 **Locks**:
 ```python
@@ -285,9 +293,12 @@ def critical_section():
         shared_resource.update()
 ```
 
+Dask locks use leases: timeout/worker failures can permit overlapping holders; disabling lease expiry can deadlock. Use a transactional external service for durable write correctness.
+
 **Events**:
 ```python
 from dask.distributed import Event
+import time
 
 event = Event()
 
@@ -300,8 +311,8 @@ def setter():
     event.set()
 
 # Start both tasks
-wait_future = client.submit(waiter)
-set_future = client.submit(setter)
+wait_future = client.submit(waiter, pure=False)
+set_future = client.submit(setter, pure=False)
 
 result = wait_future.result()  # Waits for setter to complete
 ```
@@ -319,13 +330,13 @@ var.set(42)
 def reader():
     return var.get()
 
-future = client.submit(reader)
+future = client.submit(reader, pure=False)
 print(future.result())  # 42
 ```
 
 ## Actors
 
-For stateful, rapidly-changing workflows, actors enable worker-to-worker roundtrip latency around 1ms while bypassing scheduler coordination.
+For stateful, rapidly-changing workflows, actors bypass scheduler coordination for method calls; latency is deployment-dependent.
 
 ### Creating Actors
 ```python
@@ -348,11 +359,13 @@ class Counter:
 counter = client.submit(Counter, actor=True).result()
 
 # Call methods
-future1 = counter.increment()
-future2 = counter.increment()
+counter.increment().result()
+counter.increment().result()
 result = counter.get_count().result()
 print(result)  # 2
 ```
+
+Actor state has no automatic reconstruction after its worker is lost. Wait for each state mutation when later calls depend on its completion.
 
 ### Actor Use Cases
 - Stateful services (databases, caches)
@@ -382,21 +395,21 @@ results = client.gather(futures)
 
 ### Dynamic Task Submission
 ```python
-def recursive_compute(data, depth):
-    if depth == 0:
-        return process(data)
+from dask.distributed import worker_client
 
-    # Split and recurse
-    left, right = split(data)
-    left_future = client.submit(recursive_compute, left, depth - 1)
-    right_future = client.submit(recursive_compute, right, depth - 1)
+def recursive_sum(values):
+    if len(values) <= 2:
+        return sum(values)
+    midpoint = len(values) // 2
+    # worker_client releases this task's worker slot while awaiting children.
+    # Capturing a driver-side Client or simply blocking all workers can deadlock.
+    with worker_client() as nested:
+        left = nested.submit(recursive_sum, values[:midpoint])
+        right = nested.submit(recursive_sum, values[midpoint:])
+        return sum(nested.gather([left, right]))
 
-    # Combine results
-    return combine(left_future.result(), right_future.result())
-
-# Start computation
-result_future = client.submit(recursive_compute, initial_data, 5)
-result = result_future.result()
+result = client.submit(recursive_sum, list(range(16))).result(timeout=30)
+assert result == 120
 ```
 
 ### Parameter Sweep
@@ -439,7 +452,7 @@ result = agg_future.result()
 ### Iterative Algorithm
 ```python
 # Initialize
-state = client.scatter(initial_state)
+[state] = client.scatter([initial_state])
 
 # Iterate
 for iteration in range(num_iterations):
@@ -460,7 +473,7 @@ final_state = state.result()
 ### 1. Pre-scatter Large Data
 ```python
 # Upload once, use many times
-large_data = client.scatter(big_dataset)
+[large_data] = client.scatter([big_dataset])
 futures = [client.submit(process, large_data, i) for i in range(100)]
 ```
 

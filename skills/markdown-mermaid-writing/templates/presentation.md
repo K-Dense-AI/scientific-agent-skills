@@ -2,7 +2,7 @@
 
 # Presentation / Briefing Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
 **Use this template for:** Slide-deck-style documents, research presentations, briefings, lectures, walkthroughs, or any content that would traditionally be a PowerPoint. Designed to read well as a standalone document AND to serve as speaker-ready presentation notes.
 
@@ -16,8 +16,8 @@
 2. Replace all `[bracketed placeholders]` with your content
 3. Delete sections that don't apply (but keep the core flow)
 4. Add/remove content topics (H3s under 📚 Content) as needed
-5. Follow the [Markdown Style Guide](../markdown_style_guide.md) for all formatting
-6. Add [Mermaid diagrams](../mermaid_style_guide.md) wherever a concept benefits from a visual
+5. Follow the [Markdown Style Guide](../references/markdown_style_guide.md) for all formatting
+6. Add [Mermaid diagrams](../references/mermaid_style_guide.md) wherever a concept benefits from a visual
 
 ---
 
@@ -38,7 +38,9 @@ The presentation follows a 6-section flow. Each section has an H2 with one emoji
 
 ## The Template
 
-Everything below the line is the template. Copy from here:
+Everything below the line is the template. Copy from here; commands, API routes,
+versions, thresholds, and numerical values are illustrative placeholders. Verify them
+against the actual project before publishing. Follow its existing tracker and PR conventions.
 
 ---
 

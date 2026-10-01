@@ -1,5 +1,7 @@
 # Text Generation
 
+Targets Transformers 5.18.0. Hub examples are illustrative; greedy, sampling, beam search, chat dictionaries, streaming, and static cache are tested with tiny local models. See [review evidence](review.md).
+
 ## Overview
 
 Generate text with language models using the `generate()` method. Control output quality and style through generation strategies and parameters.
@@ -11,11 +13,11 @@ For quick prototyping, the [Pipeline API](pipelines.md) wraps tokenization and `
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("gpt2")
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 # Tokenize input
-inputs = tokenizer("Once upon a time", return_tensors="pt")
+inputs = tokenizer("Once upon a time", return_tensors="pt").to(model.device)
 
 # Generate
 outputs = model.generate(**inputs, max_new_tokens=50)
@@ -35,11 +37,12 @@ Select highest probability token at each step (deterministic):
 outputs = model.generate(
     **inputs,
     max_new_tokens=50,
-    do_sample=False  # Greedy decoding (default)
+    do_sample=False,  # Explicitly override any checkpoint sampling default
+    num_beams=1
 )
 ```
 
-**Use for**: Factual text, translations, where determinism is needed.
+**Use for**: A non-sampling baseline. Greedy decoding does not make content factual, and exact reproducibility also depends on kernels, hardware, versions, and seeds.
 
 ### Sampling
 
@@ -67,26 +70,16 @@ outputs = model.generate(
     **inputs,
     max_new_tokens=50,
     num_beams=5,
+    do_sample=False,
     early_stopping=True
 )
 ```
 
-**Use for**: Translations, summarization, where quality is critical.
+**Use for**: Comparing candidate seq2seq translations or summaries. More beams do not guarantee better factuality or task quality.
 
-### Contrastive Search
+### Former built-in decoding strategies
 
-Balance quality and diversity:
-
-```python
-outputs = model.generate(
-    **inputs,
-    max_new_tokens=50,
-    penalty_alpha=0.6,
-    top_k=4
-)
-```
-
-**Use for**: Long-form generation, reducing repetition.
+Contrastive and constrained beam search moved to Hub custom-generation repositories. Legacy `penalty_alpha` / `force_words_ids` settings are not a self-contained offline implementation. Prefer the built-in greedy/sampling/beam paths unless you intentionally review the external implementation and dependencies, pin its code revision, and authorize custom code. See the [current generation strategy guide](https://huggingface.co/docs/transformers/en/generation_strategies); this skill does not execute Hub custom-generation code.
 
 ## Key Parameters
 
@@ -97,7 +90,7 @@ outputs = model.generate(
 max_new_tokens=100  # Generate up to 100 new tokens
 ```
 
-**max_length**: Maximum total length (input + output)
+**max_length**: Total decoder sequence length (prompt + output for decoder-only models; decoder-side length for encoder-decoder models). `max_new_tokens` takes precedence.
 ```python
 max_length=512  # Total sequence length
 ```
@@ -182,7 +175,8 @@ outputs = model.generate(
     **inputs,
     max_new_tokens=50,
     num_beams=5,
-    num_return_sequences=3  # Return 3 different sequences
+    do_sample=False,
+    num_return_sequences=3  # Must not exceed num_beams here; uniqueness is not guaranteed
 )
 ```
 
@@ -204,55 +198,31 @@ Generate for multiple prompts:
 
 ```python
 prompts = ["Hello, my name is", "Once upon a time"]
-inputs = tokenizer(prompts, return_tensors="pt", padding=True)
+# Decoder-only batch generation uses left padding; this is not a training rule.
+tokenizer.padding_side = "left"
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-outputs = model.generate(**inputs, max_new_tokens=50)
+outputs = model.generate(**inputs, max_new_tokens=50, pad_token_id=tokenizer.pad_token_id)
 
 for i, output in enumerate(outputs):
-    text = tokenizer.decode(output, skip_special_tokens=True)
+    text = tokenizer.decode(output[inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     print(f"Prompt {i}: {text}\n")
 ```
 
 ### Streaming Generation
 
-Stream tokens as generated:
+`TextStreamer` writes decoded chunks synchronously:
 
 ```python
-from transformers import TextIteratorStreamer
-from threading import Thread
+from transformers import TextStreamer
 
-streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True)
-
-generation_kwargs = dict(
-    inputs,
-    streamer=streamer,
-    max_new_tokens=100
-)
-
-thread = Thread(target=model.generate, kwargs=generation_kwargs)
-thread.start()
-
-for text in streamer:
-    print(text, end="", flush=True)
-
-thread.join()
+streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+outputs = model.generate(**inputs, streamer=streamer, max_new_tokens=32, num_beams=1)
 ```
 
-### Constrained Generation
-
-Force specific token sequences:
-
-```python
-# Force generation to start with specific tokens
-force_words = ["Paris", "France"]
-force_words_ids = [tokenizer.encode(word, add_special_tokens=False) for word in force_words]
-
-outputs = model.generate(
-    **inputs,
-    force_words_ids=force_words_ids,
-    num_beams=5
-)
-```
+For UI iteration, `TextIteratorStreamer(tokenizer, timeout=30.0, skip_prompt=True)` is consumed concurrently with `generate()` in a worker thread. A timeout raises `queue.Empty`; capture and propagate the worker exception, join/clean up the worker, and do not treat timeout as a completed answer. Streamers do not support beam search. Chunk boundaries are not guaranteed to equal token boundaries.
 
 ### Guidance and Control
 
@@ -295,7 +265,7 @@ outputs = model.generate(**inputs, generation_config=generation_config)
 
 ### Chat Models
 
-Use chat templates:
+Use a checkpoint with a saved chat template (plain GPT-2 does not provide one). In v5 `apply_chat_template(..., tokenize=True)` returns `BatchEncoding`; unpack it and keep its attention mask:
 
 ```python
 messages = [
@@ -310,8 +280,8 @@ inputs = tokenizer.apply_chat_template(
     return_tensors="pt"
 ).to(model.device)
 
-outputs = model.generate(inputs, max_new_tokens=100)
-response = tokenizer.decode(outputs[0][inputs.shape[-1]:], skip_special_tokens=True)
+outputs = model.generate(**inputs, max_new_tokens=100)
+response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
 ```
 
 ### Encoder-Decoder Models
@@ -321,12 +291,12 @@ For T5, BART, etc.:
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
-tokenizer = AutoTokenizer.from_pretrained("t5-small")
+model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
+tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
 
 # T5 uses task prefixes
 input_text = "translate English to French: Hello, how are you?"
-inputs = tokenizer(input_text, return_tensors="pt")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=50)
 translation = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -348,12 +318,12 @@ outputs = model.generate(
 
 ### Static Cache
 
-For fixed sequence lengths:
+For a supported architecture, allocate capacity for the full decoder sequence. Cache memory is allocated lazily; old `max_batch_size` and `device` kwargs are not required:
 
 ```python
 from transformers import StaticCache
 
-cache = StaticCache(model.config, max_batch_size=1, max_cache_len=1024, device="cuda")
+cache = StaticCache(config=model.config, max_cache_len=inputs["input_ids"].shape[1] + 100)
 
 outputs = model.generate(
     **inputs,
@@ -389,7 +359,7 @@ outputs = model.generate(
 )
 ```
 
-### Factual Generation
+### Non-sampling Baseline
 
 ```python
 outputs = model.generate(
@@ -415,12 +385,15 @@ outputs = model.generate(
 
 ### Long-Form Generation
 
+Check prompt length plus token budget against the model context window; larger output budgets consume cache memory.
+
 ```python
 outputs = model.generate(
     **inputs,
     max_new_tokens=1000,
-    penalty_alpha=0.6,  # Contrastive search
-    top_k=4,
+    do_sample=True,
+    temperature=0.8,
+    top_p=0.95,
     repetition_penalty=1.2
 )
 ```
@@ -432,6 +405,7 @@ outputs = model.generate(
     **inputs,
     max_new_tokens=100,
     num_beams=5,
+    do_sample=False,
     early_stopping=True,
     no_repeat_ngram_size=3
 )
@@ -442,7 +416,7 @@ outputs = model.generate(
 **Repetitive output:**
 - Increase repetition_penalty (1.2-1.5)
 - Use no_repeat_ngram_size (2-3)
-- Try contrastive search
+- Inspect the prompt/template and repeated-token distribution
 - Lower temperature
 
 **Poor quality:**
@@ -464,10 +438,10 @@ outputs = model.generate(
 ## Best Practices
 
 1. **Start with defaults**: Then tune based on output
-2. **Use appropriate strategy**: Greedy for factual, sampling for creative
+2. **Evaluate the strategy**: Use held-out task metrics and check factual claims against evidence
 3. **Set max_new_tokens**: Avoid unnecessarily long generation
 4. **Enable caching**: For faster sequential generation
 5. **Tune temperature**: Most impactful parameter for sampling
-6. **Use beam search carefully**: Slower but higher quality
+6. **Use beam search carefully**: More memory/compute; benchmark whether it improves task quality
 7. **Test different seeds**: For reproducibility with sampling
 8. **Monitor memory**: Large beams use significant memory

@@ -117,8 +117,8 @@ def main() -> None:
         raise CliError("select at least one HRV domain")
     if not 1 <= args.max_rows <= MAX_ROWS:
         raise CliError(f"--max-rows must be between 1 and {MAX_ROWS}")
-    if not -(2**31) <= args.seed < 2**31:
-        raise CliError("--seed must be a signed 32-bit integer")
+    if not 0 <= args.seed < 2**32:
+        raise CliError("--seed must be an unsigned 32-bit integer")
 
     import neurokit2 as nk
     import numpy as np
@@ -167,7 +167,8 @@ def main() -> None:
             raise CliError(f"synthetic row count must be between 1 and {args.max_rows}")
         try:
             ecg = nk.ecg_simulate(
-                duration=duration,
+                duration=row_count / sampling_rate,
+                length=row_count,
                 sampling_rate=int(sampling_rate),
                 heart_rate=heart_rate,
                 random_state=args.seed,
@@ -192,6 +193,7 @@ def main() -> None:
     if peaks is None or len(peaks) < 3:
         raise CliError("fewer than three R-peaks were detected")
     beat_count = len(peaks)
+    peak_span_s = float(peaks[-1] - peaks[0]) / sampling_rate
 
     warnings: list[str] = []
     hrv: dict[str, dict[str, float | int | None]] = {}
@@ -205,25 +207,34 @@ def main() -> None:
                 )
             except (TypeError, ValueError, RuntimeError, ZeroDivisionError) as exc:
                 warnings.append(f"time-domain HRV failed: {exc}")
-        if duration_s < 300:
+        if peak_span_s < 300:
             warnings.append(
                 "time-domain HRV is shorter than the conventional 5-minute "
                 "short-term recording; metric-specific validation is required"
             )
     if "frequency" in domains:
-        if duration_s < 120 or beat_count < 50:
+        if peak_span_s < 120 or beat_count < 50:
             warnings.append(
-                "frequency-domain HRV skipped: require at least 120 seconds and "
+                "frequency-domain HRV skipped: require at least 120 seconds between "
+                "first and last corrected peaks and "
                 "50 detected beats in this conservative CLI"
             )
         else:
             try:
                 hrv["frequency"] = _row_to_json(
-                    nk.hrv_frequency(info, sampling_rate=sampling_rate)
+                    nk.hrv_frequency(
+                        info, sampling_rate=sampling_rate,
+                        psd_method="welch", normalize=False, interpolation_rate=4,
+                    )
                 )
             except (TypeError, ValueError, RuntimeError, ZeroDivisionError) as exc:
                 warnings.append(f"frequency-domain HRV failed: {exc}")
-            if duration_s < 300:
+            warnings.append(
+                "ULF is not validated by this bounded pipeline; VLF interpretation "
+                "from short records is uncertain. Frequency band powers use "
+                "normalize=False (ms^2), not maximum-PSD normalization."
+            )
+            if peak_span_s < 300:
                 warnings.append(
                     "frequency-domain HRV is below the conventional 5-minute "
                     "short-term window; do not interpret VLF/ULF and justify bands"
@@ -264,8 +275,16 @@ def main() -> None:
         },
         "detected_r_peaks": beat_count,
         "duration_s": duration_s,
+        "hrv_peak_span_s": peak_span_s,
+        "hrv_interval_validity": "not established by automatic peak correction",
         "hrv": hrv,
+        "hrv_frequency_settings": {
+            "psd_method": "welch",
+            "normalize": False,
+            "interpolation_rate_hz": 4,
+        } if "frequency" in domains else None,
         "hrv_requested_domains": sorted(domains),
+        "ecg_method": args.method,
         "neurokit2_version": installed,
         "output_schema_observed": {
             "info_keys": sorted(str(key) for key in info),

@@ -1,441 +1,217 @@
 #!/usr/bin/env python3
+"""Fine-tune explicit Hugging Face or compatible DeepChem GROVER checkpoints.
+
+HF examples support one fully observed, unweighted binary or regression task.
+GROVER requires a local DeepChem component checkpoint and matching architecture.
+No pretrained weights are implied by a model output directory.
 """
-Transfer Learning Script for DeepChem
-
-Use pretrained models (ChemBERTa, GROVER, MolFormer) for molecular property prediction
-with transfer learning. Particularly useful for small datasets.
-
-Usage:
-    python transfer_learning.py --model chemberta --data my_data.csv --target activity
-    python transfer_learning.py --model grover --dataset bbbp
-"""
-
 import argparse
-import deepchem as dc
+import json
+import re
 import sys
+from pathlib import Path
 
+import deepchem as dc
+import numpy as np
+from _common import load_csv, validate_splits, evaluate_splits
+from graph_neural_network import MOLNET_DATASETS, molnet_loader
 
 PRETRAINED_MODELS = {
     'chemberta': {
         'name': 'ChemBERTa',
-        'description': 'BERT pretrained on 77M molecules from ZINC15',
-        'model_id': 'seyonec/ChemBERTa-zinc-base-v1'
+        'description': 'RoBERTa pretrained on 100k ZINC SMILES (model card)',
+        'model_id': 'seyonec/ChemBERTa-zinc-base-v1',
     },
     'grover': {
         'name': 'GROVER',
-        'description': 'Graph transformer pretrained on 10M molecules',
-        'model_id': None  # GROVER uses its own loading mechanism
+        'description': 'Transfer a matching DeepChem GROVER embedding checkpoint',
+        'model_id': None,
     },
     'molformer': {
-        'name': 'MolFormer',
-        'description': 'Transformer pretrained on molecular structures',
-        'model_id': 'ibm/MoLFormer-XL-both-10pct'
-    }
+        'name': 'MoLFormer',
+        'description': 'MoLFormer-XL pretrained on 10% ZINC plus 10% PubChem',
+        'model_id': 'ibm-research/MoLFormer-XL-both-10pct',
+    },
 }
 
 
-def train_chemberta(train_dataset, valid_dataset, test_dataset, task_type='classification', n_tasks=1, n_epochs=10):
-    """
-    Fine-tune ChemBERTa on a dataset.
-
-    Args:
-        train_dataset: Training dataset
-        valid_dataset: Validation dataset
-        test_dataset: Test dataset
-        task_type: 'classification' or 'regression'
-        n_tasks: Number of prediction tasks
-        n_epochs: Number of fine-tuning epochs
-
-    Returns:
-        Trained model and evaluation results
-    """
-    print("=" * 70)
-    print("Fine-tuning ChemBERTa")
-    print("=" * 70)
-    print("\nChemBERTa is a BERT model pretrained on 77M molecules from ZINC15.")
-    print("It uses SMILES strings as input and has learned rich molecular")
-    print("representations that transfer well to downstream tasks.")
-
-    print(f"\nLoading pretrained ChemBERTa model...")
-    model = dc.models.HuggingFaceModel(
-        model=PRETRAINED_MODELS['chemberta']['model_id'],
-        task=task_type,
-        n_tasks=n_tasks,
-        batch_size=32,
-        learning_rate=2e-5  # Lower LR for fine-tuning
-    )
-
-    print(f"\nFine-tuning for {n_epochs} epochs...")
-    print("(This may take a while on the first run as the model is downloaded)")
-    model.fit(train_dataset, nb_epoch=n_epochs)
-    print("Fine-tuning complete!")
-
-    # Evaluate
-    print("\n" + "=" * 70)
-    print("Model Evaluation")
-    print("=" * 70)
-
-    if task_type == 'classification':
-        metrics = [
-            dc.metrics.Metric(dc.metrics.roc_auc_score, name='ROC-AUC'),
-            dc.metrics.Metric(dc.metrics.accuracy_score, name='Accuracy'),
-        ]
-    else:
-        metrics = [
-            dc.metrics.Metric(dc.metrics.r2_score, name='R²'),
-            dc.metrics.Metric(dc.metrics.mean_absolute_error, name='MAE'),
-        ]
-
-    results = {}
-    for name, dataset in [('Train', train_dataset), ('Valid', valid_dataset), ('Test', test_dataset)]:
-        print(f"\n{name} Set:")
-        scores = model.evaluate(dataset, metrics)
-        results[name] = scores
-        for metric_name, score in scores.items():
-            print(f"  {metric_name}: {score:.4f}")
-
-    return model, results
-
-
-def train_grover(train_dataset, test_dataset, task_type='classification', n_tasks=1, n_epochs=20):
-    """
-    Fine-tune GROVER on a dataset.
-
-    Args:
-        train_dataset: Training dataset
-        test_dataset: Test dataset
-        task_type: 'classification' or 'regression'
-        n_tasks: Number of prediction tasks
-        n_epochs: Number of fine-tuning epochs
-
-    Returns:
-        Trained model and evaluation results
-    """
-    print("=" * 70)
-    print("Fine-tuning GROVER")
-    print("=" * 70)
-    print("\nGROVER is a graph transformer pretrained on 10M molecules using")
-    print("self-supervised learning. It learns both node and graph-level")
-    print("representations through masked atom/bond prediction tasks.")
-
-    print(f"\nCreating GROVER model...")
-    model = dc.models.GroverModel(
-        task=task_type,
-        n_tasks=n_tasks,
-        model_dir='./grover_pretrained'
-    )
-
-    print(f"\nFine-tuning for {n_epochs} epochs...")
-    model.fit(train_dataset, nb_epoch=n_epochs)
-    print("Fine-tuning complete!")
-
-    # Evaluate
-    print("\n" + "=" * 70)
-    print("Model Evaluation")
-    print("=" * 70)
-
-    if task_type == 'classification':
-        metrics = [
-            dc.metrics.Metric(dc.metrics.roc_auc_score, name='ROC-AUC'),
-            dc.metrics.Metric(dc.metrics.accuracy_score, name='Accuracy'),
-        ]
-    else:
-        metrics = [
-            dc.metrics.Metric(dc.metrics.r2_score, name='R²'),
-            dc.metrics.Metric(dc.metrics.mean_absolute_error, name='MAE'),
-        ]
-
-    results = {}
-    for name, dataset in [('Train', train_dataset), ('Test', test_dataset)]:
-        print(f"\n{name} Set:")
-        scores = model.evaluate(dataset, metrics)
-        results[name] = scores
-        for metric_name, score in scores.items():
-            print(f"  {metric_name}: {score:.4f}")
-
-    return model, results
-
-
-def train_molformer(train_dataset, valid_dataset, test_dataset, task_type='classification', n_tasks=1, n_epochs=10):
-    """
-    Fine-tune MolFormer on a dataset.
-
-    Args:
-        train_dataset: Training dataset
-        valid_dataset: Validation dataset
-        test_dataset: Test dataset
-        task_type: 'classification' or 'regression'
-        n_tasks: Number of prediction tasks
-        n_epochs: Number of fine-tuning epochs
-
-    Returns:
-        Trained model and evaluation results
-    """
-    print("=" * 70)
-    print("Fine-tuning MolFormer")
-    print("=" * 70)
-    print("\nMolFormer is a transformer pretrained on molecular structures.")
-    print("It uses SMILES strings as input via HuggingFaceModel.")
-
-    print(f"\nLoading pretrained MolFormer model...")
-    model = dc.models.HuggingFaceModel(
-        model=PRETRAINED_MODELS['molformer']['model_id'],
-        task=task_type,
-        n_tasks=n_tasks,
-        batch_size=32,
-        learning_rate=2e-5
-    )
-
-    print(f"\nFine-tuning for {n_epochs} epochs...")
-    print("(This may take a while on the first run as the model is downloaded)")
-    model.fit(train_dataset, nb_epoch=n_epochs)
-    print("Fine-tuning complete!")
-
-    print("\n" + "=" * 70)
-    print("Model Evaluation")
-    print("=" * 70)
-
-    if task_type == 'classification':
-        metrics = [
-            dc.metrics.Metric(dc.metrics.roc_auc_score, name='ROC-AUC'),
-            dc.metrics.Metric(dc.metrics.accuracy_score, name='Accuracy'),
-        ]
-    else:
-        metrics = [
-            dc.metrics.Metric(dc.metrics.r2_score, name='R²'),
-            dc.metrics.Metric(dc.metrics.mean_absolute_error, name='MAE'),
-        ]
-
-    results = {}
-    for name, dataset in [('Train', train_dataset), ('Valid', valid_dataset), ('Test', test_dataset)]:
-        print(f"\n{name} Set:")
-        scores = model.evaluate(dataset, metrics)
-        results[name] = scores
-        for metric_name, score in scores.items():
-            print(f"  {metric_name}: {score:.4f}")
-
-    return model, results
+def transfer_featurizer(model_type):
+    if model_type in ('chemberta', 'molformer'):
+        return dc.feat.DummyFeaturizer()
+    if model_type == 'grover':
+        return dc.feat.GroverFeaturizer(features_generator=dc.feat.CircularFingerprint(size=2048))
+    raise ValueError(f'Unknown model type: {model_type}')
 
 
 def load_molnet_dataset(dataset_name, model_type):
-    """
-    Load a MoleculeNet dataset with appropriate featurization.
-
-    Args:
-        dataset_name: Name of MoleculeNet dataset
-        model_type: Type of pretrained model being used
-
-    Returns:
-        tasks, train/valid/test datasets, transformers
-    """
-    # Map of MoleculeNet datasets
-    molnet_datasets = {
-        'tox21': dc.molnet.load_tox21,
-        'bbbp': dc.molnet.load_bbbp,
-        'bace': dc.molnet.load_bace_classification,
-        'hiv': dc.molnet.load_hiv,
-        'delaney': dc.molnet.load_delaney,
-        'freesolv': dc.molnet.load_freesolv,
-        'lipo': dc.molnet.load_lipo
-    }
-
-    if dataset_name not in molnet_datasets:
-        raise ValueError(f"Unknown dataset: {dataset_name}")
-
-    # ChemBERTa and MolFormer use raw SMILES
-    if model_type in ['chemberta', 'molformer']:
-        featurizer = 'Raw'
-    # GROVER needs graph features
-    elif model_type == 'grover':
-        featurizer = 'GraphConv'
-    else:
-        featurizer = 'ECFP'
-
-    print(f"\nLoading {dataset_name} dataset...")
-    load_func = molnet_datasets[dataset_name]
-    tasks, datasets, transformers = load_func(
-        featurizer=featurizer,
-        splitter='scaffold'
-    )
-
-    return tasks, datasets, transformers
+    if dataset_name not in MOLNET_DATASETS:
+        raise ValueError(f'Unknown dataset: {dataset_name}')
+    # Raw alias produces RDKit Mol objects in stable 2.8.0, not tokenizer strings.
+    # Disable balancing/normalization here: the HF loss ignores dataset.w.
+    return molnet_loader(dataset_name)(featurizer=transfer_featurizer(model_type),
+                                      splitter='scaffold', transformers=[])
 
 
 def load_custom_dataset(data_path, target_cols, smiles_col, model_type):
-    """
-    Load a custom CSV dataset.
+    dataset = load_csv(data_path, target_cols, smiles_col, transfer_featurizer(model_type))
+    return dc.splits.ScaffoldSplitter().train_valid_test_split(
+        dataset, frac_train=.8, frac_valid=.1, frac_test=.1)
 
-    Args:
-        data_path: Path to CSV file
-        target_cols: List of target column names
-        smiles_col: Name of SMILES column
-        model_type: Type of pretrained model being used
 
-    Returns:
-        train, valid, test datasets
-    """
-    print(f"\nLoading custom data from {data_path}...")
+def validate_hf_data(datasets, task_type, n_tasks):
+    if n_tasks != 1:
+        raise ValueError('HF example supports one task; sparse multitask loss needs a custom adapter')
+    validate_splits(datasets, task_type, n_tasks)
+    for dataset in datasets:
+        if not np.all(dataset.w == 1):
+            raise ValueError('HF 2.8.0 loss ignores weights: labels must be complete and weights equal 1')
+        if not all(isinstance(value, str) for value in dataset.X):
+            raise ValueError('HF tokenizer requires SMILES strings')
 
-    # Choose featurizer based on model
-    if model_type in ['chemberta', 'molformer']:
-        featurizer = dc.feat.DummyFeaturizer()  # Models handle featurization
-    elif model_type == 'grover':
-        featurizer = dc.feat.MolGraphConvFeaturizer()
-    else:
-        featurizer = dc.feat.CircularFingerprint()
 
-    loader = dc.data.CSVLoader(
-        tasks=target_cols,
-        feature_field=smiles_col,
-        featurizer=featurizer
-    )
-    dataset = loader.create_dataset(data_path)
+def validate_remote_revision(trust_remote_code, revision):
+    if trust_remote_code and (not isinstance(revision, str) or
+                             re.fullmatch(r'[0-9a-fA-F]{40}', revision) is None):
+        raise ValueError('Remote code requires a reviewed immutable 40-character commit SHA in --revision')
 
-    print(f"Loaded {len(dataset)} molecules")
 
-    # Split data
-    print("Splitting data with scaffold splitter...")
-    splitter = dc.splits.ScaffoldSplitter()
-    train, valid, test = splitter.train_valid_test_split(
-        dataset,
-        frac_train=0.8,
-        frac_valid=0.1,
-        frac_test=0.1
-    )
+def build_hf_model(model_type, task_type, model_id=None, revision=None,
+                   trust_remote_code=False, local_files_only=False):
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    from deepchem.models.torch_models import HuggingFaceModel
+    if model_type == 'molformer' and not trust_remote_code:
+        raise ValueError('MoLFormer needs reviewed remote code; supply --trust-remote-code and a pinned --revision')
+    validate_remote_revision(trust_remote_code, revision)
+    model_id = model_id or PRETRAINED_MODELS[model_type]['model_id']
+    options = dict(trust_remote_code=trust_remote_code, local_files_only=local_files_only)
+    if revision:
+        options['revision'] = revision
+    tokenizer = AutoTokenizer.from_pretrained(model_id, **options)
+    model_options = dict(options)
+    if model_type == 'molformer':
+        # Its forward accepts no token_type_ids; generic fast tokenizers add them.
+        tokenizer.model_input_names = ['input_ids', 'attention_mask']
+        model_options['deterministic_eval'] = True
+    network = AutoModelForSequenceClassification.from_pretrained(
+        model_id, num_labels=2 if task_type == 'classification' else 1,
+        problem_type='single_label_classification' if task_type == 'classification' else 'regression',
+        **model_options)
+    # The base checkpoint supplies the encoder; the prediction head may be new.
+    return HuggingFaceModel(model=network, tokenizer=tokenizer, task=task_type,
+                            batch_size=16, learning_rate=2e-5, device='cpu')
 
-    print(f"  Training: {len(train)}")
-    print(f"  Validation: {len(valid)}")
-    print(f"  Test: {len(test)}")
 
-    return train, valid, test
+def train_hf(model_type, train, valid, test, task_type='classification',
+             n_tasks=1, n_epochs=10, **options):
+    validate_hf_data((train, valid, test), task_type, n_tasks)
+    model = build_hf_model(model_type, task_type, **options)
+    model.fit(train, nb_epoch=n_epochs)
+    # The stable HuggingFaceModel prediction contract is raw logits.
+    results = evaluate_splits(model, (train, valid, test), task_type,
+                              logits=task_type == 'classification')
+    return model, results
+
+
+def train_chemberta(train_dataset, valid_dataset, test_dataset,
+                    task_type='classification', n_tasks=1, n_epochs=10, **options):
+    return train_hf('chemberta', train_dataset, valid_dataset, test_dataset,
+                    task_type, n_tasks, n_epochs, **options)
+
+
+def train_molformer(train_dataset, valid_dataset, test_dataset,
+                    task_type='classification', n_tasks=1, n_epochs=10, **options):
+    return train_hf('molformer', train_dataset, valid_dataset, test_dataset,
+                    task_type, n_tasks, n_epochs, **options)
+
+
+def build_grover(task_type, n_tasks, config, checkpoint):
+    """Strictly restore only the encoder, leaving a new supervised head."""
+    import torch
+    from deepchem.models.torch_models import GroverModel
+    if not checkpoint or not Path(checkpoint).is_file():
+        raise ValueError('GROVER requires an existing --checkpoint (DeepChem component format)')
+    if not isinstance(config, dict) or 'hidden_size' not in config:
+        raise ValueError('GROVER config must declare the checkpoint hidden_size')
+    allowed = {'hidden_size', 'num_attn_heads', 'depth', 'dropout', 'activation',
+               'self_attention', 'attn_out_size', 'ffn_num_layers', 'ffn_hidden_size'}
+    if set(config) - allowed:
+        raise ValueError(f'Unsupported GROVER config keys: {sorted(set(config) - allowed)}')
+    model = GroverModel(node_fdim=151, edge_fdim=165, features_dim=2048,
+                        task='finetuning', mode=task_type, n_tasks=n_tasks,
+                        n_classes=2 if task_type == 'classification' else None,
+                        batch_size=16, learning_rate=1e-4, device='cpu', **config)
+    state = torch.load(checkpoint, map_location='cpu', weights_only=True)
+    if not isinstance(state, dict) or 'embedding' not in state:
+        raise ValueError('Checkpoint has no DeepChem embedding component')
+    model.components['embedding'].load_state_dict(state['embedding'], strict=True)
+    return model
+
+
+def train_grover(train_dataset, test_dataset, task_type='classification',
+                 n_tasks=1, n_epochs=20, checkpoint=None, config=None,
+                 valid_dataset=None):
+    valid_dataset = valid_dataset if valid_dataset is not None else test_dataset
+    validate_splits((train_dataset, valid_dataset, test_dataset), task_type, n_tasks)
+    model = build_grover(task_type, n_tasks, config, checkpoint)
+    model.fit(train_dataset, nb_epoch=n_epochs)
+    return model, evaluate_splits(model, (train_dataset, valid_dataset, test_dataset), task_type)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Transfer learning for molecular property prediction'
-    )
-    parser.add_argument(
-        '--model',
-        type=str,
-        choices=list(PRETRAINED_MODELS.keys()),
-        required=True,
-        help='Pretrained model to use'
-    )
-    parser.add_argument(
-        '--dataset',
-        type=str,
-        choices=['tox21', 'bbbp', 'bace', 'hiv', 'delaney', 'freesolv', 'lipo'],
-        default=None,
-        help='MoleculeNet dataset to use'
-    )
-    parser.add_argument(
-        '--data',
-        type=str,
-        default=None,
-        help='Path to custom CSV file'
-    )
-    parser.add_argument(
-        '--target',
-        nargs='+',
-        default=['target'],
-        help='Target column name(s) for custom data'
-    )
-    parser.add_argument(
-        '--smiles-col',
-        type=str,
-        default='smiles',
-        help='SMILES column name for custom data'
-    )
-    parser.add_argument(
-        '--task-type',
-        type=str,
-        choices=['classification', 'regression'],
-        default='classification',
-        help='Type of prediction task'
-    )
-    parser.add_argument(
-        '--epochs',
-        type=int,
-        default=10,
-        help='Number of fine-tuning epochs'
-    )
-
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--model', choices=list(PRETRAINED_MODELS), required=True)
+    parser.add_argument('--dataset', choices=list(MOLNET_DATASETS))
+    parser.add_argument('--data')
+    parser.add_argument('--target', nargs='+', default=['target'])
+    parser.add_argument('--smiles-col', default='smiles')
+    parser.add_argument('--task-type', choices=['classification', 'regression'], default='classification')
+    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--model-id', help='HF repository or local save_pretrained directory')
+    parser.add_argument('--revision', help='HF revision; remote code requires a reviewed immutable commit SHA')
+    parser.add_argument('--trust-remote-code', action='store_true', help='Enable model repository code after review')
+    parser.add_argument('--local-files-only', action='store_true')
+    parser.add_argument('--checkpoint', help='Local DeepChem GROVER component checkpoint')
+    parser.add_argument('--grover-config', help='JSON architecture matching the checkpoint')
     args = parser.parse_args()
-
-    # Validate arguments
-    if args.dataset is None and args.data is None:
-        print("Error: Must specify either --dataset or --data", file=sys.stderr)
+    if not args.dataset and not args.data:
+        print('Error: Must specify either --dataset or --data', file=sys.stderr)
         return 1
-
     if args.dataset and args.data:
-        print("Error: Cannot specify both --dataset and --data", file=sys.stderr)
+        print('Error: Cannot specify both --dataset and --data', file=sys.stderr)
         return 1
-
-    # Print model info
-    model_info = PRETRAINED_MODELS[args.model]
-    print("\n" + "=" * 70)
-    print(f"Transfer Learning with {model_info['name']}")
-    print("=" * 70)
-    print(f"\n{model_info['description']}")
-
+    if args.epochs < 1:
+        parser.error('--epochs must be positive')
     try:
-        # Load dataset
+        # Fail before benchmark/weight downloads if required inputs are absent.
+        if args.model == 'grover' and (not args.checkpoint or not args.grover_config):
+            raise ValueError('GROVER requires --checkpoint and --grover-config')
+        if args.model == 'molformer' and (not args.trust_remote_code or not args.revision):
+            raise ValueError('MoLFormer requires reviewed --trust-remote-code and --revision')
+        if args.model != 'grover':
+            validate_remote_revision(args.trust_remote_code, args.revision)
         if args.dataset:
-            tasks, datasets, transformers = load_molnet_dataset(args.dataset, args.model)
+            task_type, n_tasks = MOLNET_DATASETS[args.dataset]
+            if args.model != 'grover' and n_tasks != 1:
+                raise ValueError('HF example supports one task; choose a single-task dataset')
+            tasks, datasets, _ = load_molnet_dataset(args.dataset, args.model)
             train, valid, test = datasets
-            task_type = 'classification' if args.dataset in ['tox21', 'bbbp', 'bace', 'hiv'] else 'regression'
             n_tasks = len(tasks)
         else:
-            train, valid, test = load_custom_dataset(
-                args.data,
-                args.target,
-                args.smiles_col,
-                args.model
-            )
-            task_type = args.task_type
-            n_tasks = len(args.target)
-
-        # Train model
-        if args.model == 'chemberta':
-            model, results = train_chemberta(
-                train, valid, test,
-                task_type=task_type,
-                n_tasks=n_tasks,
-                n_epochs=args.epochs
-            )
-        elif args.model == 'grover':
-            model, results = train_grover(
-                train, test,
-                task_type=task_type,
-                n_tasks=n_tasks,
-                n_epochs=args.epochs
-            )
-        elif args.model == 'molformer':
-            model, results = train_molformer(
-                train, valid, test,
-                task_type=task_type,
-                n_tasks=n_tasks,
-                n_epochs=args.epochs
-            )
+            train, valid, test = load_custom_dataset(args.data, args.target, args.smiles_col, args.model)
+            task_type, n_tasks = args.task_type, len(args.target)
+        if args.model == 'grover':
+            config = json.loads(Path(args.grover_config).read_text())
+            train_grover(train, test, task_type, n_tasks, args.epochs,
+                          args.checkpoint, config, valid)
         else:
-            print(f"Error: Model {args.model} not yet implemented", file=sys.stderr)
-            return 1
-
-        print("\n" + "=" * 70)
-        print("Transfer Learning Complete!")
-        print("=" * 70)
-        print("\nTip: Pretrained models often work best with:")
-        print("  - Small datasets (< 1000 samples)")
-        print("  - Lower learning rates (1e-5 to 5e-5)")
-        print("  - Fewer epochs (5-20)")
-        print("  - Avoiding overfitting through early stopping")
-
+            train_hf(args.model, train, valid, test, task_type, n_tasks, args.epochs,
+                     model_id=args.model_id, revision=args.revision,
+                     trust_remote_code=args.trust_remote_code,
+                     local_files_only=args.local_files_only)
+        print('[OK] Fine-tuning finished; evaluate applicability before using predictions')
         return 0
-
-    except Exception as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
+    except Exception as error:
+        print(f'[FAIL] {error}', file=sys.stderr)
         return 1
 
 

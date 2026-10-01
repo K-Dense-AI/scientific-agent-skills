@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RELSA (RELative Severity Assessment) score — a faithful Python port.
+"""RELSA (RELative Severity Assessment) score — an independent Python implementation.
 
 Implements the four-step procedure of Talbot et al. (2022), Front. Vet. Sci.
 9:937711, as coded in the R package ``mytalbot/RELSA``:
@@ -14,8 +14,9 @@ Implements the four-step procedure of Talbot et al. (2022), Front. Vet. Sci.
        RW_i(t)     = delta_i(t) / |100 - max_i,ref|
        RELSA(t)    = sqrt( mean_i RW_i(t)^2 )   over non-missing i
 
-RELSA = 0 means "at baseline"; RELSA = 1 means the animal reached the reference
-set's maximum deviation; above 1 means it exceeded it. Missing variables are
+RELSA = 0 means no measured deviation in the declared worsening directions.
+RELSA = 1 is a unit RMS of per-variable reference-scaled deviations, not a
+universal endpoint or necessarily the reference cohort's observed maximum. Missing variables are
 dropped from the mean rather than imputed, so a score is defined whenever at
 least one variable was measured.
 
@@ -77,6 +78,21 @@ class ReferenceModel:
     label: str = ""
     baseline_time: float | list[float] | None = None
     notes: dict[str, str] = field(default_factory=dict)
+    preprocessing: dict | None = None
+
+    def __post_init__(self) -> None:
+        if not self.variables or len(set(self.variables)) != len(self.variables):
+            raise RelsaDataError("reference variables must be nonempty and unique")
+        if set(self.turned) - set(self.variables):
+            raise RelsaDataError("turned variables must belong to the reference")
+        if set(self.maxsev) != set(self.variables) or set(self.maxdelta) != set(self.variables):
+            raise RelsaDataError("reference extrema must cover exactly its variables")
+        for var in self.variables:
+            delta = self.maxdelta[var]
+            if not np.isfinite([self.maxsev[var], delta]).all() or delta <= 0:
+                raise RelsaDataError(f"invalid reference denominator for {var!r}")
+            if not np.isclose(delta, abs(BASELINE_PCT - self.maxsev[var])):
+                raise RelsaDataError(f"inconsistent reference denominator for {var!r}")
 
     def to_json(self, path: str | Path) -> None:
         payload = {
@@ -89,6 +105,7 @@ class ReferenceModel:
             "label": self.label,
             "baseline_time": self.baseline_time,
             "notes": self.notes,
+            "preprocessing": self.preprocessing,
         }
         Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -105,6 +122,7 @@ class ReferenceModel:
             label=payload.get("label", ""),
             baseline_time=payload.get("baseline_time"),
             notes=payload.get("notes", {}),
+            preprocessing=payload.get("preprocessing"),
         )
 
     def describe(self) -> str:
@@ -136,7 +154,9 @@ def build_reference(
     variables whose *increase* signals worsening.
     """
     variables = list(variables)
-    turned = [t for t in turned if t in variables]
+    if set(turned) - set(variables):
+        raise RelsaDataError("turned variables must belong to variables")
+    turned = list(turned)
     validate(frame, variables)
 
     maxsev: dict[str, float] = {}
@@ -205,6 +225,8 @@ def relsa_weights(
     ``round_digits=None`` for full precision (scores then differ from R in the
     third decimal).
     """
+    if set(drop) - set(reference.variables):
+        raise RelsaDataError("drop contains unknown reference variables")
     used = [v for v in reference.variables if v not in set(drop)]
     if not used:
         raise RelsaDataError("every reference variable was dropped")
@@ -314,8 +336,8 @@ def prepare(
 
     Variables *not* named are left untouched — that is the RELSA convention and
     it matters: body-weight change (bwc) and scores mapped with
-    ``score_to_percent`` already sit on the percent scale, and normalizing them
-    twice silently flattens them.
+    ``score_to_percent`` already sit on the percent scale, and normalizing baseline-100 values again is redundant and can change the
+    anchor if a different baseline window is selected.
     """
     if not normalize:
         return frame.copy()
@@ -346,6 +368,8 @@ def _parse_score_scale(spec: str, frame: pd.DataFrame) -> tuple[str, tuple[float
     if column not in frame.columns:
         raise SystemExit(f"--score-scale column {column!r} not in data")
     parts = bounds.split(":")
+    if len(parts) > 2:
+        raise SystemExit("--score-scale accepts exactly MAX or MAX:BASELINE")
     try:
         max_score = float(parts[0])
         baseline = float(parts[1]) if len(parts) > 1 else 0.0
@@ -420,54 +444,76 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     digits = None if args.full_precision else 2
 
+    reference = ReferenceModel.from_json(args.load_reference) if args.load_reference else None
+    if reference is not None and (args.reference_data or args.reference_group):
+        raise SystemExit("--load-reference cannot be combined with reference selection")
+    saved = reference.preprocessing if reference is not None else None
+    if saved:
+        supplied = {
+            "normalize": parse_list(args.normalize) if args.normalize is not None else None,
+            "score_scale": args.score_scale or None,
+            "baseline_time": args.baseline_time,
+        }
+        for key, value in supplied.items():
+            if value is not None and value != saved[key]:
+                raise SystemExit(f"{key} conflicts with the saved preprocessing contract")
+        if args.full_precision and saved["round_digits"] is not None:
+            raise SystemExit("--full-precision conflicts with the saved reference")
+        normalize = saved["normalize"]
+        score_specs = saved["score_scale"]
+        baseline_spec = saved["baseline_time"]
+        digits = saved["round_digits"]
+    else:
+        normalize = parse_list(args.normalize)
+        score_specs = args.score_scale
+        baseline_spec = args.baseline_time
+        if reference is not None:
+            warnings.warn("legacy reference has no preprocessing contract; explicitly repeat "
+                          "the original normalization and score mappings", stacklevel=2)
     frame = read_relsa_table(args.data, id_col=args.id_col, time_col=args.time_col)
-    normalize = parse_list(args.normalize)
-    turned = parse_list(args.turned)
-    variables = parse_list(args.variables) or variable_columns(frame)
+    variables = parse_list(args.variables) or (list(reference.variables) if reference else variable_columns(frame))
+    if reference and tuple(variables) != reference.variables:
+        raise SystemExit("--variables conflicts with the loaded reference")
+    turned = parse_list(args.turned) if args.turned is not None else (list(reference.turned) if reference else [])
+    baseline_time: float | list[float] | None = None
+    if baseline_spec:
+        times = [float(t) for t in parse_list(baseline_spec)]
+        baseline_time = times[0] if len(times) == 1 else times
 
-    for spec in args.score_scale:
-        column, bounds = _parse_score_scale(spec, frame)
-        frame[column] = score_to_percent(frame[column], *bounds)
+    def transform(raw: pd.DataFrame) -> pd.DataFrame:
+        result = raw.copy()
+        for spec in score_specs:
+            column, bounds = _parse_score_scale(spec, result)
+            result[column] = score_to_percent(result[column], *bounds)
+        return prepare(result, normalize=normalize, baseline_time=baseline_time)
+
+    for spec in score_specs:
+        column, _ = _parse_score_scale(spec, frame)
         if column not in turned:
             turned.append(column)
         if column in normalize:
-            normalize.remove(column)
-            print(
-                f"note: {column} is mapped by --score-scale, so it is not "
-                "baseline-normalized as well",
-                file=sys.stderr,
-            )
+            normalize = [v for v in normalize if v != column]
         if column not in variables:
             variables.append(column)
-
-    baseline_time: float | list[float] | None = None
-    if args.baseline_time:
-        times = [float(t) for t in parse_list(args.baseline_time)]
-        baseline_time = times[0] if len(times) == 1 else times
-
-    prepared = prepare(frame, normalize=normalize, baseline_time=baseline_time)
-
-    if args.load_reference:
-        reference = ReferenceModel.from_json(args.load_reference)
-    else:
-        if args.reference_data:
-            ref_raw = read_relsa_table(
-                args.reference_data, id_col=args.id_col, time_col=args.time_col
-            )
-            ref_frame = prepare(ref_raw, normalize=normalize, baseline_time=baseline_time)
-        else:
-            ref_frame = prepared
+    if reference and set(turned) != set(reference.turned):
+        raise SystemExit("--turned conflicts with the loaded reference")
+    if set(normalize) - set(variables):
+        raise SystemExit("--normalize contains unscored variables")
+    validate(frame, variables)
+    prepared = transform(frame)
+    if reference is None:
+        ref_frame = transform(read_relsa_table(args.reference_data, id_col=args.id_col,
+                                              time_col=args.time_col)) if args.reference_data else prepared
         ref_frame = _filter_group(ref_frame, args.reference_group)
         label = args.reference_data or args.data
         if args.reference_group:
             label = f"{label} [{', '.join(args.reference_group)}]"
-        reference = build_reference(
-            ref_frame,
-            variables=variables,
-            turned=turned,
-            baseline_time=baseline_time,
-            label=label,
-        )
+        reference = build_reference(ref_frame, variables=variables, turned=turned,
+                                    baseline_time=baseline_time, label=label)
+        reference.preprocessing = {
+            "normalize": normalize, "score_scale": score_specs,
+            "baseline_time": baseline_spec, "round_digits": digits,
+        }
     if args.save_reference:
         reference.to_json(args.save_reference)
 

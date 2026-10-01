@@ -1,6 +1,6 @@
 # Sources and maintenance notes
 
-Checked 2026-09-30. Links below are upstream documentation or primary publications.
+Checked 2026-10-01. Links below are upstream documentation or primary publications.
 Their availability does not imply that remote services, specialized assays, or
 every API option were exercised by the bundled test suite.
 
@@ -16,6 +16,8 @@ every API option were exercised by the bundled test suite.
   `design_primers`, Tm/structure functions, physical parameters, and length limits.
 - [Thermodynamic result API](https://libnano.github.io/primer3-py/api/thermoanalysis.html):
   result units, structure flags, and `get_libprimer3_version`.
+- [PyPI release metadata](https://pypi.org/pypi/primer3-py/json): current package
+  release remains 2.3.1; the bundled pin is unchanged.
 
 ## Reference specificity
 
@@ -28,6 +30,13 @@ every API option were exercised by the bundled test suite.
 - [BLAST+ nucleotide options](https://www.ncbi.nlm.nih.gov/sites/books/NBK279684/table/appendices.T.blastn_application_options/):
   short-query tasks and search settings. Consult the installed executable's help
   because the Bookshelf table also contains historical release information.
+
+The local Python contract remains `design_primers(seq_args, global_args)` returning
+a result dictionary, and snake_case thermodynamic functions returning a float Tm
+or `ThermoResult`. BLAST screening invokes local `makeblastdb` and `blastn`, parsing
+declared tabular fields; it has no network API/authentication requirement. The
+Primer-BLAST website was read for database and mismatch-field semantics; no public
+sequence was submitted and no undocumented request/response endpoint is supported.
 
 ## Thermodynamic foundations
 

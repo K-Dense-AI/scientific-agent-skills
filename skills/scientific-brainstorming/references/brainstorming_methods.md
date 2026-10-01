@@ -226,6 +226,11 @@ Write the mapping explicitly:
 - evidence needed before transfer is credible.
 
 An analogy generates a question; it is not evidence for the target mechanism.
+Before advancing a transfer, name a target-domain baseline, measurable outcome,
+and a result that would distinguish the proposed relation from a plausible
+alternative. Check units, time scales, conserved quantities, observability,
+and boundary conditions where relevant; shared terminology alone is not a
+structural match. Use the bounded pilot record in `idea_evaluation.md`.
 
 ### Morphological analysis
 

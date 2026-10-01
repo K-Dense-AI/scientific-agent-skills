@@ -1,6 +1,6 @@
 # Events, environments, and scheduling
 
-Verified 2026-07-23 against SimPy 4.1.2 documentation and tagged source.
+Reviewed 2026-10-01 against SimPy 4.1.2 documentation and tagged source.
 
 ## Scheduler model
 
@@ -15,6 +15,11 @@ Thus same-time, same-priority events are FIFO by scheduling order. This is
 deterministic sequential execution, even when model processes represent concurrent
 activities. Floating-point discretization can collapse physically distinct times
 onto the same value, so test tie behavior explicitly.
+
+The tuple order selects from the queue **at each step**. A running callback can
+schedule an urgent `Initialize` or `Interruption` at the same time; priority can
+therefore decrease in a valid processing trace. A trace without insertion history
+cannot validate the scheduler by sorting all processed tuples afterward.
 
 ## Event lifecycle
 
@@ -40,7 +45,8 @@ assert event.processed and event.value == "ready"
 ```
 
 `event.succeed(value)` and `event.fail(exception)` return that event and may be
-called only once. In 4.1.2 `fail()` requires an `Exception`. `event.trigger(other)`
+called only once. Use an `Exception` for `fail()`; the 4.1.2 implementation accepts
+`BaseException` despite the narrower API annotation. `event.trigger(other)`
 copies the other event's success/failure and value, and returns `None`.
 
 A failed event throws its exception into a waiting process. If no process or
@@ -211,7 +217,7 @@ max_steps = 100_000
 while env.peek() < until and steps < max_steps:
     env.step()
     steps += 1
-if steps == max_steps:
+if steps == max_steps and env.peek() < until:
     raise RuntimeError("event budget reached")
 ```
 

@@ -188,7 +188,7 @@ def main() -> int:
     except ModuleNotFoundError:
         print(
             "qiskit-ibm-runtime is not installed. Install the pinned "
-            'package with: uv pip install "qiskit-ibm-runtime==0.48.0"',
+            'package with: uv pip install "qiskit-ibm-runtime==0.50.0"',
             file=sys.stderr,
         )
         return 2

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Batch-parse documents in a directory with LiteParse (local only, no network).
+Batch-parse documents with LiteParse; missing OCR language data may be downloaded.
 
 Usage:
-    python batch_parse_dir.py INPUT_DIR OUTPUT_DIR [--format json|text] [--no-ocr] [--recursive] [--extension .pdf]
+    python batch_parse_dir.py INPUT_DIR OUTPUT_DIR [--format json|text|markdown] [--no-ocr] [--recursive] [--extension .pdf]
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ DEFAULT_EXTENSIONS = {
     ".gif",
     ".bmp",
     ".tiff",
+    ".tif",
     ".webp",
     ".svg",
 }
@@ -60,12 +61,19 @@ def _text_item_dict(item) -> dict:
 def _result_to_dict(result: ParseResult) -> dict:
     return {
         "text": result.text,
+        "total_pages": result.total_pages,
+        "page_errors": [
+            {"page_number": e.page_number, "message": e.message}
+            for e in result.page_errors
+        ],
         "pages": [
             {
                 "page_num": p.page_num,
                 "width": p.width,
                 "height": p.height,
                 "text": p.text,
+                "markdown": p.markdown,
+                "page_label": p.page_label,
                 "text_items": [_text_item_dict(i) for i in p.text_items],
             }
             for p in result.pages
@@ -93,16 +101,33 @@ def parse_one(
     fmt: str,
 ) -> tuple[bool, str, str]:
     try:
-        result = parser.parse(file_path)
-        out_name = f"{file_path.stem}.{'json' if fmt == 'json' else 'txt'}"
+        extensions = {"json": "json", "text": "txt", "markdown": "md"}
+        if fmt not in extensions:
+            raise ValueError(f"Unsupported output format: {fmt}")
+        # Retain the source suffix so report.pdf and report.docx cannot collide.
+        out_name = f"{file_path.name}.{extensions[fmt]}"
         out_path = output_dir / out_name
-        if fmt == "json":
-            out_path.write_text(
-                json.dumps(_result_to_dict(result), indent=2),
-                encoding="utf-8",
+        if out_path.exists():
+            raise FileExistsError(f"Output already exists: {out_path}")
+        result = parser.parse(file_path)
+        if result.page_errors:
+            failures = "; ".join(
+                f"page {error.page_number}: {error.message}" for error in result.page_errors
             )
+            raise ValueError(f"Incomplete extraction: {failures}")
+        if len(result.pages) != result.total_pages:
+            raise ValueError(
+                f"Incomplete extraction: returned {len(result.pages)} of "
+                f"{result.total_pages} source pages; check the parser page cap"
+            )
+        if fmt == "json":
+            content = json.dumps(_result_to_dict(result), indent=2, ensure_ascii=False)
         else:
-            out_path.write_text(result.text, encoding="utf-8")
+            content = result.text
+        output_dir.mkdir(parents=True, exist_ok=True)
+        # Exclusive creation also protects against collisions between concurrent runs.
+        with out_path.open("x", encoding="utf-8") as output:
+            output.write(content)
         return True, str(file_path), f"OK -> {out_name}"
     except Exception as exc:
         return False, str(file_path), str(exc)
@@ -114,7 +139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("output_dir", type=Path, help="Directory for parsed output")
     p.add_argument(
         "--format",
-        choices=("json", "text"),
+        choices=("json", "text", "markdown"),
         default="text",
         help="Output format (default: text)",
     )
@@ -122,7 +147,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--recursive", action="store_true", help="Search subdirectories")
     p.add_argument(
         "--extension",
-        help="Only process this extension (e.g. .pdf); default: all supported types",
+        help="Only process this extension (e.g. .pdf); default: common document/image types",
     )
     p.add_argument("-q", "--quiet", action="store_true", help="Less console output")
     args = p.parse_args(argv)
@@ -146,7 +171,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     ok, fail = 0, 0
     for fp in files:
-        success, path, msg = parse_one(parser, fp, args.output_dir, args.format)
+        destination = args.output_dir / fp.relative_to(args.input_dir).parent
+        success, path, msg = parse_one(parser, fp, destination, args.format)
         if success:
             ok += 1
             if not args.quiet:

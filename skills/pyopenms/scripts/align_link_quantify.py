@@ -30,11 +30,11 @@ except ImportError:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from detect_features_metabo import detect_features
-except Exception:
+except ImportError:
     detect_features = None
 
 
-def load_or_detect(path, ppm, noise):
+def load_or_detect(path, ppm, noise, assume_centroided=False):
     if path.lower().endswith(".featurexml"):
         fm = ms.FeatureMap()
         ms.FeatureXMLFile().load(path, fm)
@@ -43,11 +43,12 @@ def load_or_detect(path, ppm, noise):
     ms.FileHandler().loadExperiment(path, exp)
     if detect_features is None:
         raise RuntimeError("detect_features_metabo.py not importable; pass .featureXML inputs instead.")
-    fm, _ = detect_features(exp, ppm=ppm, noise=noise)
+    fm, _ = detect_features(exp, ppm=ppm, noise=noise, assume_centroided=assume_centroided)
+    fm.setPrimaryMSRunPath([os.path.abspath(path)])
     return fm
 
 
-def align(feature_maps):
+def align(feature_maps, allow_unaligned=False):
     """Align all maps to the one with the most features (in place)."""
     ref_idx = max(range(len(feature_maps)), key=lambda i: feature_maps[i].size())
     aligner = ms.MapAlignmentAlgorithmPoseClustering()
@@ -61,11 +62,15 @@ def align(feature_maps):
             aligner.align(fm, trafo)
             transformer.transformRetentionTimes(fm, trafo, True)
         except Exception as e:
-            print(f"  warning: alignment failed for map {i}: {e}")
+            if not allow_unaligned:
+                raise RuntimeError(f"Alignment failed for map {i}; inspect anchors/tolerances before linking") from e
+            print(f"  warning: map {i} remains unaligned: {e}")
     return ref_idx
 
 
 def link(feature_maps, filenames, rt_tol, mz_tol, mz_unit):
+    if len(filenames) != len(set(filenames)):
+        raise ValueError("Sample filenames must be unique for consensus export")
     grouper = ms.FeatureGroupingAlgorithmQT()
     p = grouper.getParameters()
     p.setValue("distance_RT:max_difference", float(rt_tol))
@@ -96,6 +101,8 @@ def main():
     parser.add_argument("--mz-unit", choices=["ppm", "Da"], default="ppm", help="m/z unit (default ppm)")
     parser.add_argument("--ppm", type=float, default=10.0, help="ppm for feature detection (mzML inputs)")
     parser.add_argument("--noise", type=float, default=1000.0, help="Noise threshold for detection")
+    parser.add_argument("--assume-centroided", action="store_true", help="Accept unknown MS1 type after verification")
+    parser.add_argument("--allow-unaligned", action="store_true", help="Explicitly continue if RT alignment fails")
     args = parser.parse_args()
 
     if len(args.inputs) < 2:
@@ -108,13 +115,13 @@ def main():
             print(f"Error: file not found: {path}")
             sys.exit(1)
         print(f"Processing {path}...")
-        fm = load_or_detect(path, args.ppm, args.noise)
+        fm = load_or_detect(path, args.ppm, args.noise, args.assume_centroided)
         fm.setUniqueIds()
         print(f"  {fm.size()} features")
         feature_maps.append(fm)
 
     print("Aligning retention times...")
-    ref_idx = align(feature_maps)
+    ref_idx = align(feature_maps, args.allow_unaligned)
     print(f"  reference map: {args.inputs[ref_idx]}")
 
     print("Linking features...")

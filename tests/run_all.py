@@ -84,6 +84,13 @@ def isolated_command(
         "--python", entry.get("python", default_python),
         "--with", "pytest",
     ]
+    if config := entry.get("uv_config"):
+        config_path = (REPO_ROOT / config).resolve()
+        suite_root = (REPO_ROOT / target).resolve()
+        if (Path(config).is_absolute() or not config_path.is_relative_to(suite_root)
+                or not config_path.is_file()):
+            raise ValueError(f"uv_config must name an existing file inside {target}: {config}")
+        command += ["--config-file", str(config_path)]
     for package in entry.get("packages", []):
         command += ["--with", package]
     return [*command, "python", "-m", "pytest", target, *pytest_args]

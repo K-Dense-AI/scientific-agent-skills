@@ -1,12 +1,14 @@
 """Real smoke test against a live LM Studio server.
 
 Not part of the pytest suite — requires LM Studio running on localhost:1234
-with Gemma-4-31B-it loaded. Run manually:
+with a user-selected model loaded and embeddings already cached. Run manually:
 
-    pipenv run python tests/autoskill/smoke_lmstudio.py
+    python tests/autoskill/smoke_lmstudio.py --model autoskill-local
 """
 
 import json
+import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -20,7 +22,11 @@ from synthesize import synthesize
 
 
 def main() -> int:
-    backend = LocalBackend(endpoint="http://localhost:1234/v1", model="gemma-4-31b-it")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", required=True, help="exact /v1/models ID")
+    args = parser.parse_args()
+    backend = LocalBackend(endpoint="http://localhost:1234/v1", model=args.model,
+                           api_key=os.environ.get("LM_API_TOKEN"))
 
     repo_skills_dir = REPO_ROOT / "skills"
     all_skills = load_skill_descriptions(repo_skills_dir)
@@ -29,7 +35,7 @@ def main() -> int:
     # Real sentence-transformers embedder.
     print("loading sentence-transformers/all-MiniLM-L6-v2 ...")
     from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", local_files_only=True)
 
     def embedder(text: str):
         return list(map(float, model.encode(text)))
@@ -53,7 +59,7 @@ def main() -> int:
     print(json.dumps(result, indent=2)[:1000])
 
     assert result["verdict"] in {"reuse", "compose", "novel"}, result
-    print("\nOK: real sentence-transformers top-k + real Gemma-4-31B-it produced a valid verdict.")
+    print("\n[OK] real sentence-transformers top-k + selected LM Studio model produced a valid verdict.")
     return 0
 
 

@@ -26,7 +26,7 @@ https://api.core.ac.uk/v3
 | Registered Personal | 1,000/day | 25/min |
 | Registered Academic | 5,000/day | 10/min |
 
-Simple queries cost 1 token. Downloads and scroll pagination cost 3-5 tokens.
+Simple queries cost 1 token; complex queries typically cost 3-5. Inspect `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Retry-After`; quotas and costs may vary under load.
 
 ## Key Endpoints
 
@@ -39,10 +39,8 @@ GET /v3/search/works/?q={query}&limit={n}&offset={n}
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `q` | required | Search query (supports field lookups, boolean operators) |
-| `limit` | 10 | Results per page (max 100) |
+| `limit` | 10 | Requested page size; use a bounded size such as 10 or 100 |
 | `offset` | 0 | Pagination offset |
-| `scroll` | false | Enable scroll pagination for >10,000 results |
-| `sort` | relevance | `relevance` or `recency` |
 
 **POST alternative** (for complex queries):
 ```
@@ -91,7 +89,7 @@ GET /v3/outputs/{id}
 GET /v3/outputs/{id}/download
 ```
 
-Returns binary PDF. Requires authentication.
+Returns a binary PDF when available to the caller. Prefer a returned `downloadUrl` first; direct CORE downloads cost quota. Never send the CORE bearer token to a repository or publisher download URL.
 
 ```
 GET /v3/works/tei/{id}
@@ -115,7 +113,6 @@ Search by DOI: `q=doi:10.1038/nature12373`
   "totalHits": 2281337,
   "limit": 10,
   "offset": 0,
-  "scrollId": null,
   "results": [...]
 }
 ```
@@ -143,8 +140,20 @@ Search by DOI: `q=doi:10.1038/nature12373`
 ## Pagination
 
 - **Standard:** `offset` + `limit` (max 10,000 results)
-- **Scroll:** Set `scroll=true`. Response includes `scrollId`. Use in subsequent requests to page beyond 10,000 (costs more tokens).
+- The current v3 reference mentions scroll as an expensive operation, but its
+  search parameter schema no longer specifies a `scroll` / `scrollId` contract.
+  Do not assume the old recipe works. For larger sets, follow CORE's current
+  linked bulk examples or partition the query and reconcile overlapping IDs.
+- GET/POST searches document `q`, `limit`, `offset`, and optional `stats`; the
+  example schema uses `total_hits`, while the unauthenticated GET smoke response
+  on 2026-09-30 returned `totalHits` and camelCase work fields as shown here.
+  Inspect the actual response before selecting a naming convention. No
+  authenticated download or scroll walk was tested in this review.
 
 ## Error Handling
 
 Under heavy load, the API may return partial shard failure messages. These are transient -- retry after a brief wait.
+
+## Official sources reviewed 2026-09-30
+
+- https://api.core.ac.uk/docs/v3

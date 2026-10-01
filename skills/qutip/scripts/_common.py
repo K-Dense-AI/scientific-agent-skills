@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 
-QUTIP_VERSION = "5.3.0"
-PINNED_INSTALL = 'uv pip install "qutip==5.3.0"'
+QUTIP_VERSION = "5.3.1"
+PINNED_INSTALL = 'uv pip install "qutip==5.3.1"'
 DEFAULT_SEED = 20_260_723
 
 MAX_INPUT_BYTES = 1024 * 1024

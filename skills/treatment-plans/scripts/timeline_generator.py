@@ -7,6 +7,8 @@ import argparse
 import sys
 from datetime import date
 
+from check_consistency import check_consistency
+
 from _common import (
     NOTICE,
     SCHEMA_VERSION,
@@ -27,7 +29,10 @@ def _date_bound(value: str | None, code: str) -> date | None:
     if value is None:
         return None
     try:
-        return date.fromisoformat(value)
+        parsed = date.fromisoformat(value)
+        if parsed.isoformat() != value:
+            raise ValueError
+        return parsed
     except ValueError as exc:
         raise ValidationError(code) from exc
 
@@ -45,6 +50,18 @@ def build_schedule(
                 "explicit_date_schedule",
                 issues,
                 counts={"structural_issues": len(issues)},
+            ),
+            {},
+        )
+
+    consistency = check_consistency(documents)
+    if consistency["status"] == "fail":
+        return (
+            report_payload(
+                "explicit_date_schedule",
+                [Issue(item["code"], item["path"], item["level"])
+                 for item in consistency["issues"]],
+                counts={"consistency_issues": len(consistency["issues"])},
             ),
             {},
         )

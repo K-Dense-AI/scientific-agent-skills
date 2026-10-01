@@ -33,9 +33,13 @@ from pathlib import Path
 
 import defusedxml.minidom
 from xml.parsers.expat import ExpatError
+from defusedxml.common import DefusedXmlException
 from xml.sax.saxutils import escape as xml_escape
 
 from office.helpers import opc_target, rezip as _rezip, safe_extract as _safe_extract
+
+PACKAGE_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+CONTENT_TYPE_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 NS = {
@@ -99,7 +103,15 @@ def _encode_smart_quotes(text: str) -> str:
 
 def _append_xml(xml_path: Path, root_tag: str, content: str) -> None:
     dom = defusedxml.minidom.parseString(xml_path.read_text(encoding="utf-8"))
-    root = dom.getElementsByTagName(root_tag)[0]
+    prefix, local = root_tag.split(":", 1)
+    root = dom.getElementsByTagNameNS(NS[prefix], local)[0]
+    # Newly inserted fragments use canonical prefixes, even when the original
+    # document chose other prefixes for the same namespace.
+    for key, uri in NS.items():
+        attr = f"xmlns:{key}"
+        if root.hasAttribute(attr) and root.getAttribute(attr) != uri:
+            raise ValueError(f"Conflicting namespace prefix: {key}")
+        root.setAttribute(attr, uri)
     ns_attrs = " ".join(f'xmlns:{k}="{v}"' for k, v in NS.items())
     wrapper_dom = defusedxml.minidom.parseString(f"<root {ns_attrs}>{content}</root>")
     for child in wrapper_dom.documentElement.childNodes:  
@@ -111,11 +123,11 @@ def _append_xml(xml_path: Path, root_tag: str, content: str) -> None:
 
 def _find_para_id(comments_path: Path, comment_id: int) -> str | None:
     dom = defusedxml.minidom.parseString(comments_path.read_text(encoding="utf-8"))
-    for c in dom.getElementsByTagName("w:comment"):
-        if c.getAttribute("w:id") == str(comment_id):
-            for p in c.getElementsByTagName("w:p"):
-                if pid := p.getAttribute("w14:paraId"):
-                    return pid
+    for c in dom.getElementsByTagNameNS(NS["w"], "comment"):
+        if c.getAttributeNS(NS["w"], "id") == str(comment_id):
+            paragraphs = c.getElementsByTagNameNS(NS["w"], "p")
+            if paragraphs:
+                return paragraphs[-1].getAttributeNS(NS["w14"], "paraId") or None
     return None
 
 
@@ -124,9 +136,9 @@ def _next_comment_id(comments_path: Path) -> int:
         return 0
     dom = defusedxml.minidom.parseString(comments_path.read_text(encoding="utf-8"))
     ids = []
-    for c in dom.getElementsByTagName("w:comment"):
+    for c in dom.getElementsByTagNameNS(NS["w"], "comment"):
         try:
-            ids.append(int(c.getAttribute("w:id")))
+            ids.append(int(c.getAttributeNS(NS["w"], "id")))
         except ValueError:
             pass
     return (max(ids) + 1) if ids else 0
@@ -135,7 +147,7 @@ def _next_comment_id(comments_path: Path) -> int:
 def _get_next_rid(rels_path: Path) -> int:
     dom = defusedxml.minidom.parseString(rels_path.read_text(encoding="utf-8"))
     max_rid = 0
-    for rel in dom.getElementsByTagName("Relationship"):
+    for rel in dom.getElementsByTagNameNS(PACKAGE_NS, "Relationship"):
         rid = rel.getAttribute("Id")
         if rid and rid.startswith("rId"):
             try:
@@ -149,7 +161,7 @@ def _has_relationship(rels_path: Path, target: str) -> bool:
     dom = defusedxml.minidom.parseString(rels_path.read_text(encoding="utf-8"))
     return any(
         rel.getAttribute("Target") == target
-        for rel in dom.getElementsByTagName("Relationship")
+        for rel in dom.getElementsByTagNameNS(PACKAGE_NS, "Relationship")
     )
 
 
@@ -157,7 +169,7 @@ def _has_content_type(ct_path: Path, part_name: str) -> bool:
     dom = defusedxml.minidom.parseString(ct_path.read_text(encoding="utf-8"))
     return any(
         o.getAttribute("PartName") == part_name
-        for o in dom.getElementsByTagName("Override")
+        for o in dom.getElementsByTagNameNS(CONTENT_TYPE_NS, "Override")
     )
 
 
@@ -178,12 +190,13 @@ _COMMENT_OVERRIDES = [
 def _ensure_comment_relationships(unpacked_dir: Path) -> None:
     rels_path = unpacked_dir / "word" / "_rels" / "document.xml.rels"
     if not rels_path.exists():
-        return
+        rels_path.parent.mkdir(parents=True, exist_ok=True)
+        rels_path.write_text(f'<Relationships xmlns="{PACKAGE_NS}"/>', encoding="utf-8")
     dom = defusedxml.minidom.parseString(rels_path.read_text(encoding="utf-8"))
     root = dom.documentElement
     comment_types = {rel_type for rel_type, _ in _COMMENT_RELS}
     existing = set()
-    for rel in dom.getElementsByTagName("Relationship"):
+    for rel in dom.getElementsByTagNameNS(PACKAGE_NS, "Relationship"):
         if rel.getAttribute("Type") not in comment_types:
             continue
         part = opc_target(
@@ -192,13 +205,13 @@ def _ensure_comment_relationships(unpacked_dir: Path) -> None:
             rel.getAttribute("TargetMode"),
         )
         if part is not None:
-            existing.add(part)
+            existing.add((rel.getAttribute("Type"), part))
     next_rid = _get_next_rid(rels_path)
     changed = False
     for rel_type, target in _COMMENT_RELS:
-        if opc_target(target, "word/document.xml") in existing:
+        if (rel_type, opc_target(target, "word/document.xml")) in existing:
             continue
-        rel = dom.createElement("Relationship")
+        rel = dom.createElementNS(PACKAGE_NS, f"{root.prefix}:Relationship" if root.prefix else "Relationship")
         rel.setAttribute("Id", f"rId{next_rid}")
         rel.setAttribute("Type", rel_type)
         rel.setAttribute("Target", target)
@@ -212,18 +225,18 @@ def _ensure_comment_relationships(unpacked_dir: Path) -> None:
 def _ensure_comment_content_types(unpacked_dir: Path) -> None:
     ct_path = unpacked_dir / "[Content_Types].xml"
     if not ct_path.exists():
-        return
+        raise FileNotFoundError(f"{ct_path} not found (not an unpacked DOCX package)")
     dom = defusedxml.minidom.parseString(ct_path.read_text(encoding="utf-8"))
     root = dom.documentElement
     existing = {
         o.getAttribute("PartName")
-        for o in dom.getElementsByTagName("Override")
+        for o in dom.getElementsByTagNameNS(CONTENT_TYPE_NS, "Override")
     }
     changed = False
     for part_name, content_type in _COMMENT_OVERRIDES:
         if part_name in existing:
             continue
-        override = dom.createElement("Override")
+        override = dom.createElementNS(CONTENT_TYPE_NS, f"{root.prefix}:Override" if root.prefix else "Override")
         override.setAttribute("PartName", part_name)
         override.setAttribute("ContentType", content_type)
         root.appendChild(override)  
@@ -251,8 +264,27 @@ def add_comment(
         raise FileNotFoundError(f"{word} not found (not an unpacked .docx?)")
 
     comments = word / "comments.xml"
+    if not (unpacked_dir / "[Content_Types].xml").is_file():
+        raise FileNotFoundError("[Content_Types].xml not found (not an unpacked DOCX package)")
+    existing_ids = set()
+    if comments.exists():
+        dom = defusedxml.minidom.parseString(comments.read_bytes())
+        existing_ids = {int(c.getAttributeNS(NS["w"], "id"))
+                        for c in dom.getElementsByTagNameNS(NS["w"], "comment")}
     if comment_id is None:
-        comment_id = _next_comment_id(comments)
+        comment_id = max(existing_ids, default=-1) + 1
+    if comment_id < 0 or comment_id in existing_ids:
+        raise ValueError(f"Comment ID {comment_id} is negative or already in use")
+    # This helper uses conventional part names. Do not silently add a second
+    # relationship of the same type when an existing package uses other names.
+    rels = word / "_rels" / "document.xml.rels"
+    if rels.exists():
+        dom = defusedxml.minidom.parseString(rels.read_bytes())
+        expected = dict(_COMMENT_RELS)
+        for rel in dom.getElementsByTagNameNS(PACKAGE_NS, "Relationship"):
+            kind = rel.getAttribute("Type")
+            if kind in expected and opc_target(rel.getAttribute("Target"), "word/document.xml", rel.getAttribute("TargetMode")) != "word/" + expected[kind]:
+                raise ValueError("Nonstandard comment part path; edit the existing relationship target directly")
 
     parent_para = None
     if parent_id is not None:
@@ -263,6 +295,8 @@ def add_comment(
     para_id, durable_id = _generate_hex_id(), _generate_hex_id()
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # Validate pre-escaped input before writing any package parts.
+    defusedxml.minidom.parseString(f"<text>{text}</text>")
     if not comments.exists():
         shutil.copy(TEMPLATE_DIR / "comments.xml", comments)
     _ensure_comment_relationships(unpacked_dir)
@@ -354,7 +388,7 @@ def main() -> None:
         else:
             print(f"Error: {src} is neither a directory nor a .docx/.dotx file", file=sys.stderr)
             sys.exit(1)
-    except (FileNotFoundError, ValueError, zipfile.BadZipFile, ExpatError) as e:
+    except (OSError, ValueError, zipfile.BadZipFile, ExpatError, DefusedXmlException) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

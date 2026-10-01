@@ -2,7 +2,7 @@
 
 # Decision Record (ADR/RFC) Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
 **Use this template for:** Architecture Decision Records (ADRs), Requests for Comment (RFCs), technical design documents, or any decision that needs to be documented with its context, options considered, and rationale. Designed so that future teams understand not just _what_ was decided, but _why_ — and can evaluate whether the decision still holds.
 
@@ -18,13 +18,15 @@
 2. Name it sequentially: `001-use-postgresql-over-mongodb.md`
 3. Replace all `[bracketed placeholders]` with your content
 4. **Present options honestly** — don't set up straw men just to knock them down
-5. Add [Mermaid diagrams](../mermaid_style_guide.md) for architecture comparisons, data flow changes, or migration paths
+5. Add [Mermaid diagrams](../references/mermaid_style_guide.md) for architecture comparisons, data flow changes, or migration paths
 
 ---
 
 ## The Template
 
-Everything below the line is the template. Copy from here:
+Everything below the line is the template. Copy from here; commands, API routes,
+versions, thresholds, and numerical values are illustrative placeholders. Verify them
+against the actual project before publishing. Follow its existing tracker and PR conventions.
 
 ---
 
@@ -194,9 +196,9 @@ flowchart LR
 
 ## 🔗 References
 
-- [Related ADR or RFC](../adr/ADR-001-agent-optimized-documentation-system.md)
+- Related ADR or RFC (replace with the project link)
 - [External documentation or benchmark](https://example.com)
-- [Relevant issue or discussion thread](../../docs/project/issues/issue-00000001-agentic-documentation-system.md)
+- Relevant issue or discussion thread (replace with the project link)
 
 ---
 

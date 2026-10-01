@@ -89,6 +89,10 @@ Then authenticate again. Do not compare token values.
 Also check:
 
 - Token expiration/revocation
+- Token scope (selected projects versus all projects); user-generated API
+  tokens cannot access UKB RAP resources
+- Login-session timeout: two hours idle and at most 18 hours from issuance
+  under the normal policy, potentially shorter under organization policy
 - Project membership and access level
 - Organization license/policy
 - Download restrictions
@@ -347,6 +351,8 @@ Review reuse and output-folder behavior before launch.
 
 - Confirm the organization has the Nextflow feature/license.
 - Use current dx-toolkit.
+- Rebuild existing Nextflow applets after a toolkit upgrade; installing a new
+  local CLI alone does not update their execution template or assets.
 - Pin repository tag/commit.
 - Confirm only supported Nextflow versions are requested.
 - Confirm private Git credential file is accessible.
@@ -368,6 +374,9 @@ Check:
 - Queue size (current maximum 1000)
 - Output path and work directory
 - Resume/cache session
+- Offline mode and availability of pre-staged dependencies. Toolkit 0.415.0
+  applets enable it automatically without outbound network access; requesting
+  `-offline=false` does not override the app's network permissions.
 
 ### Resume failure
 

@@ -8,6 +8,9 @@ and geometry-aware graph models in its
 index focuses on molecular and knowledge-graph workflows, so avoid inventing a
 protein tutorial API that upstream does not provide.
 
+Large dataset and pretrained-weight examples are source-verified illustrations;
+this review does not download protein archives or pretrained ESM weights.
+
 ## Build protein objects
 
 ### From sequence
@@ -26,6 +29,12 @@ print(protein.to_sequence())
 
 For sequence-only work, setting atom and bond features to `None` avoids the cost
 of constructing a full atom-level representation.
+In that fast path, 0.2.1 converts unknown residue symbols to glycine with a
+warning. Validate sequences against the supported 20-residue alphabet first;
+do not allow `X`, gaps, or chain separators to become silently altered biology.
+Also preserve the original sequence separately: the fast path creates no bonds,
+so `to_sequence()` inserts component separators between residues (for example,
+`"M.K.T.A.Y"`). It is not a faithful chain-annotated round trip of this input.
 
 ### From PDB
 
@@ -70,16 +79,24 @@ Documented dataset families include:
 Example:
 
 ```python
-from torchdrug import datasets
+from torchdrug import datasets, transforms
 
 dataset = datasets.EnzymeCommission(
     "~/protein-datasets/",
     atom_feature=None,
     bond_feature=None,
     residue_feature="default",
+    transform=transforms.ProteinView(view="residue"),
 )
 train_set, valid_set, test_set = dataset.split()
 ```
+
+Unlike sequence-only construction, loading a PDB with `atom_feature=None` still
+creates atoms and an atom view. `ProteinView` exposes residue features as
+`graph.node_feature` to sequence models. EC and GO samples contain a single
+multi-hot `"targets"` tensor; see the matching task below. Keep `lazy=False`
+(the default) for EnzymeCommission: its released lazy `get_item` passes the
+options dictionary positionally to `Protein.from_pdb`, an upstream defect.
 
 Class signatures differ. Options such as `branch`, `test_cutoff`, `lazy`, or
 species/split IDs are dataset-specific; check the API before using them.
@@ -113,6 +130,12 @@ TorchDrug 0.2.1 supports these ESM-2 names:
 It also supports `ESM-1b` and `ESM-1v`. Maximum sequence input is 1022 residues
 before special tokens. Large checkpoints require substantial memory; start with
 `ESM-2-8M` or `ESM-2-35M` for pipeline validation.
+The wrapper warns and truncates each longer sequence to its **first** 1022
+residues; the returned residue features no longer cover the original full chain.
+Use an explicit cropping/chunking policy and retain residue offsets. Its `esm`
+import comes from `fair-esm==2.0.0`, not the modern `esm` SDK. Checkpoint URLs are
+public static files on `dl.fbaipublicfiles.com`; successful HEAD requests do not
+verify their checksums or model inference.
 
 ### Other sequence models
 
@@ -155,29 +178,37 @@ matches that choice.
 
 ## Property-prediction task
 
-Protein-level classification or regression can use the same task abstraction as
-molecules:
+For the EnzymeCommission dataset above, use integer indices into its target
+vector and a sequence encoder. This is an illustrative training setup:
 
 ```python
-from torchdrug import tasks
+from torchdrug import models, tasks
 
-task = tasks.PropertyPrediction(
+model = models.ProteinCNN(
+    input_dim=dataset[0]["graph"].residue_feature.shape[-1],
+    hidden_dims=[64, 64],
+    readout="mean",
+)
+task = tasks.MultipleBinaryClassification(
     model,
-    task=dataset.tasks,
+    task=list(range(len(dataset.tasks))),
     criterion="bce",
-    metric=("auprc", "auroc"),
+    metric=("auprc@micro", "f1_max"),
 )
 ```
 
-Choose criterion and metrics from the actual dataset target:
+Construct an optimizer and `Engine` to preprocess/train this task. For datasets
+that instead return separately named scalar targets, `PropertyPrediction` with
+`task=dataset.tasks` is appropriate. Choose criteria from the actual target:
 
 - binary or multi-label classification: BCE, AUPRC/AUROC
-- multiclass classification: CE and the documented compatible metrics
+- multiclass classification: CE with `"acc"` or `"mcc"`
 - regression: MSE, MAE/RMSE
 
-For large multi-label ontology tasks, inspect
-`tasks.MultipleBinaryClassification` rather than treating labels as one
-multiclass target.
+Vector labels require the matching task even for a small dataset; target schema,
+not dataset size, determines the choice. `MultipleBinaryClassification` does
+not implement `PropertyPrediction`'s NaN label mask. Do not feed missing labels
+as NaN or silently replace unknown annotation status with negative labels.
 
 ## Workflow checks
 

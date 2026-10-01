@@ -1,11 +1,12 @@
 ---
 name: pptx-posters
-description: Create and audit editable scientific posters in macro-free PowerPoint (.pptx) from author-approved local content and assets. Use when the requested deliverable is a PowerPoint research/conference poster and exact physical, printer, accessibility, provenance, and package-security checks are required.
+description: Creates and audits editable scientific posters in macro-free PowerPoint (.pptx) from author-approved local content and assets. Used when the requested deliverable is a PowerPoint research/conference poster and exact physical, printer, accessibility, provenance, and package-security checks are required.
 license: MIT
-compatibility: Requires Python 3.10+, uv, and exact generation pins python-pptx 1.0.2, Pillow 12.3.0, and lxml 6.1.1. Validation and PPTX ZIP/XML inspection are local and network-free; final PowerPoint, accessibility, PDF, printer, and author review are manual.
+compatibility: Requires Python 3.10+, uv, and exact generation pins python-pptx 1.0.2, Pillow 12.3.0, and lxml 6.1.3. Validation and PPTX ZIP/XML inspection are local and network-free; final PowerPoint, accessibility, PDF, printer, and author review are manual.
 allowed-tools: Read Write Bash Glob Grep Python
 metadata:
-  version: "2.3"
+  version: "2.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -17,7 +18,7 @@ Use this skill only when the requested source/deliverable is an editable PowerPo
 poster. Do not route an unspecified poster request here merely because PowerPoint is
 available.
 
-Version 2.0 generates a real one-slide `.pptx` from strict local JSON. It does not use
+The manifest 2.0 workflow generates a real one-slide `.pptx` from strict local JSON. It does not use
 HTML conversion, external templates, schematic/image-generation services, API keys,
 environment files, network requests, or mandatory figure styles.
 
@@ -40,19 +41,24 @@ Never fabricate missing material or leave a plausible placeholder. Drafts fail c
 
 ## Install exact generation dependencies
 
-From the skill directory:
+In the poster project directory, create an environment outside this skill tree.
+Activate it before running the tools (macOS/Linux shown):
 
 ```bash
 uv venv
-uv pip install "python-pptx==1.0.2" "Pillow==12.3.0" "lxml==6.1.1"
+source .venv/bin/activate
+uv pip install "python-pptx==1.0.2" "Pillow==12.3.0" "lxml==6.1.3"
 ```
 
-Generation requires exactly:
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`. Then run the
+CLI commands below from the skill directory with that environment still active.
+Package installation needs network access unless the exact wheels are cached; the
+poster tools themselves are local. Generation requires exactly:
 
 ```text
 python-pptx==1.0.2
 Pillow==12.3.0
-lxml==6.1.1
+lxml==6.1.3
 ```
 
 All CLIs use lazy optional imports, so `python -B scripts/<tool>.py --help` works
@@ -91,6 +97,8 @@ Follow `references/manifest_spec.md` and `references/poster_content_guide.md`.
 The manifest requires:
 
 - exact source IDs for document metadata, every element, and every asset;
+- document title, subject, and author names joined by `; ` each at most 255 characters
+  for the library core-properties API; no silent truncation;
 - `author_verified: true` on every source;
 - `author_approved: true` on every element and asset;
 - local PNG/JPEG paths and lowercase SHA-256 hashes;
@@ -165,6 +173,7 @@ Generation:
 - disables text auto-shrink;
 - adds elements in approved reading order;
 - writes approved picture alt descriptions and explicit text language to PresentationML;
+- converts offset-aware approval timestamps to UTC for document core properties;
 - does not embed fonts, audio, video, OLE, ActiveX, links, or other media;
 - removes default printer-settings binary data and normalizes package timestamps;
 - inspects the package before and after the alt-text patch;
@@ -229,6 +238,11 @@ sends the document to Microsoft for conversion; it is not a local export. For a
 local-only workflow, use a local exporter and report any resulting tag or hyperlink
 limitations after inspecting the PDF. Record the exporter and settings in the handoff.
 See [Microsoft’s accessible PDF export documentation](https://support.microsoft.com/en-us/accessibility/office-accessibility/create-accessible-pdfs).
+
+The plan does not export or resize a PDF. Measure the exported page against the
+PowerPoint canvas and the printer's required final artboard separately. For a scaled
+canvas, confirm whether the printer scales the PDF or requires an independently
+scaled full-size PDF; then inspect that derivative again.
 
 Independently verify the PDF:
 

@@ -33,6 +33,7 @@ def enrichment_pipeline(
     background=None,
     output_prefix="enrichment",
     plot=True,
+    databases=None,
 ):
     """
     Perform comprehensive enrichment analysis.
@@ -43,20 +44,30 @@ def enrichment_pipeline(
         background: Background gene list (optional)
         output_prefix: Prefix for output files
         plot: Whether to generate plots
+        databases: Optional list of full Enrichr library names
     """
     print("Enrichment Analysis Pipeline")
     print("=" * 60)
     print(f"Analyzing {len(gene_list)} genes")
     print(f"Species: {species}\n")
 
-    # Database categories to analyze
-    databases = {
-        "pathway": "KEGG Pathways",
-        "ontology": "Gene Ontology (Biological Process)",
-        "transcription": "Transcription Factors (ChEA)",
-        "diseases_drugs": "Disease Associations (GWAS)",
-        "celltypes": "Cell Type Markers (PanglaoDB)",
-    }
+    if not gene_list:
+        raise ValueError("Gene list must not be empty")
+    if species not in {"human", "mouse"} and background is not None:
+        raise ValueError("Custom backgrounds are supported only for human and mouse")
+    if databases is None:
+        if species not in {"human", "mouse"}:
+            raise ValueError("Supply --database with a full species-specific Enrichr library name")
+        databases = {
+            "pathway": "KEGG_2021_Human",
+            "ontology": "GO_Biological_Process_2021",
+            "transcription": "ChEA_2016",
+            "diseases_drugs": "GWAS_Catalog_2019",
+            "celltypes": "PanglaoDB_Augmented_2021",
+        }
+    else:
+        # Stable local output names; library identifiers are remote input, not paths.
+        databases = {f"library_{i+1}": name for i, name in enumerate(databases)}
 
     results = {}
 
@@ -67,7 +78,7 @@ def enrichment_pipeline(
         try:
             enrichment = gget.enrichr(
                 gene_list,
-                database=db_key,
+                database=db_name,
                 species=species,
                 background_list=background,
                 plot=plot,
@@ -82,17 +93,14 @@ def enrichment_pipeline(
                 # Show top 5 results
                 print(f"\nTop 5 enriched terms:")
                 for i, row in enrichment.head(5).iterrows():
-                    term = row.get("name", row.get("term", "Unknown"))
-                    p_val = row.get(
-                        "adjusted_p_value",
-                        row.get("p_value", row.get("Adjusted P-value", 1)),
-                    )
+                    term = row["path_name"]
+                    p_val = row["adj_p_val"]
                     print(f"  {i+1}. {term}")
-                    print(f"     P-value: {p_val:.2e}")
+                    print(f"     Adjusted P-value: {p_val:.2e}")
 
                 results[db_key] = enrichment
             else:
-                print("No significant results found")
+                print("No enrichment rows returned; significance has not been assessed")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -108,9 +116,8 @@ def enrichment_pipeline(
                 {
                     "Database": db_name,
                     "Total Terms": len(results[db_key]),
-                    "Top Term": results[db_key].iloc[0].get(
-                        "name", results[db_key].iloc[0].get("term", "N/A")
-                    ),
+                    "Top Term": results[db_key].iloc[0]["path_name"],
+                    "Top Adjusted P-value": results[db_key].iloc[0]["adj_p_val"],
                 }
             )
 
@@ -130,15 +137,15 @@ def enrichment_pipeline(
     try:
         # Get tissue expression for first few genes
         expr_data = []
-        for gene in gene_list[:5]:  # Limit to first 5
+        for gene in gene_list[:5] if species in {"human", "mouse"} else []:
             print(f"  Getting expression for {gene}...")
             try:
-                tissue_expr = gget.archs4(gene, which="tissue")
+                tissue_expr = gget.archs4(gene, which="tissue", species=species)
                 top_tissue = tissue_expr.nlargest(1, "median").iloc[0]
                 expr_data.append(
                     {
                         "Gene": gene,
-                        "Top Tissue": top_tissue["tissue"],
+                        "Top Tissue": top_tissue["id"],
                         "Median Expression": top_tissue["median"],
                     }
                 )
@@ -163,7 +170,7 @@ def enrichment_pipeline(
     print(f"  - {output_prefix}_summary.csv")
     print(f"  - {output_prefix}_expression.csv")
 
-    return True
+    return bool(results)
 
 
 def main():
@@ -189,6 +196,9 @@ def main():
     parser.add_argument(
         "--no-plot", action="store_true", help="Disable plotting"
     )
+    parser.add_argument(
+        "--database", action="append", help="Full Enrichr library name; repeat for multiple libraries"
+    )
 
     args = parser.parse_args()
 
@@ -208,7 +218,7 @@ def main():
                 background = read_gene_list(args.background)
                 print(f"Read {len(background)} background genes from {args.background}")
             else:
-                print(f"Warning: Background file not found: {args.background}")
+                raise FileNotFoundError(f"Background file not found: {args.background}")
 
         success = enrichment_pipeline(
             gene_list,
@@ -216,6 +226,7 @@ def main():
             background=background,
             output_prefix=args.output,
             plot=not args.no_plot,
+            databases=args.database,
         )
 
         sys.exit(0 if success else 1)

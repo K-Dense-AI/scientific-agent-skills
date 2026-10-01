@@ -25,7 +25,7 @@ FIXED_COMMANDS: dict[str, list[list[str]]] = {
     ],
     "metal": [["system_profiler", "SPDisplaysDataType", "-json"]],
     "rocm": [
-        ["amd-smi", "static", "--json"],
+        ["amd-smi", "static", "--asic", "--vram", "--json"],
         [
             "rocm-smi",
             "--showproductname",

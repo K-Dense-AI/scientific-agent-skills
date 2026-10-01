@@ -1,6 +1,6 @@
 # Overlap, counts, set algebra, and consensus
 
-Verified against Gtars Python 0.9.2 and Rust/CLI 0.9.0 on **2026-07-23**.
+Locally tested with Python 0.10.0; Rust/CLI 0.10.0 source reviewed on **2026-10-01**.
 
 ## Interval meaning
 
@@ -52,7 +52,9 @@ pieces = query.intersect_all(universe)
 ```
 
 `intersect_all` computes `[max(starts), min(ends))` for every overlapping pair.
-It differs from `pintersect`, which pairs two sets by index position.
+It differs from `pintersect`, which pairs two sets by index position, truncates
+to the shorter length, and emits zero-width placeholders for nonoverlaps.
+Validate equal length and pairing before using it.
 
 ## Base-pair set metrics
 
@@ -84,12 +86,12 @@ The exact wrapper dependency is:
 
 ```toml
 [dependencies]
-gtars = { version = "=0.9.0", default-features = false, features = [
+gtars = { version = "=0.10.0", default-features = false, features = [
   "core", "overlaprs"
 ] }
 ```
 
-A build-once/query-many pattern uses the component re-exports:
+The following source-reviewed Rust template was not compiled in this audit:
 
 ```rust
 use gtars::core::models::RegionSet;
@@ -115,7 +117,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 The optional second argument is a region filter in the component API; `None`
 queries all regions. Consult the exact
 [`gtars-overlaprs 0.6.0` docs](https://docs.rs/gtars-overlaprs/0.6.0/gtars_overlaprs/)
-selected by the 0.9.0 wrapper.
+compatible with the 0.10.0 wrapper (0.6.1 removes an unused error type).
+Record the actual Cargo.lock resolution.
 
 ## CLI `overlaprs` is not a count command
 
@@ -132,9 +135,11 @@ Valid backends are `bits` and `ailist`; the handler defaults to `bits`. The
 command writes every overlapping **universe interval** as BED3 to stdout. It does
 not emit query coordinates, query IDs, universe IDs, or one count per query.
 Repeated universe hits can therefore be indistinguishable in the output.
+Unlike `RegionSet(path)`, this CLI reader does not skip comment, browser, track,
+header, or blank rows: prepare a separate header-free BED file before invoking it.
 
 Use Python `count_overlaps` when row-aligned counts are required. The CLI exposes
-a `--streaming` flag in 0.9.0, but the tagged handler does not read it; do not
+a `--streaming` flag in 0.10.0, but the tagged handler does not read it; do not
 claim lower memory from that flag.
 
 Build a non-executing local plan first:
@@ -210,11 +215,11 @@ There is no current Python `gtars.igd.build_index`, `igd.query`,
 `overlap_coverage` surface matching the old skill. CLI `igd` has only `create`
 and `search`; see `cli.md`.
 
-## Official sources (accessed 2026-07-23)
+## Official sources (accessed 2026-10-01)
 
-- [Python RegionSet 0.9.2 binding](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/src/models/region_set.rs)
-- [Rust overlaprs source at v0.9.0](https://github.com/databio/gtars/tree/v0.9.0/gtars-overlaprs)
-- [CLI overlap parser](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/src/overlaprs/cli.rs)
-- [CLI overlap handler/output](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/src/overlaprs/handlers.rs)
-- [Consensus implementation](https://github.com/databio/gtars/blob/v0.9.0/gtars-genomicdist/src/consensus.rs)
+- [Python RegionSet 0.10.0 binding](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/src/models/region_set.rs)
+- [Rust overlaprs source at v0.10.0](https://github.com/databio/gtars/tree/gtars-v0.10.0/gtars-overlaprs)
+- [CLI overlap parser](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/src/overlaprs/cli.rs)
+- [CLI overlap handler/output](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/src/overlaprs/handlers.rs)
+- [Consensus implementation](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-genomicdist/src/consensus.rs)
 - [Gtars overlap module guide](https://docs.bedbase.org/gtars/overlaprs/)

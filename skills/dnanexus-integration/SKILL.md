@@ -1,10 +1,11 @@
 ---
 name: dnanexus-integration
-description: Build and operate reproducible genomics workloads on DNAnexus with the dx CLI, dxpy, apps/applets, native workflows, dxCompiler, and Nextflow. Use for DNAnexus data transfers, dxapp.json development, execution monitoring, workflow import, and project automation.
+description: Builds and operates reproducible genomics workloads on DNAnexus with the dx CLI, dxpy, apps/applets, native workflows, dxCompiler, and Nextflow. Supports DNAnexus data transfers, dxapp.json development, execution monitoring, workflow import, and project automation.
 license: MIT
 compatibility: Requires a DNAnexus account, network access, Python 3.11+, and dx-toolkit/dxpy; some workflow and infrastructure features require organization licenses or policies.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -21,10 +22,13 @@ at platform semantics. It covers:
 - Jobs, workflow analyses, retries, monitoring, and cost controls
 - Native workflows, WDL/CWL through dxCompiler, and Nextflow imports
 
-The documented baseline was verified on **2026-07-23** against
-`dxpy==0.410.0`, dxCompiler 2.17.0, and the 2026 DNAnexus documentation.
+The documented baseline was reviewed on **2026-09-30** against
+`dxpy==0.415.0`, dxCompiler 2.18.0, and the 2026 DNAnexus documentation.
 Consult `references/sources.md` and current release notes when behavior may
-have changed.
+have changed. SDK signatures, CLI help, and offline validators were executed
+locally; examples that transfer data, build, or launch workloads are illustrative
+and require testing in the target account. No authenticated platform run was
+performed during this review.
 
 ## Operating Contract
 
@@ -57,14 +61,14 @@ permissions, or incur compute and egress charges. Follow these rules:
 Install the CLI in an isolated tool environment:
 
 ```bash
-uv tool install "dxpy==0.410.0"
+uv tool install "dxpy==0.415.0"
 dx --version
 ```
 
 For Python code in a project:
 
 ```bash
-uv add "dxpy==0.410.0"
+uv add "dxpy==0.415.0"
 ```
 
 Use interactive login for human sessions:
@@ -79,7 +83,10 @@ dx pwd
 For non-interactive environments, inject only the named DNAnexus secret through
 the environment or a secret manager. Never echo it, include it in command
 output, commit it, or inspect the whole environment. See
-`references/authentication.md`.
+`references/authentication.md`. Prefer selected-project API tokens where supported;
+user-generated API tokens cannot access UKB RAP resources. Login sessions
+default to two hours of inactivity and expire no later than 18 hours after
+issuance, independently of API-token expiry.
 
 ## Safe Preflight
 
@@ -298,7 +305,7 @@ replaces, `dx build` validation.
 ### Inspect the installed SDK
 
 ```bash
-uv run --with "dxpy==0.410.0" \
+uv run --with "dxpy==0.415.0" \
   "scripts/inspect_dxpy.py" --strict
 ```
 

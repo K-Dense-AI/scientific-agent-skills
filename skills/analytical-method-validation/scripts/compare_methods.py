@@ -41,6 +41,7 @@ from _common import (  # noqa: E402
     deming,
     emit,
     finding,
+    finite_float,
     fit_linear,
     mean,
     note,
@@ -60,23 +61,25 @@ def main() -> int:
         description="Compare two procedures with the statistics method comparison requires."
     )
     parser.add_argument("--input", "-i", help="CSV/TSV/JSON with `reference` and `test`")
-    parser.add_argument("--margin", type=float, required=True,
+    parser.add_argument("--margin", type=finite_float, required=True,
                         help="pre-stated equivalence margin for TOST, in the units of the "
                              "difference (absolute, or %% when --relative is used)")
     parser.add_argument("--relative", action="store_true",
                         help="work in percent differences relative to the pair mean")
-    parser.add_argument("--lambda", dest="lambda_ratio", type=float, default=1.0,
+    parser.add_argument("--lambda", dest="lambda_ratio", type=finite_float, default=1.0,
                         help="Deming error-variance ratio var(y error)/var(x error) -- test "
                              "procedure over comparative procedure. Default 1.0 means equal "
-                             "precision. Estimate it as (SD of x replicates / SD of y "
+                             "precision. Estimate it as (SD of y replicates / SD of x "
                              "replicates) squared")
-    parser.add_argument("--alpha", type=float, default=0.05,
+    parser.add_argument("--alpha", type=finite_float, default=0.05,
                         help="one-sided alpha for TOST (default 0.05)")
-    parser.add_argument("--slope-tolerance", type=float, default=None,
+    parser.add_argument("--slope-tolerance", type=finite_float, default=None,
                         help="flag when the slope CI excludes 1 +/- this amount")
     add_common_args(parser)
     args = parser.parse_args()
 
+    if args.slope_tolerance is not None and args.slope_tolerance < 0:
+        raise InputError("--slope-tolerance must be non-negative")
     rows = parse_rows(read_input(args.input), args.input)
     require_columns(rows, ["reference", "test"])
     ref = [to_float(r["reference"], "reference", i) for i, r in enumerate(rows)]
@@ -173,7 +176,7 @@ def main() -> int:
     if args.slope_tolerance is not None:
         lo, hi = dem["slope_ci95"]
         target_lo, target_hi = 1.0 - args.slope_tolerance, 1.0 + args.slope_tolerance
-        if lo < target_lo or hi > target_hi:
+        if not (math.isfinite(lo) and math.isfinite(hi)) or lo < target_lo or hi > target_hi:
             findings.append(
                 f"Deming slope 95% CI ({lo:.4g}, {hi:.4g}) is not contained in "
                 f"({target_lo:g}, {target_hi:g})"
@@ -196,8 +199,8 @@ def main() -> int:
             "stated margin. Absence of a detected difference is not evidence of equivalence"
         )
     note(
-        "ordinary least squares assumes the reference values carry no error, which is false in a "
-        "method comparison; the OLS slope is shown only for contrast"
+        "OLS treats reference values as fixed without error; appreciable reference error can "
+        "attenuate the slope. Choose a regression consistent with the error model"
     )
     note(
         "the equivalence margin must be pre-stated from the specification or the analytical "

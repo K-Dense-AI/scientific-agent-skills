@@ -69,10 +69,19 @@ Do not claim 0.49.1 behavior is identical to 0.52. Read the release notes and te
 
 - Python 3.12 became the minimum.
 - NumPy 2 became a core minimum requirement.
-- Native bindings moved from Cython/setup.py to nanobind with scikit-build-core and CMake.
+- Native bindings moved from legacy extension/setup.py machinery to nanobind with scikit-build-core and CMake.
 - Tree/GPU fixes improved missing-value routing, vector-valued XGBoost base scores, and multiclass additivity.
 - `TreeExplainer` gained a pandas nullable-dtype fix.
 - Plot and documentation examples continued moving to the modern API.
+
+### Verified 0.52.0 traps
+
+- Tabular backgrounds are capped at 100 by default; set the masker's `max_samples` explicitly for larger experiments.
+- `Explainer(algorithm="deep")` fails through unsupported dispatch keywords; use `DeepExplainer` directly.
+- Kernel SHAP defaults to `l1_reg="num_features(10)"`; declare regularization and sampling budgets.
+- Tree interactions require the raw, tree-path-dependent path; do not reuse a probability/interventional explainer.
+- Loss baselines may be callable and label-dependent, and classifier loss transforms require model-specific verification.
+- A one-output deep array can retain a final singleton output axis; `ranked_outputs` belongs on `.shap_values`, not the constructor.
 
 ## Explanation API Migration
 
@@ -366,7 +375,7 @@ The two additive decompositions can differ.
 
 1. Pin old and new environments.
 2. Capture model predictions and existing SHAP outputs on a small immutable fixture.
-3. Replace `.shap_values(X)` with `explainer(X)`.
+3. Prefer `explainer(X)` where it exposes the required controls. Keep specialized `.shap_values` calls for Kernel `nsamples`, deep ranked outputs, and gradient sampling budgets.
 4. Print every result shape.
 5. Replace list-based output selection with final-axis slicing.
 6. Replace legacy plotting calls.

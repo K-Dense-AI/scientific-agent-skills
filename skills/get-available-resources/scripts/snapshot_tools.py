@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime as dt
 from typing import Any, Mapping, Sequence
 
 from _common import (
@@ -49,11 +50,11 @@ def _check_optional_number(
     path: str,
     errors: list[dict[str, str]],
 ) -> None:
-    if not _is_optional_nonnegative_number(parent.get(key)):
+    if key not in parent or not _is_optional_nonnegative_number(parent.get(key)):
         errors.append(
             {
                 "code": "NUMBER",
-                "message": "must be null or a finite nonnegative bounded number",
+                "message": "required field must be null or a finite nonnegative bounded number",
                 "path": f"{path}.{key}",
             }
         )
@@ -80,7 +81,13 @@ def validate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
     observed_at = snapshot.get("observed_at")
-    if not isinstance(observed_at, str) or not observed_at.endswith("Z"):
+    try:
+        valid_time = (isinstance(observed_at, str) and observed_at.endswith("Z")
+                      and dt.datetime.fromisoformat(observed_at[:-1] + "+00:00").utcoffset()
+                      == dt.timedelta(0))
+    except ValueError:
+        valid_time = False
+    if not valid_time:
         errors.append(
             {
                 "code": "TIMESTAMP",
@@ -200,6 +207,16 @@ def validate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             )
 
     accelerators = _expect_mapping(snapshot, "accelerators", "$", errors)
+    for key in ("candidate_counts", "candidate_upper_bounds"):
+        counts = _expect_mapping(accelerators, key, "$.accelerators", errors)
+        for backend in ("cuda", "metal", "rocm"):
+            value = counts.get(backend)
+            if (backend not in counts or
+                (value is None and key == "candidate_counts") or
+                (value is not None and (isinstance(value, bool) or not isinstance(value, int)
+                                       or not 0 <= value <= 256))):
+                errors.append({"code": "ACCELERATOR_COUNT", "message": "invalid candidate count",
+                               "path": f"$.accelerators.{key}.{backend}"})
     devices = accelerators.get("devices")
     if not isinstance(devices, list) or len(devices) > 256:
         errors.append(
@@ -220,7 +237,8 @@ def validate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                     }
                 )
                 continue
-            if device.get("backend_candidate") not in {"cuda", "metal", "rocm"}:
+            backend = device.get("backend_candidate")
+            if not isinstance(backend, str) or backend not in {"cuda", "metal", "rocm"}:
                 errors.append(
                     {
                         "code": "ACCELERATOR_BACKEND",

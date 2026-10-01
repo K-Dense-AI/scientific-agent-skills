@@ -1,6 +1,6 @@
 # gget Module Catalog
 
-Every module by category, with its parameters and both command-line and Python examples.
+Every module by category, with selected parameters and CLI/Python examples for gget 0.30.8. Examples are illustrative unless identified as executed in [workflows.md](workflows.md); optional setup, input files, and network access are required. See [database contracts](database_info.md) for authentication, return fields, and pagination limits.
 This is the usage-oriented cut; see `module_reference.md` for the fuller per-parameter
 reference and `database_info.md` for the underlying data sources.
 
@@ -20,7 +20,7 @@ Retrieve download links and metadata for Ensembl reference genomes.
 - `-l/--list_species`: List available vertebrate species
 - `-liv/--list_iv_species`: List available invertebrate species
 - `-ftp`: Return only FTP links
-- `-d/--download`: Download files (requires curl)
+- `-d/--download`: CLI-only download (requires curl; Python returns links)
 
 **Examples**:
 ```bash
@@ -37,7 +37,7 @@ gget ref -w gtf,cdna -d mouse
 ```python
 # Python
 gget.ref("homo_sapiens")
-gget.ref("mus_musculus", which=["gtf", "cdna"], download=True)
+gget.ref("mus_musculus", which=["gtf", "cdna"])  # metadata/links; CLI -d downloads
 ```
 
 #### gget search - Gene Search
@@ -53,7 +53,7 @@ Locate genes by name, description, and Ensembl synonyms across species.
 - `-l/--limit`: Maximum results to return
 - `wrap_text`: Python-only display helper for wide DataFrames
 
-**Returns**: ensembl_id, gene_name, ensembl_description, ext_ref_description, biotype, URL
+**Returns**: ensembl_id, gene_name, ensembl_description, ext_ref_description, biotype, synonym, url
 
 **Examples**:
 ```bash
@@ -104,7 +104,7 @@ Fetch nucleotide or amino acid sequences for genes and transcripts.
 - `-t/--translate`: Fetch amino acid sequences instead of nucleotide
 - `-iso/--isoforms`: Return all transcript variants (gene IDs only)
 
-**Returns**: FASTA format sequences
+**Returns**: Python list of FASTA lines (header, sequence, ...), or None on failure; CLI prints FASTA
 
 **Examples**:
 ```bash
@@ -197,7 +197,7 @@ gget muscle large_dataset.fasta -s5
 
 ```python
 # Python
-gget.muscle("sequences.fasta", save=True)
+gget.muscle("sequences.fasta", out="aligned.afa")
 ```
 
 #### gget diamond - Local Sequence Alignment
@@ -209,7 +209,7 @@ Perform fast local protein alignment or translated nucleotide-to-protein alignme
 - `-ref/--reference`: Reference sequences (string/list) or FASTA file path (required)
 - `-s/--sensitivity`: fast, mid-sensitive, sensitive, more-sensitive, very-sensitive (default), ultra-sensitive
 - `-t/--threads`: CPU threads (default: 1)
-- `-db/--diamond_db`: Save database for reuse
+- `-db/--diamond_db`: Database output path (reference still required)
 - `-x/--translated`: Enable nucleotide query to amino acid reference alignment
 
 **Returns**: Identity percentage, sequence lengths, match positions, gap openings, E-values, bit scores
@@ -237,10 +237,10 @@ Query RCSB Protein Data Bank for structure and metadata.
 
 **Parameters**:
 - `pdb_id`: PDB identifier (e.g., '7S7U')
-- `-r/--resource`: Data type (pdb, entry, pubmed, assembly, entity types)
+- `-r/--resource`: Data type (pdb, mmcif, entry, pubmed, assembly, entity types)
 - `-i/--identifier`: Assembly, entity, or chain ID
 
-**Returns**: PDB format (structures) or JSON (metadata)
+**Returns**: PDB/mmCIF text (structures) or dictionary (metadata); `resource="pdb"` falls back to mmCIF if PDB is unavailable
 
 **Examples**:
 ```bash
@@ -256,21 +256,46 @@ gget pdb 7S7U -r entry
 gget.pdb("7S7U", save=True)
 ```
 
+#### gget g2p - Residue Annotations and Isoform Maps
+
+Public G2P lookups, added in 0.30.7 and updated in 0.30.8. At least one of `gene`
+or `uniprot_id` is required. Gene-only lookup chooses a reviewed human UniProt
+match; specify the pair when identity matters. `resource` is `features`, `map`,
+or `alignment`. Alignment requires explicit canonical `uniprot_id` and alternative
+`isoform`. `residues` filters positions locally for features/alignment, not map.
+Python returns DataFrame or None on request failure; invalid inputs can raise.
+There is no Python `json` argument. `out` writes CSV and overrides `save`.
+
+```bash
+gget g2p TP53 -u P04637 -r map --csv
+```
+
+```python
+mapping = gget.g2p("TP53", uniprot_id="P04637", resource="map")
+features = gget.g2p("TP53", uniprot_id="P04637", residues=[175, 248, 273])
+```
+
+Results include `gene_name`/`uniprot_id`; maps add `PDB Ids List`. The public API
+does not expose the portal's ClinVar/gnomAD/HGMD variant overlays. Per-residue
+scores and predictions require their own calibration; they do not establish
+pathogenicity. [Official manual](https://scverse.org/gget/en/g2p.html).
+
 #### gget alphafold - Protein Structure Prediction
 
-Predict 3D protein structures using simplified AlphaFold2.
+Legacy AlphaFold2 wrapper, deprecated and no longer actively maintained since 0.30.7. Retained for existing environments; prefer a maintained predictor for new work.
 
 **Setup Required**:
 ```bash
-# Installs modified third-party dependencies and downloads model parameters
+# Legacy setup; installs third-party dependencies and downloads model parameters
 gget setup alphafold
 ```
 
 **Parameters**:
 - `sequence`: Amino acid sequence (string), multiple sequences (list), or FASTA file. Multiple sequences trigger multimer modeling
-- `-mr/--multimer_recycles`: Recycling iterations (default: 3; recommend 20 for accuracy)
+- `-mr/--multimer_recycles`: Recycling iterations (default: 3; higher values increase compute without guaranteeing accuracy)
 - `-mfm/--multimer_for_monomer`: Apply multimer model to single proteins
 - `-r/--relax`: AMBER relaxation for top-ranked model
+- `-jhd/--jackhmmer_savedir`: Directory for temporary jackhmmer files
 - `plot`: Python-only; generate interactive 3D visualization (default: True)
 - `show_sidechains`: Python-only; include side chains (default: True)
 
@@ -281,7 +306,7 @@ gget setup alphafold
 # Predict single protein structure
 gget alphafold MKWMFKEDHSLEHRCVESAKIRAKYPDRVPVIVEKVSGSQIVDIDKRKYLVPSDITVAQFMWIIRKRIQLPSEKAIFLFVDKTVPQSR
 
-# Predict multimer with higher accuracy
+# Legacy multimer example; increased recycles are not an accuracy guarantee
 gget alphafold sequence1.fasta -mr 20 -r
 ```
 
@@ -340,8 +365,8 @@ Query ARCHS4 database for correlated genes or tissue expression data.
 - `-e/--ensembl`: Input is Ensembl ID
 
 **Returns**:
-- **Correlation mode**: Gene symbols, Pearson correlation coefficients
-- **Tissue mode**: Tissue identifiers, min/Q1/median/Q3/max expression values
+- **Correlation mode**: `gene_symbol`, `pearson_correlation` (human only; Python `gene_count` controls count)
+- **Tissue mode**: `id`, `min`, `q1`, `median`, `q3`, `max`
 
 **Examples**:
 ```bash
@@ -370,13 +395,13 @@ gget setup cellxgene
 - `--gene` (-g): Gene names or Ensembl IDs (case-sensitive! 'PAX7' for human, 'Pax7' for mouse)
 - `--tissue`: Tissue type(s)
 - `--cell_type`: Specific cell type(s)
-- `--species` (-s): 'homo_sapiens' (default) or 'mus_musculus'
+- `--species` (-s): 'homo_sapiens' (default), 'mus_musculus', 'macaca_mulatta', 'callithrix_jacchus', or 'pan_troglodytes' (primates require Census 2025-11-08 or newer)
 - `--census_version` (-cv): Version ("stable", "latest", or dated)
 - `--ensembl` (-e): Use Ensembl IDs
 - `--meta_only` (-mo): Return metadata only
-- Additional filters: disease, development_stage, sex, assay, dataset_id, donor_id, ethnicity, suspension_type
+- Additional filters: disease, development_stage, sex, assay, dataset_id, donor_id, self_reported_ethnicity, suspension_type
 
-**Returns**: AnnData object with count matrices and metadata (or metadata-only dataframes)
+**Returns**: AnnData with raw counts; metadata-only DataFrame rows are cells, and the gene filter is ignored in that mode. Pin a dated release and scope observations.
 
 **Examples**:
 ```bash
@@ -397,7 +422,7 @@ adata = gget.cellxgene(gene=["ACE2", "ABCA1"], tissue="lung", cell_type="mucus s
 Perform ontology enrichment analysis on gene lists using Enrichr.
 
 **Parameters**:
-- `genes`: Gene symbols or Ensembl IDs
+- `genes`: Gene symbols, or Ensembl IDs with `ensembl=True` / CLI `--ensembl`
 - `-db/--database`: Reference database (supports shortcuts: 'pathway', 'transcription', 'ontology', 'diseases_drugs', 'celltypes')
 - `-s/--species`: human (default), mouse, fly, yeast, worm, fish
 - `-bkg_l/--background_list`: Background genes for comparison
@@ -410,6 +435,9 @@ Perform ontology enrichment analysis on gene lists using Enrichr.
 - 'ontology' → GO_Biological_Process_2021
 - 'diseases_drugs' → GWAS_Catalog_2019
 - 'celltypes' → PanglaoDB_Augmented_2021
+- 'kinase_interactions' → KEA_2015
+
+Shortcuts apply to human/mouse only. Other species need their full library names; custom backgrounds are human/mouse only. Ensembl background IDs also require `ensembl_bkg=True`.
 
 **Examples**:
 ```bash
@@ -462,11 +490,13 @@ Retrieve disease and drug associations from OpenTargets.
 - Ensembl gene ID (required)
 - `-r/--resource`: diseases (default), drugs, tractability, pharmacogenetics, expression, depmap, interactions
 - `-l/--limit`: Cap results count
-- `--filters`: Exact-match filters using returned OpenTargets column names; repeat on the CLI or pass a Python dict
-- `-or/--or`: CLI-only; combine filters with OR logic instead of the default AND logic
+- `--filter`: Exact-match filters using returned OpenTargets column names; repeat on the CLI or pass a Python dict
+- Filters use AND logic; there is no `--or` option in the released 0.30.8 CLI
 
 **Current notes**:
-- gget 0.30.5 rewrote this module for the newer OpenTargets API; some output column names differ from older releases.
+- gget 0.30.8 returns dot-separated columns, including `disease.name`, `score`, `drug.name`, and `drug.maximumClinicalStage`.
+- Expression is `baselineExpression`: `median/min/q1/q3/max/unit` and `tissueBiosample.*`/`celltypeBiosample.*`.
+- Filters apply locally after limit. Expression fetches one page (max 3000); diseases/drugs/interactions use server default pages. `limit=None` does not make a complete export.
 - The older `--filter_mode` argument was removed upstream.
 
 **Examples**:
@@ -478,7 +508,7 @@ gget opentargets ENSG00000169194 -r diseases -l 5
 gget opentargets ENSG00000169194 -r drugs -l 10
 
 # Filter interactions by returned column names
-gget opentargets ENSG00000169194 -r interactions --filters protein_a_id=P35225 --filters gene_b_id=ENSG00000077238
+gget opentargets ENSG00000169194 -r interactions --filter intA=P35225 --filter targetB.id=ENSG00000077238
 ```
 
 ```python
@@ -487,13 +517,15 @@ gget.opentargets("ENSG00000169194", resource="diseases", limit=5)
 gget.opentargets(
     "ENSG00000169194",
     resource="interactions",
-    filters={"protein_a_id": "P35225", "gene_b_id": "ENSG00000077238"},
+    filters={"intA": "P35225", "targetB.id": "ENSG00000077238"},
 )
 ```
 
 #### gget cbio - cBioPortal Cancer Genomics
 
 Plot cancer genomics heatmaps using cBioPortal data.
+
+**Setup:** `gget setup cbio` installs optional dependencies.
 
 **Two subcommands**:
 
@@ -647,7 +679,7 @@ gene_expression(["Gjb4"], analysis_level="Across_tissues", analysis_type="Strain
 
 Generate mutated nucleotide sequences from mutation annotations.
 
-**Current scope**: gget 0.29.1 simplified `mutate` to focus on applying standard mutation annotations to supplied nucleotide sequences and returning/saving mutated FASTA records. The broader variant-screening workflow moved upstream to the `kvar` project.
+**Scope**: Applies mutation annotations to supplied nucleotide sequences. Python returns raw mutated sequence strings when `out` is omitted; `out` writes FASTA. Verify the exact transcript/CDS and reference bases before applying `c.` coordinates; this does not assess functional impact. Broader variant-screening workflows are maintained in the upstream `kvar` project.
 
 **Parameters**:
 - `sequences`: FASTA file path or direct nucleotide sequence input (string/list)
@@ -658,7 +690,7 @@ Generate mutated nucleotide sequences from mutation annotations.
 - `-k/--k`: Length of flanking sequences (default: 30 nucleotides)
 - `-o/--out`: Output FASTA path; without it Python returns a list of mutated sequences
 
-**Returns**: Mutated sequences in FASTA format
+**Returns**: List of mutated sequence strings in Python; `out` writes FASTA
 
 **Examples**:
 ```bash
@@ -677,14 +709,14 @@ gget.mutate(["ATCGCTAAGCT", "TAGCTA"], ["c.4G>T", "c.1_3inv"], out="mutated.fast
 
 #### gget gpt - OpenAI Text Generation
 
-Generate natural language text using OpenAI's API.
+Legacy OpenAI wrapper; deprecated and no longer actively maintained since 0.30.7. Examples below are illustrative and require an account-compatible model.
 
 **Setup Required**:
 ```bash
 gget setup gpt
 ```
 
-**Important**: Requires an OpenAI API key. Do not hard-code the key in notebooks, scripts, shell history, or committed files. Prefer a named environment variable such as `OPENAI_API_KEY`, and set monthly billing limits before use.
+**Important**: Requires an OpenAI API key. Do not hard-code the key in notebooks, scripts, shell history, or committed files. Prefer a named environment variable such as `OPENAI_API_KEY`, and inspect the account and model requirements before use.
 
 **Parameters**:
 - `prompt`: Text input for generation (required)
@@ -699,7 +731,8 @@ For CLI usage, `gget gpt` expects the API key as an argument. Avoid this on shar
 # Python
 import os
 
-gget.gpt("Explain CRISPR", api_key=os.environ["OPENAI_API_KEY"])
+# Legacy wrapper uses openai.ChatCompletion.create, removed by modern SDKs.
+# Do not execute it in a modern SDK environment or assume the default model exists.
 ```
 
 #### gget setup - Install Dependencies
@@ -714,7 +747,8 @@ As of gget 0.29.2, `gget setup` tries `uv pip install` first for Python dependen
 
 **Modules requiring setup**:
 - `alphafold` - Downloads ~4GB of model parameters
-- `cellxgene` - Installs cellxgene-census (may require Python 3.9/3.10 if the latest Python is unsupported)
+- `cbio` - Installs optional cBioPortal dependencies (bravado)
+- `cellxgene` - Installs cellxgene-census (may require Python 3.12/3.13 if the latest Python is unsupported)
 - `elm` - Downloads local ELM database
 - `gpt` - Installs/configures OpenAI integration dependencies
 

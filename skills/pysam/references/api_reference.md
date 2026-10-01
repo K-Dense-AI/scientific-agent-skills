@@ -1,7 +1,7 @@
 # Pysam 0.24 API Quick Reference
 
 This is a compact navigation aid, not a replacement for the official API
-documentation. Signatures and defaults below are for pysam 0.24.0.
+documentation. Signatures and defaults below are for pysam 0.24.1.
 
 ## Alignment Files
 
@@ -10,7 +10,7 @@ documentation. Signatures and defaults below are for pysam 0.24.0.
 ```python
 pysam.AlignmentFile(
     filepath_or_object,
-    mode=None,
+    mode=None,  # pass the remaining options by keyword
     template=None,
     reference_names=None,
     reference_lengths=None,
@@ -21,7 +21,6 @@ pysam.AlignmentFile(
     check_header=True,
     check_sq=True,
     reference_filename=None,
-    filename=None,
     index_filename=None,
     filepath_index=None,
     require_index=False,
@@ -88,7 +87,7 @@ Important pileup kwargs/defaults:
 | `max_depth` | `8000` | maximum depth |
 | `stepper` | `"samtools"` in current implementation/docs context | read filtering/processing mode |
 | `fastafile` | `None` | reference for BAQ/samtools behavior |
-| `ignore_overlaps` | `True` | collapse overlapping paired bases |
+| `ignore_overlaps` | `True` | adjust qualities of overlapping paired bases |
 | `ignore_orphans` | `True` | exclude improper paired orphans |
 | `flag_filter` | unmapped, secondary, QC-fail, duplicate | excluded flags |
 | `flag_require` | `0` | required flags |
@@ -97,8 +96,14 @@ Important pileup kwargs/defaults:
 | `compute_baq` | `True` | compute BAQ when reference is available |
 | `redo_baq` | `False` | recompute existing BAQ |
 
+For `count_coverage`, pass numeric `contig`, `start`, `stop` within contig
+bounds; the accepted `region`/`end` aliases do not size its arrays correctly
+in 0.24.1.
+
 Always pass important pileup semantics explicitly rather than depending on
-defaults.
+defaults. `get_num_aligned()` is a quality-filtered pileup-entry count in
+0.24.1 and can include D/N entries. Count non-deletion/non-refskip entries
+explicitly for observed base depth.
 
 Other useful methods/properties:
 
@@ -110,7 +115,8 @@ Other useful methods/properties:
 - `find_introns(read_iterator)`
 - `head(n, multiple_iterators=True)`
 - `references`, `lengths`, `nreferences`
-- `mapped`, `unmapped`, `nocoordinate` when index statistics support them
+- `mapped`, `unmapped`, `nocoordinate` when index statistics support them;
+  CRAI returns zeros because it stores no such counts
 
 ## `AlignedSegment`
 
@@ -178,7 +184,8 @@ They return mappings from `(canonical_base, strand, modification)` to
 - `indel`
 - `level`
 
-Proxy objects are valid only while their iterator remains alive.
+Read column values before the iterator advances; the buffer is reused.
+`PileupRead.level` is exposed but is not currently computed.
 
 ## Variant Files
 
@@ -216,7 +223,9 @@ VariantFile.write(record)
 ```
 
 Numeric fetch coordinates are 0-based, half-open. `reopen=True` supports
-multiple simultaneous iterators.
+multiple simultaneous iterators. Use `contig`, not the legacy `reference`
+alias: without `contig` or `region`, 0.24.1 selects the sequential-rewind path
+before interpreting that alias.
 
 `VariantHeader`:
 
@@ -296,9 +305,9 @@ Yielded records expose:
 ```python
 pysam.TabixFile(
     filename,
-    index=None,
     mode="r",
     parser=None,
+    index=None,
     encoding="ascii",
     threads=1,
 )
@@ -313,7 +322,11 @@ TabixFile.fetch(
 )
 ```
 
-Properties: `contigs`, `header`, `filename`, `index_filename`.
+Properties: `contigs`, `header`, `filename`, `filename_index`. Do not use the
+inherited `index_filename` to discover the loaded tabix index (it is `None`
+in the tested release). Supply `index="data.gz.csi"` for CSI; the default
+looks only for `data.gz.tbi`. Although accepted, `threads=` is reset to 1
+by the 0.24.1 TabixFile implementation; do not promise tabix parallel decoding.
 
 Compression and indexing:
 
@@ -346,7 +359,8 @@ Parsers:
 - `pysam.asTuple()`
 - `pysam.asBed()`
 - `pysam.asGTF()`
-- `pysam.asVCF()`
+- `pysam.asGFF3()`
+- `pysam.asVCF()` (its `.pos` is 0-based, unlike `VariantRecord.pos`)
 
 ## Wrapped Commands
 
@@ -375,7 +389,8 @@ command.usage()
 - stdout is returned by default
 - `save_stdout=path` writes captured stdout to a file
 - `catch_stdout=False` discards stdout and avoids overriding a command's `-o`
-- stderr is captured and available from `get_messages()`
+- after success, stderr is available from `get_messages()`; after failure,
+  use the raised exception because 0.24.1 can leave that cache unchanged
 - a nonzero exit raises `pysam.SamtoolsError`
 
 Top-level samtools aliases such as `pysam.sort` exist, but explicit module
@@ -391,6 +406,8 @@ imports make provenance clearer. Bcftools should be explicitly imported as
 - `pysam.tabix_compress(...)`
 - `pysam.tabix_index(...)`
 - `pysam.set_verbosity(level)`
+- `pysam.reverse_complement(sequence)` (new in 0.24.1; preserves input type)
+- `pysam.reverse_complement_inplace(bytearray_sequence)` (new in 0.24.1)
 
 Pysam 0.24 substantially optimized `array_to_qualitystring()`.
 
@@ -400,7 +417,8 @@ Expect and handle narrowly:
 
 - `ValueError`: invalid coordinates, header/record errors, unusable index
 - `OSError` / `IOError`: file, compression, and HTSlib I/O problems
-- `IndexError`: out-of-range FASTA coordinates and sequence access
+- `IndexError`: some invalid coordinates and sequence access; FASTA end
+  overruns can instead clip or return an empty string, so validate bounds
 - `KeyError`: missing headers, samples, tags, or fields when accessed directly
 - `pysam.SamtoolsError`: wrapped command failure
 

@@ -285,11 +285,11 @@ class FormatResultTests(unittest.TestCase):
         )
         self.assertEqual(renderings["parenthetic"], "9.1093837139(28)e-31 kg")
 
-    def test_exact_values_are_labelled(self) -> None:
+    def test_zero_uncertainty_does_not_claim_exactness(self) -> None:
         renderings = format_result.render(
             format_result.round_to_uncertainty(299792458.0, 0.0), "m/s"
         )
-        self.assertIn("exact", renderings["plusminus"])
+        self.assertIn("zero supplied uncertainty", renderings["plusminus"])
 
     def test_warnings_cover_the_reporting_traps(self) -> None:
         rounded = format_result.round_to_uncertainty(
@@ -496,7 +496,8 @@ class PropagationTests(unittest.TestCase):
         validation = propagate_uncertainty.validate_linearization(
             framework, sampling, 2
         )
-        self.assertTrue(validation["gum_framework_validated"])
+        self.assertTrue(validation["endpoint_agreement"])
+        self.assertIsNone(validation["gum_framework_validated"])
         self.assertEqual(
             propagate_uncertainty.collect_warnings(framework, sampling, {}), []
         )
@@ -513,7 +514,8 @@ class PropagationTests(unittest.TestCase):
         validation = propagate_uncertainty.validate_linearization(
             framework, sampling, 2
         )
-        self.assertFalse(validation["gum_framework_validated"])
+        self.assertFalse(validation["endpoint_agreement"])
+        self.assertIsNone(validation["gum_framework_validated"])
         self.assertLess(framework["coverage_interval"][0], 0.0)
         self.assertGreaterEqual(sampling["shortest_coverage_interval"][0], 0.0)
         warnings = propagate_uncertainty.collect_warnings(framework, sampling, {})

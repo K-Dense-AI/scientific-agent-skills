@@ -221,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
             destination = checked_output(args.output, root=args.root, force=args.force)
             if paths_overlap(mapping_path, destination):
                 raise ToolError("report must not overwrite the sensitive mapping")
+            if args.uid_key_file and paths_overlap(key_path, destination):
+                raise ToolError("report must not overwrite the UID key")
             atomic_write(destination, json_bytes(report), force=args.force)
             emit_json(
                 {

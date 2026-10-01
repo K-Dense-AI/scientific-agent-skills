@@ -1,7 +1,7 @@
 ---
 name: onekgpd
 description: >
-  Query the 1000 Genomes Project dataset (3,202 whole-genome-sequenced
+  Queries the 1000 Genomes Project dataset (3,202 whole-genome-sequenced
   individuals, GRCh38) at the level of individual participants.
   Use when a question is about individuals or variants in the 1000 Genomes
   Project cohort: which individuals carry variants matching specific criteria
@@ -14,7 +14,9 @@ license: MIT
 compatibility: Requires Python >=3.11. Variant and sample queries require outbound network access to the public 1000 Genomes query endpoint over TLS; the sample/population metadata commands run fully offline over a data file bundled in the skill. No credentials, API keys, or environment variables are used.
 allowed-tools: Write Bash
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
+  upstream-version: "dnaerys 0.2.1; proto R1.20.0"
   skill-author: Dnaerys
 ---
 
@@ -38,6 +40,12 @@ axes listed below. Relatedness between two named individuals is also available.
 The genotype state in which a variant is carried — heterozygous or homozygous —
 is a criterion that queries may specify; results are returned as variants or as
 sample names, not as raw genotypes.
+
+The public service is **TLS gRPC at `db.dnaerys.org:443`**, accessed with
+`dnaerys 0.2.1` (Python 3.11+); it is not a REST base URL. The maintained
+service snapshot advertises VEP 115 / GENCODE 49, ClinVar 202502, and gnomAD
+4.1. These are the service's annotation releases, not the latest release of
+each upstream resource. Record them when interpreting results.
 
 ## When to Use
 
@@ -82,7 +90,10 @@ sample names, not as raw genotypes.
     (https://www.internationalgenome.org/data).
 3.  **Access constraints**: There is no API key, no `.env` file, and no
     rate-limit token to configure.
-4.  **No credentials required**
+4.  **Timeouts**: network commands use `--timeout 30` seconds per RPC by default.
+    A positive finite override is allowed. Pagination makes several RPCs and
+    retryable failures retry the whole fetch up to three times, so this is not
+    a deadline for the whole command.
 
 ## Core Rules
 
@@ -105,13 +116,21 @@ sample names, not as raw genotypes.
 -   **Output**: scripts write full JSON to a file (`--output`, default under
     `/tmp/`) and print a concise summary to stdout. Do not read large JSON files
     into context — use `jq` or a small disposable `uv run python` snippet to
-    extract fields.
+    extract fields. `--page-size` retrieves every page but accumulates all
+    variants in RAM; it is not a bounded-memory export. Size the query first.
+-   **Check completeness**: `result_incomplete=true` means results cannot support
+    a definitive zero/absence claim. Re-run after service recovery. For capped
+    variant selections, `truncated=true` means the limit was reached and more
+    records may exist, even if the cluster result itself was complete.
 
 ## Coordinate Provenance (MANDATORY FIRST STEP)
 
 Before any region-based query, resolve the gene or feature to **GRCh38**
-coordinates against an authoritative source (for example Ensembl), and query
-with those resolved coordinates. The assembly must be explicit, and a gene-range
+coordinates against an authoritative source (for example Ensembl or NCBI), and query
+with those resolved coordinates. Inputs are **1-based, inclusive**: a BED interval
+`[start0, end0)` becomes `start=start0+1, end=end0`. Record the source accession,
+annotation release, and retrieval date; gene boundaries can differ by annotation
+release even on the same assembly. The assembly must be explicit, and a gene-range
 must be resolved to precise positions before use. This is structural, not
 advisory: there is no source-side guardrail that would catch a misplaced region,
 so an unverified coordinate produces results for an unintended location with no
@@ -191,39 +210,55 @@ filtering is not necessarily echoed back on the returned variant.
 > nothing.
 
 > [!NOTE]
-> Allele-frequency fields use `0.0` to mean "not present in that source." So
-> `--gnomad-exomes-af-gt 0` selects variants that *are* in gnomAD exomes; a
-> returned `gnomad_exomes_af` of `0.0` means the variant is absent from gnomAD
-> exomes. The same convention for gnomAD genomes AF.
-> Conversely, `--gnomad-exomes-af-lt` / `--gnomad-genomes-af-lt` bounds **include**
-unannotated variants: "AF < X in gnomAD" includes variants with gnomAD AF = 0,
-i.e. unannotated; pair it with `--gnomad-*-af-gt 0` to require presence in gnomAD.
+> `gnomad_exomes_af`, `gnomad_genomes_af`, and `am_score` use `0.0` for
+> **not annotated in this service snapshot**. This does not establish absence
+> from the current gnomAD release, biological rarity, or a benign prediction.
+> The dataset's own `af` field is a different statistic, not this sentinel.
 
-> [!NOTE]
-> `am_score` of `0.0` means not scored or not annotated by AlphaMissense - it does not mean `benign`.
-> A real AlphaMissense score is always greater than 0.
+> [!CAUTION]
+> **A zero numeric filter is unset on the server**, so `--gnomad-exomes-af-gt 0`
+> does not exclude missing annotations. The wrapper rejects zero, nonfinite,
+> out-of-range, and float32-underflowing bounds. Choose an explicit positive
+> threshold (for example `--gnomad-exomes-af-gt 0.000001` means AF > 1e-6,
+> not merely annotation presence). For exact `> 0`, retrieve a complete variant
+> set and post-filter the returned AF locally. A `< X` filter alone includes
+> unannotated zero values. Apply the same missing-score caution to AlphaMissense.
+
+Categorical annotations are retained across transcripts. Combining consequence
+and impact filters does not establish that they describe the same transcript.
+`amino_acids` may contain multiple HGVSp entries; the generic gRPC service places
+canonical annotations first, whereas the separate MCP layer trims its output.
+Preserve transcript identifiers, and do not treat a model's likely-pathogenic
+class as a clinical diagnosis or a participant phenotype.
 
 ## Quick Start
 
 ```bash
-# Step 1. Resolve coordinates against an authoritative source — see Coordinate Provenance.
-#    example: BRCA1: chr17:43044292-43170245
+# Step 1. NCBI Gene 672, GRCh38.p14 / NC_000017.11, RS_2025_08:
+# BRCA1 spans chr17:43044295-43170327 (1-based inclusive).
+# Source: https://www.ncbi.nlm.nih.gov/gene/672 ; re-resolve for your analysis.
 # Step 2. Size the result set: how many individuals carry predicted likely-pathogenic
 #    missense variants in this region?
 uv run scripts/onekgpd_api.py count-samples \
-  --chrom chr17 --start 43044292 --end 43170245 \
+  --chrom chr17 --start 43044295 --end 43170327 \
   --consequence MISSENSE_VARIANT \
   --alpha-missense-class AM_LIKELY_PATHOGENIC \
   --output /tmp/count.json
 # Step 3. If the count is manageable, list those individuals.
 uv run scripts/onekgpd_api.py select-samples \
-  --chrom chr17 --start 43044292 --end 43170245 \
+  --chrom chr17 --start 43044295 --end 43170327 \
   --consequence MISSENSE_VARIANT \
   --alpha-missense-class AM_LIKELY_PATHOGENIC \
   --output /tmp/samples.json
-# Step 4: For that set of individuals, see the actual variants they carry.
+# Step 4. Count then select variants for actual returned sample IDs.
+# HG03169,NA20506 below are illustrative IDs; substitute the Step 3 results.
+uv run scripts/onekgpd_api.py count-variants-in-samples \
+  --chrom chr17 --start 43044295 --end 43170327 \
+  --samples HG03169,NA20506 \
+  --consequence MISSENSE_VARIANT --alpha-missense-class AM_LIKELY_PATHOGENIC \
+  --output /tmp/variant_count.json
 uv run scripts/onekgpd_api.py select-variants-in-samples \
-  --chrom chr17 --start 43044292 --end 43170245 \
+  --chrom chr17 --start 43044295 --end 43170327 \
   --samples HG03169,NA20506 \
   --consequence MISSENSE_VARIANT --alpha-missense-class AM_LIKELY_PATHOGENIC \
   --output /tmp/variants.json
@@ -275,9 +310,11 @@ returned. Full schema:
 Single position via `--chrom` + `--position` (not a region).
 
 -   `count-samples-hom-ref` — count individuals with a 0/0 call at the position.
-    The count is a sentinel: `-1` = no variant exists at that position at all;
+    The count uses a sentinel: `-1` = no variant exists at that position at all;
     `0` = a variant exists but no individual is homozygous reference; `>0` = the
-    number of homozygous-reference individuals. The summary states which case.
+    number of homozygous-reference individuals. These interpretations require
+    `result_incomplete=false`; otherwise `variant_present` is `null`. No variant
+    record is not evidence that all 3,202 individuals have callable 0/0 genotypes.
 -   `select-samples-hom-ref` — list the individuals with a 0/0 call at the position.
 
 ### Relatedness command
@@ -328,6 +365,8 @@ argument tables and JSON output schemas.
 
 ### Which individuals, then which variants they carry
 
+The following is an illustrative template; replace all angle-bracket placeholders.
+
 ```bash
 # Step 1: resolve gene -> verified GRCh38 region (authoritative source).
 # Step 2: count individuals carrying a qualifying variant in the region.
@@ -340,7 +379,12 @@ uv run scripts/onekgpd_api.py select-samples \
   --chrom <chr> --start <start> --end <end> \
   --consequence MISSENSE_VARIANT --alpha-missense-class AM_LIKELY_PATHOGENIC \
   --output /tmp/who.json
-# Step 4: for that set of individuals, see the actual variants they carry.
+# Step 4: count variants for those individuals before selecting.
+uv run scripts/onekgpd_api.py count-variants-in-samples \
+  --chrom <chr> --start <start> --end <end> \
+  --samples <name1,name2,...> \
+  --consequence MISSENSE_VARIANT --alpha-missense-class AM_LIKELY_PATHOGENIC \
+  --output /tmp/variant_count.json
 uv run scripts/onekgpd_api.py select-variants-in-samples \
   --chrom <chr> --start <start> --end <end> \
   --samples <name1,name2,...> \
@@ -349,6 +393,8 @@ uv run scripts/onekgpd_api.py select-variants-in-samples \
 ```
 
 ### Homozygous-reference carriers at a position of interest
+
+Illustrative template; replace the placeholders with verified coordinates.
 
 ```bash
 # After identifying a position of interest (verified coordinate):
@@ -377,5 +423,7 @@ uv run scripts/onekgpd_api.py select-samples-hom-ref \
     — the controlled-vocabulary terms accepted by the CSV filter flags
     (consequence, impact, biotype, feature type, ClinVar significance,
     AlphaMissense class, variant class).
+-   Current API contract and live-check scope: the
+    [command reference](references/onekgpd_commands.md#verified-api-contract).
 -   1000 Genomes Project / IGSR: https://www.internationalgenome.org/
 -   1000 Genomes Project dataset online: https://dnaerys.org/online/

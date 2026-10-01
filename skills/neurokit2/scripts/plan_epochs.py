@@ -42,6 +42,8 @@ def _parse_events(value: str) -> list[float]:
 
 def _sample_offset(seconds: float, sampling_rate: float, *, name: str) -> int:
     exact = seconds * sampling_rate
+    if not math.isfinite(exact):
+        raise CliError(f"{name} must map to a finite sample offset")
     rounded = round(exact)
     if not math.isclose(exact, rounded, rel_tol=0.0, abs_tol=1e-8):
         raise CliError(
@@ -59,6 +61,8 @@ def _event_samples(
 ) -> list[int]:
     samples: list[int] = []
     for index, value in enumerate(values, start=1):
+        if not math.isfinite(value) or value < 0:
+            raise CliError(f"event {index} must be finite and nonnegative")
         if unit == "samples":
             rounded = round(value)
             if not math.isclose(value, rounded, rel_tol=0.0, abs_tol=1e-9):
@@ -113,10 +117,15 @@ def plan(
     rows: list[dict[str, Any]] = []
     invalid = 0
     for ordinal, onset in enumerate(events, start=1):
+        if isinstance(onset, bool) or not isinstance(onset, int):
+            raise CliError("event onsets must be integer sample indices")
+        if not 0 <= onset < recording_samples:
+            raise CliError(f"event {ordinal} onset is outside the recording")
         start = onset + start_offset
         end = onset + end_offset
-        before = max(0, -start)
-        after = max(0, end - recording_samples)
+        window_samples = end_offset - start_offset
+        before = min(window_samples, max(0, -start))
+        after = min(window_samples, max(0, end - recording_samples))
         complete = before == 0 and after == 0
         if not complete:
             invalid += 1

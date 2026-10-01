@@ -28,8 +28,8 @@ SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "pdf"
 SCRIPTS = SKILL_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-# These scripts take positional paths via `sys.argv` rather than argparse, so
-# there is no `--help` contract to apply here.
+# The preview converter exposes argparse; the remaining helpers use positional paths.
+CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 
 
 def coords():

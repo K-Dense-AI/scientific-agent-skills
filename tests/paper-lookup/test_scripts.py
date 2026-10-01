@@ -24,9 +24,11 @@ Each is a failure the upstream API reports as success.
 from __future__ import annotations
 
 import json
+import io
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -432,12 +434,12 @@ class PaginateAdapterTests(unittest.TestCase):
             0,
         )
         self.assertIsNone(page.total)
-        self.assertEqual(page.next_state, 1)
+        self.assertIsNone(page.next_state)
 
     def test_biorxiv_url_selects_details_or_pubs(self) -> None:
         build = paginate._rxiv_url("biorxiv")
         self.assertIn("/details/biorxiv/2024-01-01/2024-01-03/0/json", build("2024-01-01/2024-01-03", 0, 100))
-        self.assertIn("/pubs/biorxiv/2024-01-01/2024-01-03/30/json", build("pubs:2024-01-01/2024-01-03", 30, 100))
+        self.assertEqual("https://api.biorxiv.org/pubs/biorxiv/2024-01-01/2024-01-03/30", build("pubs:2024-01-01/2024-01-03", 30, 100))
 
     def test_medrxiv_never_uses_the_api_medrxiv_host(self) -> None:
         url = paginate._rxiv_url("medrxiv")("2024-01-01/2024-01-03", 0, 100)
@@ -526,6 +528,94 @@ class PaginateAdapterTests(unittest.TestCase):
                     "paginate.py", "--api", "biorxiv", "--query", "5", flag, "0", "--dry-run"
                 )
                 self.assertEqual(result.returncode, 1)
+
+
+class CurrentContractRegressionTests(unittest.TestCase):
+    """Synthetic boundary cases supplement the dated response fixtures."""
+
+    def test_legacy_arxiv_id_keeps_archive_and_version(self) -> None:
+        self.assertEqual(
+            arxiv_atom.id_from_url("https://arxiv.org/abs/hep-th/9901001v2"),
+            "hep-th/9901001v2",
+        )
+
+    def test_xml_error_page_is_not_an_empty_atom_feed(self) -> None:
+        with patch.object(arxiv_atom, "read_input", return_value="<html><body>Blocked</body></html>"), patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as caught:
+                arxiv_atom.main(["-"])
+        self.assertEqual(caught.exception.code, 1)
+
+    def test_sparse_abstract_does_not_allocate_the_missing_positions(self) -> None:
+        text, notes = openalex_abstract.reconstruct({"start": [0], "end": [10**12], "bad": [-1]})
+        self.assertEqual(text, "start end")
+        self.assertTrue(any("999999999999 position" in note for note in notes))
+        self.assertTrue(any("negative position" in note for note in notes))
+
+    def test_api_errors_cannot_be_reported_as_empty_searches_or_works(self) -> None:
+        for parser in (paginate._rxiv_parse, paginate._europepmc_parse, paginate._openalex_parse, paginate._crossref_parse):
+            with self.subTest(parser=parser.__name__), self.assertRaises(RuntimeError):
+                parser({"error": "request rejected"}, 0)
+        with self.assertRaises(_common.InputError):
+            openalex_abstract.works_from({"error": "rate limit exceeded"})
+
+    def test_rxiv_doi_and_recent_count_use_non_paginated_routes(self) -> None:
+        build = paginate._rxiv_url("biorxiv")
+        self.assertEqual(build("10.1101/2024.01.16.575895", 0, 100), "https://api.biorxiv.org/details/biorxiv/10.1101/2024.01.16.575895/na/json")
+        self.assertEqual(build("5", 0, 100), "https://api.biorxiv.org/details/biorxiv/5")
+
+    def test_url_builders_override_conflicting_pagination_and_preserve_encoding(self) -> None:
+        from urllib.parse import parse_qs, urlsplit
+
+        url = paginate._openalex_url("search=alpha%26beta&per_page=999&page=5&cursor=old", "new+cursor=", 999)
+        params = parse_qs(urlsplit(url).query)
+        self.assertEqual(params["search"], ["alpha&beta"])
+        self.assertEqual(params["per_page"], ["100"])
+        self.assertEqual(params["cursor"], ["new+cursor="])
+        self.assertNotIn("page", params)
+        url = paginate._crossref_url("query=alpha&rows=999&offset=20&cursor=old", "new+cursor=", 2)
+        params = parse_qs(urlsplit(url).query)
+        self.assertEqual(params["rows"], ["2"])
+        self.assertEqual(params["cursor"], ["new+cursor="])
+        self.assertNotIn("offset", params)
+
+    def test_crossref_sample_is_not_a_paginated_query(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "sample"):
+            paginate._crossref_url("sample=5", "*", 100)
+
+    def test_crossref_short_final_page_stops_even_if_cursor_is_present(self) -> None:
+        page = paginate._crossref_parse({"message": {"total-results": 1, "items-per-page": 100, "items": [{"DOI": "10.1/example"}], "next-cursor": "same"}}, "same")
+        self.assertIsNone(page.next_state)
+
+    def test_europepmc_single_hit_can_omit_the_next_cursor(self) -> None:
+        page = paginate._europepmc_parse({"hitCount": 1, "resultList": {"result": [{"id": "32117569", "source": "MED"}]}}, "*")
+        self.assertEqual(len(page.records), 1)
+        self.assertIsNone(page.next_state)
+
+    def test_final_page_overshoot_is_an_explained_bound(self) -> None:
+        payload = {"messages": [{"status": "ok", "total": "3", "count": 3}], "collection": [{"doi": str(i)} for i in range(3)]}
+        with patch.object(paginate, "fetch", return_value=payload):
+            records, summary, _ = paginate.walk(paginate.APIS["biorxiv"], "2024-01-01/2024-01-01", page_size=100, max_records=2, max_calls=1, verbose=False)
+        self.assertEqual(len(records), 2)
+        self.assertTrue(summary.stopped_at_limit)
+        self.assertTrue(summary.ok)
+        self.assertFalse(summary.complete)
+
+    def test_network_error_does_not_echo_key_or_error_body(self) -> None:
+        import urllib.error
+
+        url = "https://api.openalex.org/works?api_key=SECRET"
+        error = urllib.error.HTTPError(url, 403, "SECRET", {}, io.BytesIO(b"SECRET"))
+        with patch.object(paginate.urllib.request, "urlopen", side_effect=error):
+            with self.assertRaises(RuntimeError) as caught:
+                paginate.fetch(url)
+        self.assertNotIn("SECRET", str(caught.exception))
+        self.assertIn("HTTP 403", str(caught.exception))
+
+    def test_query_credential_is_redacted_in_completed_output(self) -> None:
+        with patch.object(paginate, "walk", return_value=([], _common.Reconciliation(expected=0), [])), patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(paginate.main(["--api", "openalex", "--query", "search=crispr&api_key=SECRET"]), 0)
+        self.assertNotIn("SECRET", output.getvalue())
+        self.assertIn("REDACTED", json.loads(output.getvalue())["query"])
 
 
 class StructureTests(unittest.TestCase):

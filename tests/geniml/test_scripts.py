@@ -362,5 +362,77 @@ class PlannerTests(unittest.TestCase):
             self.assertNotIn(str(root), completed.stdout)
 
 
+class MetadataFailureTests(unittest.TestCase):
+    def test_model_dimensions_reject_booleans(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = ModelAndTokenizerTests()._bundle(root)
+            (bundle / 'config.yaml').write_text('vocab_size: 9\nembedding_dim: true\n')
+            for name in ('model_artifact_inspector.py', 'tokenizer_compatibility.py'):
+                args = ['--model-dir', 'model']
+                if name == 'tokenizer_compatibility.py':
+                    args += ['--universe', 'model/universe.bed', '--assembly', 'synthetic']
+                completed = run_cli(name, *args, cwd=root)
+                self.assertEqual(completed.returncode, 2, completed.stderr)
+                self.assertIn('config:invalid_embedding_dim', json_output(completed)['errors'])
+
+    def test_nonfinite_and_ambiguous_json_fail_cleanly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = ModelAndTokenizerTests()._bundle(root)
+            for text in ('{"embedding_dim": NaN}', '{"embedding_dim": 1e999}',
+                         '{"vocab_size":9,"vocab_size":1}', '[' * 2000 + '0' + ']' * 2000):
+                with self.subTest(text=text[:50]):
+                    (bundle / 'config.json').write_text(text)
+                    completed = run_cli('model_artifact_inspector.py', '--model-dir', 'model', cwd=root)
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertFalse(json_output(completed)['ok'])
+                    self.assertNotIn('Traceback', completed.stderr)
+
+    def test_yaml_numeric_overflow_fails_cleanly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = ModelAndTokenizerTests()._bundle(root)
+            (bundle / 'config.yaml').write_text('vocab_size: 9\nembedding_dim: 1e999\n')
+            completed = run_cli('model_artifact_inspector.py', '--model-dir', 'model', cwd=root)
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertFalse(json_output(completed)['ok'])
+            self.assertNotIn('Traceback', completed.stderr)
+
+    def test_record_limit_error_keeps_path_redacted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'SENSITIVE_FILENAME.bed').write_text('chr1\t0\t10\nchr1\t20\t30\n')
+            completed = run_cli('bed_validator.py', '--input', 'SENSITIVE_FILENAME.bed',
+                                '--assembly', 'synthetic', '--max-records', '1', cwd=root)
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertNotIn('SENSITIVE_FILENAME', completed.stdout)
+            self.assertFalse(json_output(completed)['ok'])
+
+    def test_line_reader_bounds_allocation_before_checking_length(self):
+        import importlib.util
+        import io
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location('geniml_safety', SCRIPTS / '_common.py')
+        common = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(common)
+        class BoundedReader(io.BytesIO):
+            def __next__(self):
+                raise AssertionError('unbounded line iteration')
+            def readline(self, size=-1):
+                self.assert_bound(size)
+                return super().readline(size)
+            @staticmethod
+            def assert_bound(size):
+                assert size == 11
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'large.bed'
+            path.write_bytes(b'x' * 100)
+            with patch.object(common, '_open_binary_nofollow', return_value=BoundedReader(b'x' * 100)):
+                with self.assertRaises(common.SafetyError):
+                    list(common.iter_text_lines(path, max_bytes=1000, max_records=3, max_line_bytes=10))
+
+
 if __name__ == "__main__":
     unittest.main()

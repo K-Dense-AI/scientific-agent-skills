@@ -1,6 +1,9 @@
 # Multi-Language Geospatial Programming
 
-Geospatial programming across 8 languages: R, Julia, JavaScript, C++, Java, Go, Rust, and Python.
+Geospatial programming across R, Julia, JavaScript, C++, Java, Go, Rust and Python.
+Reviewed 2026-10-01 against upstream sources listed below. These are illustrative
+language-specific fragments, not compiled/executed cross-language coverage. Python
+runtime coverage is recorded separately in [review.md](review.md).
 
 ## R Geospatial
 
@@ -20,8 +23,8 @@ st_crs(roads)  # Check CRS
 roads_utm <- st_transform(roads, 32610)  # Reproject
 
 # Geometric operations
-roads_buffer <- st_buffer(roads, dist = 100)  # Buffer
-roads_simplify <- st_simplify(roads, tol = 0.0001)  # Simplify
+roads_buffer <- st_buffer(roads_utm, dist = 100)  # Buffer
+roads_simplify <- st_simplify(roads_utm, dTolerance = 1)  # Simplify
 roads_centroid <- st_centroid(roads)  # Centroid
 
 # Spatial joins
@@ -37,8 +40,8 @@ ggplot() +
   theme_minimal()
 
 # Calculate area
-zones$area <- st_area(zones)  # In CRS units
-zones$area_km2 <- st_area(zones) / 1e6  # Convert to km2
+zones$area <- st_area(zones)  # sf returns units; geographic data can use geodesic/S2 area
+zones$area_km2 <- units::set_units(st_area(zones), km^2)  # Convert to km2
 ```
 
 ### terra (Raster Processing)
@@ -60,7 +63,7 @@ slope <- terrain(r, v = "slope")
 aspect <- terrain(r, v = "aspect")
 
 # Multi-raster operations
-ndvi <- (s2[[8]] - s2[[4]]) / (s2[[8]] + s2[[4]])
+ndvi <- (nir - red) / (nir + red)  # named, aligned, masked reflectance SpatRasters
 
 # Focal operations
 focal_mean <- focal(r, w = matrix(1, 3, 3), fun = mean)
@@ -68,7 +71,7 @@ focal_sd <- focal(r, w = matrix(1, 5, 5), fun = sd)
 
 # Zonal statistics
 zones <- vect("zones.shp")
-zonal_mean <- zonal(r, zones, fun = mean)
+zonal_mean <- extract(r, zones, fun = mean, na.rm = TRUE)
 
 # Extract values at points
 points <- vect("points.shp")
@@ -93,7 +96,8 @@ s2 <- rast("sentinel2.tif")
 
 # 2. Extract training data
 training_points <- st_centroid(training)
-values <- extract(s2, training_points)
+training_points <- st_transform(training_points, crs(s2))
+values <- extract(s2, vect(training_points), ID = FALSE)
 
 # 3. Combine with labels
 df <- data.frame(values)
@@ -101,7 +105,8 @@ df$class <- as.factor(training$class_id)
 
 # 4. Train model
 set.seed(42)
-train_index <- createDataPartition(df$class, p = 0.7, list = FALSE)
+# Use independently assigned spatial folds from the training table.
+train_index <- which(training$fold != "holdout")
 train_data <- df[train_index, ]
 test_data <- df[-train_index, ]
 
@@ -124,64 +129,38 @@ writeRaster(predicted, "classified.tif", overwrite = TRUE)
 
 ```julia
 using ArchGDAL
-using GeoInterface
 
-# Register drivers
-ArchGDAL.registerdrivers() do
-    # Read shapefile
-    data = ArchGDAL.read("countries.shp") do dataset
-        layer = dataset[1]
-        features = []
-        for feature in layer
-            geom = ArchGDAL.getgeom(feature)
-            push!(features, geom)
-        end
-        features
+# Work inside the dataset lifetime; do not return borrowed feature geometries.
+ArchGDAL.read("countries.shp") do dataset
+    layer = ArchGDAL.getlayer(dataset, 0)
+    for feature in layer
+        geometry = ArchGDAL.getgeom(feature)
+        println(ArchGDAL.toWKT(geometry))
     end
 end
 
-# Create geometries
-using GeoInterface
-
-point = GeoInterface.Point(-122.4, 37.7)
-polygon = GeoInterface.Polygon([GeoInterface.LinearRing([
-    GeoInterface.Point(-122.5, 37.5),
-    GeoInterface.Point(-122.3, 37.5),
-    GeoInterface.Point(-122.3, 37.8),
-    GeoInterface.Point(-122.5, 37.8),
-    GeoInterface.Point(-122.5, 37.5)
-])])
-
-# Geometric operations
-buffered = GeoInterface.buffer(point, 1000)
-intersection = GeoInterface.intersection(poly1, poly2)
+# Synthetic planar coordinates in chosen map units:
+point = ArchGDAL.createpoint(0.0, 0.0)
+buffered = ArchGDAL.buffer(point, 100.0)
 ```
+
+GeoInterface defines interfaces; it is not a general constructor/geometry-operation
+namespace. Use an actual geometry backend. Clone borrowed geometries if they must
+outlive their owning dataset/feature.
 
 ### GeoStats.jl
 
 ```julia
 using GeoStats
-using GeoStatsBase
-using Variography
-
-# Load point data
-data = georef((value = [1.0, 2.0, 3.0],),
-              [Point(0.0, 0.0), Point(1.0, 0.0), Point(0.5, 1.0)])
-
-# Experimental variogram
-γ = variogram(EmpiricalVariogram, data, :value, maxlag = 1.0)
-
-# Fit theoretical variogram
-γfit = fit(EmpiricalVariogram, γ, SphericalVariogram)
-
-# Ordinary kriging
-problem = OrdinaryKriging(data, :value, γfit)
-solution = solve(problem)
-
-# Simulate
-simulation = SimulationProblem(data, :value, SphericalVariogram, 100)
-result = solve(simulation)
+samples = georef((; value=[1., 2., 1.5]), [(0., 0.), (10., 0.), (5., 10.)])
+grid = CartesianGrid(10, 10)
+result = samples |> Interpolate(grid, model=Kriging(GaussianVariogram(range=10.)))
 ```
+
+Current GeoStats uses interpolation transforms, not the former `SimulationProblem`
+and `solve(OrdinaryKriging(...))` sketches. This uses synthetic Cartesian coordinates
+and a chosen variogram, not a fitted geostatistical model. Fit/check an empirical
+variogram, validate spatially and define units/support before a scientific result.
 
 ## JavaScript (Node.js & Browser)
 
@@ -232,7 +211,7 @@ const area = turf.area(polygon); // square meters
 const map = L.map('map').setView([37.7, -122.4], 13);
 
 // Add tile layer
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
@@ -245,7 +224,9 @@ fetch('data.geojson')
         return { color: feature.properties.color };
       },
       onEachFeature: function(feature, layer) {
-        layer.bindPopup(feature.properties.name);
+        const label = document.createElement('span');
+        label.textContent = String(feature.properties.name ?? '');
+        layer.bindPopup(label);
       }
     }).addTo(map);
   });
@@ -271,10 +252,14 @@ const circle = L.circle([37.7, -122.4], {
 #include "gdal_priv.h"
 #include "ogr_api.h"
 #include "ogr_spatialref.h"
+#include "ogrsf_frmts.h"
+#include <stdexcept>
 
+// Inside an application entry point, after GDALAllRegister():
 // Open raster
 GDALDataset *poDataset = (GDALDataset *) GDALOpen("input.tif", GA_ReadOnly);
 
+if (poDataset == nullptr) throw std::runtime_error("Raster open failed");
 // Get band
 GDALRasterBand *poBand = poDataset->GetRasterBand(1);
 
@@ -282,12 +267,17 @@ GDALRasterBand *poBand = poDataset->GetRasterBand(1);
 int nXSize = poBand->GetXSize();
 int nYSize = poBand->GetYSize();
 float *pafScanline = (float *) CPLMalloc(sizeof(float) * nXSize);
-poBand->RasterIO(GF_Read, 0, 0, nXSize, 1,
+CPLErr read_status = poBand->RasterIO(GF_Read, 0, 0, nXSize, 1,
                  pafScanline, nXSize, 1, GDT_Float32, 0, 0);
+// Check read_status != CE_None and handle I/O errors before using values.
+
+CPLFree(pafScanline);
+GDALClose(poDataset);
 
 // Vector data
 GDALDataset *poDS = (GDALDataset *) GDALOpenEx("roads.shp",
     GDAL_OF_VECTOR, NULL, NULL, NULL);
+if (poDS == nullptr) throw std::runtime_error("Vector open failed");
 OGRLayer *poLayer = poDS->GetLayer(0);
 
 OGRFeature *poFeature;
@@ -306,16 +296,19 @@ GDALClose(poDS);
 ### GeoTools
 
 ```java
-import org.geotools.data.FileDataStore;
-import org.geotools.data.FileDataStoreFinder;
+import org.geotools.api.data.FileDataStore;
+import org.geotools.api.data.FileDataStoreFinder;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
-import org.geotools.data.simple.SimpleFeatureSource;
+import org.geotools.api.data.SimpleFeatureSource;
 import org.geotools.geometry.jts.JTS;
 import org.geotools.referencing.CRS;
-import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.geotools.api.feature.simple.SimpleFeature;
+import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
 
+import java.io.File;
+import org.geotools.api.referencing.operation.MathTransform;
+import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
@@ -340,15 +333,16 @@ GeometryFactory gf = new GeometryFactory();
 Point point = gf.createPoint(new Coordinate(-122.4, 37.7));
 
 // Reproject
-CoordinateReferenceSystem sourceCRS = CRS.decode("EPSG:4326");
-CoordinateReferenceSystem targetCRS = CRS.decode("EPSG:32633");
+CoordinateReferenceSystem sourceCRS = CRS.decode("EPSG:4326", true);
+CoordinateReferenceSystem targetCRS = CRS.decode("EPSG:32610", true);
 MathTransform transform = CRS.findMathTransform(sourceCRS, targetCRS);
 Geometry reprojected = JTS.transform(point, transform);
+store.dispose(); // In production use finally to release the datastore even on error.
 ```
 
 ## Go Geospatial
 
-### Simple Features Go
+### Orb geometry and spherical metrics
 
 ```go
 package main
@@ -357,33 +351,35 @@ import (
     "fmt"
     "github.com/paulmach/orb"
     "github.com/paulmach/orb/geojson"
-    "github.com/paulmach/orb/planar"
+    "github.com/paulmach/orb/geo"
 )
 
 func main() {
     // Create point
-    point := orb.Point{122.4, 37.7}
+    point := orb.Point{-122.4, 37.7}
 
     // Create linestring
     line := orb.LineString{
-        {122.4, 37.7},
-        {122.3, 37.8},
+        {-122.4, 37.7},
+        {-122.3, 37.8},
     }
 
     // Create polygon
     polygon := orb.Polygon{
-        {{122.4, 37.7}, {122.3, 37.7}, {122.3, 37.8}, {122.4, 37.8}, {122.4, 37.7}},
+        {{-122.4, 37.7}, {-122.3, 37.7}, {-122.3, 37.8}, {-122.4, 37.8}, {-122.4, 37.7}},
     }
 
     // GeoJSON feature
     feature := geojson.NewFeature(polygon)
     feature.Properties["name"] = "Zone 1"
 
-    // Distance (planar)
-    distance := planar.Distance(point, orb.Point{122.3, 37.8})
+    _ = line
+    _ = feature
+    // Spherical geographic metrics (not planar degrees)
+    distance := geo.Distance(point, orb.Point{-122.3, 37.8})
 
     // Area
-    area := planar.Area(polygon)
+    area := geo.Area(polygon)
 
     fmt.Printf("Distance: %.2f meters\n", distance)
     fmt.Printf("Area: %.2f square meters\n", area)
@@ -392,65 +388,37 @@ func main() {
 
 For more code examples across all languages, see [code-examples.md](code-examples.md).
 
-## Rust Geospatial
+## Rust geospatial
 
-### GeoRust (Geographic Rust)
+This fragment targets the reviewed `geo` 0.33.1 API. Geometry methods are planar and
+unitless; use a projected metre grid for the buffer/simplification shown.
 
-The Rust geospatial ecosystem includes crates for geometry operations, projections, and file I/O.
-
-\`\`\`rust
-// Cargo.toml dependencies:
-// geo = "0.28"
-// geo-types = "0.7"
-// proj = "0.27"
-// shapefile = "0.5"
-
-use geo::{Coord, Point, LineString, Polygon, Geometry};
-use geo::prelude::*;
-use proj::Proj;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a point
-    let point = Point::new(-122.4_f64, 37.7_f64);
-
-    // Create a linestring
-    let linestring = LineString::new(vec![
-        Coord { x: -122.4, y: 37.7 },
-        Coord { x: -122.3, y: 37.8 },
-        Coord { x: -122.2, y: 37.9 },
-    ]);
-
-    // Create a polygon
-    let polygon = Polygon::new(
-        LineString::new(vec![
-            Coord { x: -122.4, y: 37.7 },
-            Coord { x: -122.3, y:  37.7 },
-            Coord { x: -122.3, y: 37.8 },
-            Coord { x: -122.4, y: 37.8 },
-            Coord { x: -2.4, y: 37.7 }, // Close the ring
-        ]),
-        vec![], // No interior rings
-    );
-
-    // Geometric operations
-    let buffered = polygon.buffer(1000.0); // Buffer in CRS units
-    let centroid = polygon.centroid();
-    let convex_hull = polygon.convex_hull();
-    let simplified = polygon.simplify(&1.0); // Tolerance
-
-    // Spatial relationships
-    let point_within = point.within(&polygon);
-    let line_intersects = linestring.intersects(&polygon);
-
-    // Coordinate transformation
-    let from = "EPSG:4326";
-    let to = "EPSG:32610";
-    let proj = Proj::new_known_crs(from, to, None)?;
-    let transformed = proj.convert(point)?;
-
-    println!("Point: {:?}", point);
-    println!("Within polygon: {}", point_within);
-
-    Ok(())
+```rust
+// Cargo.toml: geo = "0.33.1"
+use geo::{Point, LineString, Polygon, Buffer, Centroid, Contains, Simplify};
+fn main() {
+    let polygon = Polygon::new(LineString::from(vec![
+        (0., 0.), (100., 0.), (100., 100.), (0., 100.), (0., 0.)
+    ]), vec![]);
+    let point = Point::new(50., 50.);
+    let buffered = polygon.buffer(10.);
+    let simplified = polygon.simplify(1.);
+    println!("{} {:?}", polygon.contains(&point), buffered.centroid());
+    let _ = simplified;
 }
-\`\`\`
+```
+
+For CRS conversion, use a compatible `proj` crate/native PROJ version and
+`Proj::new_known_crs(source, target, None)` with a verified axis-order contract.
+Do not buffer longitude/latitude by 1000 and label it metres. `simplify` can change
+topology; validate the result. Pin language dependencies in the actual project.
+
+Sources: [sf unary](https://r-spatial.github.io/sf/reference/geos_unary.html),
+[terra extract](https://rspatial.github.io/terra/reference/extract.html),
+[ArchGDAL geometry](https://yeesian.com/ArchGDAL.jl/latest/geometries/),
+[GeoStats interpolation](https://juliaearth.github.io/GeoStatsDocs/stable/interpolation/),
+[GeoTools35 quickstart](https://docs.geotools.org/stable/userguide/tutorial/quickstart/maven.html),
+[orb geo](https://pkg.go.dev/github.com/paulmach/orb/geo),
+[GeoRust](https://docs.rs/geo/latest/geo/),
+[Turf](https://turfjs.org/docs/api/interpolate),
+[OSM tile policy](https://operations.osmfoundation.org/policies/tiles/).

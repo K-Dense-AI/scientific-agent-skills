@@ -1,10 +1,11 @@
 ---
 name: peer-review
-description: Prepare evidence-bounded, constructive peer-review drafts and structured manuscript assessments. Use for authorized review of scientific manuscripts, protocols, preprints, or research proposals; reporting-guideline selection; claim–evidence checks; methods, statistics, reproducibility, ethics, figure/table, and citation critique; or revision-response planning.
+description: Prepares evidence-bounded, constructive peer-review drafts and structured manuscript assessments. Supports authorized review of scientific manuscripts, protocols, preprints, or research proposals; reporting-guideline selection; claim–evidence checks; methods, statistics, reproducibility, ethics, figure/table, and citation critique; or revision-response planning.
 license: MIT
 compatibility: Python 3.11+ standard library. Bundled CLIs are deterministic and local-only; they accept bounded JSON, CSV, or Markdown and make no network, model, image, or external-service calls.
 metadata:
-  version: "2.3"
+  version: "2.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -21,7 +22,9 @@ Before reading or analyzing unpublished content:
 3. Record conflicts, competence limits, requested scope, and specialist-review needs.
 4. Default to local-only processing.
 
-If authorization is unclear, do not inspect or quote the manuscript. Ask for confirmation or use only the bundled local CLIs, whose reports do not echo manuscript text.
+If authorization is unclear, do not inspect or quote the manuscript. Clarify only the unresolved authorization; existing documented authorization need not be requested again. Until resolved, use only the intake validator or synthetic/public fixtures. Local processing of the manuscript also requires authorization.
+
+Running a bundled CLI locally does not make the surrounding assistant session local. Treat any manuscript content read into a hosted assistant as external processing when evaluating venue policy and authorization.
 
 Never:
 
@@ -73,6 +76,8 @@ The validator blocks:
 - Missing deletion/retention planning
 
 It validates declarations, not their truth.
+
+A conflict marked `disclosed_to_editor` remains blocked. Use `editor_cleared` only after actual editor clearance, or `none_identified` when no conflict exists. Do not clear a conflict merely to pass the validator.
 
 ## Review workflow
 
@@ -211,7 +216,7 @@ For Pandoc-style citations such as `[@ref-id]`:
 python3 scripts/audit_citations.py local-manuscript.md local-references.csv
 ```
 
-Start from `assets/citation_references_template.csv`. This checks key consistency and identifier format only; it does not verify that a source exists or supports a claim.
+Start from `assets/citation_references_template.csv`. This checks a restricted, single-line bracketed citation subset and identifier format only; it does not implement the complete Pandoc citation grammar or verify that a source exists or supports a claim. See the parser limits in `references/tool_reference.md`.
 
 ### 9. Draft actionable comments
 
@@ -288,7 +293,7 @@ Full schemas and exit codes: `references/tool_reference.md`.
 - `references/statistical_reproducibility.md` — methods, statistics, and reproducibility review
 - `references/common_issues.md` — contextual issue patterns and constructive responses
 - `references/security_validation.md` — baseline remediation and local scan results
-- `assets/source_ledger.csv` — authoritative sources verified 2026-07-23
+- `assets/source_ledger.csv` — dated source checks and access limitations, reviewed 2026-10-01
 - `assets/reporting_guidelines.json` — local selector catalog
 - `assets/review_scaffold_template.md` — private structured draft
 

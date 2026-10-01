@@ -5,7 +5,7 @@ Comprehensive guide to searching Google Scholar for academic papers, including a
 ## Overview
 
 Google Scholar provides the most comprehensive coverage of academic literature across all disciplines:
-- **Coverage**: 100+ million scholarly documents
+- **Coverage**: Broad scholarly discovery; Google does not publish a complete current index count
 - **Scope**: All academic disciplines
 - **Content types**: Journal articles, books, theses, conference papers, preprints, patents, court opinions
 - **Citation tracking**: "Cited by" links for forward citation tracking
@@ -86,22 +86,12 @@ intitle:review climate change
 - Reduces irrelevant results
 - Good for finding reviews or methods
 
-### Source (Journal) Search
+### Publication Search
 
-Search within specific journals or conferences:
-
-```
-source:Nature
-source:"Nature Communications"
-source:NeurIPS
-source:"Journal of Machine Learning Research"
-```
-
-**Applications**:
-- Track publications in top-tier venues
-- Find papers in specialized journals
-- Identify conference-specific work
-- Verify publication venue
+Use the Advanced Search window's publication field for a journal or conference.
+The official help does not document `source:` as a stable public API operator;
+verify the resulting venue manually. Title and date constraints are also
+available in Advanced Search.
 
 ### Exclusion Operator
 
@@ -186,7 +176,7 @@ python scripts/search_google_scholar.py "quantum computing" \
 - May miss highly cited older papers
 - Click "Sort by date" in interface
 
-**By citation count** (via script):
+**By citation count** (local sort of the retrieved sample, not a Scholar-wide sort):
 ```bash
 python scripts/search_google_scholar.py "transformers" \
   --sort-by citations \
@@ -199,7 +189,7 @@ python scripts/search_google_scholar.py "transformers" \
 - Settings → Languages
 - Select preferred languages
 
-**Default**: English and papers with English abstracts
+Language preferences depend on the user settings; do not assume an English-only default.
 
 ## Search Strategies
 
@@ -208,15 +198,14 @@ python scripts/search_google_scholar.py "transformers" \
 Identify highly influential papers in a field:
 
 1. **Search by topic** with broad terms
-2. **Sort by citations** (most cited first)
+2. **Inspect citation counts within the retrieved sample**
 3. **Look for review articles** for comprehensive overviews
 4. **Check publication dates** for foundational vs recent work
 
 **Example**:
 ```
 "generative adversarial networks"
-# Sort by citations
-# Top results: original GAN paper (Goodfellow et al., 2014), key variants
+# Inspect the returned sample; use citation chaining to find earlier work
 ```
 
 ### Finding Recent Work
@@ -372,14 +361,14 @@ Google Scholar has rate limiting to prevent automated scraping:
 **Best practices**:
 1. **Add delays between requests**: 2-5 seconds minimum
 2. **Limit query volume**: Don't search hundreds of queries rapidly
-3. **Use scholarly library**: Handles rate limiting automatically
-4. **Rotate User-Agents**: Appear as different browsers
-5. **Consider proxies**: For large-scale searches (use ethically)
+3. **Treat `scholarly` as an unofficial scraper**, not a supported Google API
+4. **Stop on blocking** and use OpenAlex or PubMed for bulk work
+5. Respect robots.txt; Google does not provide bulk record access
 
 **In our scripts**:
 ```python
 # Automatic rate limiting built in
-time.sleep(random.uniform(3, 7))  # Random delay 3-7 seconds
+time.sleep(random.uniform(2, 5))  # Client pacing, not a guaranteed safe quota
 ```
 
 ### Ethical Considerations
@@ -418,12 +407,13 @@ time.sleep(random.uniform(3, 7))  # Random delay 3-7 seconds
 1. **Start simple, then refine**:
    ```
    # Too specific initially
-   intitle:"deep learning" intitle:review source:Nature 2023..2024
+   intitle:"deep learning" intitle:review
+   # Publication and years: use Advanced Search controls
    
    # Better approach
    deep learning review
    # Review results
-   # Add intitle:, source:, year filters as needed
+   # Add title, publication, and year controls as needed
    ```
 
 2. **Use multiple search strategies**:
@@ -441,7 +431,8 @@ time.sleep(random.uniform(3, 7))  # Random delay 3-7 seconds
 4. **Combine operators strategically**:
    ```
    # Good combination
-   author:Church intitle:"synthetic biology" 2015..2024
+   author:Church intitle:"synthetic biology"
+   # Apply 2015-2024 using the year controls
    
    # Find reviews by specific author on topic in recent years
    ```
@@ -508,13 +499,15 @@ Combine multiple operators for precise searches:
 ```
 # Highly cited reviews on specific topic by known authors
 intitle:review "machine learning" ("drug discovery" OR "drug development")
-author:Horvath OR author:Bengio 2020..2024
+author:Horvath OR author:Bengio
+# Apply 2020-2024 using the year controls
 
 # Method papers excluding reviews
 intitle:method "protein folding" -review -survey
 
 # Papers in top journals only
-("Nature" OR "Science" OR "Cell") CRISPR 2022..2024
+CRISPR
+# Use Advanced Search publication and date controls; inspect actual venue
 ```
 
 ### Finding Open Access Papers
@@ -568,10 +561,10 @@ python scripts/search_openalex.py "topic" --output papers.json   # each result h
 
 ```
 # arXiv papers
-source:arxiv "deep learning"
+site:arxiv.org "deep learning"
 
 # bioRxiv papers
-source:biorxiv CRISPR
+site:biorxiv.org CRISPR
 
 # All preprint servers
 ("arxiv" OR "biorxiv" OR "medrxiv") your topic
@@ -622,7 +615,7 @@ source:biorxiv CRISPR
 1. Wait several minutes before continuing
 2. Reduce query frequency
 3. Use longer delays in scripts (5-10 seconds)
-4. Switch to different IP/network
+4. Stop automated requests and switch to an official metadata API
 5. Consider using institutional access
 
 ### Missing Metadata
@@ -730,3 +723,5 @@ Key strategies:
 
 For biomedical research, complement with PubMed for MeSH terms and curated metadata.
 
+
+Reviewed sources: [Google Scholar Help](https://scholar.google.com/intl/en/scholar/help.html), [scholarly search_pubs API](https://scholarly.readthedocs.io/en/stable/scholarly_user.html). Searches are illustrative; this refresh did not scrape Scholar or test proxy services.

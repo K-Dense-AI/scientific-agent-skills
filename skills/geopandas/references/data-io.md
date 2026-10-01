@@ -31,15 +31,22 @@ For GDAL-backed formats:
 ```python
 from pathlib import Path
 import pyogrio
+import geopandas
 
 path = Path("approved/input.gpkg")
 if not path.is_file() or path.is_symlink():
     raise ValueError("Expected a vetted local regular file")
 
 layers = pyogrio.list_layers(path)
-info = pyogrio.read_info(path, layer="approved_layer", force_feature_count=False)
+info = pyogrio.read_info(
+    path, layer="approved_layer", force_feature_count=False, force_total_bounds=False
+)
 drivers = pyogrio.list_drivers()
 ```
+
+GeoPandas 1.2 adds `geopandas.read_file_info(path, layer=...)`, a small wrapper
+with only those two parameters. Use `pyogrio.read_info` directly for options
+such as `force_feature_count` and `force_total_bounds`; the wrapper rejects them.
 
 Record:
 
@@ -49,8 +56,9 @@ Record:
 - `pyogrio.__gdal_version__`, `pyogrio.__gdal_geos_version__`, Shapely GEOS,
   pyproj PROJ, package versions, and enabled driver capabilities.
 
-`list_drivers()` returns capabilities containing `r`, `w`, and/or `a`, but a
-listed driver is not proof every field/geometry is supported. Treat drivers as
+In pyogrio 0.13, `list_drivers()` reports capabilities containing `r`, `w`,
+and/or `a` (append, GDAL >=3.11); `list_drivers(append=True)` filters for known
+append support. A listed driver is not proof every field/geometry is supported. Treat drivers as
 an allowlist, not merely a discovered list.
 
 ## `read_file`
@@ -153,7 +161,7 @@ gdf.to_parquet(
     compression="snappy",
     geometry_encoding="WKB",
     write_covering_bbox=False,
-    schema_version="1.0.0",
+    schema_version="1.1.0",
 )
 
 roundtrip = geopandas.read_parquet(
@@ -162,11 +170,12 @@ roundtrip = geopandas.read_parquet(
 )
 ```
 
-GeoPandas 1.1.4 write semantics:
+GeoPandas 1.2.0 write semantics:
 
 - all geometry columns are preserved;
 - default `geometry_encoding="WKB"` maximizes interoperability;
-- default supported stable schema is **1.0.0**;
+- default supported stable schema is **1.1.0**; request 1.0.0 explicitly for
+  consumers that require the older metadata contract;
 - `geometry_encoding="geoarrow"` requires GeoParquet 1.1.0, supports
   single-geometry native encodings, and is still described as experimental;
 - `write_covering_bbox=True` adds a per-row `bbox` column and 1.1 covering
@@ -181,11 +190,16 @@ Read semantics:
   non-spatial result;
 - if the stored primary geometry is omitted, the first selected geometry
   becomes active;
-- bbox filtering works only when covering metadata/columns were written;
+- `bbox=` filtering works with covering metadata, native `point` encoding,
+  or GeoParquet 2.0 logical geometry types. Bounding-box intersection can admit
+  false positives for non-point geometries; apply an exact predicate afterward;
 - if GeoParquet `crs` metadata is **missing**, the specification default is
   `OGC:CRS84`;
 - an explicit `crs: null` means unknown/undefined, which is different;
 - WKB/native coordinates are x/y regardless of authority axis order.
+- 1.2 writes and restores JSON-serializable `gdf.attrs`. Review or clear these
+  attributes before publication; paths, source IDs, and study notes can leak
+  through file metadata even when columns are clean.
 
 GeoParquet 1.1 metadata requires a `geo` JSON value, `primary_column`, and
 metadata for every geometry column. Geometry columns must be root-level and may
@@ -195,6 +209,16 @@ document your own stable-ID metadata/column.
 
 Do not use bbox covering for public sensitive-location data without
 generalization and approval.
+
+### GeoParquet 2.0 opt-in
+
+GeoPandas 1.2 supports the **upcoming** 2.0.0 specification through
+`schema_version="2.0.0"`. Writing needs PyArrow >=21 and uses WKB with the
+Parquet Geometry logical type; `geometry_encoding="geoarrow"` is rejected.
+The release supports bbox filtering without a separate covering column for
+these files. Treat this as an explicit interoperability choice and test the
+actual downstream reader. The bundled export planner deliberately supports
+only stable 1.0/1.1 contracts; do not infer 2.0 support from planner success.
 
 ### Arrow in memory
 
@@ -206,6 +230,7 @@ non-geometry Arrow conversion.
 
 ## PostGIS without credential leakage
 
+The following PostGIS examples are illustrative; no live database was tested.
 Required writing dependencies are SQLAlchemy, GeoAlchemy2, and psycopg/psycopg2.
 Create connections from named secrets without embedding or logging a connection
 URL:
@@ -238,7 +263,7 @@ query = text(
     "SELECT feature_id, geom FROM approved_schema.features "
     "WHERE category = :category"
 )
-gdf = geopandas.read_postgis(
+chunks = geopandas.read_postgis(
     query,
     con=engine,
     geom_col="geom",
@@ -271,7 +296,8 @@ with engine.begin() as connection:
 - Validate schema/table/geometry column names against an allowlist; do not
   interpolate user input.
 - GeoPandas 1.1.2 fixed SQL injection through a geometry-column name; remain on
-  a patched version and still validate identifiers.
+  a patched version and still validate identifiers. Version 1.1.4 added
+  further hardening; 1.2.0 includes both fixes.
 - Use least-privilege database roles and a transaction.
 
 ## Fiona-to-pyogrio migration
@@ -306,7 +332,7 @@ For every output:
 Use `scripts/vector_inventory.py` for redacted intake and
 `scripts/export_plan.py` for a non-executing output contract.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [GeoPandas reading and writing files](https://geopandas.org/en/stable/docs/user_guide/io.html).
 - [geopandas.read_file](https://geopandas.org/en/stable/docs/reference/api/geopandas.read_file.html).
@@ -319,5 +345,7 @@ Use `scripts/vector_inventory.py` for redacted intake and
 - [pyogrio introduction](https://pyogrio.readthedocs.io/en/stable/introduction.html).
 - [pyogrio API](https://pyogrio.readthedocs.io/en/stable/api.html).
 - [GeoParquet 1.1.0 specification](https://geoparquet.org/releases/v1.1.0/).
-- [GeoArrow 0.2 specification](https://github.com/geoarrow/geoarrow).
+- [GeoArrow specification](https://github.com/geoarrow/geoarrow).
 - [GeoPandas 1.1.2 security/bug-fix release](https://github.com/geopandas/geopandas/releases/tag/v1.1.2) — released 2025-12-22.
+- [GeoPandas 1.2.0 Arrow implementation](https://github.com/geopandas/geopandas/blob/v1.2.0/geopandas/io/arrow.py).
+- [pyogrio 0.13.0 metadata API source](https://github.com/geopandas/pyogrio/blob/v0.13.0/pyogrio/core.py).

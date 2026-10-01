@@ -1,305 +1,198 @@
 ---
 name: open-notebook
-description: Self-hosted, open-source alternative to Google NotebookLM for AI-powered research and document analysis. Use when organizing research materials into notebooks, ingesting diverse content sources (PDFs, videos, audio, web pages, Office documents), generating AI-powered notes and summaries, creating multi-speaker podcasts from research, chatting with documents using context-aware AI, searching across materials with full-text and vector search, or running custom content transformations. Supports 16+ AI providers including OpenAI, Anthropic, Google, Ollama, Groq, and Mistral with self-hosted storage and configurable local or cloud AI processing.
+description: Organizes research with the self-hosted Open Notebook alternative to NotebookLM. Supports source ingestion (PDFs, web pages, audio, video, and Office documents), cited document chat, text and vector search, notes, custom transformations, and multi-speaker podcasts. Use when automating Open Notebook through its REST API or configuring its local or cloud AI providers, including OpenAI, Anthropic, Google, Ollama, Groq, and Mistral.
 license: MIT
+compatibility: Requires a running Open Notebook backend and worker; Python 3.11+ with requests for bundled helpers. Docker Compose is the documented deployment option. Network access to the instance and any configured providers is required.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-09-30"
+  upstream-version: "1.14.0"
   openclaw:
     envVars:
-    - name: OPEN_NOTEBOOK_URL
-      required: true
-      description: Open Notebook server URL.
-    - name: OPEN_NOTEBOOK_PASSWORD
-      required: false
-      description: Open Notebook password, if auth is enabled.
-    - name: OPEN_NOTEBOOK_ENCRYPTION_KEY
-      required: false
-      description: Encryption key for stored content, if configured.
+      - name: OPEN_NOTEBOOK_URL
+        required: false
+        description: Backend origin, default http://localhost:5055, not the web UI URL.
+      - name: OPEN_NOTEBOOK_PASSWORD
+        required: false
+        description: Instance password used as the Bearer token when auth is enabled.
 ---
 
 # Open Notebook
 
 ## Overview
 
-Open Notebook is an open-source, self-hosted alternative to Google's NotebookLM that enables researchers to organize materials, generate AI-powered insights, create podcasts, and have context-aware conversations with their documents — with self-hosted storage and a choice of local or cloud AI processing.
+Open Notebook organizes sources, notes, and AI conversations into research notebooks.
+It supports several AI providers through Esperanto, full-text and vector search,
+custom transformations, and podcast generation with speaker profiles. Application
+storage is self-hosted; content sent to configured cloud models is not local-only.
 
-Unlike Google's Notebook LM, which has no publicly available API outside of the Enterprise version, Open Notebook provides a comprehensive REST API, supports 16+ AI providers, and runs entirely on your own infrastructure.
-
-**Key advantages over NotebookLM:**
-- Full REST API for programmatic access and automation
-- Choice of 16+ AI providers (not locked to Google models)
-- Multi-speaker podcast generation with 1-4 customizable speakers (vs. 2-speaker limit)
-- Control over application storage through self-hosting
-- Open source and fully extensible (MIT license)
-
-**Repository:** https://github.com/lfnovo/open-notebook
+This skill targets the latest published release observed on 2026-09-30,
+[v1.14.0](https://github.com/lfnovo/open-notebook/releases/tag/v1.14.0).
+Request/response contracts were checked against its official source and current main
+commit `3127f14ea9dbb519f0e4ddc64a0742ca644ba6ef`. Bundled helpers have mocked HTTP
+regression tests; deployment, ingestion, and paid AI calls were not run against a
+live instance. Deployment and remote workflow examples are illustrative.
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker Desktop installed
-- API key for at least one AI provider (or local Ollama for free local inference)
-
 ### Installation
 
-Deploy Open Notebook using Docker Compose:
+Use Docker Desktop/Engine with Compose. The upstream docker-compose file configures
+SurrealDB v2 and the `lfnovo/open_notebook:v1-latest` application image. It mounts
+`./notebook_data` at `/app/data` and `./surreal_data` at `/mydata`.
 
 ```bash
-# Download the docker-compose file
-curl -o docker-compose.yml https://raw.githubusercontent.com/lfnovo/open-notebook/main/docker-compose.yml
-
-# Set the required encryption key
-export OPEN_NOTEBOOK_ENCRYPTION_KEY="your-secret-key-here"
-
-# Launch the services
-docker-compose up -d
+curl --fail --location --output docker-compose.yml \
+  https://raw.githubusercontent.com/lfnovo/open-notebook/v1.14.0/docker-compose.yml
 ```
 
-Access the application:
-- **Frontend UI:** http://localhost:8502
-- **REST API:** http://localhost:5055
-- **API Documentation:** http://localhost:5055/docs
+Before starting, edit the downloaded Compose file: replace the literal
+`OPEN_NOTEBOOK_ENCRYPTION_KEY=change-me-to-a-secret-string` value, or change it to
+`${OPEN_NOTEBOOK_ENCRYPTION_KEY:?Set OPEN_NOTEBOOK_ENCRYPTION_KEY}` and supply that
+variable. Exporting a shell variable alone does **not** replace the upstream literal.
+Retain the key across restarts; it encrypts provider credentials, not source documents.
+Set `OPEN_NOTEBOOK_PASSWORD` in the application's container environment when password
+protection is wanted; clients then send `Authorization: Bearer <instance-password>`.
+For a reproducible deployment, resolve and record an image digest; `v1-latest` moves.
 
-### Configure AI Provider
+```bash
+docker compose up -d
+docker compose logs --tail=100 open_notebook
+```
 
-After startup, configure at least one AI provider:
+- Web UI: `http://localhost:8502`
+- Backend: `http://localhost:5055`; API base: `http://localhost:5055/api`
+- Instance contracts: `/docs`, `/redoc`, `/openapi.json`
 
-1. Navigate to **Settings > API Keys** in the UI
-2. Add credentials for your preferred provider (OpenAI, Anthropic, etc.)
-3. Test the connection and discover available models
-4. Register models for use across the platform
+Source installation is also supported; it needs a separate processing worker.
+See [configuration](references/configuration.md) for persistence and provider setup.
 
-Or configure via the REST API:
+### Configure AI providers
+
+In **Manage → Models**, add a configuration/credential, test it, discover models,
+and register the particular models needed. Assign chat and embedding defaults;
+assign speech models separately for transcription/podcasts. OpenAI, Anthropic,
+Google, Ollama, Groq, and Mistral have different modalities. Discover support from
+the instance's `/api/models/providers`; do not infer speech support from LLM support.
+
+Credential discovery returns `discovered[]` with `name` and `provider`, often without
+a usable `model_type`. Registration requires `models[]` containing `name`, `provider`,
+and an explicitly chosen `model_type`. The four types are `language`, `embedding`,
+`speech_to_text`, and `text_to_speech`. They are not `llm`, `stt`, or `tts`.
+See the [API reference](references/api_reference.md) and
+[credential example](references/configuration.md).
+
+### Use the bundled helpers
+
+Resolve this skill's directory and run from its `scripts/` directory, or add that
+directory to the Python import path. Install requests in a dedicated environment,
+for example `uv run --isolated --with requests python notebook_management.py --help`.
+Each CLI only lists records; creation, AI calls, and deletion are explicit functions.
+Set `OPEN_NOTEBOOK_URL` to the backend origin (an existing `/api` suffix is also
+accepted). Set `OPEN_NOTEBOOK_PASSWORD` only if the instance requires authentication.
 
 ```python
-import requests
+from notebook_management import create_notebook
+from source_ingestion import add_text_source, wait_for_processing
+from chat_interaction import build_context, create_chat_session, send_chat_message
 
-BASE_URL = "http://localhost:5055/api"
-
-# Add a credential for an AI provider
-response = requests.post(f"{BASE_URL}/credentials", json={
-    "provider": "openai",
-    "name": "My OpenAI Key",
-    "api_key": "sk-..."
-})
-credential = response.json()
-
-# Discover available models
-response = requests.post(
-    f"{BASE_URL}/credentials/{credential['id']}/discover"
+notebook = create_notebook("Methods review", "Compare reported experimental designs")
+source = add_text_source(
+    notebook["id"], "Pilot study excerpt",
+    "Illustrative study: 24 samples were randomized to two treatments.",
+    process_async=True, embed=False,
 )
-discovered = response.json()
-
-# Register discovered models
-requests.post(
-    f"{BASE_URL}/credentials/{credential['id']}/register-models",
-    json={"model_ids": [m["id"] for m in discovered["models"]]}
+wait_for_processing(source["id"])
+built = build_context(notebook["id"], source_ids=[source["id"]], note_ids=[])
+if not built["context"]["sources"]:
+    raise RuntimeError("No source content was included")
+session = create_chat_session(notebook["id"], "Methods discussion")
+answer = send_chat_message(
+    session["id"], "What design was reported? Cite the source and identify gaps.",
+    built["context"],
 )
+ai_messages = [m for m in answer["messages"] if m["type"] == "ai"]
 ```
 
-## Core Features
+## Core Features and Workflow
 
-### Notebooks
-Organize research into separate notebooks, each containing sources, notes, and chat sessions.
+### Notebooks and notes
 
-```python
-import requests
+Create a notebook with `POST /api/notebooks` and JSON `name`, `description`.
+Use `POST /api/notes` with `content`, optional `title`, `notebook_id`, and
+`note_type="human"` or `"ai"`. A missing title on an AI note invokes a model.
+Notebook deletion removes notes and chat sessions; source deletion is controlled by
+`delete_exclusive_sources`. Inspect `/delete-preview` before intentional deletion.
 
-BASE_URL = "http://localhost:5055/api"
+### Source ingestion
 
-# Create a notebook
-response = requests.post(f"{BASE_URL}/notebooks", json={
-    "name": "Cancer Genomics Research",
-    "description": "Literature review on tumor mutational burden"
-})
-notebook = response.json()
-notebook_id = notebook["id"]
-```
+`POST /api/sources` takes form fields, including **required** `type`: `link`, `upload`,
+or `text`. Supply respectively `url`, multipart `file`, or `content`. Use `notebooks`
+as a JSON-encoded list in form data. `async_processing` and `embed` both default to
+false. The fields `text` and `process_async` do not implement these options.
+Use `/api/sources/json` for JSON bodies; the form endpoint does not accept arbitrary JSON.
 
-### Sources
-Ingest diverse content types including PDFs, videos, audio files, web pages, and Office documents. Sources are processed for full-text and vector search.
+Wait for `/api/sources/{id}/status`; a failed job must not flow into analysis as if
+it succeeded. Inspect `full_text` after extraction, especially for scanned PDFs,
+tables, and transcripts. Vector retrieval additionally needs `embed=true`, a default
+embedding model, and completed embeddings (`embedded_chunks > 0`). Source list pages
+are limited to 100; use `iter_sources` for a stable collection. It defaults to a
+1,000-page cap and raises on repeated IDs, malformed pages, or an exhausted cap.
+Discard partial results after an error; raise `max_pages` explicitly if needed.
 
-```python
-# Add a web URL source
-response = requests.post(f"{BASE_URL}/sources", data={
-    "url": "https://arxiv.org/abs/2301.00001",
-    "notebook_id": notebook_id,
-    "process_async": "true"
-})
-source = response.json()
+### Context-aware chat
 
-# Upload a PDF file
-with open("paper.pdf", "rb") as f:
-    response = requests.post(
-        f"{BASE_URL}/sources",
-        data={"notebook_id": notebook_id},
-        files={"file": ("paper.pdf", f, "application/pdf")}
-    )
-```
+Call `/api/chat/context` with `notebook_id` and `context_config`, whose `sources` and
+`notes` maps associate IDs with `"full content"`, `"insights"` (sources), or
+`"not in context"`. An empty config includes all notebook items in short form;
+explicit empty maps select nothing. Review returned items and `token_count`.
+Send the returned **context object** to `/api/chat/execute` with `session_id` and
+`message`. It returns JSON `{session_id, messages}`; message fields include `type`
+(`human`/`ai`) and `content`. `include_sources` flags do not build context.
 
-### Notes
-Create and manage notes (human or AI-generated) associated with notebooks.
+### Search and Ask
 
-```python
-# Create a human note
-response = requests.post(f"{BASE_URL}/notes", json={
-    "title": "Key Findings",
-    "content": "TMB correlates with immunotherapy response in NSCLC...",
-    "note_type": "human",
-    "notebook_id": notebook_id
-})
-```
+`POST /api/search` uses `query`, `type="text"` or `"vector"`, `limit` (1–1000),
+`search_sources`, `search_notes`, and `minimum_score` (0–1, vector only).
+Read `total_count`, the returned-hit count rather than a corpus-wide total.
+On v1.14.0 search and Ask are global; sending unsupported `source_ids`/`note_ids`
+does not filter results. Main after v1.14.0 adds notebook scoping, but check the
+installed OpenAPI schema before relying on it. Use selected-source chat when
+scope must be guaranteed on the release API.
 
-### Context-Aware Chat
-Chat with your research materials using AI that cites sources.
+Ask requires `question`, `strategy_model`, `answer_model`, and `final_answer_model`
+with registered model record IDs, plus an embedding model. `/api/search/ask/simple`
+returns `{answer, question}`. `/api/search/ask` streams SSE, including error events.
 
-```python
-# Create a chat session
-session = requests.post(f"{BASE_URL}/chat/sessions", json={
-    "notebook_id": notebook_id,
-    "title": "TMB Discussion"
-}).json()
+### Transformations and podcasts
 
-# Send a message with context from sources
-response = requests.post(f"{BASE_URL}/chat/execute", json={
-    "session_id": session["id"],
-    "message": "What are the key biomarkers for immunotherapy response?",
-    "context": {"include_sources": True, "include_notes": True}
-})
-```
+Create transformations with `name`, `title`, `description`, `prompt`, and optional
+`apply_default`/`model_id`. Execute with `transformation_id`, `input_text`, optional
+`model_id`; read `output`. Treat generated findings as drafts and verify numerical
+claims and citations against the extracted source.
 
-### Search
-Search across all materials using full-text or vector (semantic) search.
+Podcast generation requires `episode_profile` and `speaker_profile` **names**, an
+`episode_name`, and explicit `content` or `notebook_id`. One speaker profile holds
+multiple speakers. It returns a `job_id`; poll its job with a deadline, and read
+`result.episode_id` on success before downloading episode audio. Review the script
+for unsupported scientific claims before sharing it. See
+[worked examples](references/examples.md).
 
-```python
-# Vector search across the knowledge base
-results = requests.post(f"{BASE_URL}/search", json={
-    "query": "tumor mutational burden immunotherapy",
-    "search_type": "vector",
-    "limit": 10
-}).json()
+## Environment Variables and Architecture
 
-# Ask a question with AI-powered answer
-answer = requests.post(f"{BASE_URL}/search/ask/simple", json={
-    "query": "How does TMB predict checkpoint inhibitor response?"
-}).json()
-```
+`OPEN_NOTEBOOK_ENCRYPTION_KEY` belongs on the server; API clients do not need it.
+`SURREAL_PASSWORD` (not `SURREAL_PASS`) configures the database password. Preserve
+both database and `/app/data`, including uploads, podcasts, and SQLite chat state.
+The backend uses FastAPI, SurrealDB, LangChain/LangGraph, and Esperanto; the UI uses
+Next.js. Background jobs need the worker even when the API health check succeeds.
+See [architecture](references/architecture.md).
 
-### Podcast Generation
-Generate professional multi-speaker podcasts from research materials with 1-4 customizable speakers.
-
-```python
-# Generate a podcast episode
-job = requests.post(f"{BASE_URL}/podcasts/generate", json={
-    "notebook_id": notebook_id,
-    "episode_profile_id": episode_profile_id,
-    "speaker_profile_ids": [speaker1_id, speaker2_id]
-}).json()
-
-# Check generation status
-status = requests.get(f"{BASE_URL}/podcasts/jobs/{job['job_id']}").json()
-
-# Download audio when ready
-audio = requests.get(
-    f"{BASE_URL}/podcasts/episodes/{status['episode_id']}/audio"
-)
-```
-
-### Content Transformations
-Apply custom AI-powered transformations to content for summarization, extraction, and analysis.
-
-```python
-# Create a custom transformation
-transform = requests.post(f"{BASE_URL}/transformations", json={
-    "name": "extract_methods",
-    "title": "Extract Methods",
-    "description": "Extract methodology details from papers",
-    "prompt": "Extract and summarize the methodology section...",
-    "apply_default": False
-}).json()
-
-# Execute transformation on text
-result = requests.post(f"{BASE_URL}/transformations/execute", json={
-    "transformation_id": transform["id"],
-    "input_text": "...",
-    "model_id": "model_id_here"
-}).json()
-```
-
-## Supported AI Providers
-
-Open Notebook supports 16+ AI providers through the Esperanto library:
-
-| Provider | LLM | Embedding | Speech-to-Text | Text-to-Speech |
-|----------|-----|-----------|----------------|----------------|
-| OpenAI | Yes | Yes | Yes | Yes |
-| Anthropic | Yes | No | No | No |
-| Google GenAI | Yes | Yes | No | Yes |
-| Vertex AI | Yes | Yes | No | Yes |
-| Ollama | Yes | Yes | No | No |
-| Groq | Yes | No | Yes | No |
-| Mistral | Yes | Yes | No | No |
-| Azure OpenAI | Yes | Yes | No | No |
-| DeepSeek | Yes | No | No | No |
-| xAI | Yes | No | No | No |
-| OpenRouter | Yes | No | No | No |
-| ElevenLabs | No | No | Yes | Yes |
-| Perplexity | Yes | No | No | No |
-| Voyage | No | Yes | No | No |
-
-## Environment Variables
-
-Key configuration variables for Docker deployment:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPEN_NOTEBOOK_ENCRYPTION_KEY` | **Required.** Secret key for encrypting stored credentials | None |
-| `SURREAL_URL` | SurrealDB connection URL | `ws://surrealdb:8000/rpc` |
-| `SURREAL_NAMESPACE` | Database namespace | `open_notebook` |
-| `SURREAL_DATABASE` | Database name | `open_notebook` |
-| `OPEN_NOTEBOOK_PASSWORD` | Optional password protection for the UI | None |
-
-## API Reference
-
-The REST API is available at `http://localhost:5055/api` with interactive documentation at `/docs`.
-
-Core endpoint groups:
-- `/api/notebooks` - Notebook CRUD and source association
-- `/api/sources` - Source ingestion, processing, and retrieval
-- `/api/notes` - Note management
-- `/api/chat/sessions` - Chat session management
-- `/api/chat/execute` - Chat message execution
-- `/api/search` - Full-text and vector search
-- `/api/podcasts` - Podcast generation and management
-- `/api/transformations` - Content transformation pipelines
-- `/api/models` - AI model configuration and discovery
-- `/api/credentials` - Provider credential management
-
-For complete API reference with all endpoints and request/response formats, see `references/api_reference.md`.
-
-## Architecture
-
-Open Notebook uses a modern stack:
-- **Backend:** Python with FastAPI
-- **Database:** SurrealDB (document + relational)
-- **AI Integration:** LangChain with the Esperanto multi-provider library
-- **Frontend:** Next.js with React
-- **Deployment:** Docker Compose with persistent volumes
-
-## Important Notes
-
-- Open Notebook requires Docker for deployment
-- At least one AI provider must be configured for AI features to work
-- For free local inference without API costs, use Ollama
-- The `OPEN_NOTEBOOK_ENCRYPTION_KEY` must be set before first launch and kept consistent across restarts
-- Self-hosting controls application storage, but configured cloud LLM, embedding,
-  transcription, and speech providers can receive source content. Before ingesting
-  restricted research data, check the provider selected for each operation; a local
-  chat model alone does not make embedding or podcast processing local. Use local
-  providers for every relevant stage when local-only processing is required. See
-  the [upstream provider documentation](https://github.com/lfnovo/open-notebook).
+Self-hosting controls application storage. Configured cloud LLM, embedding,
+transcription, speech, and extraction services can receive research content. For
+local-only processing, configure every relevant stage locally; a local chat model
+alone is insufficient. Reconcile extraction completeness, context membership,
+retrieval coverage, and source citations before using outputs as scientific evidence.
 
 ## Citing Scientific Agent Skills
 

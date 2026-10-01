@@ -157,7 +157,7 @@ def validate_process(data: dict[str, Any]) -> dict[str, Any]:
         _required_true(data, field, errors)
 
     method = data.get("method")
-    if method not in METHODS:
+    if not isinstance(method, str) or method not in METHODS:
         errors.append(f"method must be one of {sorted(METHODS)}")
     elif method == "safe_harbor":
         statuses = data.get("safe_harbor_identifiers")
@@ -171,7 +171,10 @@ def validate_process(data: dict[str, Any]) -> dict[str, Any]:
             if extra:
                 errors.append(f"unexpected Safe Harbor categories: {extra}")
             for key in SAFE_HARBOR_KEYS:
-                if statuses.get(key) not in CLEAR_STATUSES:
+                if (
+                    not isinstance(statuses.get(key), str)
+                    or statuses.get(key) not in CLEAR_STATUSES
+                ):
                     errors.append(f"safe_harbor_identifiers.{key} is not cleared")
         actual = data.get("actual_knowledge_review")
         if not isinstance(actual, dict):
@@ -238,7 +241,10 @@ def validate_process(data: dict[str, Any]) -> dict[str, Any]:
         errors.append("residual_risk_review must be an object")
     else:
         for key in RESIDUAL_KEYS:
-            if residual.get(key) not in RESIDUAL_CLEAR_STATUSES:
+            if (
+                not isinstance(residual.get(key), str)
+                or residual.get(key) not in RESIDUAL_CLEAR_STATUSES
+            ):
                 errors.append(f"residual_risk_review.{key} is unresolved")
 
     review = data.get("review")

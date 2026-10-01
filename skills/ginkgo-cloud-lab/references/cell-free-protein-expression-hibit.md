@@ -1,6 +1,8 @@
 # Cell Free Protein Expression with HiBiT Quantification
 
 **URL:** https://cloud.ginkgo.bio/protocols/cell-free-protein-expression-hibit
+**Service terms:** https://cloud.ginkgo.bio/terms/cfps-hibit
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $39/sample
 **Turnaround:** up to 11 days
@@ -12,7 +14,7 @@ Fastest path from a sequence to a protein yield metric. Uses a proprietary recon
 
 ## Input
 
-- **DNA Input:** Linear DNA sequence (`.xlsx` template)
+- **Sequence input:** The protocol page links a CFPS `.xlsx` template for linear DNA; service terms describe protein or DNA in CSV. Confirm the downloaded schema and synthesis format (linear DNA or clonal plasmid).
 - **HiBiT Tag Orientation:** N-terminal or C-terminal fusion
 - **Linker Sequence:** If unspecified, Ginkgo uses a standard GGGS linker
 
@@ -31,7 +33,9 @@ Fastest path from a sequence to a protein yield metric. Uses a proprietary recon
 
 ### Phase 2 - Detection Prep
 
-1. Add Nano-Glo HiBiT Lytic detection reagent
+1. Spin down plates
+2. Transfer samples and standards (Echo)
+3. Dispense PBS/buffer and prepare the HiBiT assay plate (MultiFlo / Bravo 384)
 
 ### Phase 3 - Detection & Quantification
 

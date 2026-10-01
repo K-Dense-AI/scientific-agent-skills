@@ -4,7 +4,7 @@
 
 | Source | What it holds | How to reach it |
 |---|---|---|
-| [registry.datalad.org](https://registry.datalad.org) | Search across roughly 16,000 unique DataLad and git-annex datasets, indexing URL, dataset ID, branches, tags, and metadata | Search box supports a bare word, a quoted phrase, `AND`/`OR`/`NOT`, and field-specific terms; results give clone URLs |
+| [registry.datalad.org](https://registry.datalad.org) | Search across discovered DataLad and git-annex datasets, indexing URL, dataset ID, branches, tags, and metadata | Search box supports a bare word, a quoted phrase, `AND`/`OR`/`NOT`, and field-specific terms; results give clone URLs |
 | [datasets.datalad.org](https://datasets.datalad.org) | The DataLad superdataset, a nested collection of curated public datasets | `datalad clone ///` for the superdataset, `datalad clone ///<name>` for one entry |
 | [OpenNeuroDatasets](https://github.com/OpenNeuroDatasets) | Public BIDS neuroimaging datasets from OpenNeuro, one repository per accession | `datalad clone https://github.com/OpenNeuroDatasets/ds00XXXX.git` |
 | [dandisets](https://github.com/dandisets) | DANDI archive dandisets, mostly neurophysiology in NWB | `datalad clone https://github.com/dandisets/000XXX.git` |
@@ -55,6 +55,11 @@ datalad get [-h] [-s LABEL] [-d PATH] [-r] [-R LEVELS] [-n] [-c PROC] [-D
 - `-J/--jobs` parallelises retrieval, and `-J auto` uses the configured maximum. On a
   dataset of many small files this is the difference between minutes and hours.
 
+DataLad 1.6.5 also has `--data`: its `auto-if-wanted` default honors configured
+local wanted settings and otherwise retrieves requested content. Use `--data anything`
+when the requested inputs must be fetched regardless of that preference. `--data nothing`
+and `-n` skip file content. This controls retrieval, not analysis parallelism.
+
 When resolving where a subdataset lives, DataLad ranks candidate locations by cost,
 considering the recorded URL, the superdataset's remote URL, and configured URL templates.
 A subdataset that fails to install from its recorded URL can often still be reached
@@ -78,7 +83,7 @@ Every annexed file has two things that can independently exist:
 Inspect the state rather than guessing:
 
 ```bash
-datalad status --annex           # local content summary for the dataset
+datalad status --annex availability # local availability plus annex key/size
 git annex whereis <path>         # which repositories hold this file, and how many copies
 git annex whereis --json <path>  # same, machine-readable, one JSON object per line
 git annex list <path>            # compact matrix of files against remotes
@@ -98,8 +103,11 @@ corrupt every other reference to it.
 ```bash
 datalad unlock <path>            # make it writable
 # edit
-datalad save -m "revise <path>"  # re-annexes and re-locks
+datalad save -m "revise <path>" <path> # record the revised annex content
 ```
+
+The tested default re-locks the saved file. Unlocked/adjusted configurations can behave
+differently; inspect status instead of assuming a worktree representation.
 
 Inside `datalad run`, declaring the file with `--output` performs the unlock
 automatically, which is why the flag matters beyond documentation.
@@ -119,8 +127,8 @@ datalad drop [-h] [--what {filecontent|allkeys|datasets|all}] [--reckless
 - `--reckless availability` overrides the check that another copy exists. This is the
   option that loses data when the check was right.
 - `--reckless modification` allows dropping despite unsaved modifications,
-  `--reckless undead` proceeds when the annex believes a copy exists somewhere
-  unreachable, and `--reckless kill` is a last-resort removal.
+  `--reckless undead` skips checking whether the annex being removed remains
+  recorded as alive elsewhere (and can leave stale availability records), and `--reckless kill` is a last-resort removal.
 - `--nocheck` and `--if-dirty` are deprecated. `--nocheck` is replaced by
   `--reckless availability`; `--if-dirty` is ignored entirely.
 
@@ -139,10 +147,11 @@ the file count, not the copy count — for a single file it always prints `1`, w
 content exists in five places or nowhere but the local annex. The JSON form is what you
 want when a script has to decide.
 
-Never use `rm` or `git rm` on an annexed file to free space. `rm` leaves the pointer
-pointing at nothing while the annex object survives, and `git rm` removes the pointer
-without dropping the object. Both leave the dataset in a state that has to be repaired
-rather than simply reverted.
+Use `drop` to free annexed bytes while retaining the tracked file. `rm` removes the
+worktree pointer (it does not leave that pointer behind); `git rm` also stages its
+removal. Neither ordinarily removes the annex object, so deleting a pointer is not a
+substitute for dropping content. Removing a tracked file can be intentional; save that
+deletion only when it is the intended dataset change.
 
 ## Repair and verification
 
@@ -151,13 +160,21 @@ rather than simply reverted.
 ```bash
 git annex fsck                       # verify local content against recorded checksums
 git annex fsck --fast                # skip checksum verification, check presence only
-git annex fsck --from <remote>       # verify what a remote claims to hold
+git annex fsck --from <remote> --fast # presence check without downloading all bytes
+git annex fsck --from <remote>        # full check; can retrieve remote content
 git annex unused                     # find annex objects no longer referenced
-git annex dropunused all             # remove them
+git annex dropunused <number>        # selected entry from the unused report
 ```
 
-Run `git annex fsck --from <remote>` after any suspicion that a remote lost data, since it
-is the only thing that replaces recorded belief with a live check. Run
-`datalad wtf --section dependencies` when behaviour is inconsistent with the documentation,
-since an old git-annex is behind a large share of confusing errors; DataLad 1.6 was
-released alongside git-annex 10.x and drift from that pairing is the first thing to check.
+`fsck --from` contacts the remote; checksum support and download cost depend on remote
+type. It is one way to check recorded availability, alongside actual retrieval and
+the verification performed by a safe drop. Review `unused` entries before removing
+them: content absent from the current worktree may still matter to historical results.
+Check `datalad wtf --section dependencies` when behavior differs from the manuals.
+
+The registry count changes continuously. Its live frontend and search syntax were
+reviewed on 2026-09-30; see also the
+[official registry guide](https://blog.datalad.org/posts/registry/). Public dataset
+locations were checked as Git repository metadata only, without downloading their
+annexed scientific data. Registry search is case-insensitive substring search; group
+mixed AND/OR expressions with parentheses as the frontend instructs.

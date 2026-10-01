@@ -1,5 +1,11 @@
 # Standard Scanpy Workflow for Single-Cell Analysis
 
+Reviewed for Scanpy 1.12.4 / AnnData 0.13.4 on 2026-10-01. These snippets are
+illustrative and require the named genes, groups and prior results to exist.
+Use the tested CLI workflow for a runnable starting point. Counts, normalized
+expression and `.raw` have distinct roles; see [upstream-review.md](upstream-review.md).
+
+
 This document outlines the standard workflow for analyzing single-cell RNA-seq data using scanpy.
 
 ## Complete Analysis Pipeline
@@ -13,7 +19,7 @@ import numpy as np
 
 # Configure scanpy settings
 sc.settings.verbosity = 3  # verbosity: errors (0), warnings (1), info (2), hints (3)
-sc.settings.set_figure_params(dpi=80, facecolor='white')
+sc.set_figure_params(dpi=80, facecolor='white')
 
 # Load data (various formats)
 adata = sc.read_10x_mtx('path/to/data/')  # For 10X data
@@ -24,6 +30,8 @@ adata = sc.read_10x_mtx('path/to/data/')  # For 10X data
 ### 2. Quality Control (QC)
 
 ```python
+# Human symbols shown; use organism/annotation-specific mitochondrial IDs
+adata.var["mt"] = adata.var_names.str.startswith("MT-")
 # Calculate QC metrics
 sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
@@ -32,7 +40,7 @@ sc.pp.filter_cells(adata, min_genes=200)
 sc.pp.filter_genes(adata, min_cells=3)
 
 # Remove cells with high mitochondrial content
-adata = adata[adata.obs.pct_counts_mt < 5, :]
+adata = adata[adata.obs.pct_counts_mt < 5, :].copy()
 
 # Optional: doublet detection (run on raw counts before normalization)
 # sc.pp.scrublet(adata)
@@ -48,6 +56,8 @@ sc.pl.scatter(adata, x='total_counts', y='n_genes_by_counts')
 ### 3. Normalization
 
 ```python
+# Preserve identified raw counts BEFORE normalization
+adata.layers["counts"] = adata.X.copy()
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
@@ -55,7 +65,7 @@ sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 
 # Store normalized data in raw for later use
-adata.raw = adata
+adata.raw = adata.copy()
 ```
 
 ### 4. Feature Selection
@@ -67,15 +77,17 @@ sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
 # Visualize highly variable genes
 sc.pl.highly_variable_genes(adata)
 
+# Gene subsetting also subsets counts: retain full-gene data for pseudobulk
+adata.write_h5ad("full_gene_lognorm.h5ad")
 # Subset to highly variable genes
-adata = adata[:, adata.var.highly_variable]
+adata = adata[:, adata.var.highly_variable].copy()
 ```
 
 ### 5. Scaling and Regression
 
 ```python
-# Regress out effects of total counts per cell and percent mitochondrial genes
-sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
+# Optional; may densify and remove true biological signal
+# sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
 
 # Scale data to unit variance and zero mean
 sc.pp.scale(adata, max_value=10)
@@ -85,14 +97,15 @@ sc.pp.scale(adata, max_value=10)
 
 ```python
 # Principal Component Analysis (PCA)
-sc.tl.pca(adata, svd_solver='arpack')
+n_pcs = min(40, adata.n_obs - 1, adata.n_vars - 1)
+sc.pp.pca(adata, n_comps=n_pcs, svd_solver='arpack')
 
 # Visualize PCA results
 sc.pl.pca(adata, color='CST3')
 sc.pl.pca_variance_ratio(adata, log=True)
 
 # Computing neighborhood graph
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
+sc.pp.neighbors(adata, n_neighbors=10, n_pcs=n_pcs, use_rep='X_pca')
 
 # UMAP for visualization
 sc.tl.umap(adata)
@@ -105,7 +118,7 @@ sc.tl.umap(adata)
 
 ```python
 # Leiden clustering
-sc.tl.leiden(adata, resolution=0.5)
+sc.tl.leiden(adata, resolution=0.5, flavor='igraph', directed=False, n_iterations=2)
 
 # Visualize clustering results
 sc.pl.umap(adata, color=['leiden'], legend_loc='on data')
@@ -113,7 +126,7 @@ sc.pl.umap(adata, color=['leiden'], legend_loc='on data')
 
 ### 8. Marker Gene Identification
 
-`rank_genes_groups` is appropriate for exploratory cluster markers. Per-cell tests produce inflated p-values; for rigorous DE between conditions, pseudobulk with `sc.get.aggregate()` and use pydeseq2.
+`rank_genes_groups` is appropriate for exploratory cluster markers. Per-cell tests produce inflated significance; for rigorous DE between conditions, pseudobulk with `sc.get.aggregate()` and use pydeseq2.
 
 ```python
 # Find marker genes for each cluster (exploratory)
@@ -168,7 +181,8 @@ sc.pl.paga(adata, color=['leiden'])
 
 # Diffusion pseudotime (DPT)
 adata.uns['iroot'] = np.flatnonzero(adata.obs['leiden'] == '0')[0]
-sc.tl.dpt(adata)
+sc.tl.diffmap(adata, n_comps=10)  # choose fewer for small datasets
+sc.tl.dpt(adata, n_dcs=10)
 sc.pl.umap(adata, color=['dpt_pseudotime'])
 ```
 
@@ -183,7 +197,8 @@ pb = sc.get.aggregate(
     func='sum',
     layer='counts',
 )
-# Export pb and use pydeseq2 for condition comparisons
+# pb.layers["sum"] is samples x genes; pb.X is None.
+# Join condition/donor metadata, select one cell type and verify replication/design.
 ```
 
 For quick exploratory comparisons only:
@@ -215,7 +230,7 @@ sc.pl.umap(adata, color='T_cell_score')
 ## Best Practices
 
 1. Always visualize QC metrics before filtering
-2. Save raw counts before normalization (`adata.raw = adata`)
+2. Save raw counts before normalization (`adata.layers["counts"] = adata.X.copy()`)
 3. Use Leiden clustering (`sc.tl.louvain` deprecated in scanpy 1.12)
 4. Try multiple clustering resolutions to find optimal granularity
 5. Validate cell type annotations with known marker genes

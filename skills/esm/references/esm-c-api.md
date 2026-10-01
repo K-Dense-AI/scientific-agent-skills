@@ -1,609 +1,143 @@
-# ESM C API Reference
+# ESMC embeddings: esm 3.4.1.post1
 
-## Overview
+## Current local interface
 
-ESM C (Cambrian) is a family of protein language models optimized for representation learning and efficient embedding generation. Designed as a drop-in replacement for ESM2, ESM C provides significant improvements in speed and quality across all model sizes.
+Use `EsmcForMaskedLM` and `EsmcTokenizer` from `esm.models.esmc`. Local checkpoints
+are `biohub/ESMC-300M`, `biohub/ESMC-600M`, and `biohub/ESMC-6B`. Their published
+hidden dimensions/layers are 960/30, 1152/36, and 2560/80. ESMC 6B is now
+open-weight; the old assertion that it is hosted-only is obsolete.
 
-## Model Architecture
-
-**ESM C Family Models:**
-
-| Model ID | Parameters | Layers | Best For |
-|----------|-----------|--------|----------|
-| `esmc_300m` / `esmc-300m-2024-12` | 300M | 30 | Fast inference, lightweight applications |
-| `esmc_600m` / `esmc-600m-2024-12` | 600M | 36 | Balanced performance and quality |
-| `esmc-6b-2024-12` | 6B | 80 | Maximum quality (Forge API; not open weights) |
-
-**Key Features:**
-- 3x faster inference than ESM2
-- Improved perplexity and embedding quality
-- Efficient architecture for production deployment
-- Compatible with ESM2 workflows (drop-in replacement)
-- Support for long sequences (up to 1024 residues efficiently)
-
-**Architecture Improvements over ESM2:**
-- Optimized attention mechanisms
-- Better token representation
-- Enhanced training procedures
-- Reduced memory footprint
-
-## Core API Components
-
-### ESMC Class
-
-Main interface for ESM C models.
-
-**Model Loading:**
-
-```python
-from esm.models.esmc import ESMC
-from esm.sdk.api import ESMProtein, LogitsConfig
-
-# Load model with automatic device placement
-model = ESMC.from_pretrained("esmc_300m").to("cuda")
-
-# Or specify device explicitly
-model = ESMC.from_pretrained("esmc_600m").to("cpu")
-
-# For maximum local quality (open weights: esmc_300m or esmc_600m)
-# For 6B hosted inference, use Forge with esmc-6b-2024-12 (see forge-api.md)
-model = ESMC.from_pretrained("esmc_600m").to("cuda")
-```
-
-**Model Selection Criteria:**
-
-- **esmc_300m**: Development, real-time applications, batch processing of many sequences
-- **esmc_600m**: Production deployments, good quality/speed balance
-- **esmc-6b-2024-12** (Forge): Research, maximum accuracy when 6B open weights are unavailable locally
-
-### Basic Embedding Generation
-
-**Single Sequence:**
-
-```python
-from esm.models.esmc import ESMC
-from esm.sdk.api import ESMProtein, LogitsConfig
-
-# Load model
-model = ESMC.from_pretrained("esmc_600m").to("cuda")
-
-# Create protein
-protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
-
-# Encode to tensor
-protein_tensor = model.encode(protein)
-
-# Generate logits and embeddings
-logits_output = model.logits(
-    protein_tensor,
-    LogitsConfig(sequence=True, return_embeddings=True),
-)
-embeddings = logits_output.embeddings
-logits = logits_output.logits
-
-print(f"Embedding shape: {embeddings.shape}")
-print(f"Logits shape: {logits.shape}")
-```
-
-**Output Shapes:**
-
-For a sequence of length L:
-- `embeddings.shape`: `(1, L, hidden_dim)` where hidden_dim depends on model
-  - esmc_300m: hidden_dim = 960
-  - esmc_600m: hidden_dim = 1152
-  - esmc-6b: hidden_dim = 2560
-- `logits.shape`: `(1, L, 64)` - per-position amino acid predictions
-
-### Batch Processing
-
-Process multiple sequences efficiently:
+Illustrative pretrained inference:
 
 ```python
 import torch
+from esm.models.esmc import EsmcForMaskedLM, EsmcTokenizer
 
-# Multiple proteins
-sequences = [
-    "MPRTKEINDAGLIVHSP",
-    "AGKWFYLTQSNHERVPM",
-    "DEIFKRNAVWGSLTPQY"
-]
+model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M", device="cpu").eval()
+tokenizer = EsmcTokenizer()
+sequences = ["MPRTKEIND", "ACDE"]
+inputs = tokenizer(sequences, return_tensors="pt", padding=True,
+                   return_special_tokens_mask=True, truncation=False)
+special = inputs.pop("special_tokens_mask")
+inputs = {key: value.to(model.device) for key, value in inputs.items()}
+with torch.inference_mode():
+    output = model(**inputs, output_hidden_states=True)
 
-proteins = [ESMProtein(sequence=seq) for seq in sequences]
-
-# Encode all
-protein_tensors = [model.encode(p) for p in proteins]
-
-# Process batch (if same length)
-# For variable lengths, process individually or pad
-embeddings_list = []
-for tensor in protein_tensors:
-    embedding = model.forward(tensor)
-    embeddings_list.append(embedding)
-
-print(f"Processed {len(embeddings_list)} proteins")
+# One vector for each residue, excluding CLS/EOS/padding.
+keep = inputs["attention_mask"].bool() & ~special.to(model.device).bool()
+residues = [states[mask].cpu() for states, mask in zip(output.last_hidden_state, keep)]
+assert [len(item) for item in residues] == [len(item) for item in sequences]
 ```
 
-**Efficient Batching for Variable Lengths:**
+The current model cards specify a 2048-token context. For plain single-chain
+inputs with CLS/EOS, the helper limits sequences to 2046 residues and raises on
+longer input. It never truncates silently.
 
-```python
-def batch_encode_variable_length(model, sequences, max_batch_size=32):
-    """
-    Efficiently batch encode sequences of variable length.
-    Groups by similar length for efficiency.
-    """
-    # Sort by length
-    sorted_seqs = sorted(enumerate(sequences), key=lambda x: len(x[1]))
+The native output contains:
 
-    results = [None] * len(sequences)
-    batch = []
-    batch_indices = []
+| Field | Shape/meaning |
+| --- | --- |
+| `last_hidden_state` | `(B,T,D)`, final normalized representations |
+| `logits` | `(B,T,64)` for the masked-LM class |
+| `hidden_states` | `(N+1,B,T,D)` when requested; embedding layer plus block outputs, final state normalized |
+| `attentions` | Per-layer tuple of `(B,H,T,T)` when `output_attentions=True` |
 
-    for idx, seq in sorted_seqs:
-        batch.append(seq)
-        batch_indices.append(idx)
+`T` includes the boundary tokens and any padding. Attentions can be expensive
+and are not causal explanations. The native SDK's `hidden_states` is a stacked
+tensor, not necessarily the same container as another Transformers model.
 
-        # Process batch when full or length changes significantly
-        if (len(batch) >= max_batch_size or
-            (len(batch) > 0 and abs(len(seq) - len(batch[0])) > 10)):
+For repeated embedding extraction, use `embed_sequences()` from
+`scripts/esm_embeddings.py` (add that directory to `PYTHONPATH`). It validates
+plain single-chain sequences, never silently truncates, and pools only residues.
+Do not concatenate separately generated fragments and call that full-protein
+inference: fragmentation removes long-range context.
 
-            # Process current batch
-            proteins = [ESMProtein(sequence=s) for s in batch]
-            embeddings = [model.forward(model.encode(p)) for p in proteins]
+## Tiny CPU contract check
 
-            # Store results
-            for i, emb in zip(batch_indices, embeddings):
-                results[i] = emb
-
-            batch = []
-            batch_indices = []
-
-    # Process remaining
-    if batch:
-        proteins = [ESMProtein(sequence=s) for s in batch]
-        embeddings = [model.forward(model.encode(p)) for p in proteins]
-        for i, emb in zip(batch_indices, embeddings):
-            results[i] = emb
-
-    return results
-```
-
-## Common Use Cases
-
-### 1. Sequence Similarity Analysis
-
-Compute similarity between proteins using embeddings:
+This construction was executed without pretrained weights or network access.
+The result tests shapes and code behavior; random weights have no biological
+predictive meaning.
 
 ```python
 import torch
-import torch.nn.functional as F
+from esm.models.esmc import EsmcConfig, EsmcForMaskedLM, EsmcTokenizer
+from esm_embeddings import embed_sequences
 
-def get_sequence_embedding(model, sequence):
-    """Get mean-pooled sequence embedding."""
-    protein = ESMProtein(sequence=sequence)
-    tensor = model.encode(protein)
-    embedding = model.forward(tensor)
-
-    # Mean pooling over sequence length
-    return embedding.mean(dim=1)
-
-# Get embeddings
-seq1_emb = get_sequence_embedding(model, "MPRTKEINDAGLIVHSP")
-seq2_emb = get_sequence_embedding(model, "MPRTKEINDAGLIVHSQ")  # Similar
-seq3_emb = get_sequence_embedding(model, "WWWWWWWWWWWWWWWWW")  # Different
-
-# Compute cosine similarity
-sim_1_2 = F.cosine_similarity(seq1_emb, seq2_emb)
-sim_1_3 = F.cosine_similarity(seq1_emb, seq3_emb)
-
-print(f"Similarity (1,2): {sim_1_2.item():.4f}")
-print(f"Similarity (1,3): {sim_1_3.item():.4f}")
+torch.manual_seed(0)
+model = EsmcForMaskedLM(EsmcConfig(
+    hidden_size=32, num_attention_heads=4, num_hidden_layers=2,
+)).eval()
+features = embed_sequences(model, EsmcTokenizer(), ["MPRT", "AC"])
+assert features.shape == (2, 32) and torch.isfinite(features).all()
 ```
 
-### 2. Protein Classification
-
-Use embeddings as features for classification:
-
-```python
-import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-
-# Generate embeddings for training set
-def embed_dataset(model, sequences):
-    embeddings = []
-    for seq in sequences:
-        protein = ESMProtein(sequence=seq)
-        tensor = model.encode(protein)
-        emb = model.forward(tensor).mean(dim=1)  # Mean pooling
-        embeddings.append(emb.cpu().detach().numpy().flatten())
-    return np.array(embeddings)
-
-# Example: Classify proteins by function
-train_sequences = [...]  # Your sequences
-train_labels = [...]      # Your labels
-
-embeddings = embed_dataset(model, train_sequences)
-
-# Train classifier
-X_train, X_test, y_train, y_test = train_test_split(
-    embeddings, train_labels, test_size=0.2
-)
-
-classifier = LogisticRegression(max_iter=1000)
-classifier.fit(X_train, y_train)
-
-# Evaluate
-accuracy = classifier.score(X_test, y_test)
-print(f"Classification accuracy: {accuracy:.4f}")
-```
-
-### 3. Protein Clustering
-
-Cluster proteins based on sequence similarity:
-
-```python
-from sklearn.cluster import KMeans
-import numpy as np
-
-# Generate embeddings
-sequences = [...]  # Your protein sequences
-embeddings = embed_dataset(model, sequences)
-
-# Cluster
-n_clusters = 5
-kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-cluster_labels = kmeans.fit_predict(embeddings)
-
-# Analyze clusters
-for i in range(n_clusters):
-    cluster_seqs = [seq for seq, label in zip(sequences, cluster_labels) if label == i]
-    print(f"Cluster {i}: {len(cluster_seqs)} sequences")
-```
-
-### 4. Sequence Search and Retrieval
-
-Find similar sequences in a database:
-
-```python
-import torch
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-
-def build_sequence_index(model, database_sequences):
-    """Build searchable index of sequence embeddings."""
-    embeddings = []
-    for seq in database_sequences:
-        emb = get_sequence_embedding(model, seq)
-        embeddings.append(emb.cpu().detach().numpy().flatten())
-    return np.array(embeddings)
-
-def search_similar_sequences(model, query_seq, database_embeddings,
-                            database_sequences, top_k=10):
-    """Find top-k most similar sequences."""
-    query_emb = get_sequence_embedding(model, query_seq)
-    query_emb_np = query_emb.cpu().detach().numpy().flatten().reshape(1, -1)
-
-    # Compute similarities
-    similarities = cosine_similarity(query_emb_np, database_embeddings)[0]
-
-    # Get top-k
-    top_indices = np.argsort(similarities)[-top_k:][::-1]
-
-    results = [
-        (database_sequences[idx], similarities[idx])
-        for idx in top_indices
-    ]
-    return results
-
-# Example usage
-database_seqs = [...]  # Large sequence database
-index = build_sequence_index(model, database_seqs)
-
-query = "MPRTKEINDAGLIVHSP"
-similar = search_similar_sequences(model, query, index, database_seqs, top_k=5)
-
-for seq, score in similar:
-    print(f"Score: {score:.4f} - {seq[:30]}...")
-```
-
-### 5. Feature Extraction for Downstream Models
-
-Use ESM C embeddings as input to custom neural networks:
-
-```python
-import torch.nn as nn
-
-class ProteinPropertyPredictor(nn.Module):
-    """Example: Predict protein properties from ESM C embeddings."""
-
-    def __init__(self, embedding_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.fc1 = nn.Linear(embedding_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, output_dim)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.3)
-
-    def forward(self, embeddings):
-        # embeddings: (batch, seq_len, embedding_dim)
-        # Mean pool over sequence
-        x = embeddings.mean(dim=1)
-
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.relu(self.fc2(x))
-        x = self.dropout(x)
-        x = self.fc3(x)
-        return x
-
-# Use ESM C as frozen feature extractor
-esm_model = ESMC.from_pretrained("esmc_600m").to("cuda")
-esm_model.train(False)  # Inference mode (disables dropout; not Python eval)
-
-# Create task-specific model
-predictor = ProteinPropertyPredictor(
-    embedding_dim=1152,  # esmc_600m dimension
-    hidden_dim=512,
-    output_dim=1  # e.g., stability score
-).to("cuda")
-
-# Training loop
-for sequence, target in dataloader:
-    protein = ESMProtein(sequence=sequence)
-    with torch.no_grad():
-        embeddings = esm_model.forward(esm_model.encode(protein))
-
-    prediction = predictor(embeddings)
-    loss = criterion(prediction, target)
-    # ... backprop through predictor only
-```
-
-### 6. Per-Residue Analysis
-
-Extract per-residue representations for detailed analysis:
-
-```python
-def get_per_residue_embeddings(model, sequence):
-    """Get embedding for each residue."""
-    protein = ESMProtein(sequence=sequence)
-    tensor = model.encode(protein)
-    embeddings = model.forward(tensor)
-
-    # embeddings shape: (1, seq_len, hidden_dim)
-    return embeddings.squeeze(0)  # (seq_len, hidden_dim)
-
-# Analyze specific positions
-sequence = "MPRTKEINDAGLIVHSPQWFYK"
-residue_embeddings = get_per_residue_embeddings(model, sequence)
-
-# Extract features for position 10
-position_10_features = residue_embeddings[10]
-print(f"Features for residue {sequence[10]} at position 10:")
-print(f"Shape: {position_10_features.shape}")
-
-# Compare residue representations
-pos_5 = residue_embeddings[5]
-pos_15 = residue_embeddings[15]
-similarity = F.cosine_similarity(pos_5, pos_15, dim=0)
-print(f"Residue similarity: {similarity.item():.4f}")
-```
-
-## Performance Optimization
-
-### Memory Management
-
-```python
-import torch
-
-# Use half precision for memory efficiency
-model = ESMC.from_pretrained("esmc_600m").to("cuda").half()
-
-# Process with mixed precision
-with torch.cuda.amp.autocast():
-    embeddings = model.forward(model.encode(protein))
-
-# Clear cache between batches
-torch.cuda.empty_cache()
-```
-
-### Batch Processing Best Practices
-
-```python
-def efficient_batch_processing(model, sequences, batch_size=32):
-    """Process sequences in optimized batches."""
-    results = []
-
-    for i in range(0, len(sequences), batch_size):
-        batch = sequences[i:i + batch_size]
-
-        # Process batch
-        batch_embeddings = []
-        for seq in batch:
-            protein = ESMProtein(sequence=seq)
-            emb = model.forward(model.encode(protein))
-            batch_embeddings.append(emb)
-
-        results.extend(batch_embeddings)
-
-        # Periodically clear cache
-        if i % (batch_size * 10) == 0:
-            torch.cuda.empty_cache()
-
-    return results
-```
-
-### Caching Embeddings
-
-```python
-import pickle
-import hashlib
-
-def get_cache_key(sequence):
-    """Generate cache key for sequence."""
-    return hashlib.md5(sequence.encode()).hexdigest()
-
-class EmbeddingCache:
-    """Cache for protein embeddings."""
-
-    def __init__(self, cache_file="embeddings_cache.pkl"):
-        self.cache_file = cache_file
-        try:
-            with open(cache_file, 'rb') as f:
-                self.cache = pickle.load(f)
-        except FileNotFoundError:
-            self.cache = {}
-
-    def get(self, sequence):
-        key = get_cache_key(sequence)
-        return self.cache.get(key)
-
-    def set(self, sequence, embedding):
-        key = get_cache_key(sequence)
-        self.cache[key] = embedding
-
-    def save(self):
-        with open(self.cache_file, 'wb') as f:
-            pickle.dump(self.cache, f)
-
-# Usage
-cache = EmbeddingCache()
-
-def get_embedding_cached(model, sequence):
-    cached = cache.get(sequence)
-    if cached is not None:
-        return cached
-
-    # Compute
-    protein = ESMProtein(sequence=sequence)
-    embedding = model.forward(model.encode(protein))
-    cache.set(sequence, embedding)
-
-    return embedding
-
-# Don't forget to save cache
-cache.save()
-```
-
-## Comparison with ESM2
-
-**Performance Improvements:**
-
-| Metric | ESM2-650M | ESM C-600M | Improvement |
-|--------|-----------|------------|-------------|
-| Inference Speed | 1.0x | 3.0x | 3x faster |
-| Perplexity | Higher | Lower | Better |
-| Memory Usage | 1.0x | 0.8x | 20% less |
-| Embedding Quality | Baseline | Improved | +5-10% |
-
-**Migration from ESM2:**
-
-ESM C is designed as a modern replacement for many ESM2 embedding workflows:
-
-```python
-# Old ESM2 code
-from esm import pretrained
-model, alphabet = pretrained.esm2_t33_650M_UR50D()
-
-# New ESM C code (similar API)
-from esm.models.esmc import ESMC
-model = ESMC.from_pretrained("esmc_600m")
-```
-
-Key differences:
-- Faster inference with same or better quality
-- Simplified API through ESMProtein
-- Better support for long sequences
-- More efficient memory usage
-
-### Hosted 6B Embeddings via Forge
-
-The 6B model is available through Forge (not as open local weights). Use `LogitsConfig` to return embeddings:
+## Hosted ESMC
+
+Use `esmc_client`, not the ESM3 factory. The current ESM3 factory rejects
+non-ESM3 names. Dated hosted IDs are distinct from Hugging Face repository IDs.
+Illustrative authenticated inference:
 
 ```python
 import os
-from esm.sdk.forge import ESM3ForgeInferenceClient
-from esm.sdk.api import ESMProtein, LogitsConfig
+from esm.sdk import esmc_client
+from esm.sdk.api import ESMProtein, ESMProteinError, LogitsConfig
+from esm.models.esmc import EsmcTokenizer
+from esm_embeddings import sdk_residue_embeddings, validate_sequence
 
-client = ESM3ForgeInferenceClient(
-    model="esmc-6b-2024-12",
-    url="https://forge.evolutionaryscale.ai",
-    token=os.environ["ESM_API_KEY"],
-)
-
-protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
-protein_tensor = client.encode(protein)
-output = client.logits(protein_tensor, LogitsConfig(sequence=True, return_embeddings=True))
-embeddings = output.embeddings
+sequence = "MPRTKEINDAGLIVHSPQWFYK"
+validate_sequence(sequence)
+with esmc_client(model="esmc-600m-2024-12", url="https://biohub.ai",
+                 token=os.environ["ESM_API_KEY"], request_timeout=120) as model:
+    encoded = model.encode(ESMProtein(sequence=sequence))
+    if isinstance(encoded, ESMProteinError):
+        raise encoded
+    output = model.logits(encoded, LogitsConfig(sequence=True, return_embeddings=True))
+    if isinstance(output, ESMProteinError):
+        raise output
+    residues = sdk_residue_embeddings(
+        encoded.sequence, output.embeddings, EsmcTokenizer(), len(sequence),
+    )
+    pooled = residues.mean(dim=0).cpu()
+    sequence_logits = output.logits.sequence
 ```
 
-SDK v3.2+ also supports `mean_hidden_state` on forward passes for pooled representations.
+The SDK returns `LogitsOutput`: **`output.logits.sequence`** is a tensor;
+`output.logits` is a per-track container. A single-chain tensor response normally
+has `(1,L+2,D)` embeddings and `(1,L+2,64)` sequence logits. Validate against the
+encoded token count and strip boundary tokens; do not assume `(1,L,D)`.
 
-## Advanced Topics
+`LogitsConfig(return_hidden_states=True, ith_hidden_layer=k)` requests a layer
+with embedding-layer index 0. Hosted ESMC6B requires an explicit layer rather
+than `-1` for all layers. `return_mean_embedding` and
+`return_mean_hidden_states` exist, but a client-side explicit residue mask makes
+the pooling convention reviewable. Check account limits before large batches.
 
-### Fine-tuning ESM C
+## Legacy compatibility and fine tuning
 
-ESM C can be fine-tuned for specific tasks:
+The deprecated `ESMC` wrapper still supports `encode`/`logits`; keep it only for
+existing pipelines. Its low-level `forward` consumes token tensors, not an
+`ESMProteinTensor`, and returns an output object, not embeddings directly. The
+native API above avoids that ambiguity. Hidden-state indexing also changed:
+legacy compatibility states omit the embedding layer and use the pre-final-norm
+last state, so old layer-index caches cannot be reused without conversion.
 
-```python
-import torch.optim as optim
+The older `fair-esm` package also imports as `esm`, but exposes ESM2/ESMFold1 APIs.
+Use another environment for it. ESMC is a replacement representation model, not
+a drop-in API or numerical substitute. Refit and validate downstream models.
 
-# Load model
-model = ESMC.from_pretrained("esmc_300m").to("cuda")
+For trainable fine tuning use the native PyTorch forward path with a defined
+supervised loss and optimizer. Do not call an inference helper decorated with
+`torch.inference_mode()` and expect gradients. Fine-tuning quality, GPU memory
+budgets and pretrained attention maps were not validated here.
 
-# Unfreeze for fine-tuning
-for param in model.parameters():
-    param.requires_grad = True
+Cache sequence features with model/checkpoint revision, SDK version, layer,
+pooling convention, dtype and preprocessing in the key. Store numerical arrays
+without arbitrary-object deserialization, preserve source IDs, and split homologs
+before training to reduce leakage. Similarity and cluster membership alone do
+not establish function.
 
-# Define optimizer
-optimizer = optim.Adam(model.parameters(), lr=1e-5)
-
-# Training loop
-for epoch in range(num_epochs):
-    for sequences, labels in dataloader:
-        optimizer.zero_grad()
-
-        # Forward pass
-        proteins = [ESMProtein(sequence=seq) for seq in sequences]
-        embeddings = [model.forward(model.encode(p)) for p in proteins]
-
-        # Your task-specific loss
-        loss = compute_loss(embeddings, labels)
-
-        loss.backward()
-        optimizer.step()
-```
-
-### Attention Visualization
-
-Extract attention weights for interpretability:
-
-```python
-def get_attention_weights(model, sequence):
-    """Extract attention weights from model."""
-    protein = ESMProtein(sequence=sequence)
-    tensor = model.encode(protein)
-
-    # Forward with attention output
-    output = model.forward(tensor, output_attentions=True)
-
-    return output.attentions  # List of attention tensors per layer
-
-# Visualize attention
-attentions = get_attention_weights(model, "MPRTKEINDAGLIVHSP")
-# Process and visualize attention patterns
-```
-
-## Citation
-
-If using ESM C in research, cite:
-
-```
-ESM Cambrian: https://www.evolutionaryscale.ai/blog/esm-cambrian
-EvolutionaryScale (2024)
-```
-
-## Additional Resources
-
-- ESM C blog post: https://www.evolutionaryscale.ai/blog/esm-cambrian
-- Model weights: HuggingFace EvolutionaryScale organization
-- Comparison benchmarks: See blog post for detailed performance comparisons
+Sources: [released SDK](https://pypi.org/project/esm/3.4.1.post1/),
+[native model](https://github.com/Biohub/esm/blob/main/esm/models/esmc/model.py),
+[tokenizer](https://github.com/Biohub/esm/blob/main/esm/models/esmc/tokenizer.py),
+[compatibility layer](https://github.com/Biohub/esm/blob/main/esm/models/esmc/compatibility.py),
+[ESMC model card](https://huggingface.co/biohub/ESMC-6B).

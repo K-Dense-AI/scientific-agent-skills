@@ -1,333 +1,178 @@
-# Single-Cell RNA-seq Models
+# RNA models
 
-This document covers core models for analyzing single-cell RNA sequencing data in scvi-tools.
+Targets scvi-tools 1.5.1. Code is illustrative and source-verified; short synthetic
+SCVI/SCANVI fitting, predictions, DE and persistence were exercised in CPU tests. Unless stated otherwise, examples require an
+AnnData with measured RNA counts in `layers['counts']`, unique gene/cell IDs and
+valid named metadata. Complete QC and feature selection before setup.
 
-## scVI (Single-Cell Variational Inference)
+## SCVI and SCANVI
 
-**Purpose**: Unsupervised analysis, dimensionality reduction, and batch correction for scRNA-seq data.
-
-**Key Features**:
-- Deep generative model based on variational autoencoders (VAE)
-- Learns low-dimensional latent representations that capture biological variation
-- Automatically corrects for batch effects and technical covariates
-- Enables normalized gene expression estimation
-- Supports differential expression analysis
-
-**When to Use**:
-- Initial exploration and dimensionality reduction of scRNA-seq datasets
-- Integrating multiple batches or studies
-- Generating batch-corrected expression matrices
-- Performing probabilistic differential expression analysis
-
-**Basic Usage**:
 ```python
 import scvi
 
-# Setup data
-scvi.model.SCVI.setup_anndata(
-    adata,
-    layer="counts",
-    batch_key="batch"
-)
+scvi.model.SCVI.setup_anndata(adata, layer="counts", batch_key="batch")
+rna_model = scvi.model.SCVI(adata, n_latent=20, gene_likelihood="nb")
+rna_model.train()
+adata.obsm["X_scVI"] = rna_model.get_latent_representation()
+normalized = rna_model.get_normalized_expression(library_size=1e4)
 
-# Train model
-model = scvi.model.SCVI(adata, n_latent=30)
-model.train()
-
-# Extract results
-latent = model.get_latent_representation()
-normalized = model.get_normalized_expression()
-```
-
-**Key Parameters**:
-- `n_latent`: Dimensionality of latent space (default: 10)
-- `n_layers`: Number of hidden layers (default: 1)
-- `n_hidden`: Number of nodes per hidden layer (default: 128)
-- `dropout_rate`: Dropout rate for neural networks (default: 0.1)
-- `dispersion`: Gene-specific or cell-specific dispersion ("gene" or "gene-batch")
-- `gene_likelihood`: Distribution for data ("zinb", "nb", "poisson")
-
-**Outputs**:
-- `get_latent_representation()`: Batch-corrected low-dimensional embeddings
-- `get_normalized_expression()`: Denoised, normalized expression values
-- `differential_expression()`: Probabilistic DE testing between groups
-- `get_feature_correlation_matrix()`: Gene-gene correlation estimates
-
-## scANVI (Single-Cell ANnotation using Variational Inference)
-
-**Purpose**: Semi-supervised cell type annotation and integration using labeled and unlabeled cells.
-
-**Key Features**:
-- Extends scVI with cell type labels
-- Leverages partially labeled datasets for annotation transfer
-- Performs simultaneous batch correction and cell type prediction
-- Enables query-to-reference mapping
-
-**When to Use**:
-- Annotating new datasets using reference labels
-- Transfer learning from well-annotated to unlabeled datasets
-- Joint analysis of labeled and unlabeled cells
-- Building cell type classifiers with uncertainty quantification
-
-**Basic Usage**:
-```python
-# Option 1: Train from scratch
-scvi.model.SCANVI.setup_anndata(
-    adata,
-    layer="counts",
-    batch_key="batch",
-    labels_key="cell_type",
-    unlabeled_category="Unknown"
-)
-model = scvi.model.SCANVI(adata)
-model.train()
-
-# Option 2: Initialize from pretrained scVI
-scvi_model = scvi.model.SCVI(adata)
-scvi_model.train()
+# cell_type contains known labels and a literal Unknown for unlabeled cells.
 scanvi_model = scvi.model.SCANVI.from_scvi_model(
-    scvi_model,
-    unlabeled_category="Unknown"
+    rna_model, labels_key="cell_type", unlabeled_category="Unknown",
 )
 scanvi_model.train()
-
-# Predict cell types
 predictions = scanvi_model.predict()
+probabilities = scanvi_model.predict(soft=True)
 ```
 
-**Key Parameters**:
-- `labels_key`: Column in `adata.obs` containing cell type labels
-- `unlabeled_category`: Label for cells without annotations
-- All scVI parameters are also available
+For training from scratch, use `SCANVI.setup_anndata` with `labels_key` and
+`unlabeled_category`, then `SCANVI(adata)`. There is no `predict_proba()` method;
+`predict(soft=True)` returns class probabilities. Provide `labels_key` explicitly
+when the source SCVI model was not registered with labels. Do not reuse a SCANVI
+registry to initialize a different class without that class's setup.
 
-**Outputs**:
-- `predict()`: Cell type predictions for all cells
-- `predict_proba()`: Prediction probabilities
-- `get_latent_representation()`: Cell type-aware latent space
+SCVI defaults include `n_latent=10`, `n_hidden=128`, `n_layers=1`,
+`dropout_rate=0.1`, `gene_likelihood='zinb'`, and `dispersion='gene'`.
+Dispersion options include gene, gene-batch, gene-label and gene-cell; a gene-batch
+parameter is not a cell-specific parameter. Choice of likelihood requires checking
+the assay and fit, not simply counting zeros.
+
+Embeddings are candidates for integration, not guaranteed batch-free biology.
+Normalized expression is decoded model output and does not replace measured counts.
+Evaluate annotation on held-out donors, label ontology consistency and absent
+reference types; large class probabilities alone do not establish calibration.
 
 ## AUTOZI
 
-**Purpose**: Automatic identification and modeling of zero-inflated genes in scRNA-seq data.
-
-**Key Features**:
-- Distinguishes biological zeros from technical dropout
-- Learns which genes exhibit zero-inflation
-- Provides gene-specific zero-inflation probabilities
-- Improves downstream analysis by accounting for dropout
-
-**When to Use**:
-- Detecting which genes are affected by technical dropout
-- Improving imputation and normalization for sparse datasets
-- Understanding the extent of zero-inflation in your data
-
-**Basic Usage**:
 ```python
 scvi.model.AUTOZI.setup_anndata(adata, layer="counts")
 model = scvi.model.AUTOZI(adata)
 model.train()
-
-# Get zero-inflation probabilities per gene
-zi_probs = model.get_alphas_betas()
+posterior_beta_parameters = model.get_alphas_betas()
 ```
 
-## VeloVI
+AUTOZI assesses evidence for extra zero inflation under its count-mixture model.
+`get_alphas_betas()` returns beta-distribution parameters, not a vector labeling
+technical zeros or direct per-gene dropout probabilities. It does not determine
+whether a particular observed zero is biological or technical.
 
-**Purpose**: RNA velocity analysis using variational inference.
+## VELOVI
 
-**Key Features**:
-- Joint modeling of spliced and unspliced RNA counts
-- Probabilistic estimation of RNA velocity
-- Accounts for technical noise and batch effects
-- Provides uncertainty quantification for velocity estimates
+VELOVI requires **preprocessed continuous** spliced and unspliced abundance layers,
+commonly scVelo moments `Ms` and `Mu`. Preserve original spliced/unspliced counts
+and record filtering, normalization, neighborhood and scaling choices.
 
-**When to Use**:
-- Inferring cellular dynamics and differentiation trajectories
-- Analyzing spliced/unspliced count data
-- RNA velocity analysis with batch correction
-
-**Basic Usage**:
 ```python
-import scvelo as scv
-
-# Prepare velocity data
-scv.pp.filter_and_normalize(adata)
-scv.pp.moments(adata)
-
-# Train VeloVI (lives in scvi.external)
-scvi.external.VELOVI.setup_anndata(adata, spliced_layer="Ms", unspliced_layer="Mu")
-model = scvi.external.VELOVI(adata)
-model.train()
-
-# Get velocity estimates
-latent_time = model.get_latent_time()
-velocities = model.get_velocity()
+scvi.external.VELOVI.setup_anndata(
+    velocity_adata, spliced_layer="Ms", unspliced_layer="Mu",
+)
+velocity_model = scvi.external.VELOVI(velocity_adata)
+velocity_model.train()
+latent_time = velocity_model.get_latent_time()
+velocities = velocity_model.get_velocity()
+rates = velocity_model.get_rates()
 ```
 
-## contrastiveVI
+This setup has no batch-covariate argument. Do not advertise generic batch-corrected
+velocity. Latent time can be gene/cell-specific and is not observed chronological
+time. Validate kinetic assumptions, phase portraits, direction uncertainty and
+preprocessing sensitivity before interpreting a trajectory or causal transition.
+Follow the official velocity tutorial when exporting rescaled values to scVelo;
+raw model outputs are not an interchangeable velocity graph.
 
-**Purpose**: Isolating perturbation-specific variations from background biological variation.
+## ContrastiveVI
 
-**Key Features**:
-- Separates shared variation (common across conditions) from target-specific variation
-- Useful for perturbation studies (drug treatments, genetic perturbations)
-- Identifies condition-specific gene programs
-- Enables discovery of treatment-specific effects
-
-**When to Use**:
-- Analyzing perturbation experiments (drug screens, CRISPR, etc.)
-- Identifying genes responding specifically to treatments
-- Separating treatment effects from background variation
-- Comparing control vs. perturbed conditions
-
-**Basic Usage** (contrastiveVI lives in `scvi.external`):
 ```python
 import numpy as np
 
-scvi.external.ContrastiveVI.setup_anndata(adata, layer="counts")
-
+scvi.external.ContrastiveVI.setup_anndata(adata, layer="counts", batch_key="batch")
 model = scvi.external.ContrastiveVI(
-    adata,
-    n_background_latent=10,  # Shared/background variation
-    n_salient_latent=10,     # Target-specific (salient) variation
+    adata, n_background_latent=10, n_salient_latent=10,
 )
-
-# Train with explicit background (control) and target (perturbed) cell indices
-background_idx = np.where(adata.obs["condition"] == "control")[0]
-target_idx = np.where(adata.obs["condition"] == "treated")[0]
+background_idx = np.flatnonzero(adata.obs["condition"].eq("control"))
+target_idx = np.flatnonzero(adata.obs["condition"].eq("treated"))
+assert len(background_idx) and len(target_idx)
 model.train(background_indices=background_idx, target_indices=target_idx)
-
-# Extract representations
 background = model.get_latent_representation(representation_kind="background")
 salient = model.get_latent_representation(representation_kind="salient")
 ```
 
+The salient latent variable models target-specific variation. Confounding between
+condition, donor or technology can also enter that space; it does not isolate a
+causal perturbation effect automatically.
+
 ## CellAssign
 
-**Purpose**: Marker-based cell type annotation using known marker genes.
+Use a **genes-by-cell-types** binary marker DataFrame. Match marker rows exactly
+to the modeled gene order, and compute size factors from the full count library
+before restricting to marker genes.
 
-**Key Features**:
-- Uses prior knowledge of marker genes for cell types
-- Probabilistic assignment of cells to types
-- Handles marker gene overlap and ambiguity
-- Provides soft assignments with uncertainty
-
-**When to Use**:
-- Annotating cells using known marker genes
-- Leveraging existing biological knowledge for classification
-- Cases where marker gene lists are available but reference datasets are not
-
-**Basic Usage**:
 ```python
-# Create marker gene matrix (cell types x genes)
-marker_gene_mat = pd.DataFrame({
-    "CD4 T cells": [1, 1, 0, 0],  # CD3D, CD4, CD8A, CD19
-    "CD8 T cells": [1, 0, 1, 0],
-    "B cells": [0, 0, 0, 1]
+import numpy as np
+import pandas as pd
+
+markers = pd.DataFrame({
+    "CD4 T": [1, 1, 0, 0], "CD8 T": [1, 0, 1, 0], "B": [0, 0, 0, 1],
 }, index=["CD3D", "CD4", "CD8A", "CD19"])
-
-# CellAssign lives in scvi.external and needs a size factor per cell
-adata.obs["size_factor"] = adata.X.sum(axis=1)
-scvi.external.CellAssign.setup_anndata(adata, size_factor_key="size_factor")
-model = scvi.external.CellAssign(adata, marker_gene_mat)
+assert markers.index.isin(adata.var_names).all()
+lib = np.asarray(adata.layers["counts"].sum(axis=1)).ravel()
+assert (lib > 0).all()
+adata.obs["size_factor"] = lib / lib.mean()
+marker_adata = adata[:, markers.index].copy()
+scvi.external.CellAssign.setup_anndata(
+    marker_adata, layer="counts", size_factor_key="size_factor",
+)
+model = scvi.external.CellAssign(marker_adata, markers)
 model.train()
-
-predictions = model.predict()
+probabilities = model.predict()
 ```
 
-## Solo (Doublet Detection)
+This tiny marker matrix illustrates orientation, not a validated annotation panel.
+Marker absence, non-specific expression and missing reference types affect results.
+`predict` returns soft assignments; select labels only after checking uncertainty.
 
-**Purpose**: Identifying doublets (cells containing two or more cells) in scRNA-seq data.
+## SOLO
 
-**Key Features**:
-- Semi-supervised doublet detection using scVI embeddings
-- Simulates artificial doublets for training
-- Provides doublet probability scores
-- Can be applied to any scVI model
-
-**When to Use**:
-- Quality control of scRNA-seq datasets
-- Removing doublets before downstream analysis
-- Assessing doublet rates in your data
-
-**Basic Usage**:
 ```python
-# Train scVI model first
-scvi.model.SCVI.setup_anndata(adata, layer="counts")
-scvi_model = scvi.model.SCVI(adata)
-scvi_model.train()
-
-# Train Solo for doublet detection
-solo_model = scvi.external.SOLO.from_scvi_model(scvi_model)
-solo_model.train()
-
-# Predict doublets
-predictions = solo_model.predict()
-doublet_scores = predictions["doublet"]
-adata.obs["doublet_score"] = doublet_scores
+# rna_model must have been trained using only counts and optional batch_key.
+solo = scvi.external.SOLO.from_scvi_model(rna_model, restrict_to_batch="capture1")
+solo.train()
+scores = solo.predict(soft=True, return_logits=False)
 ```
 
-## Amortized LDA (Topic Modeling)
+SOLO does not support extra categorical/continuous covariates in the source model.
+Analyze separate captures appropriately: simulated cross-capture doublets are not
+physical droplet doublets. `restrict_to_batch` must match a registered batch value.
+Returned rows correspond to source-cell barcodes (simulated doublets are omitted by
+default); align the index before writing into `.obs`, especially after restriction.
+Probability thresholds and expected doublet rates require assay-specific validation.
 
-**Purpose**: Topic modeling for gene expression using Latent Dirichlet Allocation.
+## LinearSCVI and AmortizedLDA
 
-**Key Features**:
-- Discovers gene expression programs (topics)
-- Amortized variational inference for scalability
-- Each cell is a mixture of topics
-- Each topic is a distribution over genes
-
-**When to Use**:
-- Discovering gene programs or expression modules
-- Understanding compositional structure of expression
-- Alternative dimensionality reduction approach
-- Interpretable decomposition of expression patterns
-
-**Basic Usage**:
 ```python
+scvi.model.LinearSCVI.setup_anndata(adata, layer="counts", batch_key="batch")
+linear = scvi.model.LinearSCVI(adata, n_latent=10)
+linear.train()
+loadings = linear.get_loadings()
+
 scvi.model.AmortizedLDA.setup_anndata(adata, layer="counts")
-model = scvi.model.AmortizedLDA(adata, n_topics=10)
-model.train()
-
-# Get topic compositions per cell (Monte Carlo estimate of topic proportions)
-topic_proportions = model.get_latent_representation()
-
-# Get gene-by-topic loadings
-topic_gene_loadings = model.get_feature_by_topic()
+lda = scvi.model.AmortizedLDA(adata, n_topics=10)
+lda.train()
+cell_topics = lda.get_latent_representation()
+gene_topics = lda.get_feature_by_topic()
 ```
 
-## Model Selection Guidelines
+Linear decoder loadings and LDA topics can aid interpretation; assess stability and
+gene enrichment rather than treating components as uniquely identified pathways.
+AmortizedLDA does not inherit every SCVI normalization or covariate API.
 
-**Choose scVI when**:
-- Starting with unsupervised analysis
-- Need batch correction and integration
-- Want normalized expression and DE analysis
-
-**Choose scANVI when**:
-- Have some labeled cells for training
-- Need cell type annotation
-- Want to transfer labels from reference to query
-
-**Choose AUTOZI when**:
-- Concerned about technical dropout
-- Need to identify zero-inflated genes
-- Working with very sparse datasets
-
-**Choose VeloVI when**:
-- Have spliced/unspliced count data
-- Interested in cellular dynamics
-- Need RNA velocity with batch correction
-
-**Choose contrastiveVI when**:
-- Analyzing perturbation experiments
-- Need to separate treatment effects
-- Want to identify condition-specific programs
-
-**Choose CellAssign when**:
-- Have marker gene lists available
-- Want probabilistic marker-based annotation
-- No reference dataset available
-
-**Choose Solo when**:
-- Need doublet detection
-- Already using scVI for analysis
-- Want probabilistic doublet scores
+Sources: [SCVI](https://docs.scvi-tools.org/en/stable/api/reference/scvi.model.SCVI.html),
+[SCANVI](https://docs.scvi-tools.org/en/stable/api/reference/scvi.model.SCANVI.html),
+[RNA prediction mixin](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/base/_training_mixin.py),
+[AUTOZI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_autozi.py),
+[VELOVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/velovi/_model.py),
+[ContrastiveVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/contrastivevi/_model.py),
+[CellAssign](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/cellassign/_model.py),
+[SOLO](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/solo/_model.py),
+[LinearSCVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_linear_scvi.py),
+[AmortizedLDA](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_amortizedlda.py).

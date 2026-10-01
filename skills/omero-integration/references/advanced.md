@@ -81,7 +81,9 @@ omero download Image:789 ./reviewed-empty-directory
 omero download Fileset:321 ./reviewed-empty-directory
 ```
 
-`Image` and `Fileset` may expand to multiple files. First inspect count/size,
+`Image` and `Fileset` may expand to multiple files. The current download CLI
+looks these up with cross-group context; verify the object’s actual group
+first instead of relying on the session group. First inspect count/size,
 then use a dedicated destination with collision/symlink checks. Authenticate
 through a prompted stored session; do not add password or key flags.
 
@@ -91,11 +93,11 @@ Direct `RawFileStore` usage must be bounded and closed:
 max_bytes = 50 * 1024 * 1024
 store = conn.createRawFileStore()
 try:
-    store.setFileId(original_file_id)
-    size = store.size()
+    store.setFileId(original_file_id, conn.SERVICE_OPTS)
+    size = store.size(conn.SERVICE_OPTS)
     if size > max_bytes:
         raise ValueError("OriginalFile exceeds approved byte limit")
-    chunk = store.read(0, min(size, 1024 * 1024))
+    chunk = store.read(0, min(size, 1024 * 1024), conn.SERVICE_OPTS)
 finally:
     store.close()
 ```
@@ -155,7 +157,7 @@ parameters = omero.sys.ParametersI()
 parameters.addLong("image_id", image_id)
 
 query = "select i from Image i where i.id = :image_id"
-model_image = conn.getQueryService().findByQuery(query, parameters)
+model_image = conn.getQueryService().findByQuery(query, parameters, conn.SERVICE_OPTS)
 ```
 
 Never interpolate names, namespaces, IDs, ordering, or arbitrary user text
@@ -208,6 +210,20 @@ Official docs describe create/read/update/delete access but also explicitly
 limit type coverage. Do not call it a complete generic REST interface, assume
 OAuth, assume token authentication, or infer endpoints not listed by the
 server's discovery response.
+
+The JSON API defaults list queries to **all accessible groups**, unlike a
+typical BlitzGateway session query. Include an explicit `group=<id>` filter
+for group-scoped lists. Follow discovery URLs (including any deployment
+prefix), and use `data` for results and `meta` for pagination.
+
+Authentication uses session cookies: discover `url:servers` and select its
+server ID; GET `url:token` for the CSRF value; POST **form-encoded** `server`,
+`username`, and `password` to `url:login`, with `X-CSRFToken` (or
+`csrfmiddlewaretoken`) and an HTTPS same-origin `Referer`. Retain cookies in
+the same client session and refresh the CSRF token after login before further
+mutations. The token endpoint is `/api/v0/token/`, not a bearer-token issuer;
+`/api/v0/servers/` returns server IDs in `data`. Do not log login responses,
+which include session identifiers.
 
 Use HTTPS. A JSON API password is sent in the documented login POST and must
 never be logged. Honor the returned `maxLimit`; apply a smaller client cap.

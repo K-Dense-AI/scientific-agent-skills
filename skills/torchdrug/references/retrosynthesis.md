@@ -12,6 +12,8 @@ implements the G2Gs workflow:
 This is a single-step reactant prediction pipeline. Multi-step route search,
 commercial availability, conditions, yields, and cost optimization are not
 provided by `tasks.Retrosynthesis`.
+The long training/beam-search examples are source-verified illustrations, not
+completed benchmark experiments from this review.
 
 ## Prepare synchronized datasets
 
@@ -37,7 +39,10 @@ torch.manual_seed(1)
 synthon_train, synthon_valid, synthon_test = synthon_dataset.split()
 ```
 
-The repeated seed is required to align the reaction and synthon splits.
+The repeated seed follows upstream's split protocol. Verify source `"sample id"`
+sets as shown in [datasets](datasets.md#splitting-correctly), because filtering
+or different graph-conversion outcomes can break alignment. Row counts across
+the two views need not match.
 
 - Reaction mode stores `(reactants, product)` pairs.
 - Synthon mode stores `(reactant, synthon)` pairs.
@@ -78,8 +83,10 @@ reaction_solver.save("g2gs-reaction.pth")
 ```
 
 `CenterIdentification` predicts reaction centers. Its
-`predict_synthon(batch, k=...)` method returns top-k records containing synthons,
-reaction centers, reaction metadata, and log likelihoods.
+`predict_synthon(batch, k=...)` method returns **one dictionary**, despite the
+release docstring's `list of dict` annotation. Its keys are `synthon`,
+`num_synthon`, `reaction_center`, `log_likelihood`, and `reaction`; packed graph
+attributes carry product/split IDs.
 
 ## Synthon completion
 
@@ -171,27 +178,38 @@ solver.evaluate("valid")
 ```
 
 Keep model architectures, feature sets, and dataset metadata identical to the
-training run. Inspect missing or unexpected keys if adapting this pattern.
+training run. The composite's `load_state_dict` matches the exact key set of one
+subtask and requires `strict=True`; it cannot restore its own combined state dict
+through this override. Keep the two individual solver checkpoints. Load only
+trusted files because this PyTorch 2.0 path uses pickle.
 
 ## Prediction output
 
 The end-to-end task returns packed reactant predictions and a count per input:
 
 ```python
-from torchdrug import data, utils
+from torchdrug import data
 
-batch = data.graph_collate(reaction_valid[:4])
-batch = utils.cuda(batch)
-predictions, num_prediction = task.predict(batch)
+batch = data.graph_collate([reaction_valid[i] for i in range(min(4, len(reaction_valid)))])
+task.eval()
+with torch.no_grad():
+    predictions, num_prediction = task.predict(batch)
 
 top1_index = num_prediction.cumsum(0) - num_prediction
-for index in top1_index.tolist():
+for index, count in zip(top1_index.tolist(), num_prediction.tolist()):
+    if count == 0:
+        print("No reactant prediction")
+        continue
     reactants = predictions[index].connected_components()[0]
     print(reactants.to_smiles())
 ```
 
 Call `utils.cuda` only when the task/models are on CUDA. Keep the batch on CPU
 for CPU execution.
+Validate that `len(num_prediction)` equals the number of input products and
+that `num_prediction.sum() == len(predictions)` before associating outputs with
+inputs. Empty beam-search results may also raise inside the released task;
+record these failures rather than reporting a candidate for the next product.
 
 ## Evaluation
 

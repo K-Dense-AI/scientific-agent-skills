@@ -3,6 +3,11 @@
 The six stages from planning through final preparation, with the checks that belong at
 each stage.
 
+Treat the section ranges below as planning options, not additive time budgets.
+Choose one concrete allocation whose sum includes transitions, buffer, and any in-slot
+Q&A. The [timing guide](../assets/timing_guidelines.md) gives checked 5-, 15-, and
+45-minute budgets; rehearsal, not slide count, determines whether the deck fits.
+
 ## Workflow for Presentation Development
 
 ### Stage 1: Planning (Before Creating Slides)

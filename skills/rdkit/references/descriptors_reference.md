@@ -1,6 +1,6 @@
 # RDKit Molecular Descriptors Reference
 
-Complete reference for molecular descriptors available in RDKit's `Descriptors` module.
+Selected reference for molecular descriptors available in RDKit's `Descriptors` module.
 
 ## Usage
 
@@ -20,13 +20,13 @@ all_desc = Descriptors.CalcMolDescriptors(mol)
 ## Molecular Weight and Mass
 
 ### MolWt
-Average molecular weight of the molecule.
+Average molecular weight (numerically g/mol), including implicit hydrogens.
 ```python
 Descriptors.MolWt(mol)
 ```
 
 ### ExactMolWt
-Exact molecular weight using isotopic composition.
+Monoisotopic mass (Da), honoring specified isotopes; not an ion m/z calculation.
 ```python
 Descriptors.ExactMolWt(mol)
 ```
@@ -40,7 +40,7 @@ Descriptors.HeavyAtomMolWt(mol)
 ## Lipophilicity
 
 ### MolLogP
-Wildman-Crippen LogP (octanol-water partition coefficient).
+Wildman-Crippen estimate of octanol/water logP; not measured logP or pH-dependent logD.
 ```python
 Descriptors.MolLogP(mol)
 ```
@@ -54,7 +54,9 @@ Descriptors.MolMR(mol)
 ## Polar Surface Area
 
 ### TPSA
-Topological polar surface area (TPSA) based on fragment contributions.
+Fragment-based TPSA in square angstrom. The default excludes sulfur/phosphorus
+contributions; request `rdMolDescriptors.CalcTPSA(mol, includeSandP=True)` explicitly
+if that is the intended definition.
 ```python
 Descriptors.TPSA(mol)
 ```
@@ -68,13 +70,13 @@ Descriptors.LabuteASA(mol)
 ## Hydrogen Bonding
 
 ### NumHDonors
-Number of hydrogen bond donors (N-H and O-H).
+Count under RDKit donor SMARTS rules; includes eligible N, O and S sites.
 ```python
 Descriptors.NumHDonors(mol)
 ```
 
 ### NumHAcceptors
-Number of hydrogen bond acceptors (N and O).
+Count under RDKit acceptor SMARTS rules; not simply the count of N/O atoms.
 ```python
 Descriptors.NumHAcceptors(mol)
 ```
@@ -192,7 +194,7 @@ Descriptors.NumRotatableBonds(mol)
 ### NumAromaticAtoms
 Number of aromatic atoms.
 ```python
-Descriptors.NumAromaticAtoms(mol)
+sum(atom.GetIsAromatic() for atom in mol.GetAtoms())
 ```
 
 ## Fraction Descriptors
@@ -243,14 +245,11 @@ Descriptors.Kappa3(mol)
 
 Molecular connectivity indices.
 
-### Chi0, Chi1, Chi2, Chi3, Chi4
-Simple chi connectivity indices.
+### Chi0 and Chi1
+Unmodified connectivity indices (higher orders use the n/v families below).
 ```python
 Descriptors.Chi0(mol)
 Descriptors.Chi1(mol)
-Descriptors.Chi2(mol)
-Descriptors.Chi3(mol)
-Descriptors.Chi4(mol)
 ```
 
 ### Chi0n, Chi1n, Chi2n, Chi3n, Chi4n
@@ -391,11 +390,11 @@ Descriptors.SMR_VSA1(mol)
 
 LogP VSA descriptors.
 
-### SLogP_VSA1 through SLogP_VSA12
+### SlogP_VSA1 through SlogP_VSA12
 MOE-type descriptors using LogP contributions and surface area.
 ```python
-Descriptors.SLogP_VSA1(mol)
-# ... through SLogP_VSA12
+Descriptors.SlogP_VSA1(mol)
+# ... through SlogP_VSA12
 ```
 
 ## EState VSA Descriptors
@@ -480,12 +479,13 @@ Various autocorrelation indices measuring spatial distribution of properties.
 
 Molecular Quantum Numbers - 42 simple descriptors.
 
-### mqn1 through mqn42
-Integer descriptors counting various molecular features.
+### MQNs_
+The descriptor registry does not supply `mqn1` to `mqn42`. Request the 42-element
+MQN vector directly and retain its documented order.
 ```python
-# Access via CalcMolDescriptors
-desc = Descriptors.CalcMolDescriptors(mol)
-mqns = {k: v for k, v in desc.items() if k.startswith('mqn')}
+from rdkit.Chem import rdMolDescriptors
+mqns = list(rdMolDescriptors.MQNs_(mol))
+assert len(mqns) == 42
 ```
 
 ## QED
@@ -588,8 +588,14 @@ def molecular_complexity(mol):
 ## Tips
 
 1. **Use batch calculation** for multiple descriptors to avoid redundant computations
-2. **Check for None** - some descriptors may return None for invalid molecules
-3. **Normalize descriptors** for machine learning applications
+2. **Check validity and finiteness** - reject None/zero-atom inputs; `CalcMolDescriptors(mol, missingVal=float("nan"))` can include missing/nonfinite values. Preserve failure masks and feature names/order.
+3. **Fit transforms on training data only**; preserve original IDs across invalid rows and split by the appropriate chemical/scaffold/temporal unit before training.
 4. **Select relevant descriptors** - not all 200+ descriptors are useful for every task
 5. **Consider 3D descriptors** separately (require 3D coordinates)
 6. **Validate ranges** - check if descriptor values are in expected ranges
+
+QED and strict all-four Lipinski/lead-like cutoffs here are descriptive heuristics,
+not validated predictions of efficacy, toxicity, solubility, or oral exposure.
+2D descriptors usually account for implicit H; indiscriminately adding H can
+change graph descriptors. Record protonation, salts, tautomer policy, and RDKit
+version alongside features.

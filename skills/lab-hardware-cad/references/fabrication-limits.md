@@ -13,7 +13,7 @@ article, then verify with a test coupon.
 | --- | --- | --- | --- | --- |
 | FDM | ±0.3 mm (often worse over 100 mm) | 1.2 mm (3 x 0.4 mm nozzle) | ~0.8 mm | Anisotropic: much weaker across layers. Porous. |
 | SLA / DLP | ±0.1 mm | 0.8 mm | ~0.3 mm | Better surface and detail. Resin choice dominates properties. |
-| SLS (nylon) | ±0.2 mm | 0.8 mm | ~0.5 mm | Isotropic, no supports, slightly porous surface. |
+| SLS (nylon) | ±0.2 mm | 0.8 mm | ~0.5 mm | Often less anisotropic than FDM; no supports; porous surface. |
 | CNC milling | ±0.05 mm or better | 0.8 mm in metal | Set by tool diameter | Internal corners carry the tool radius — you cannot mill a sharp internal corner. |
 | Laser cutting | ±0.1 mm | n/a | Kerf ~0.1-0.3 mm | 2D only. Edge taper on thick stock. Kerf offset must be applied. |
 
@@ -52,11 +52,15 @@ Nominal dimensions do not produce fits. Choose a clearance deliberately, per sid
 | --- | --- | --- | --- |
 | Free-sliding (a plate dropping into a pocket) | 0.40 mm | 0.20 mm | 0.10 mm |
 | Located but removable by hand | 0.25 mm | 0.10 mm | 0.05 mm |
-| Press / interference | -0.05 mm | -0.03 mm | -0.02 mm |
+| Press / interference | Coupon-specific | Coupon-specific | Use a toleranced shaft/hole fit |
+
+For a guaranteed free fit, receiving-feature CAD size minus its undersize tolerance
+must exceed the mating part's maximum size plus the required functional gap.
+A nominal allowance is not the guaranteed assembled clearance.
 
 Then remember the **other** part has tolerance too. When mating to a standardised component,
 design the receiving feature against the component's **maximum material condition**, not its
-nominal — a pocket sized from nominal fits only the smaller half of conforming parts. This is what
+nominal — a pocket sized from nominal does not guarantee clearance for conforming parts. This is what
 `intent: "envelope"` enforces. Declare it in the model and check the manifest:
 
 ```bash
@@ -67,7 +71,7 @@ Or check a single number by hand:
 
 ```bash
 python scripts/check.py fit --standard slas-microplate-footprint \
-  --intent envelope --clearance 0.8 --value footprint_length=128.81
+  --intent envelope --clearance 0.8 --value footprint_length=129.06
 ```
 
 ## Threads and inserts
@@ -93,7 +97,7 @@ For FDM especially, orientation is a design decision, not a printing detail:
   along layers, and state the intended orientation in the model docstring.
 - Overhangs beyond roughly 45 degrees need support, and supported surfaces come out rough and
   dimensionally poor. If a surface is a sealing or mating face, orient it so it is not supported.
-- Holes printed with their axis vertical are round; printed horizontally they come out with a
+- Holes printed with their axis vertical are usually more circular; printed horizontally they come out with a
   drooped top. Teardrop or chamfer horizontal holes that must stay round.
 - **Every enclosed cavity needs a drain path** in resin printing. See
   `references/microfluidics.md`.
@@ -107,10 +111,10 @@ For FDM especially, orientation is a design decision, not a printing detail:
 | PLA | ~50-60 °C | **No** — distorts well below autoclave temperature |
 | PETG | ~70-80 °C | No |
 | ABS / ASA | ~90-100 °C | Marginal, generally no |
-| Polypropylene | ~100 °C | Marginal |
+| Polypropylene | Grade/application dependent | Some molded labware is rated for 121 °C; printed parts need validation |
 | Nylon (SLS) | ~120-160 °C | Sometimes; verify per grade |
-| PEEK | >250 °C | Yes |
-| Stainless steel, aluminium, glass | High | Yes |
+| PEEK | Grade/load dependent | Often compatible; verify grade and cycles |
+| Stainless steel, aluminium, glass | Grade/coating dependent | Often compatible; verify corrosion and thermal-shock limits |
 
 **Assume a printed part is not autoclavable unless it is a verified high-temperature material.**
 Offer chemical or gas sterilisation as the alternative, and check that against the solvent notes
@@ -122,7 +126,8 @@ below.
   a lab that disinfects everything with ethanol.
 - **Polycarbonate** is attacked by many solvents and by some alkaline cleaners.
 - **PLA** hydrolyses; it degrades in warm, wet, or repeatedly-cleaned service.
-- **PP, PTFE, PEEK** have broad chemical resistance and are the safe choices for solvent contact.
+- **PP, PTFE, PEEK** have broad chemical resistance, but require compatibility checks for the exact
+  chemical, concentration, temperature and exposure time; none is universally safe.
 
 Always ask what the part will be cleaned with, not just what it will contain. Cleaning agent
 compatibility is more often the failure than the sample.
@@ -148,9 +153,17 @@ compatibility is more often the failure than the sample.
 ## Cost and lead-time reality
 
 Mention these when recommending a process: FDM is hours and pennies; SLA is hours and modest cost;
-SLS and CNC are typically outsourced with days of lead time and much higher cost. A design that
-needs ±0.05 mm has committed the user to CNC — flag that trade before they discover it at quoting.
+SLS and CNC are typically outsourced with days of lead time and much higher cost. For ±0.05 mm requirements, ask the supplier to confirm process capability and inspection
+method; CNC or post-machining may be needed.
 
 ## Before fabrication
 
 Work through `references/validation.md`.
+
+## Review sources
+
+The dimensional tables are illustrative planning values, not supplier acceptance criteria.
+
+- Resin cure and biocompatibility are process-specific: <https://formlabs.com/support/Best-practices-for-post-curing-prints/>
+- Polypropylene labware sterilisation: <https://www.thermofisher.com/de/de/home/life-science/lab-plasticware-supplies/plastic-material-selection/polypropylene-pp-labware.html>
+- Grade/chemical/temperature compatibility: <https://documents.thermofisher.com/TFS-Assets/LCD/posters/LCD-Chemical-Resistance-Guide-GALSPCHEMRESPOSTER-EN.pdf>

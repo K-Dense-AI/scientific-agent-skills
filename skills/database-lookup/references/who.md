@@ -80,8 +80,8 @@ https://ghoapi.azureedge.net/api/WHOSIS_000001
       "SpatialDimType": "COUNTRY",
       "TimeDim": 2019,
       "TimeDimType": "YEAR",
-      "Dim1": "SEX",
-      "Dim1Type": "BTSX",
+      "Dim1": "SEX_BTSX",
+      "Dim1Type": "SEX",
       "Dim2": null,
       "Dim2Type": null,
       "Dim3": null,
@@ -131,10 +131,10 @@ https://ghoapi.azureedge.net/api/WHOSIS_000001?$filter=SpatialDim eq 'USA' and T
 
 **Example (life expectancy, both sexes, USA, 2015+):**
 ```
-https://ghoapi.azureedge.net/api/WHOSIS_000001?$filter=SpatialDim eq 'USA' and TimeDim ge 2015 and Dim1 eq 'BTSX'
+https://ghoapi.azureedge.net/api/WHOSIS_000001?$filter=SpatialDim eq 'USA' and TimeDim ge 2015 and Dim1 eq 'SEX_BTSX'
 ```
 
-Dim1 sex values: `BTSX` (both sexes), `MLE` (male), `FMLE` (female).
+Dim1 sex values: `SEX_BTSX` (both sexes), `SEX_MLE` (male), `SEX_FMLE` (female).
 
 ### 6. Pagination and Limiting
 
@@ -270,7 +270,7 @@ Key fields in each observation:
 - `NumericValue`: The numeric data value (float or null)
 - `Value`: String representation of the value
 - `Low` / `High`: Confidence interval bounds (when available)
-- `Dim1`: First additional dimension (often sex: `BTSX`, `MLE`, `FMLE`)
+- `Dim1`: First additional dimension (often sex: `SEX_BTSX`, `SEX_MLE`, `SEX_FMLE`)
 - `Dim2`, `Dim3`: Additional dimensions (age group, etc.)
 
 ## Notes

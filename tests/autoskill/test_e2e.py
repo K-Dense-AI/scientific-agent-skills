@@ -125,7 +125,7 @@ class _FakeLMStudioHandler:
             out = {"verdict": "reuse", "target": "literature-review"}
 
         return httpx.Response(200, json={
-            "choices": [{"message": {"content": json.dumps(out)}}]
+            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(out)}}]
         })
 
 
@@ -325,3 +325,79 @@ def test_cli_dry_run_writes_plan_without_backend_or_embedding_model(tmp_path, mo
     plan = (subdirs[0] / "plan.md").read_text()
     assert "Cluster" in plan
     assert "Chrome" in plan
+
+
+def test_real_loopback_http_fixture_contracts(tmp_path, monkeypatch):
+    """Actual HTTP on an ephemeral port, using only invented activity and tokens."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+    from urllib.parse import parse_qs, urlparse
+    from doctor import default_llm_probe, default_screenpipe_probe
+
+    events = _realistic_day()
+    seen = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def reply(self, data):
+            encoded = json.dumps(data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def do_GET(self):
+            path = urlparse(self.path)
+            seen.append(path.path)
+            if path.path == "/health":
+                return self.reply({"status": "healthy"})
+            assert self.headers.get("Authorization") == "Bearer fixture-token"
+            if path.path == "/v1/models":
+                return self.reply({"data": [{"id": "fixture-model"}]})
+            assert path.path == "/search"
+            params = parse_qs(path.query)
+            assert params["include_cloud"] == ["false"]
+            assert params["filter_pii"] == ["false"]
+            offset = int(params["offset"][0])
+            return self.reply({"data": events[offset:offset + 20],
+                               "pagination": {"offset": offset, "total": len(events)}})
+
+        def do_POST(self):
+            seen.append(self.path)
+            assert self.path == "/v1/chat/completions"
+            assert self.headers.get("Authorization") == "Bearer fixture-token"
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert body["model"] == "fixture-model"
+            assert body["stream"] is False
+            return self.reply({"choices": [{"finish_reason": "stop", "message": {
+                "content": json.dumps({"verdict": "reuse", "target": "literature-review"})}}]})
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}"
+    monkeypatch.setenv("LM_API_TOKEN", "fixture-token")
+    monkeypatch.setenv("SCREENPIPE_TOKEN", "fixture-token")
+    config = {**_base_config(), "backend": "local", "screenpipe": {"url": url},
+              "local": {"endpoint": url + "/v1", "model": "fixture-model"}}
+    skills = tmp_path / "skills"
+    _seed_skills_dir(skills)
+    try:
+        assert default_screenpipe_probe(config)[0] == "ok"
+        assert default_llm_probe(config)[0] == "ok"
+        with httpx.Client(base_url=url) as search, httpx.Client(base_url=url + "/v1") as llm:
+            backend = LocalBackend(url + "/v1", "fixture-model", client=llm,
+                                   api_key="fixture-token")
+            out = run(config, start_time="2026-04-17T00:00:00Z", end_time="2026-04-18T00:00:00Z",
+                      out_dir=tmp_path / "proposed", screenpipe_client=search,
+                      backend=backend, embedder=_keyword_embedder, skills_dir=skills,
+                      screenpipe_token="fixture-token", now=lambda: "fixture")
+            assert "literature-review" in (out / "report.md").read_text()
+        assert seen.count("/search") == 7
+        assert seen.count("/v1/chat/completions") == 3
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

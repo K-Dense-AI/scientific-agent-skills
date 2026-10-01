@@ -8,7 +8,7 @@
 **Best for:** Prioritization matrices, risk assessment, two-axis comparisons, effort/impact analysis
 **When NOT to use:** Time-based data (use [Gantt](gantt.md) or [XY Chart](xy_chart.md)), simple rankings (use a table)
 
-> ⚠️ **Accessibility:** Quadrant charts do **not** support `accTitle`/`accDescr`. Always place a descriptive _italic_ Markdown paragraph directly above the code block.
+> **Accessibility:** Mermaid 12.0.0 emits `accTitle`/`accDescr` for this type. Keep a visible description and verify older destination renderers.
 
 ---
 
@@ -18,19 +18,21 @@ _Priority matrix plotting engineering initiatives by effort required versus busi
 
 ```mermaid
 quadrantChart
+    accTitle: Quadrant Example
+    accDescr: Illustrative quadrant diagram; the surrounding text describes its data and relationships.
     title 🎯 Engineering Priority Matrix
     x-axis Low Effort --> High Effort
     y-axis Low Impact --> High Impact
-    quadrant-1 Do First
-    quadrant-2 Plan Carefully
-    quadrant-3 Reconsider
-    quadrant-4 Quick Wins
+    quadrant-1 Plan Carefully
+    quadrant-2 Quick Wins
+    quadrant-3 Low Priority
+    quadrant-4 Reconsider
     Upgrade auth library: [0.3, 0.9]
     Migrate to new DB: [0.9, 0.8]
     Fix typos in docs: [0.1, 0.2]
     Add dark mode: [0.4, 0.6]
     Rewrite legacy API: [0.95, 0.95]
-    Update CI cache: [0.15, 0.5]
+    Update CI cache: [0.15, 0.35]
     Add unit tests: [0.5, 0.7]
 ```
 
@@ -53,6 +55,8 @@ _Description of the two axes and what the quadrant placement means:_
 
 ```mermaid
 quadrantChart
+    accTitle: Quadrant Example
+    accDescr: Illustrative quadrant diagram; the surrounding text describes its data and relationships.
     title 🎯 Your Matrix Title
     x-axis Low X Axis --> High X Axis
     y-axis Low Y Axis --> High Y Axis
@@ -64,3 +68,8 @@ quadrantChart
     Item B: [0.7, 0.6]
     Item C: [0.2, 0.3]
 ```
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/quadrantChart.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

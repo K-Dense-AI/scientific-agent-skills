@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/compaction
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi has two summarization mechanisms that share the same structured summary format and track file operations cumulatively.
 
 | Mechanism | Trigger | Purpose |
@@ -9,21 +11,21 @@ Pi has two summarization mechanisms that share the same structured summary forma
 | Compaction | context exceeds threshold, or `/compact` | Summarize old messages to free context |
 | Branch summarization | `/tree` navigation | Preserve context when switching branches |
 
-Both use fresh routing session IDs and, where the provider supports it, disable prompt-cache writes because these one-off prompts are unlikely to be reused.
+Both disable prompt-cache writes where supported because these one-off prompts are unlikely to be reused.
 
 ## Auto-Compaction
 
-Triggers when `contextTokens > contextWindow - reserveTokens`. Defaults: `reserveTokens` 16384, `keepRecentTokens` 20000, configured under `compaction` in global or project settings. `/compact [instructions]` works even with auto-compaction disabled.
+Triggers when `contextTokens > contextWindow - reserveTokens`. Defaults: `reserveTokens` 16384, `keepRecentTokens` 20000, configured under `compaction` in global or project settings. Exact-model `compaction.modelOverrides` can override either budget independently. `/compact [instructions]` works even with auto-compaction disabled.
 
 Steps: walk backwards from the newest message accumulating token estimates until `keepRecentTokens` is reached (the cut point) → collect messages from the previous kept boundary (or session start) to the cut point → summarize with the structured format, passing any previous summary as iterative context → append a `CompactionEntry` → rebuild the context for the next request as summary plus messages from `firstKeptEntryId`.
 
-On repeated compactions the summarized span starts at the previous compaction's kept boundary (`firstKeptEntryId`), not at the compaction entry, falling back to the entry after the previous compaction when that kept entry is not on the path. This re-includes messages that survived the earlier pass. `tokensBefore` is recalculated from the rebuilt context before writing the new entry.
+On repeated compactions the summarized span starts at the previous compaction's kept boundary (`firstKeptEntryId`), not at the compaction entry, falling back to the entry after the previous compaction when that kept entry is not on the path. This re-includes messages that survived the earlier pass. `tokensBefore` is recalculated from the context-edited projection before writing the new entry.
 
 Valid cut points: user messages, assistant messages, bash execution messages, and custom messages (`custom_message`, `branch_summary`). Pi never cuts at tool results.
 
 ## Split Turns
 
-A turn starts with a user message and includes all assistant responses and tool calls until the next user message. When a single turn exceeds `keepRecentTokens`, the cut lands mid-turn at an assistant message (`isSplitTurn`). Pi then generates two summaries — a history summary for previous context and a turn-prefix summary for the early part of the split turn — and merges them.
+A user-message span starts with a user message and includes assistant turns and tool calls until the next user message. A runtime `turn_start`/`turn_end` instead encloses one assistant response and its tools. When a single turn exceeds `keepRecentTokens`, the cut lands mid-turn at an assistant message (`isSplitTurn`). Pi then generates two summaries — a history summary for previous context and a turn-prefix summary for the early part of the split turn — and merges them.
 
 ## Branch Summarization
 
@@ -37,7 +39,7 @@ Both mechanisms extract file operations from the tool calls being summarized **a
 
 `BranchSummaryEntry`: same plus `fromId` instead of `firstKeptEntryId`.
 
-Default `details` is `{ readFiles: string[], modifiedFiles: string[] }`; extensions may store any JSON-serializable structure. Newer harness-generated compactions also embed `retainedTail` — see `references/session-format.md`.
+Default `details` is `{ readFiles: string[], modifiedFiles: string[] }`; extensions may store any JSON-serializable structure. Current entries use `firstKeptEntryId` plus an optional complete `systemMessage` checkpoint; `retainedTail` is not the Pi 0.99.2 contract. Context edits affect the projected input, while raw history and costs remain unchanged. See `references/session-format.md`.
 
 ## Summary Format
 

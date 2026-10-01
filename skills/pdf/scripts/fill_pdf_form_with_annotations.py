@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 
 from pypdf import PdfReader, PdfWriter
@@ -43,6 +44,9 @@ def fill_pdf_form(input_pdf_path, fields_json_path, output_pdf_path):
     pdf_dimensions = {}
     for i, page in enumerate(reader.pages):
         mediabox = page.mediabox
+        if (page.rotation % 360 or tuple(mediabox.lower_left) != (0, 0)
+                or tuple(page.cropbox) != tuple(mediabox) or float(page.get("/UserUnit", 1)) != 1):
+            raise ValueError("Annotation helper requires unrotated pages, zero-origin MediaBox, matching CropBox, and UserUnit=1; normalize a copy and remeasure first")
         pdf_dimensions[i + 1] = [mediabox.width, mediabox.height]
     
     annotations = []
@@ -52,7 +56,10 @@ def fill_pdf_form(input_pdf_path, fields_json_path, output_pdf_path):
         page_info = next(p for p in fields_data["pages"] if p["page_number"] == page_num)
         pdf_width, pdf_height = pdf_dimensions[page_num]
 
-        if "pdf_width" in page_info:
+        if "image_width" not in page_info:
+            if not (math.isclose(page_info["pdf_width"], float(pdf_width), abs_tol=0.1)
+                    and math.isclose(page_info["pdf_height"], float(pdf_height), abs_tol=0.1)):
+                raise ValueError("fields.json dimensions do not match the PDF page")
             transformed_entry_box = transform_from_pdf_coords(
                 field["entry_bounding_box"],
                 float(pdf_height)
@@ -60,6 +67,8 @@ def fill_pdf_form(input_pdf_path, fields_json_path, output_pdf_path):
         else:
             image_width = page_info["image_width"]
             image_height = page_info["image_height"]
+            if image_width <= 0 or image_height <= 0:
+                raise ValueError("Image dimensions must be positive")
             transformed_entry_box = transform_from_image_coords(
                 field["entry_bounding_box"],
                 image_width, image_height,
@@ -73,7 +82,13 @@ def fill_pdf_form(input_pdf_path, fields_json_path, output_pdf_path):
         if not text:
             continue
         
-        font_name = entry_text.get("font", "Arial")
+        left, bottom, right, top = transformed_entry_box
+        font_points = float(entry_text.get("font_size", 14))
+        if (not all(math.isfinite(v) for v in (*transformed_entry_box, font_points))
+                or not (0 <= left < right <= float(pdf_width) and 0 <= bottom < top <= float(pdf_height))
+                or font_points <= 0 or top - bottom < font_points):
+            raise ValueError("Entry box is invalid, outside the page, or too short for its point-size font")
+        font_name = entry_text.get("font", "Helvetica")
         font_size = str(entry_text.get("font_size", 14)) + "pt"
         font_color = entry_text.get("font_color", "000000")
 

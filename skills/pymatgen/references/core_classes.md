@@ -1,7 +1,7 @@
 # Core classes: explicit chemistry, coordinates, and periodicity
 
-This reference targets the verified `pymatgen==2026.5.4` wrapper with
-`pymatgen-core==2026.7.16`. Core objects now ship from `pymatgen-core` but keep
+This reference targets the verified `pymatgen==2026.9.24` wrapper with
+`pymatgen-core==2026.9.23`. Core objects now ship from `pymatgen-core` but keep
 the public `pymatgen.core` namespace.
 
 ## Units and representation
@@ -187,6 +187,9 @@ images; wrapping them is a transformation, not an automatic fix.
 Record whether `to_unit_cell`, sorting, merging, primitive reduction, or
 standardization occurred. Check minimum periodic distances under a site-count
 bound; an all-pairs matrix is quadratic.
+The bundled distance checks exclude periodic images of the same site, so a
+one-site structure has a null pair distance. Check lattice self-image contacts
+separately when small cells are possible.
 
 ### Oxidation states
 
@@ -267,6 +270,12 @@ Do not use pickle. Do not feed attacker-controlled MSON metadata to a general
 decoder that dynamically imports classes. JSON is only a syntax; schema
 validation is the trust boundary.
 
+In this release, even `Structure.from_dict()` decodes MSON-valued site
+properties through `PeriodicSite.from_dict()`. The example above is a trusted
+round trip. The bundled intake rejects nested `@...` metadata and duplicate
+keys before this constructor; supply ordinary JSON lists/numbers for properties
+such as magmoms rather than serialized arbitrary Python objects.
+
 ## Validation checklist
 
 - object kind (composition/molecule/periodic structure) is explicit
@@ -280,11 +289,11 @@ validation is the trust boundary.
 - output schema and maximum size are explicit
 - provenance links every derived object to its parent checksum
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-09-30)
 
 - [pymatgen core API](https://pymatgen.org/pymatgen.core.html)
 - [pymatgen usage guide](https://pymatgen.org/usage.html)
-- [pymatgen-core 2026.7.16 package metadata](https://pypi.org/project/pymatgen-core/)
-- [pymatgen 2026.5.4 package metadata](https://pypi.org/project/pymatgen/)
+- [pymatgen-core 2026.9.23 package metadata](https://pypi.org/project/pymatgen-core/)
+- [pymatgen 2026.9.24 package metadata](https://pypi.org/project/pymatgen/)
 - [pymatgen-core source](https://github.com/materialsproject/pymatgen-core)
 - [pymatgen changelog](https://pymatgen.org/CHANGES.html)

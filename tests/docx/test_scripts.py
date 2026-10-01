@@ -2,8 +2,8 @@
 
 The shared `office/` tree -- zip safety, relationship resolution, repacking --
 is covered by the contract, since pptx and xlsx ship byte-identical copies.
-What is specific to docx is the run merger and the comment writer, and both
-edit `word/document.xml` in place, so the tests build a real unpacked package
+What is specific to docx is the run merger and the comment writer; they edit
+body XML and comment parts respectively, so the tests build a real unpacked package
 in a temporary directory and assert on the XML that comes back out.
 
 `merge_runs` is the one with a genuine correctness risk: Word splits a single
@@ -210,7 +210,7 @@ class TemplateTests(unittest.TestCase):
                 ElementTree.fromstring(template.read_text(encoding="utf-8"))
 
     def test_the_documented_comment_parts_are_all_present(self) -> None:
-        # Word needs every one of these to open a commented document.
+        # The helper ships modern-comment extension templates; basic comments need fewer parts.
         shipped = {path.name for path in (SCRIPTS / "templates").glob("*.xml")}
         for required in (
             "comments.xml",

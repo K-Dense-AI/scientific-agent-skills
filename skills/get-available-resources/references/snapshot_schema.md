@@ -90,18 +90,23 @@ of the same size.
 `accelerators.devices` contains management-visible or explicitly
 platform-inferred candidates:
 
-- `vendor`: `nvidia`, `amd`, or `apple`.
+- `vendor`: hardware vendor (`nvidia`, `amd`, `apple`, `intel`, or `unknown`).
+  macOS display discovery retains the actual vendor while offering Metal as
+  a backend candidate.
 - `device_class`: keeps integrated and discrete GPU concepts distinct.
 - `backend_candidate`: `cuda`, `rocm`, or `metal`.
 - `management_query`: visibility evidence.
 - `device_permission`: `not_tested`; a query does not prove device-node access.
 - `runtime_compatibility`: `not_tested` in detector output.
-- `memory.model`: dedicated/HBM, unified, or unknown.
+- `memory.model`: dedicated, unified, device-reported pool, or unknown.
+  AMD records use `reported_total_bytes`; `dedicated_total_bytes` stays null
+  because a management query does not resolve shared-memory topology.
 - `local_index`: local query index; stable UUIDs and PCI addresses are omitted.
 
 `candidate_counts` is a query count, not a usable-device count.
 `candidate_upper_bounds` conservatively intersects query count with parsed
-visibility/allocation counts when available. `runtime_usable_devices` remains
+visibility/allocation counts when available. These bounds concern management
+records, not MIG/partition/runtime-device enumeration. `runtime_usable_devices` remains
 null because no framework runtime is loaded.
 
 `visibility_environment` includes only four allowlisted variable names. Raw
@@ -115,7 +120,9 @@ values are never emitted.
 confinement.
 
 `cgroup_v2.scope` says only `root`, `non_root`, `unknown`, or `not_applicable`.
-The cgroup path is not emitted.
+The cgroup path is not emitted. Scope is relative to the visible cgroup2 mount;
+hidden ancestors and cgroup v1 constraints are outside this observation.
+Unreadable or invalid membership keeps scope unknown.
 
 `container.detected` requires a known marker. A `cgroup_limit` can appear as
 evidence without asserting that the process is in a container.
@@ -169,4 +176,10 @@ bounded to 512 changes.
 All helper inputs are regular, non-symlink JSON files no larger than 1 MiB.
 Output defaults to stdout. Explicit file output is restricted to a `.json`
 filename in the current directory, refuses overwrite unless `--force` is used,
-and is opened with private permissions.
+and is opened with mode 0600 on POSIX. Windows privacy also depends on directory
+ACLs. Forced output refuses non-regular files and hard links.
+
+The planner retains schema version 1.1 and adds `recommendation.status`. A
+known budget that cannot fit one worker yields `insufficient_memory`, zero
+workers, and zero threads; no job should be launched. `review_required` means
+CPU capacity or available RAM is unknown. `provisional` is still an estimate.

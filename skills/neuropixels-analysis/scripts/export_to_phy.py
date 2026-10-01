@@ -34,6 +34,7 @@ def export_phy(
     if compute_amplitudes and analyzer.get_extension('spike_amplitudes') is None:
         print("Computing spike amplitudes...")
         analyzer.compute('spike_amplitudes')
+    analyzer.compute('amplitude_scalings')
 
     if compute_pc_features and analyzer.get_extension('principal_components') is None:
         print("Computing principal components...")
@@ -49,6 +50,8 @@ def export_phy(
         n_jobs=n_jobs,
     )
 
+    if analyzer.unit_ids.dtype.kind in {"U", "S", "O"}:
+        print("[WARN] SpikeInterface 0.105 read_phy may fail on string IDs; preserve cluster_si_unit_ids.tsv for mapping.")
     print("\nExport complete!")
     print(f"To open in Phy, run:")
     print(f"  phy template-gui {output_path / 'params.py'}")

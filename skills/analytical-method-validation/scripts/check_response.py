@@ -34,6 +34,7 @@ from _common import (  # noqa: E402
     add_common_args,
     emit,
     finding,
+    finite_float,
     fit_linear,
     heteroscedasticity,
     lack_of_fit,
@@ -70,15 +71,23 @@ def main() -> int:
                         help="calibration weighting (default: none)")
     parser.add_argument("--levels-required", type=int, default=5,
                         help="minimum distinct levels expected (Q2(R2) recommends 5)")
-    parser.add_argument("--max-back-calc-error", type=float, default=None,
+    parser.add_argument("--max-back-calc-error", type=finite_float, default=None,
                         help="flag any level whose mean back-calculated error exceeds this %%")
-    parser.add_argument("--alpha", type=float, default=0.05,
+    parser.add_argument("--alpha", type=finite_float, default=0.05,
                         help="significance level for lack-of-fit and runs tests")
-    parser.add_argument("--through-origin-tolerance", type=float, default=None,
+    parser.add_argument("--through-origin-tolerance", type=finite_float, default=None,
                         help="flag when the intercept exceeds this %% of the response at the "
                              "highest level (a proxy for the y-intercept significance check)")
     add_common_args(parser)
     args = parser.parse_args()
+
+    if not 0 < args.alpha < 1:
+        raise InputError("--alpha must be between 0 and 1")
+    if args.levels_required < 3:
+        raise InputError("--levels-required must be at least 3")
+    for value in (args.max_back_calc_error, args.through_origin_tolerance):
+        if value is not None and value < 0:
+            raise InputError("error/intercept limits must be non-negative")
 
     rows = parse_rows(read_input(args.input), args.input)
     require_columns(rows, ["level", "response"])
@@ -99,7 +108,7 @@ def main() -> int:
         )
 
     lof = lack_of_fit(xs, ys, fit)
-    runs = runs_test(fit.residuals)
+    runs = runs_test([r for _, r in sorted(zip(xs, fit.residuals), key=lambda pair: pair[0])])
     het = heteroscedasticity(xs, fit.residuals)
 
     if lof.get("applicable") and lof["p_value"] < args.alpha:
@@ -118,7 +127,7 @@ def main() -> int:
         findings.append(
             f"residual variance is {het['variance_ratio_high_over_low']:.1f}x larger in the top "
             "third of the range than the bottom, and the fit is unweighted: back-calculated "
-            "results at the low end are biased. Consider 1/x or 1/x2 weighting"
+            "results at the low end may be imprecise. Investigate a justified variance model"
         )
 
     # Back-calculated relative error per level -- the practical test of the model.
@@ -222,14 +231,13 @@ def main() -> int:
     )
     if args.weight != "none" and lof.get("applicable"):
         note(
-            f"the lack-of-fit F test is computed on unweighted residuals while the fit used "
-            f"{args.weight} weighting, so its null distribution is approximate here. Read it "
-            "alongside the back-calculated error per level, which is unaffected"
+            f"weighted lack-of-fit uses {args.weight} in both residual and pure-error sums; "
+            "its F reference assumes independent normal errors with variance proportional "
+            "to inverse weight. The weights need independent scientific justification"
         )
     if not lof.get("applicable"):
         note(
-            "no replicates at any level, so pure error could not be separated from lack of fit. "
-            "Replicating at least one level makes the linearity test possible"
+            f"lack-of-fit was not assessed: {lof.get('reason', 'unavailable')}"
         )
     for f in findings:
         finding(f)

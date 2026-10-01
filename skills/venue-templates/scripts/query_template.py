@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 
-CHECKED_DATE = "2026-07-20"
+CHECKED_DATE = "2026-10-01"
 
 TEMPLATES = {
     "journals": {
@@ -37,9 +37,9 @@ TEMPLATES = {
             "file": "neurips_article.tex",
             "full_name": "NeurIPS 2026 paper wrapper",
             "status": "Requires the official neurips_2026.sty and checklist files.",
-            "source": "https://neurips.cc/Conferences/2026/CallForPapers",
+            "source": "https://neurips.cc/Conferences/2026/MainTrackHandbook",
             "requirements": (
-                "Main track: 9 content pages; acknowledgments, references, checklist, "
+                "Main track initial submission: 9 content pages; references, checklist, "
                 "and optional technical appendices do not count. Initial submission is anonymous."
             ),
         },
@@ -52,10 +52,10 @@ TEMPLATES = {
         },
         "elsevier-numeric-names": {
             "file": "elsarticle-template-num-names.tex",
-            "full_name": "Elsevier elsarticle sorted numeric example",
+            "full_name": "Elsevier elsarticle numeric-with-names example",
             "status": "Bundled example; the journal's Guide for Authors controls.",
             "source": "https://www.elsevier.com/researcher/author/policies-and-guidelines/latex-instructions",
-            "requirements": "Sorted/compressed numeric citations using elsarticle-num-names.bst.",
+            "requirements": "Numeric citations with author names supported by elsarticle-num-names.bst; sorting/compression is a natbib option.",
         },
         "elsevier-author-year": {
             "file": "elsarticle-template-harv.tex",

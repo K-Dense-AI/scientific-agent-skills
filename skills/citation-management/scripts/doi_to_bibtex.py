@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DOI to BibTeX Converter
-Quick utility to convert DOIs to BibTeX format using CrossRef API.
+Convert DOIs to BibTeX through DOI content negotiation (Crossref/DataCite/mEDRA).
 """
 
 import sys
@@ -9,15 +9,19 @@ import requests
 import argparse
 import time
 import json
+import re
 from typing import Optional, List
+from urllib.parse import quote, unquote
+
+from _common import citation_key, parse_bibtex, render_entry
 
 class DOIConverter:
-    """Convert DOIs to BibTeX entries using CrossRef API."""
+    """Convert DOIs to BibTeX through their registration agency."""
     
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'DOIConverter/1.0 (Citation Management Tool; mailto:support@example.com)'
+            'User-Agent': 'DOIConverter/1.0 (Citation Management Tool)'
         })
     
     def doi_to_bibtex(self, doi: str) -> Optional[str]:
@@ -32,15 +36,12 @@ class DOIConverter:
         """
         # Clean DOI (remove URL prefix if present)
         doi = doi.strip()
-        if doi.startswith('https://doi.org/'):
-            doi = doi.replace('https://doi.org/', '')
-        elif doi.startswith('http://doi.org/'):
-            doi = doi.replace('http://doi.org/', '')
-        elif doi.startswith('doi:'):
-            doi = doi.replace('doi:', '')
+        if re.match(r'^https?://(?:dx\.)?doi\.org/', doi, re.IGNORECASE):
+            doi = unquote(re.sub(r'^https?://(?:dx\.)?doi\.org/', '', doi, flags=re.IGNORECASE))
+        doi = re.sub(r'^doi:\s*', '', doi, flags=re.IGNORECASE)
         
         # Request BibTeX from CrossRef content negotiation
-        url = f'https://doi.org/{doi}'
+        url = f'https://doi.org/{quote(doi, safe="/")}'
         headers = {
             'Accept': 'application/x-bibtex',
             'User-Agent': 'DOIConverter/1.0 (Citation Management Tool)'
@@ -51,10 +52,15 @@ class DOIConverter:
             
             if response.status_code == 200:
                 bibtex = response.text.strip()
-                # CrossRef sometimes returns entries with @data type, convert to @misc
-                if bibtex.startswith('@data{'):
-                    bibtex = bibtex.replace('@data{', '@misc{', 1)
-                return bibtex
+                entries = parse_bibtex(bibtex)
+                if len(entries) != 1:
+                    print(f'Error: DOI service returned no single BibTeX entry for {doi}', file=sys.stderr)
+                    return None
+                entry = entries[0]
+                fields = entry['fields']
+                key = citation_key(fields.get('author', ''), fields.get('year', ''), fields.get('title', ''))
+                entry_type = 'misc' if entry['type'] in ('data', 'dataset') else entry['type']
+                return render_entry(entry_type, key, fields)
             elif response.status_code == 404:
                 print(f'Error: DOI not found: {doi}', file=sys.stderr)
                 return None
@@ -99,7 +105,7 @@ class DOIConverter:
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
-        description='Convert DOIs to BibTeX format using CrossRef API',
+        description='Convert DOIs to BibTeX using DOI content negotiation',
         epilog='Example: python doi_to_bibtex.py 10.1038/s41586-021-03819-2'
     )
     
@@ -198,6 +204,8 @@ def main():
     if len(dois) > 1:
         success_rate = len(bibtex_entries) / len(dois) * 100
         print(f'\nConverted {len(bibtex_entries)}/{len(dois)} DOIs ({success_rate:.1f}%)', file=sys.stderr)
+        if len(bibtex_entries) < len(dois):
+            sys.exit(2)
 
 
 if __name__ == '__main__':

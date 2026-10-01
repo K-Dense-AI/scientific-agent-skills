@@ -80,6 +80,9 @@ def inspect_dataset(
         )
     else:
         transfer = pydicom.uid.UID(transfer_value)
+        if not transfer.is_transfer_syntax:
+            issues.append(_issue("transfer_syntax_unknown", "UID is not a recognized transfer syntax."))
+            transfer = None
 
     sop_class = str(dataset.get("SOPClassUID", ""))
     sop_instance = str(dataset.get("SOPInstanceUID", ""))

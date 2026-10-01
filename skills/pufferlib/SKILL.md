@@ -1,32 +1,36 @@
 ---
 name: pufferlib
-description: Version-aware guidance for PufferLib reinforcement-learning environments, vectorization, policies, PuffeRL training, evaluation, and safe checkpoint review. Use when adapting Gymnasium/PettingZoo environments to published PufferLib 3.0.0 or working with the pinned historical native 4.0 source profile; use upstream documentation for 5.0.
+description: Version-aware guidance for PufferLib reinforcement-learning environments, vectorization, policies, PuffeRL training, evaluation, and safe checkpoint review. Covers the native 5.0 build and environment API, published 3.0.0 Gymnasium/PettingZoo adaptation, and a pinned historical 4.0 profile.
 license: MIT
-compatibility: Bundled CLIs require Python 3.10+ and use only the standard library. Published pufferlib 3.0.0 supports Python >=3.9 but ships as a native-code source archive; the reviewed 4.0 source requires Python >=3.10, Torch >=2.9, and an audited CPU/CUDA toolchain. Network, GPU, native builds, environment plug-ins, assets, checkpoints, and external logging are never required by the bundled CLIs.
+compatibility: Bundled CLIs require Python 3.10+ (standard library only). PufferLib 5.0 requires a native C/CUDA toolchain; CPU builds support evaluation, not training. PyPI 3.0.0 declares Python >=3.9 and needs a native source build with NumPy <2 and Gymnasium <=0.29.1. Native dependencies and network access are needed for installation; bundled checks require neither.
 allowed-tools: Read Bash Grep Python
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-10-01"
 ---
 
 # PufferLib
 
-Use PufferLib with an explicit version profile. This skill targets the two
-**historical profiles** below. The [live upstream documentation](https://puffer.ai/docs.html)
-now describes **5.0**, including a native build workflow and CPU evaluation without
-CPU training. Do not apply the 4.0 CLI, fallback, or build instructions to 5.0.
-The bundled plans continue to validate only 3.0 and the reviewed 4.0 snapshot;
-using 5.0 requires checking its own source and documented build requirements.
+Choose the version before choosing an API. Reviewed **2026-10-01**:
 
-| Profile | Status on 2026-07-23 | Main use |
+| Profile | Status | Main use |
 |---|---|---|
-| `pufferlib==3.0.0` | Latest stable PyPI release, published 2025-06-23 | Python/Gymnasium/PettingZoo emulation, `pufferlib.vector`, Torch PuffeRL |
-| source `4.0` | Reviewed source snapshot; no longer the live documentation profile | Native C Ocean environments, native CUDA trainer, optional Torch fallback |
+| Native source `5.0` | Current default branch and live documentation | C/CUDA environments, native trainer; CPU evaluation only |
+| `pufferlib==3.0.0` | Latest PyPI release, published 2025-06-23; sdist only | Python/Gymnasium/PettingZoo adaptation and Torch PuffeRL |
+| Pinned source `4.0` | Historical snapshot | C Ocean interface with an optional Torch fallback |
 
-Do not combine 3.0 imports with 4.0 config/CLI examples. The reviewed 4.0 redesign
-removed the 3.0 `emulation`, `vector`, and `pytorch` modules from the reviewed
-4.0 package tree.
+For **5.0**, read [references/native-5.md](references/native-5.md). The reviewed
+revision is `6ffa5b10dbbbe4d1e8288367c7d9d3acd3bad4a2`. Its CLI is
+`./puffer train` after building an environment, not `puffer train ENV_NAME`.
+There is no 5.0 Python emulation/vector API or `--slowly` fallback.
+
+The bundled plan schema deliberately supports only 3.0 and pinned 4.0; it does
+not launch training. All native/PufferLib training examples are **source-reviewed,
+illustrative, and not executed in this review**. Bundled synthetic checks are
+executed CPU tests, not evidence of PufferLib installation or learning quality.
+The PyPI sdist was hash-verified and its Python sources inspected; the moving
+`3.0` branch differs, including its `load_policy` and logger contracts.
 
 ## Safe defaults
 
@@ -84,10 +88,14 @@ uv lock
 uv sync --frozen
 ```
 
+These installation commands are illustrative and were not executed.
 Commit `pyproject.toml` and `uv.lock`; verify the archive digest and every
 resolved dependency. The source build can compile native code and fetch build
 assets, so resolve/build in a sandbox without credentials or sensitive mounts.
-The uploaded metadata does not pin Torch or CUDA; do not claim a supported CUDA
+The archive declares NumPy `<2`, Gymnasium `<=0.29.1`, and PettingZoo `<=1.24.1`;
+latest Gymnasium/NumPy are not valid substitutes for this profile. Its setup
+supports Linux/macOS and rejects other systems. Python classifiers alone do
+not establish a successful native build. The uploaded metadata does not pin Torch or CUDA; do not claim a supported CUDA
 matrix that PyPI does not declare.
 
 ### Pinned 4.0 source
@@ -127,7 +135,10 @@ Gymnasium reset returns `(observation, info)`. Step returns:
 Validate spaces, shapes, dtypes, finite rewards, booleans, reset-before-step,
 reset-after-end, seeding, and cleanup. `terminated` is an MDP terminal;
 `truncated` is an external cutoff such as a time limit. Preserve the distinction
-for bootstrapping and metrics.
+for bootstrapping and metrics. Both flags can be true in general Gymnasium.
+Check autoreset timing and retain the final pre-reset observation; do not
+bootstrap from the next episode. The 3.0 trainer has unresolved truncation and
+inactive-agent mask handling, described in `references/training.md`.
 
 ```bash
 python3 scripts/env_contract_validator.py \
@@ -222,6 +233,7 @@ Published 3.0 trainer import:
 ```python
 from pufferlib import pufferl
 
+# train_config must include the environment name for checkpoint naming.
 trainer = pufferl.PuffeRL(train_config, vecenv, policy)
 ```
 
@@ -243,7 +255,22 @@ python3 scripts/train_template.py \
   --total-timesteps 10000
 ```
 
-Validate a custom strict-JSON plan:
+`train_template.py` emits a **report envelope**, not a bare plan. Its `plan`
+member is the input to `validate_plan.py`; passing the whole report is invalid.
+For the synthetic environment, `command_preview` is an empty list because
+there is no upstream training command to launch. To save and revalidate:
+
+```bash
+python3 scripts/train_template.py > training-report.json
+python3 -c 'import json; r=json.load(open("training-report.json")); print(json.dumps(r["plan"], allow_nan=False, indent=2))' > plan.json
+python3 scripts/validate_plan.py --root . --config plan.json
+```
+
+The handoff consists of the training report, extracted plan and validation
+report. A command preview exists only for a reviewed non-synthetic environment
+and remains partial until its environment-specific settings are resolved.
+
+Validate a custom strict-JSON plan using the same bare-plan format:
 
 ```bash
 python3 scripts/validate_plan.py --root . --config plan.json
@@ -255,24 +282,29 @@ train/eval seeds. See `references/training.md`.
 
 ## Logging
 
-PufferLib 3.0 exposes W&B and Neptune; the reviewed 4.0 CLI exposes W&B. Both are
-optional external services. They may transmit configuration, metrics, source
+PufferLib 3.0 contains historical W&B and Neptune integrations; pinned 4.0
+contains W&B. **Neptune shut down on 2026-03-05** and the bundled planner
+rejects it. Native 5.0 uses local logs/Constellation and has no reviewed W&B or
+Neptune CLI flag. W&B remains an optional external service. It may transmit configuration, metrics, source
 metadata, hardware telemetry, output, and approved artifacts, with privacy,
 retention, access-control, and cost implications.
 
 - W&B credential: named environment variable `WANDB_API_KEY`.
-- Neptune credential: named environment variable `NEPTUNE_API_TOKEN`.
+- Historical Neptune token name: `NEPTUNE_API_TOKEN`; do not configure new runs.
 - Never put values in arguments/config/logs.
 - Sanitize config keys before logging.
 - Keep source/model upload off unless explicitly approved.
 
-The planner requires both:
+The reviewed 3.0 sdist and pinned 4.0 W&B training paths upload a model on
+completion. The 3.0 sdist has no `--no-model-upload` flag. The planner therefore
+requires explicit artifact opt-in as well as logging opt-in:
 
 ```bash
 python3 scripts/train_template.py \
   --logger wandb \
   --enable-external-logging \
-  --acknowledge-external-disclosure
+  --acknowledge-external-disclosure \
+  --upload-checkpoints
 ```
 
 It reports only the required variable name and never reads its value.
@@ -308,20 +340,25 @@ sandboxed load. Never use `latest` in a reproducible evaluation.
 
 ### References
 
+- `references/native-5.md` — current native build, environment, trainer and evaluation contracts.
 - `references/environments.md` — Gymnasium, stable PufferEnv, emulation, native C.
 - `references/vectorization.md` — backends, shapes, start methods, benchmarks.
-- `references/policies.md` — stable/current policy contracts and state safety.
+- `references/policies.md` — version-specific policy contracts and state safety.
 - `references/training.md` — installs, config, CLI, PuffeRL, eval, logs, checkpoints.
 - `references/integration.md` — migration matrix, third-party and credential safety.
 
 ## Dated upstream sources
 
+- [Neptune shutdown notice](https://docs.neptune.ai/) — service discontinued
+  2026-03-05; checked 2026-10-01.
+- Current 5.0 source/CLI evidence is linked in `references/native-5.md`.
+
+
 - [PyPI pufferlib 3.0.0](https://pypi.org/project/pufferlib/3.0.0/) —
   released 2025-06-23; checked 2026-07-23.
 - [PyPI 3.0.0 metadata](https://pypi.org/pypi/pufferlib/3.0.0/json) —
-  digest/dependencies; checked 2026-07-23.
-- [PufferLib official docs](https://puffer.ai/docs.html) — live docs now describe 5.0; the 4.0 snapshot was
-  checked 2026-07-23.
+  digest/dependencies and archive contents; rechecked 2026-10-01.
+- [PufferLib official docs](https://puffer.ai/docs.html) — checked 2026-10-01; implementation details pinned in `references/native-5.md`.
 - [PufferLib source](https://github.com/PufferAI/PufferLib) — source history and
   implementation; checked 2026-07-23.
 - [PufferTank 4.0 Dockerfile](https://github.com/PufferAI/PufferTank/blob/4.0/puffertank.dockerfile)
@@ -329,7 +366,7 @@ sandboxed load. Never use `latest` in a reproducible evaluation.
 - [PufferLib 2.0 paper](https://openreview.net/forum?id=qRyteMTgn0) —
   Reinforcement Learning Journal, 2025; use only for its stated benchmarks.
 - [PufferLib compatibility paper](https://arxiv.org/abs/2406.12905) —
-  submitted 2024-06-18; describes an earlier API/performance profile.
+  submitted 2024-06-11; describes an earlier API/performance profile.
 
 ## Citing Scientific Agent Skills
 

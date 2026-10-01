@@ -1,6 +1,6 @@
 # Best Practices
 
-Guidelines for efficient and effective use of AnnData.
+Guidelines reviewed for AnnData 0.13.4. User-file paths and application-specific `process`/`analyze` functions are illustrative. Small synthetic tests verify the data-structure and native-I/O contracts; they do not validate biological analysis.
 
 ## Memory Management
 
@@ -21,7 +21,8 @@ if sparsity > 0.5:
 else:
     adata = ad.AnnData(X=data)
 
-# Benefits: 10-100x memory reduction for sparse genomics data
+# Measure actual memory: data.nbytes versus CSR data/indices/indptr.nbytes.
+# Density, dtype, index width, and temporary arrays determine savings.
 ```
 
 ### Convert strings to categoricals
@@ -35,7 +36,7 @@ adata.obs['cell_type'] = adata.obs['cell_type'].astype('category')
 # Convert all string columns
 adata.strings_to_categoricals()
 
-# Benefits: 10-50x memory reduction for repeated strings
+# Check obs.memory_usage(deep=True); savings depend on category cardinality.
 ```
 
 ### Use backed mode for large datasets
@@ -60,8 +61,8 @@ adata_subset = filtered.to_memory()
 subset = adata[0:100, :]
 print(subset.is_view)  # True
 
-# Views don't copy data (memory efficient)
-# But modifications can affect original
+# Views defer subset copies. In 0.13, .X also uses copy-on-write.
+# Modification can allocate a full subset copy; make ownership explicit.
 
 # Check if object is a view
 if adata.is_view:
@@ -109,22 +110,20 @@ adata.write_h5ad('data.h5ad', compression='gzip')
 ```python
 import anndata
 
-# Default is Zarr v2; opt into v3 for cloud workflows (anndata 0.12+)
-anndata.settings.zarr_write_format = 3
-anndata.settings.auto_shard_zarr_v3 = True  # experimental; independent of zarr_write_format
+# AnnData 0.13.4 defaults to Zarr v3 with automatic sharding.
 adata.write_zarr('data.zarr', chunks=(100, 100))
 ```
 - Excellent for cloud storage (S3, GCS)
-- Supports parallel I/O and opt-in Zarr v3 sharding (0.12+)
+- Supports parallel I/O and default Zarr v3 sharding in 0.13.4
 - Good compression
 - Best for: Large datasets, cloud workflows, parallel processing
 
 **CSV - Interoperability**
 ```python
-adata.write_csvs('output_dir/')
+adata.write_csvs('output_dir/', skip_data=False)
 ```
 - Human readable
-- Compatible with all tools
+- Interoperable tabular export; loses parts of AnnData and may densify X
 - Large file sizes, slow
 - Best for: Sharing with non-Python tools, small datasets
 
@@ -145,7 +144,7 @@ adata.strings_to_categoricals()
 # 3. Use compression
 adata.write_h5ad('data.h5ad', compression='gzip', compression_opts=9)
 
-# Typical results: 5-20x file size reduction
+# Compare actual sizes and read/write times; there is no universal reduction factor.
 ```
 
 ## Backed Mode Strategies
@@ -167,12 +166,15 @@ adata_filtered = high_quality.to_memory()
 # Open in read-write backed mode
 adata = ad.read_h5ad('data.h5ad', backed='r+')
 
-# Modify X (persisted to disk)
-adata.X[0, 0] = 0
+# Dense HDF5 X supports in-place writes; backed sparse X does not in 0.13.
+import h5py
+if isinstance(adata.X, h5py.Dataset):
+    adata.X[0, 0] = 0
 
 # Metadata changes are not persisted from backed mode; load and write a new file
 adata_memory = adata.to_memory()
 adata_memory.obs['new_annotation'] = values
+adata.file.close()
 adata_memory.write_h5ad('data_with_annotations.h5ad')
 ```
 
@@ -196,14 +198,14 @@ final_result = combine(results)
 
 ### Subsetting performance
 ```python
-# Fast: Boolean indexing with arrays
+# Boolean mask: clear and aligned to obs
 mask = np.array(adata.obs['quality'] > 0.5)
 subset = adata[mask, :]
 
-# Slow: Boolean indexing with Series (creates view chain)
+# A boolean Series is also supported; it does not inherently create a view chain
 subset = adata[adata.obs['quality'] > 0.5, :]
 
-# Fastest: Integer indices
+# Integer positions: useful when already available; benchmark actual workloads
 indices = np.where(adata.obs['quality'] > 0.5)[0]
 subset = adata[indices, :]
 ```
@@ -215,8 +217,8 @@ for cell_type in ['A', 'B', 'C']:
     subset = adata[adata.obs['cell_type'] == cell_type]
     process(subset)
 
-# Efficient: Group and process
-groups = adata.obs.groupby('cell_type').groups
+# Alternative: reuse groups when several operations need the same grouping
+groups = adata.obs.groupby('cell_type', observed=True).groups
 for cell_type, indices in groups.items():
     subset = adata[indices, :]
     process(subset)
@@ -225,7 +227,7 @@ for cell_type, indices in groups.items():
 ### Use chunked operations for large matrices
 ```python
 # Process X in chunks
-for chunk in adata.chunked_X(chunk_size=1000):
+for chunk, start, stop in adata.chunked_X(chunk_size=1000):
     result = compute(chunk)
 
 # More memory efficient than loading full X
@@ -254,7 +256,8 @@ all_genes = adata.raw.var_names
 # Use raw for:
 # - Differential expression on filtered genes
 # - Visualization of specific genes not in filtered set
-# - Accessing original counts after normalization
+# - Accessing the snapshot values, which may be counts OR normalized data
+# Check raw_semantics; .raw is not automatically counts or a full object backup.
 
 # Access raw data
 if adata.raw is not None:
@@ -292,7 +295,7 @@ else:
 # Store metadata descriptions in uns
 adata.uns['metadata_descriptions'] = {
     'cell_type': 'Cell type annotation from automated clustering',
-    'quality_score': 'QC score from scrublet (0-1, higher is better)',
+    'doublet_score': 'Scrublet predicted doublet score; higher suggests a doublet',
     'batch': 'Experimental batch identifier'
 }
 
@@ -407,36 +410,29 @@ sc.tl.umap(adata)
 ```python
 import pandas as pd
 
-# Convert to DataFrame
-df = adata.to_df()
+# Convert only a manageable subset: to_df densifies sparse data
+df = adata[:100, :100].to_df()
 
 # Create from DataFrame
 adata = ad.AnnData(df)
 
 # Work with metadata as DataFrames
-adata.obs = adata.obs.merge(external_metadata, left_index=True, right_index=True)
+assert external_metadata.index.is_unique
+adata.obs = adata.obs.join(external_metadata, how='left', validate='one_to_one')
 ```
 
 ### PyTorch integration
-```python
-from anndata.experimental import AnnLoader
 
-# Create PyTorch DataLoader
-dataloader = AnnLoader(adata, batch_size=128, shuffle=True)
-
-# Iterate in training loop
-for batch in dataloader:
-    X = batch.X
-    # Train model on batch
-```
+`AnnLoader` is deprecated; use the official [annbatch.Loader migration tutorial](https://anndata.readthedocs.io/en/stable/tutorials/notebooks/annbatch.html).
+No training, accelerator, or third-party version combination was executed here.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Modifying views
 ```python
-# Wrong: Modifying view can affect original
+# In 0.13, assigning .X to a view materializes that view (copy-on-write).
 subset = adata[:100, :]
-subset.X = new_data  # May modify adata.X!
+subset.X = new_data  # Can allocate unexpectedly; older releases behaved differently
 
 # Correct: Copy before modifying
 subset = adata[:100, :].copy()
@@ -455,25 +451,25 @@ adata.obs['new_col'] = external_data.set_index('cell_id').loc[adata.obs_names, '
 
 ### Pitfall 3: Mixing sparse and dense
 ```python
-# Wrong: Converting sparse to dense uses huge memory
-result = adata.X + 1  # Converts sparse to dense!
-
-# Correct: Use sparse operations
+# SciPy sparse + nonzero scalar raises NotImplementedError.
+# Adding 1 to .data alone changes only stored entries, NOT every matrix element.
+# A zero-preserving operation such as log1p can safely preserve sparsity:
 from scipy.sparse import issparse
 if issparse(adata.X):
     result = adata.X.copy()
-    result.data += 1
+    result.data = np.log1p(result.data)
+else:
+    result = np.log1p(adata.X)
 ```
 
 ### Pitfall 4: Not handling views
 ```python
-# Wrong: Assuming subset is independent
+# An in-memory view keeps its parent alive even if the local name is deleted.
 subset = adata[mask, :]
-del adata  # subset may become invalid!
-
-# Correct: Copy when needed
-subset = adata[mask, :].copy()
-del adata  # subset remains valid
+del adata
+# Copy when independent ownership is required:
+subset = subset.copy()
+# For backed data, keep the HDF5 file open until .to_memory() completes.
 ```
 
 ### Pitfall 5: Ignoring memory constraints
@@ -496,7 +492,8 @@ import numpy as np
 from scipy.sparse import csr_matrix, issparse
 
 # 1. Load with backed mode if large
-adata = ad.read_h5ad('data.h5ad', backed='r')
+source = ad.read_h5ad('data.h5ad', backed='r')
+adata = source
 
 # 2. Quick metadata check without loading data
 print(f"Dataset: {adata.n_obs} cells × {adata.n_vars} genes")
@@ -506,6 +503,7 @@ high_quality = adata[adata.obs['quality_score'] > 0.8]
 
 # 4. Load filtered subset to memory
 adata = high_quality.to_memory()
+source.file.close()
 
 # 5. Convert to optimal storage types (csr/csc sparse only since 0.12)
 adata.strings_to_categoricals()
@@ -524,9 +522,29 @@ adata = adata[:, adata.var['highly_variable']].copy()
 adata.uns['processing'] = {
     'filtered': 'quality_score > 0.8',
     'n_hvg': adata.n_vars,
-    'date': '2025-11-03'
+    'matrix_semantics': 'retain and document input transformations'
 }
 
 # 9. Save optimized
 adata.write_h5ad('processed.h5ad', compression='gzip')
 ```
+
+## Provenance and compatibility
+
+- `raw` retains its feature axis on gene filtering, but follows cell filtering. Named
+  layers follow both axes. Store counts separately if later analyses need all genes.
+- AnnData 0.13 includes X as `layers[None]`; use `key is not None` for named-layer
+  iteration and `layers.clear(keep_x=True)` to retain X. Check third-party exporters
+  before upgrading: this change breaks some older string-key assumptions.
+- Keep stable feature IDs separate from symbols; making duplicate names unique is
+  a syntactic repair, not biological deduplication. Record species and genome build.
+- H5AD backed reads can still load metadata and layers; Zarr `read_zarr` is eager.
+  Budget memory before `to_memory`, `to_df`, transposition, scaling, or dense export.
+- Reopen native output and compare identifiers in order, dtypes, categories, selected
+  matrix values, named layers, raw gene IDs, and source/transformation provenance.
+
+Sources: [AnnData 0.13 release notes](https://anndata.readthedocs.io/en/stable/release-notes/),
+[raw](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.raw.html),
+[write_csvs](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.write_csvs.html),
+[read_h5ad](https://anndata.readthedocs.io/en/stable/generated/anndata.io.read_h5ad.html),
+and installed AnnData 0.13.4 source.

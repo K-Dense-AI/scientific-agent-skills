@@ -192,7 +192,7 @@ For each finding, record:
 - **Command and exact arguments:** [record]
 - **Python version:** [record]
 - **Pinned direct and transitive environment/lock:** [record]
-- **Script/skill version:** `exploratory-data-analysis 1.1`
+- **Script/skill version:** `exploratory-data-analysis 1.4`
 - **Random seed or deterministic sampling rule:** [record]
 - **Derived artifact checksums:** [record]
 - **Repository revision and working-tree state:** [record]

@@ -42,7 +42,7 @@ Use this comprehensive checklist before printing or presenting your research pos
 Run in terminal: `grep -i "warning\|overfull\|underfull" poster.log`
 
 - [ ] No overfull hbox warnings (text too wide)
-- [ ] No underfull hbox warnings (excessive spacing)
+- [ ] Underfull spacing diagnostics inspected; unintended overfull boxes fixed
 - [ ] No missing figure warnings
 - [ ] No missing font warnings
 - [ ] No undefined reference warnings
@@ -66,13 +66,13 @@ pdfinfo poster.pdf | grep "Page size"
 pdffonts poster.pdf
 ```
 - [ ] All fonts show "yes" in "emb" column
-- [ ] No bitmap fonts (should be Type 1 or TrueType)
+- [ ] Font type and appearance checked; no unintended bitmap text
 
 #### Image Quality
 ```bash
 pdfimages -list poster.pdf
 ```
-- [ ] All images at least 300 DPI
+- [ ] Raster images meet printer requirements at placed size (check x-ppi/y-ppi); vectors are resolution independent
 - [ ] No JPEG artifacts in figures
 - [ ] Vector graphics used where possible
 
@@ -80,9 +80,9 @@ pdfimages -list poster.pdf
 ```bash
 ls -lh poster.pdf
 ```
-- [ ] Reasonable size (2-50 MB typical)
+- [ ] File fits the actual submission limit
 - [ ] Not too large for email (<50 MB) if sharing digitally
-- [ ] Not suspiciously small (<1 MB - may indicate low quality)
+- [ ] Figure quality inspected; small vector PDFs can be correct
 
 ## Visual Inspection (100% Zoom)
 
@@ -141,10 +141,13 @@ ls -lh poster.pdf
 ### Test Print Preparation
 Print poster at 25% scale:
 - A0 poster → Print on A4 paper
-- 36×48" poster → Print on Letter paper
+- 36×48" poster → 9×12-inch paper at 25%; use about 23% to fit Letter
 - A1 poster → Print on A5 paper
 
 ### Readability from Distance
+
+The distances below refer to the full-size poster. For a 25% proof, divide each
+viewing distance by four; arbitrary screen zoom does not calibrate physical size.
 
 **From 6 feet (2 meters):**
 - [ ] Title clearly readable
@@ -204,7 +207,7 @@ Test at: https://webaim.org/resources/contrastchecker/
 
 - [ ] Title-background contrast ≥ 7:1
 - [ ] Body text-background contrast ≥ 4.5:1
-- [ ] All text meets WCAG AA standard minimum
+- [ ] Digital text contrast checked (4.5:1 normal, 3:1 large); this alone does not certify accessibility
 
 ### Color Blindness
 Test with simulator: https://www.color-blindness.com/coblis-color-blindness-simulator/
@@ -284,7 +287,7 @@ If presenting digitally or sharing online:
 - [ ] All QR codes tested and functional
 - [ ] QR codes link to correct URLs
 - [ ] Hyperlinks work (if included)
-- [ ] Links open in new tabs/windows appropriately
+- [ ] Hyperlink annotations are correctly positioned and destinations verified
 
 ### Alternative Formats
 - [ ] PNG version created for social media (if needed)
@@ -348,11 +351,11 @@ _________________________________________________________
 | Text too small | Increase scale: `scale=1.5` in beamerposter |
 | Blurry figures | Use vector graphics (PDF) or higher resolution (600+ DPI) |
 | Colors wrong | Check RGB vs CMYK, test print before final |
-| Fonts not embedded | Compile with: `pdflatex -dEmbedAllFonts=true` |
+| Fonts not embedded | Rebuild the source with embeddable fonts, then check `pdffonts` |
 | Content cut off | Check total width: columns + spacing + margins = pagewidth |
 | QR codes don't scan | Increase size (min 2×2cm), ensure high contrast |
 | File too large | Compress: `gs -sDEVICE=pdfwrite -dPDFSETTINGS=/printer ...` |
 
 ## Checklist Version
-Version 1.0 - For use with LaTeX poster packages (beamerposter, tikzposter, baposter)
+Reviewed 2026-09-30 - For use with LaTeX poster packages (beamerposter, tikzposter, baposter)
 

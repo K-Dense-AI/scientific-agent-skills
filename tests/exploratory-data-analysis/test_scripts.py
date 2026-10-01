@@ -11,6 +11,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "exploratory-data-analysis"
@@ -186,6 +187,26 @@ class TabularTests(unittest.TestCase):
         self.assertTrue(sensitivity["values_were_not_deleted_or_modified"])
         self.assertFalse(report["raw_values_emitted"])
 
+    def test_existing_keys_are_updated_after_tracking_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "study.csv"
+            path.write_text(
+                "entity,group,split,value\na,g1,train,1\nb,g2,train,2\n"
+                "c,g3,train,3\na,g1,test,1\na,g1,train,1\n",
+                encoding="utf-8",
+            )
+            with patch.object(_tabular, "MAX_TRACKED_LEAKAGE_KEYS", 2):
+                profile = _tabular.profile_table(path)
+                audit = _tabular.audit_missingness_and_leakage(
+                    path, entity_column="entity", group_column="group", split_column="split",
+                )["leakage_audit"]
+        self.assertEqual(profile["duplicate_row_count_in_scanned_rows"], 1)
+        self.assertTrue(profile["duplicate_tracking_truncated"])
+        self.assertEqual(audit["entity_tokens_in_multiple_splits"], 1)
+        self.assertEqual(audit["group_tokens_in_multiple_splits"], 1)
+        self.assertEqual(audit["identical_row_hashes_in_multiple_splits"], 1)
+        self.assertTrue(audit["tracking_truncated"])
+
 
 class StructuredFormatTests(unittest.TestCase):
     def test_strict_json_rejects_duplicates_and_nonfinite_values(self) -> None:
@@ -199,6 +220,18 @@ class StructuredFormatTests(unittest.TestCase):
                 _structured.inspect_json(duplicate)
             with self.assertRaises(_common.CliError):
                 _structured.inspect_json(nonfinite)
+
+    def test_json_numeric_overflow_has_redacted_validation_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "data.json"
+            for literal in ("1e400", "-1e400", "1" * 5000):
+                path.write_text('{"private_field": ' + literal + '}', encoding="utf-8")
+                with self.subTest(literal_length=len(literal)):
+                    with self.assertRaises(_common.CliError) as caught:
+                        _structured.inspect_json(path)
+                    self.assertNotIn("private_field", str(caught.exception))
+            path.write_text('{"x": 1e308}', encoding="utf-8")
+            self.assertEqual(_structured.inspect_json(path)["type_counts"]["number"], 1)
 
     def test_json_profile_emits_structure_not_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -261,6 +294,23 @@ class StructuredFormatTests(unittest.TestCase):
         self.assertNotIn("external.h5", serialized)
         self.assertNotIn("local_secret", serialized)
 
+    def test_fortran_memory_map_sampling_does_not_flatten_whole_array(self) -> None:
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("NumPy not installed")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fortran.npy"
+            expected = np.arange(12000, dtype=np.float64).reshape(100, 120)
+            np.save(path, np.asfortranarray(expected))
+            mapped = np.load(path, mmap_mode="r", allow_pickle=False)
+            self.assertTrue(mapped.flags.f_contiguous)
+            with patch.object(np.memmap, "reshape", side_effect=AssertionError("full copy")):
+                sample = _structured._sample_array(mapped, np)
+            positions = np.linspace(0, expected.size - 1, 4096, dtype=np.int64)
+            np.testing.assert_array_equal(sample, expected.flat[positions])
+            self.assertEqual(sample.size, 4096)
+
 
 class SequenceAndImageTests(unittest.TestCase):
     def test_fasta_and_fastq_are_aggregate_only_when_available(self) -> None:
@@ -319,7 +369,7 @@ class SequenceAndImageTests(unittest.TestCase):
                 path,
                 np.zeros((4, 4), dtype=np.uint8),
                 metadata={"axes": "YX"},
-                ome=True,
+                kind="ome",
             )
             report = image_inspector.inspect_image_file(
                 path,
@@ -328,6 +378,61 @@ class SequenceAndImageTests(unittest.TestCase):
         self.assertTrue(report["is_ome_tiff"])
         self.assertFalse(report["pixels_decoded"])
         self.assertFalse(report["ome_xml_emitted"])
+        self.assertEqual(report["series_interpretation"], "generic_page_groups_not_OME_axes")
+        self.assertFalse(report["companion_files_opened"])
+
+    def test_tiff_companion_reference_is_never_opened(self) -> None:
+        try:
+            import numpy as np
+            import tifffile
+        except ImportError:
+            self.skipTest("NumPy/tifffile not installed")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            companion = root / "private-companion.tif"
+            tifffile.imwrite(companion, np.zeros((2, 2), dtype=np.uint8))
+            source = root / "image.ome.tiff"
+            xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06" UUID="urn:uuid:local">
+<Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint8"
+ SizeX="2" SizeY="2" SizeZ="1" SizeC="1" SizeT="1">
+<Channel ID="Channel:0:0" SamplesPerPixel="1"/>
+<TiffData IFD="0" PlaneCount="1"><UUID FileName="private-companion.tif">urn:uuid:external</UUID></TiffData>
+</Pixels></Image></OME>'''
+            tifffile.imwrite(source, np.zeros((2, 2), dtype=np.uint8),
+                             kind="generic", description=xml, metadata=None)
+            opened = []
+            real_open = tifffile.FileHandle.open
+
+            def record_open(handle):
+                result = real_open(handle)
+                opened.append(str(handle.path))
+                return result
+
+            with patch.object(tifffile.FileHandle, "open", record_open):
+                # Positive control: this real fixture activates default OME
+                # companion discovery, so an empty recorder cannot pass.
+                with tifffile.TiffFile(source) as default_reader:
+                    self.assertTrue(list(default_reader.series))
+                self.assertTrue(any("private-companion" in name for name in opened))
+                opened.clear()
+                report = image_inspector.inspect_image_file(source, suffix=".ome.tiff")
+            self.assertTrue(opened)
+            self.assertFalse(any("private-companion" in name for name in opened), opened)
+            self.assertTrue(report["is_ome_tiff"])
+            self.assertFalse(report["companion_files_opened"])
+
+    def test_pillow_bomb_error_is_reported_as_validation_error(self) -> None:
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        previous_limit = Image.MAX_IMAGE_PIXELS
+        with patch.object(Image, "open", side_effect=Image.DecompressionBombError("private path")):
+            with self.assertRaises(_common.CliError) as caught:
+                image_inspector._inspect_pillow(Path("image.png"))
+        self.assertNotIn("private path", str(caught.exception))
+        self.assertEqual(Image.MAX_IMAGE_PIXELS, previous_limit)
 
 
 class AnalyzerAndScaffoldTests(unittest.TestCase):

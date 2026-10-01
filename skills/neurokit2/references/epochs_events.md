@@ -1,6 +1,6 @@
 # Events and epochs
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable source/runtime and
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable source/runtime and
 the live Events and Epochs API pages.
 
 ## Event coordinate contract
@@ -126,13 +126,18 @@ epochs = nk.epochs_create(
 )
 
 amplitude_columns = ["EDA_Phasic"]
-for epoch in epochs.values():
-    baseline = epoch.loc[(epoch.index >= -0.2) & (epoch.index < 0), amplitude_columns]
+onsets_by_label = dict(zip(events["label"], events["onset"]))
+for label, epoch in epochs.items():
+    relative_samples = epoch["Index"] - onsets_by_label[label]
+    baseline = epoch.loc[(relative_samples >= -20) & (relative_samples < 0), amplitude_columns]
+    if len(baseline) != 20 or baseline.isna().any().any():
+        raise ValueError("Incomplete or missing baseline; apply the trial exclusion policy")
     epoch.loc[:, amplitude_columns] = (
         epoch.loc[:, amplitude_columns] - baseline.mean()
     )
 ```
 
+This uses original sample coordinates rather than the stretched floating time index.
 Prespecify baseline interval and estimand. Baseline subtraction is not universally
 appropriate for rates, binary peaks, phase, quality, or absolute tonic levels.
 Reject/flag a trial if its baseline has missing data or artifact rather than quietly
@@ -190,7 +195,7 @@ There is no universal minimum number of trials or universal epoch window. Determ
 both from the expected response, acquisition, study design, reliability, and power
 analysis.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official Events API](https://neuropsychology.github.io/NeuroKit/functions/events.html)
 - [Official Epochs API](https://neuropsychology.github.io/NeuroKit/functions/epochs.html)

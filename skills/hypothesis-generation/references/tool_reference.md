@@ -8,7 +8,8 @@ All bundled CLIs:
 - read explicit local JSON, CSV, or Markdown paths;
 - reject URL-like paths, symlinks, wrong suffixes, oversized inputs, invalid UTF-8, and NUL bytes;
 - cap inputs at 2 MiB, CSV data at 1,000 rows, cells/Markdown lines at 8,000 characters, and JSON collections at bounded sizes;
-- reject duplicate JSON keys and require exact ordered CSV headers;
+- reject duplicate JSON keys, nonstandard `NaN`/`Infinity` constants, and JSON nesting beyond 64 container levels; require exact ordered CSV headers;
+- require full dates in `YYYY-MM-DD` calendar form; Python's accepted compact and ISO-week forms are not accepted by this schema;
 - make no network, model, image, subprocess, credential, or environment-variable calls;
 - write only to an explicit existing local directory;
 - refuse implicit overwrite unless `--force` is given;
@@ -223,6 +224,7 @@ The generator:
 - renders all candidates and rivals without ranking;
 - escapes inserted text for inert Markdown;
 - marks the output as an unregistered draft;
+- labels `updated_on` as the input record's update date, without inventing a generation or registration timestamp;
 - leaves repository-, design-, oversight-, and sign-off fields for humans.
 
 It never uploads, registers, timestamps externally, or submits the result.

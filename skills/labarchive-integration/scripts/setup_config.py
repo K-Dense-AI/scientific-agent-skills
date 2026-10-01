@@ -45,6 +45,8 @@ REGIONS: dict[str, dict[str, str]] = {
     },
 }
 
+INVENTORY_API_BASE_URL = "https://iapi.labarchives.com"
+
 ENV_API_URL = "LABARCHIVES_ELN_API_URL"
 ENV_ACCESS_KEY_ID = "LABARCHIVES_ACCESS_KEY_ID"
 ENV_ACCESS_PASSWORD = "LABARCHIVES_ACCESS_PASSWORD"
@@ -120,13 +122,15 @@ def _select_api_url(args: argparse.Namespace, env: Mapping[str, str]) -> str:
 
 def command_regions(args: argparse.Namespace) -> int:
     payload = {
-        "as_of": "2026-07-23",
+        "as_of": "2026-09-30",
+        "inventory_documented_api_base_url": INVENTORY_API_BASE_URL,
         "regions": [
             {"code": code, **values} for code, values in sorted(REGIONS.items())
         ],
         "warning": (
             "Browser login URLs and ELN API URLs are different. "
-            "Inventory absolute API base URLs are not inferred here."
+            "Inventory has a separately documented API base; "
+            "regional variants are not inferred."
         ),
     }
     _dump(payload, compact=args.compact, stream=sys.stdout)

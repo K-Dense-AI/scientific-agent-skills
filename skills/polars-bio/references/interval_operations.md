@@ -1,370 +1,151 @@
-# Genomic Interval Operations
+# Genomic interval operations (polars-bio 0.36.0)
 
-## Overview
+Use the [current API](https://biodatageeks.org/polars-bio/api/operations/) alongside
+[release source](https://github.com/biodatageeks/polars-bio/blob/0.36.0/polars_bio/range_op.py).
+Signatures alone are insufficient: `on_cols` is present but rejected. The examples
+below use small synthetic half-open intervals and were executed on Polars 1.44.2.
 
-polars-bio provides 8 core operations for genomic interval arithmetic. All operations work on Polars DataFrames or LazyFrames containing genomic intervals (columns: `chrom`, `start`, `end` by default) and return a **LazyFrame** by default. Pass `output_type="polars.DataFrame"` for eager results.
+## Prepare inputs
 
-## Operations Summary
-
-| Operation | Inputs | Description |
-|-----------|--------|-------------|
-| `overlap` | two DataFrames | Find pairs of overlapping intervals |
-| `count_overlaps` | two DataFrames | Count overlaps per interval in the first set |
-| `nearest` | two DataFrames | Find nearest intervals between two sets |
-| `merge` | one DataFrame | Merge overlapping/bookended intervals |
-| `cluster` | one DataFrame | Assign cluster IDs to overlapping intervals |
-| `coverage` | two DataFrames | Compute per-interval coverage counts |
-| `complement` | one DataFrame + genome | Find gaps between intervals |
-| `subtract` | two DataFrames | Remove overlapping portions |
-
-## overlap
-
-Find pairs of overlapping intervals between two DataFrames.
-
-### Functional API
+All eight operations accept Polars DataFrames/LazyFrames; supported registered
+tables or file paths can also be supplied. Prefer explicit reader results when
+format options or coordinate conventions matter. Default column names are
+`chrom`, `start`, `end`; use `cols1`/`cols2` for two inputs, `cols` for one input,
+and `view_cols` for complement bounds.
 
 ```python
 import polars as pl
 import polars_bio as pb
 
-df1 = pl.DataFrame({
-    "chrom": ["chr1", "chr1", "chr1"],
-    "start": [1, 5, 22],
-    "end":   [6, 9, 30],
-})
-
-df2 = pl.DataFrame({
-    "chrom": ["chr1", "chr1"],
-    "start": [3, 25],
-    "end":   [8, 28],
-})
-
-# Returns LazyFrame by default
-result_lf = pb.overlap(df1, df2, suffixes=("_1", "_2"))
-result_df = result_lf.collect()
-
-# Or get DataFrame directly
-result_df = pb.overlap(df1, df2, suffixes=("_1", "_2"), output_type="polars.DataFrame")
-
-# Left output: keep df1 rows that overlap df2 (original column names, no suffixes)
-left_hits = pb.overlap(df1, df2, overlap_output="left", output_type="polars.DataFrame")
-
-# Left output with one row per df1 interval (deduplicated)
-left_unique = pb.overlap(df1, df2, overlap_output="left", distinct_output=True, output_type="polars.DataFrame")
+pb.set_option("datafusion.bio.coordinate_system_zero_based", True)
+pb.set_option("datafusion.bio.coordinate_system_check", True)
+a = pl.DataFrame({"chrom": ["chr1", "chr1", "chr2"],
+                  "start": [0, 10, 0], "end": [10, 20, 10]})
+b = pl.DataFrame({"chrom": ["chr1", "chr1"],
+                  "start": [5, 8], "end": [12, 15]})
+for frame in (a, b):
+    frame.config_meta.set(coordinate_system_zero_based=True)
 ```
 
-### Method-Chaining API (LazyFrame only)
+Validate assembly and contig aliases independently of coordinate metadata.
+Require integer, non-null bounds, positive-length intervals, and finite genome
+limits. Keep a row ID before a join if duplicate records are meaningful. The
+COITrees backend uses signed Int32 interval positions even when the output
+retains Int64 columns; check upper bounds before indexing.
+
+## Overlap, hits, counts and covered bases
 
 ```python
-result = df1.lazy().pb.overlap(df2, suffixes=("_1", "_2")).collect()
+pairs = pb.overlap(a, b, suffixes=("_query", "_target")).collect()
+assert pairs.height == 4
+
+hits = pb.overlap(a, b, overlap_output="left", distinct_output=True).collect()
+assert hits.height == 2
+
+counts = pb.count_overlaps(a, b).collect().sort("chrom", "start")
+assert counts["count"].to_list() == [2, 2, 0]
+
+covered = pb.coverage(a, b).collect().sort("chrom", "start")
+assert covered["coverage"].to_list() == [5, 5, 0]
 ```
 
-### Parameters
+`overlap` defaults to an inner pair join, not a left join. Default suffixes are
+`("_1", "_2")`. `overlap_output="left"` retains original left names; without
+`distinct_output=True` the left row repeats per match. Distinct output operates
+on source row identity, not unique coordinate values.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df1` | DataFrame/LazyFrame/str | required | First (probe) interval set |
-| `df2` | DataFrame/LazyFrame/str | required | Second (build) interval set |
-| `suffixes` | tuple[str, str] | `("_1", "_2")` | Suffixes for overlapping column names |
-| `on_cols` | list[str] | `None` | Additional columns to join on (beyond genomic coords) |
-| `cols1` | list[str] | `["chrom", "start", "end"]` | Column names in df1 |
-| `cols2` | list[str] | `["chrom", "start", "end"]` | Column names in df2 |
-| `algorithm` | str | `"Coitrees"` | Interval algorithm |
-| `low_memory` | bool | `False` | Low memory mode |
-| `overlap_output` | str | `"join"` | `"join"` returns both sides with suffixes; `"left"` returns only overlapping df1 rows with original column names |
-| `distinct_output` | bool | `False` | When `overlap_output="left"`, deduplicate df1 rows by row identity |
-| `output_type` | str | `"polars.LazyFrame"` | Output format: `"polars.LazyFrame"`, `"polars.DataFrame"`, `"pandas.DataFrame"` |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown optimization |
+`count_overlaps` returns original query fields plus Int64 `count` (default
+suffixes `("", "_")`). Default `naive_query=True` uses the native path and
+internally exchanges operands, so a general build/probe memory rule does not
+apply unchanged. Keep this tested default unless separately checking the
+alternative strategy's schema, metadata and boundary behavior.
 
-### Output Schema
+`coverage` returns original query fields plus Int64 `coverage`: union length of
+intersections with targets. Overlapping targets do not double count a base.
+For the example, two targets hit each chr1 query but only five bases per query
+are covered. Divide by `end-start` for a half-open coverage fraction, or by
+`end-start+1` for closed intervals. Read depth is a different measurement.
 
-Returns columns from both inputs with suffixes applied:
-- `chrom_1`, `start_1`, `end_1` (from df1)
-- `chrom_2`, `start_2`, `end_2` (from df2)
-- Any additional columns from df1 and df2
-
-Column dtypes are `String` for chrom and `Int64` for start/end.
-
-## count_overlaps
-
-Count the number of overlapping intervals from df2 for each interval in df1.
+## Nearest
 
 ```python
-# Functional
-counts = pb.count_overlaps(df1, df2)
-
-# Method-chaining (LazyFrame)
-counts = df1.lazy().pb.count_overlaps(df2)
+nearest = pb.nearest(a, b, k=3).collect()
+nonoverlapping = pb.nearest(a, b, overlap=False).collect()
+without_distance = pb.nearest(a, b, distance=False).collect()
 ```
 
-### Parameters
+The defaults are `k=1`, `overlap=True`, `distance=True`, suffixes `("_1", "_2")`.
+`k=3` is implemented in 0.36.0. A query with no target on its contig retains a
+row whose target fields and distance are null. Requesting k larger than the
+candidate set does not fabricate k real neighbors.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df1` | DataFrame/LazyFrame/str | required | Query interval set |
-| `df2` | DataFrame/LazyFrame/str | required | Target interval set |
-| `suffixes` | tuple[str, str] | `("", "_")` | Suffixes for column names |
-| `cols1` | list[str] | `["chrom", "start", "end"]` | Column names in df1 |
-| `cols2` | list[str] | `["chrom", "start", "end"]` | Column names in df2 |
-| `on_cols` | list[str] | `None` | Additional join columns |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `naive_query` | bool | `True` | Use naive query strategy |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
+Distance counts intervening bases: `[0,10)` to `[10,20)` has distance 0;
+`[0,10)` to `[12,20)` has distance 2. Closed `[1,10]` to `[11,20]` also has
+zero intervening bases. Thus `distance == 0` is not an overlap test. Recompute
+intersection using the proper inequality if that distinction matters.
+Tie order is not a biological ranking: for reproducible annotation define an
+explicit tie policy and test it. A self-nearest query can select the same row;
+there is no documented `exclude_self` or strand-direction parameter here.
 
-### Output Schema
-
-Returns df1 columns with an additional `count` column (Int64).
-
-## nearest
-
-Find the nearest interval in df2 for each interval in df1.
+## Merge and cluster
 
 ```python
-# Find nearest (default: k=1, any direction)
-nearest = pb.nearest(df1, df2, output_type="polars.DataFrame")
-
-# Find k nearest
-nearest = pb.nearest(df1, df2, k=3)
-
-# Exclude overlapping intervals from results
-nearest = pb.nearest(df1, df2, overlap=False)
-
-# Without distance column
-nearest = pb.nearest(df1, df2, distance=False)
+separate = pb.merge(a).collect()                # 3 rows: bookends stay separate
+joined = pb.merge(a, min_dist=1).collect()       # chr1 becomes [0,20)
+clusters = pb.cluster(a, min_dist=1).collect()
+assert separate.height == 3
+assert joined.height == 2
+assert "n_intervals" in joined.columns
+assert {"cluster", "cluster_start", "cluster_end"} <= set(clusters.columns)
 ```
 
-### Parameters
+In 0.36.0, `min_dist=0` merges overlapping intervals; it does not join adjacent
+half-open bookends. For integer half-open bounds, `min_dist=1` joins bookends.
+The effective gap threshold is strict in half-open mode: verify a gap equal to
+and just below the chosen threshold. Closed-coordinate boundary comparisons
+also depend on the coordinate metadata; do not transplant bioframe thresholds.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df1` | DataFrame/LazyFrame/str | required | Query interval set |
-| `df2` | DataFrame/LazyFrame/str | required | Target interval set |
-| `suffixes` | tuple[str, str] | `("_1", "_2")` | Suffixes for column names |
-| `on_cols` | list[str] | `None` | Additional join columns |
-| `cols1` | list[str] | `["chrom", "start", "end"]` | Column names in df1 |
-| `cols2` | list[str] | `["chrom", "start", "end"]` | Column names in df2 |
-| `k` | int | `1` | Number of nearest neighbors to find |
-| `overlap` | bool | `True` | Include overlapping intervals in results |
-| `distance` | bool | `True` | Include distance column in output |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
+`merge` discards additional annotations and returns bounds plus `n_intervals`.
+`cluster` retains rows and adds cluster labels and bounds; labels are execution
+identifiers, not stable biological IDs. It has no `on_cols` parameter.
 
-### Output Schema
-
-Returns columns from both DataFrames (with suffixes) plus a `distance` column (Int64) with the distance to the nearest interval (0 if overlapping). Distance column is omitted if `distance=False`.
-
-## merge
-
-Merge overlapping and bookended intervals within a single DataFrame.
+## Complement and subtract
 
 ```python
-import polars as pl
-import polars_bio as pb
-
-df = pl.DataFrame({
-    "chrom": ["chr1", "chr1", "chr1", "chr2"],
-    "start": [1, 4, 20, 1],
-    "end":   [6, 9, 30, 10],
-})
-
-# Functional
-merged = pb.merge(df, output_type="polars.DataFrame")
-
-# Method-chaining (LazyFrame)
-merged = df.lazy().pb.merge().collect()
-
-# Merge intervals within a minimum distance
-merged = pb.merge(df, min_dist=10)
+genome = pl.DataFrame({"chrom": ["chr1", "chr2"],
+                       "start": [0, 0], "end": [20, 10]})
+genome.config_meta.set(coordinate_system_zero_based=True)
+gaps = pb.complement(b, view_df=genome).collect().sort("chrom", "start")
+fragments = pb.subtract(a, b).collect().sort("chrom", "start")
+assert fragments.select("chrom", "start", "end").rows() == [
+    ("chr1", 0, 5), ("chr1", 15, 20), ("chr2", 0, 10)]
+assert gaps.rows() == fragments.rows()
 ```
 
-### Parameters
+Give complement finite, valid, nonoverlapping assembly view bounds; check the
+view's coordinates yourself rather than relying on two-input metadata validation.
+Without a view the implementation extends contigs toward Int64 maximum, which
+is not a genome definition. Subtraction can split one source interval into
+several coordinate fragments and does not carry source annotations: rejoin to
+explicit IDs if provenance matters, accounting for duplicate/overlapping sources.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df` | DataFrame/LazyFrame/str | required | Interval set to merge |
-| `min_dist` | int | `0` | Minimum distance between intervals to merge (0 = must overlap or be bookended) |
-| `cols` | list[str] | `["chrom", "start", "end"]` | Column names |
-| `on_cols` | list[str] | `None` | Additional grouping columns |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
+## Grouping, output and execution
 
-### Output Schema
+Non-None `on_cols` currently raises `AssertionError` for overlap, nearest,
+coverage, count_overlaps and merge. For same-strand or within-sample operations,
+partition both inputs by the grouping values, operate only on corresponding
+partitions, and restore those keys in the output. Filtering an unstranded count
+or nearest result after computation does not fix its semantics.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `chrom` | String | Chromosome |
-| `start` | Int64 | Merged interval start |
-| `end` | Int64 | Merged interval end |
-| `n_intervals` | Int64 | Number of intervals merged |
+Most calls return LazyFrames; eager Polars, pandas (optional extra), and
+`datafusion.DataFrame` output are supported by range operations. Avoid assuming
+this `output_type` set applies to `depth` or `sql`. Interval method chaining is
+`a.lazy().pb.overlap(b)`, not `a.pb.overlap(b)`. Projection after pair joins must
+use suffixed names before feeding a new single-interval operation.
 
-## cluster
-
-Assign cluster IDs to overlapping intervals. Intervals that overlap are assigned the same cluster ID.
-
-```python
-# Functional
-clustered = pb.cluster(df, output_type="polars.DataFrame")
-
-# Method-chaining (LazyFrame)
-clustered = df.lazy().pb.cluster().collect()
-
-# With minimum distance
-clustered = pb.cluster(df, min_dist=5)
-```
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df` | DataFrame/LazyFrame/str | required | Interval set |
-| `min_dist` | int | `0` | Minimum distance for clustering |
-| `cols` | list[str] | `["chrom", "start", "end"]` | Column names |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
-
-### Output Schema
-
-Returns the original columns plus:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `cluster` | Int64 | Cluster ID (intervals in the same cluster overlap) |
-| `cluster_start` | Int64 | Start of the cluster extent |
-| `cluster_end` | Int64 | End of the cluster extent |
-
-## coverage
-
-Compute per-interval coverage counts. This is a **two-input** operation: for each interval in df1, count the coverage from df2.
-
-```python
-# Functional
-cov = pb.coverage(df1, df2, output_type="polars.DataFrame")
-
-# Method-chaining (LazyFrame)
-cov = df1.lazy().pb.coverage(df2).collect()
-```
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df1` | DataFrame/LazyFrame/str | required | Query intervals |
-| `df2` | DataFrame/LazyFrame/str | required | Coverage source intervals |
-| `suffixes` | tuple[str, str] | `("_1", "_2")` | Suffixes for column names |
-| `on_cols` | list[str] | `None` | Additional join columns |
-| `cols1` | list[str] | `["chrom", "start", "end"]` | Column names in df1 |
-| `cols2` | list[str] | `["chrom", "start", "end"]` | Column names in df2 |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
-
-### Output Schema
-
-Returns columns from df1 plus a `coverage` column (Int64).
-
-## complement
-
-Find gaps between intervals within a genome. Requires a genome definition specifying chromosome sizes.
-
-```python
-import polars as pl
-import polars_bio as pb
-
-df = pl.DataFrame({
-    "chrom": ["chr1", "chr1"],
-    "start": [100, 500],
-    "end":   [200, 600],
-})
-
-genome = pl.DataFrame({
-    "chrom": ["chr1"],
-    "start": [0],
-    "end":   [1000],
-})
-
-# Functional
-gaps = pb.complement(df, view_df=genome, output_type="polars.DataFrame")
-
-# Method-chaining (LazyFrame)
-gaps = df.lazy().pb.complement(genome).collect()
-```
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df` | DataFrame/LazyFrame/str | required | Interval set |
-| `view_df` | DataFrame/LazyFrame | `None` | Genome with chrom, start, end defining chromosome extents |
-| `cols` | list[str] | `["chrom", "start", "end"]` | Column names in df |
-| `view_cols` | list[str] | `None` | Column names in view_df |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
-
-### Output Schema
-
-Returns a DataFrame with `chrom` (String), `start` (Int64), `end` (Int64) columns representing gaps between intervals.
-
-## subtract
-
-Remove portions of intervals in df1 that overlap with intervals in df2.
-
-```python
-# Functional
-result = pb.subtract(df1, df2, output_type="polars.DataFrame")
-
-# Method-chaining (LazyFrame)
-result = df1.lazy().pb.subtract(df2).collect()
-```
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `df1` | DataFrame/LazyFrame/str | required | Intervals to subtract from |
-| `df2` | DataFrame/LazyFrame/str | required | Intervals to subtract |
-| `cols1` | list[str] | `["chrom", "start", "end"]` | Column names in df1 |
-| `cols2` | list[str] | `["chrom", "start", "end"]` | Column names in df2 |
-| `output_type` | str | `"polars.LazyFrame"` | Output format |
-| `projection_pushdown` | bool | `True` | Enable projection pushdown |
-
-### Output Schema
-
-Returns `chrom` (String), `start` (Int64), `end` (Int64) representing the remaining portions of df1 intervals after subtraction.
-
-## Performance Considerations
-
-### Probe-Build Architecture
-
-Two-input operations (`overlap`, `nearest`, `count_overlaps`, `coverage`, `subtract`) use a probe-build join:
-- **Probe** (first DataFrame): Iterated over, row by row
-- **Build** (second DataFrame): Indexed into an interval tree for fast lookup
-
-For best performance, pass the **larger** DataFrame as the probe (first argument) and the **smaller** one as the build (second argument).
-
-### Parallelism
-
-By default, polars-bio uses a single execution partition. For large datasets, enable parallel execution:
-
-```python
-import os
-import polars_bio as pb
-
-pb.set_option("datafusion.execution.target_partitions", os.cpu_count())
-```
-
-### Streaming Execution
-
-DataFusion streaming is enabled by default for interval operations. Data is processed in batches, enabling out-of-core computation for datasets larger than available RAM.
-
-### When to Use Lazy Evaluation
-
-Use `scan_*` functions and lazy DataFrames for:
-- Files larger than available RAM
-- When only a subset of results is needed
-- Pipeline operations where intermediate results can be optimized away
-
-```python
-# Lazy pipeline
-lf1 = pb.scan_bed("large1.bed")
-lf2 = pb.scan_bed("large2.bed")
-result = pb.overlap(lf1, lf2).collect()
-```
+Output batch streaming does not mean constant memory: many operations retain
+an index, sort or aggregate input, and `.collect()` materializes the final
+result. Do not swap arguments solely to optimize memory when query semantics
+must stay fixed. Benchmark a representative subset and use sinks for large
+outputs. Parallel partitioning can alter output order; sort explicitly for
+comparisons and reproducible exports.

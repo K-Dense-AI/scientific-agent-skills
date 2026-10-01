@@ -157,7 +157,7 @@ def validate_artifact(document: dict[str, Any]) -> IssueLog:
         data = document.get("data_governance")
         if not isinstance(data, dict):
             raise InputError("data_governance must be an object")
-        if data.get("data_level") not in ALLOWED_DATA_LEVELS:
+        if not isinstance(data.get("data_level"), str) or data.get("data_level") not in ALLOWED_DATA_LEVELS:
             log.errors.append("data_governance.data_level must be aggregate or synthetic")
         if data.get("phi_supplied") is not False:
             log.errors.append("data_governance.phi_supplied must be false")

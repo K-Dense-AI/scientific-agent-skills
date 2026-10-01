@@ -1,8 +1,9 @@
 # File Manager, Uploads, Imports, and Exports
 
-Verified **2026-07-23** against the official
+Verified **2026-09-30** against the official
 [API reference](https://apidoc.protocols.io/),
 [platform features](https://www.protocols.io/features), and
+[entry service](https://www.protocols.io/we-enter-protocols), and rendered
 [Protocolify tutorial](https://www.protocols.io/tutorials/how-to-import-into-protocols.io-existing-digital-p).
 
 ## Current v4 Search
@@ -15,9 +16,8 @@ The maintained File Manager API documents:
 | One workspace | `GET /api/v4/filemanager/workspaces/<workspace_uri>/search` |
 | All accessible workspaces | `GET /api/v4/filemanager/search` |
 
-Some nearby example blocks still show `-X PUT`, but each maintained “HTTP
-Request” declaration says `GET`. Use the declared method, and recheck the live
-page before deploying because this inconsistency is upstream.
+The maintained examples and HTTP Request declarations now agree on `GET`.
+Do not retain the old `PUT`-example workaround.
 
 The all-workspaces search requires `search_key`.
 
@@ -30,7 +30,10 @@ The reference documents:
 - `search_key`;
 - repeated/array `content_types[]`;
 - repeated/array `protocol_types[]`;
-- `modified_after` Unix timestamp.
+- `modified_after` and `modified_before` Unix timestamps.
+
+The docs do not specify whether the time bounds are inclusive. For incremental
+archives, overlap adjacent windows and deduplicate by item/content identity.
 
 Content type IDs:
 
@@ -77,7 +80,10 @@ The reference currently documents:
 The HTTP verbs are counterintuitive. Do not replace them with an invented
 `DELETE /files/{id}` or `/restore` endpoint.
 
-Both are mutations. Fetch each item, verify `item_id`, underlying content ID,
+Examples use form data (`curl -d`), not the v4 JSON contract. The precise
+wire serialization of the `ids` array is not shown; confirm it before building
+a separate executor. Both are mutations. Fetch each item, verify `item_id`,
+underlying content ID,
 kind, workspace, `can_remove`, current trash state, and affected collection/
 protocol references. Show the full ID list and obtain fresh confirmation.
 Never retry automatically.
@@ -97,7 +103,8 @@ The planner cannot execute.
 The API reference describes a three-phase S3-backed process:
 
 1. **Prepare** — `POST /api/v3/files`
-2. **Transfer** — submit the returned form to the returned storage destination
+2. **Transfer** — use the returned S3 form metadata with a separately verified
+   storage destination; the reference does not provide a complete transfer request
 3. **Verify** — `PUT /api/v3/files/<file_id>`
 
 ### Prepare
@@ -108,7 +115,9 @@ Documented fields:
 - optional `original_file_id` for a thumbnail;
 - optional `width`, `height`, and average `color`.
 
-The response includes a new `file_id`, file metadata, and ephemeral form fields
+The prepare example sends form data. The response puts `file_id` under
+`metaData` and upload fields under `formData`; it shows a bucket/key rather than
+a complete upload URL. It includes file metadata and ephemeral form fields
 such as key, bucket, access-key identifier, policy, signature, content type,
 and ACL.
 
@@ -197,9 +206,12 @@ file-download endpoint. Do not invent
 
 ## Imports
 
-The official Protocolify tutorial describes a user-facing AI importer that
-turns an existing **PDF or Word document** into an interactive protocol. It
-explicitly says imported protocols must be carefully checked for accuracy.
+The current entry-service page links an AI Protocol Importer. The Protocolify
+tutorial, re-extracted on 2026-09-30, documents **PDF or Word document** input
+and explicitly requires checking the imported protocol for accuracy. The
+entry-methods comparison also says components are not imported and must be
+added manually; verify quantities, units, and structured components after
+conversion rather than assuming a complete structured copy.
 
 This is a product workflow, not a public REST import contract in the API
 sections reviewed. Do not invent an `/imports` endpoint or automate the UI
@@ -244,13 +256,15 @@ search API. Do not build new integrations on the archived section.
 ## Sources
 
 - [Official API reference — File Manager, Files, Organizations](https://apidoc.protocols.io/),
-  accessed 2026-07-23 — maintained v4 search, v3 trash/upload, archived
+  accessed 2026-09-30 — maintained v4 search, v3 trash/upload, archived
   warnings, v4 organization export.
-- [Platform features](https://www.protocols.io/features), accessed 2026-07-23
+- [Platform features](https://www.protocols.io/features), accessed 2026-09-30
   — any-file-type claim, permissions, archive/export, cloud integrations.
 - [Protocolify import tutorial](https://www.protocols.io/tutorials/how-to-import-into-protocols.io-existing-digital-p),
-  accessed 2026-07-23 — PDF/Word import and mandatory accuracy review.
+  accessed 2026-09-30 through rendered extraction — PDF/Word input and required
+  accuracy review.
 - [Protocols entry methods](https://www.protocols.io/entry-methods), accessed
-  2026-07-23 — current user-facing entry/import options.
+  2026-09-30 through rendered extraction — AI import, step-text parsing,
+  and editorial entry options.
 - [We enter protocols](https://www.protocols.io/we-enter-protocols), accessed
-  2026-07-23 — editorial entry service and user review.
+  2026-09-30 — editorial entry service and user review.

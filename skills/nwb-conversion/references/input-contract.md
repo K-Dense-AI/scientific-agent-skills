@@ -11,6 +11,15 @@ seconds or infer a timezone from the computer running the conversion.
 intensity unit, excitation and emission wavelengths in **nanometers**, and optical-channel description.
 The helper implements a two-photon series; optical metadata must describe that actual acquisition.
 Subject fields are passed through to PyNWB and retained in the full provenance config.
+The optional `subject.date_of_birth` uses timezone-aware ISO 8601 text, converted to a datetime for
+PyNWB. Session and position descriptions, optical text fields, and every experimenter name must be
+nonempty. The position reference frame must describe the calibrated coordinates actually supplied.
+
+Set integer `imaging.num_channels: 1` and `imaging.num_planes: 1` only after checking the acquisition
+layout. The helper rejects multiple TIFF series, color/palette samples, or explicit non-singleton
+channel/depth axes. Missing TIFF layout metadata does not prove a single channel or plane: a stack
+of interleaved grayscale pages can look identical to a time sequence. Resolve that from microscope
+metadata before conversion. OME multi-channel or volumetric input needs a separately tested reader.
 
 Image timestamps CSV has exactly one column:
 
@@ -34,6 +43,9 @@ time_s,x,y
 0.2,10.3,20.2
 0.4,10.8,20.1
 ```
+
+Every CSV row must have exactly the header's number of fields. Extra values, missing fields,
+nonfinite values and nonincreasing time values are rejected rather than silently discarded.
 
 `position_unit` is `m`, `cm` or `mm`; `position_reference_frame` describes origin and axis directions,
 and `position_description` records measurement/calibration context. Pixel inputs are rejected because
@@ -63,6 +75,11 @@ maximum acceptable residual in seconds from the experiment's timing precision re
 ```
 
 The fitted map is `reference_seconds = slope * device_seconds + offset_seconds`.
+Evaluation centers device times at the first pulse to reduce loss of numerical precision. The
+report preserves that origin, the centered intercept, each pulse residual and both clocks' support
+intervals. All reference seconds use the explicit NWB `timestamps_reference_time`, equal to this
+converter's `session_start_time`; device seconds must use the same device origin in behavior and
+pulse CSVs. A shared clock requires a shared epoch as well as a shared tick rate.
 Inspect residuals and drift over the session before choosing the tolerance. A small least-squares
 residual from only three pulses does not rule out unobserved clock jumps between them; record pulse
 coverage and acquisition interruptions. Pulse extrapolation is rejected even when a linear fit is

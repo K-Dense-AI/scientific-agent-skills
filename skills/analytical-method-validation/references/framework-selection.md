@@ -1,6 +1,6 @@
 # Which Framework Governs
 
-Research basis: **2026-07-27**. Confirm every date and edition against the official source before
+Research basis: **2026-09-30**. Confirm every date and edition against the official source before
 relying on it; see `source-ledger.md`.
 
 Framework selection is the first decision and the one most often skipped. Getting it wrong
@@ -19,28 +19,28 @@ assays. Q2(R2) does not govern here.
 **2. Is it a quality attribute of a drug substance or drug product — assay, potency, impurity,
 identity, dissolution, content uniformity?**
 → **ICH Q2(R2)** for validation, with **ICH Q14** for development, robustness, the analytical
-target profile, and lifecycle change management. If the procedure is compendial and being used as
+target profile (formal documentation optional), and lifecycle change management. If the procedure is compendial and being used as
 written, see question 3 first.
 
 **3. Is the procedure a compendial (pharmacopoeial) procedure?**
 → **USP <1226> verification** if it is used as written and within its stated scope. Verification
 assesses selected characteristics to show the procedure works under actual conditions of use; it is
 not revalidation and does not repeat the full study. → **USP <1225> validation** if the procedure
-is non-compendial, or compendial but used outside its scope. Both sit inside the **USP <1220>**
+is non-compendial, or compendial but used outside its scope. Confirm the effective edition: the linked 2025 <1225> preview is a proposal. Both sit inside the **USP <1220>**
 three-stage lifecycle. Regional pharmacopoeias (Ph. Eur., JP) have their own general chapters —
 check which pharmacopoeia the specification cites.
 
 **4. Is it a clinical laboratory measurement procedure reporting patient results?**
 → **CLSI EP series**, inside a CLIA/CAP or ISO 15189 quality system. The vocabulary differs from
-pharmaceutical work: *verification* of a manufacturer's claims for an FDA-cleared assay is a much
+pharmaceutical work: *verification* of a manufacturer's claims for an unmodified FDA-cleared or approved nonwaived assay is a much
 smaller exercise than *establishment* of performance for a laboratory-developed test, and the
 distinction is regulatory, not stylistic.
 
 **5. Is the laboratory accredited to ISO/IEC 17025 and the method non-standard, laboratory-developed,
 or a modified standard method?**
 → **ISO/IEC 17025 clause 7.2.2** requires validation as extensive as necessary to meet the needs of
-the intended application, plus measurement uncertainty under clause 7.6. It sets no characteristic
-list and no numeric criteria; the laboratory justifies both.
+the intended application, plus measurement uncertainty under clause 7.6. It does not prescribe one universal characteristic
+checklist or numeric acceptance limits; the laboratory justifies both.
 
 **6. Is it an environmental, food, or forensic method under a prescribed method system?**
 → The method system governs (for example a published EPA method, an AOAC Official Method, or a

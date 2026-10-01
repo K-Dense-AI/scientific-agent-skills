@@ -1,6 +1,6 @@
 # Reference specificity and amplicon geometry
 
-Documentation checked: 2026-09-30. Specificity is a claim about named sequences,
+Documentation checked: 2026-10-01. Specificity is a claim about named sequences,
 search settings, and assay conditions. A favorable thermodynamic score or a clean
 search of an incomplete reference does not establish a unique biological product.
 
@@ -131,6 +131,19 @@ review candidate primers when public-reference searching is appropriate.
 5. Save the complete report, retrieval date, database description, settings, and
    result interpretation. A transient job URL is insufficient provenance.
 
+Current database help distinguishes `core_nt` (excludes assembled eukaryotic
+chromosomes), RefSeq reference genomes (includes applicable alternate loci), and
+selected-organism primary assemblies (excludes alternate loci). `core_nt` alone
+cannot establish genome-wide eukaryotic specificity. In **Custom** mode, the
+organism field is ignored; the supplied references determine scope. Verify the
+current field help when choosing an assembly or database.
+
+Primer-BLAST's minimum mismatches required for an unintended target to be accepted
+as discriminated is different from the local CLI's maximum mismatches retained as
+potential binding. Do not copy the same number between these controls and assume
+equivalent sensitivity. Its separate ignore-target threshold excludes a target
+when at least one primer reaches that total mismatch count.
+
 NCBI distinguishes the cap on database sequences searched from output display
 limits. Larger searches may reveal additional products. Exact reference accessions
 help distinguish intended targets from redundant records.
@@ -139,6 +152,9 @@ help distinguish intended targets from redundant records.
 Do not invent a supported Primer-BLAST API or substitute the general BLAST URL API
 for its pair-specific workflow. Any remote submission sends the submitted sequence
 to that service; use a local reference workflow when sequences must stay local.
+The linked Primer-BLAST URL returns an interactive HTML form/report workflow, not
+a documented JSON job-submission or pagination contract. No remote submission is
+implemented or required by the bundled scripts.
 
 ## Local BLAST review
 

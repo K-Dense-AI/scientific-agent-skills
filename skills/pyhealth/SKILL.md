@@ -1,129 +1,128 @@
 ---
 name: pyhealth
-description: Build clinical/healthcare deep-learning pipelines with PyHealth — loading EHR/signal/imaging datasets (MIMIC-III/IV, eICU, OMOP, SleepEDF, ChestXray14, EHRShot), defining tasks (mortality, readmission, length-of-stay, drug recommendation, sleep staging, ICD coding, EEG events), instantiating models (Transformer, RETAIN, GAMENet, SafeDrug, MICRON, StageNet, AdaCare, CNN/RNN/MLP), training with the PyHealth Trainer, computing clinical metrics, and using medical code utilities (ICD/ATC/NDC/RxNorm lookup and cross-mapping). Use this skill whenever the user mentions PyHealth, MIMIC, eICU, OMOP, EHR modeling, clinical prediction, drug recommendation, sleep staging, medical code mapping, ICD/ATC codes, or any healthcare ML pipeline that fits the dataset → task → model → trainer → metrics pattern, even if "PyHealth" isn't named explicitly.
+description: Builds and validates PyHealth clinical machine-learning pipelines for EHR, signals, imaging, and medical codes. Use for PyHealth dataset loading, MIMIC-III/IV, eICU or OMOP prediction tasks, patient-level evaluation, mortality/readmission/length-of-stay modeling, medication recommendation, sleep staging, Trainer checkpoints, and ICD/ATC/NDC/RxNorm mapping.
+compatibility: Requires Python 3.12 or 3.13 and PyHealth 2.0.2 (Torch 2.7.1). Network access is needed for installation, public datasets and uncached medical-code resources. Restricted clinical datasets require authorized local access.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-09-30"
 ---
 
 # PyHealth
 
-PyHealth (https://pyhealth.dev/) is a Python toolkit for clinical deep learning. It provides a unified, modular pipeline across electronic health records (EHR), physiological signals, and medical imaging.
+Targets **PyHealth 2.0.2**, verified against its released wheel, current official
+documentation, and CPU execution on Python 3.12/Torch 2.7.1. PyHealth's pipeline is
+`Dataset -> Task -> Model -> Trainer -> Metrics`; its 1.x and 2.x interfaces differ.
+Do not combine legacy `Visit` examples with the 2.x event/processor API.
 
-The library is built around a **5-stage pipeline** — `Dataset → Task → Model → Trainer → Metrics` — where each stage is replaceable and the interfaces between stages are stable. Code that follows this pipeline shape composes well; code that bypasses it usually fights the library.
+## When to use
 
-## When to use this skill
+Use for clinical prediction with PyHealth, including EHR sequences, physiological
+signals, imaging tasks, or medical-code lookup. Establish the cohort, prediction
+time, observation window, outcome horizon, and unit of evaluation before modeling.
+For general tabular learning without a PyHealth dataset/task, this skill is optional.
 
-Use this skill whenever the user is doing clinical/healthcare ML and any of the following are true:
-
-- They mention PyHealth, MIMIC-III/IV, eICU, OMOP-CDM, EHRShot, SleepEDF, SHHS, ISRUC, COVID19-CXR, ChestX-ray14, TUEV/TUAB.
-- They want to predict mortality, readmission, length of stay, drug recommendations, sleep stages, ICD codes, EEG events, or de-identification.
-- They need to look up or cross-map medical codes (ICD-9-CM, ICD-10-CM, ATC, NDC, RxNorm, CCS).
-- They have EHR-shaped data and want to train a clinical model without writing the plumbing themselves.
-
-PyHealth is the right tool when the workflow fits its 5 stages. If the user just wants generic PyTorch on tabular data, this skill is not necessary.
-
-## Installation (uv)
-
-PyHealth 2.0 requires Python ≥ 3.12, < 3.14. Use `uv` for environment management — it's faster and reproducible.
+## Install and smoke-test
 
 ```bash
-# Create a project with the right Python
-uv init my-pyhealth-project
-cd my-pyhealth-project
-uv python pin 3.12
-
-# Add PyHealth (this also pulls in PyTorch and friends)
-uv add pyhealth
-
-# Run scripts inside the env
-uv run python train.py
+uv run --no-project --isolated --python 3.12 --with pyhealth==2.0.2 python assets/starter_pipeline.py --demo --epochs 1
 ```
 
-For a one-off script without a project, use `uv run --with pyhealth python script.py`. For the legacy 1.x line (Python 3.9+), `uv add pyhealth==1.16`. Detailed install notes, MIMIC access, and GPU/CPU device tips are in `references/installation.md`.
+Run that command from the skill directory, or use the absolute path to the asset.
+It trains on invented in-memory records and exercises patient splitting, metrics,
+and best-checkpoint restoration. It provides no evidence of clinical performance.
+See [installation](references/installation.md) for project setup and device options.
 
-## The 5-stage pipeline
+## Workflow
 
-A complete pipeline is typically <20 lines. This is the canonical shape — start here and modify pieces:
+1. **Inspect the installed version and dataset configuration.** Both MIMIC-III and
+   MIMIC-IV use lowercase table selectors in 2.0.2. MIMIC-III files remain uppercase.
+2. **Check task semantics and required tables.** `MortalityPredictionMIMIC3` predicts
+   death in the *next admission*, excludes the last admission, and requires diagnoses,
+   procedures and prescriptions in the current admission. It is not a current-stay
+   early-warning model. Missing/invalid next-admission mortality flags are assigned
+   zero upstream; audit this before using real data.
+3. **Create supervised samples.** `base.set_task(task)` returns a processed dataset
+   with input/output schemas. Inspect raw task output as well as processed samples.
+4. **Partition by patient and verify overlap, class counts and observation windows.**
+   `split_by_patient(..., seed=42)` is random, not chronological or stratified.
+   It does not prevent within-visit temporal leakage or preprocessing leakage.
+5. **Choose a schema-compatible model and run one batch before training.** Construct
+   it from the training sample dataset. Transformer uses `embedding_dim`, not
+   `hidden_dim`; arguments are model-specific.
+6. **Declare validation metrics and the exact monitor.** Supply `metrics=[...]` to
+   `Trainer`; the monitor must be a returned key. An absent key raises an error.
+   Use `monitor_criterion="min"` for loss, `"max"` for AUC/accuracy.
+7. **Evaluate the held-out test set once the model choice is fixed.** Report prevalence,
+   patient counts, discrimination, calibration, threshold policy and uncertainty as
+   appropriate. PR-AUC's no-skill reference depends on prevalence, not a universal 0.5.
+
+## MIMIC-III prototype
+
+This is the 2.0.2 interface shape; the starter adds partition and label checks.
+Use a local authorized root for real data. The public bucket is synthetic data.
 
 ```python
-from pyhealth.datasets import MIMIC3Dataset, split_by_patient, get_dataloader
+from pyhealth.datasets import MIMIC3Dataset, get_dataloader, split_by_patient
 from pyhealth.tasks import MortalityPredictionMIMIC3
 from pyhealth.models import Transformer
 from pyhealth.trainer import Trainer
-from pyhealth.metrics.binary import binary_metrics_fn
 
-# 1. Dataset — raw patient registry
 base = MIMIC3Dataset(
     root="https://storage.googleapis.com/pyhealth/Synthetic_MIMIC-III/",
-    tables=["DIAGNOSES_ICD", "PROCEDURES_ICD", "PRESCRIPTIONS"],
+    tables=["diagnoses_icd", "procedures_icd", "prescriptions"],
+    cache_dir="./cache/mimic3", num_workers=1, dev=True,
 )
-
-# 2. Task — converts patients into supervised samples
 samples = base.set_task(MortalityPredictionMIMIC3())
-
-# 3. Split + DataLoaders (split by patient to avoid leakage)
-train_ds, val_ds, test_ds = split_by_patient(samples, [0.8, 0.1, 0.1])
-train_loader = get_dataloader(train_ds, batch_size=32, shuffle=True)
-val_loader   = get_dataloader(val_ds,   batch_size=32, shuffle=False)
-test_loader  = get_dataloader(test_ds,  batch_size=32, shuffle=False)
-
-# 4. Model — must be passed the SampleDataset, not the BaseDataset
-model = Transformer(dataset=samples)
-
-# 5. Train + evaluate
-trainer = Trainer(model=model)
-trainer.train(
-    train_dataloader=train_loader,
-    val_dataloader=val_loader,
-    epochs=50,
-    monitor="pr_auc",
-)
-
-y_true, y_prob, _ = trainer.inference(test_loader)
-print(binary_metrics_fn(y_true, y_prob, metrics=["pr_auc", "roc_auc"]))
+train, val, test = split_by_patient(samples, [0.6, 0.2, 0.2], seed=42)
+loaders = [get_dataloader(part, batch_size=16, shuffle=(i == 0))
+           for i, part in enumerate((train, val, test))]
+model = Transformer(dataset=train, embedding_dim=8)
+trainer = Trainer(model=model, metrics=["accuracy"], device="cpu")
+trainer.train(train_dataloader=loaders[0], val_dataloader=loaders[1],
+              epochs=1, monitor="accuracy", monitor_criterion="max")
+print(trainer.evaluate(loaders[2]))
 ```
 
-A copy-pasteable starter is in `assets/starter_pipeline.py`.
+The public synthetic task with `dev=True` (up to 1000 patients) produced only
+20 samples (18 negative, 2 positive) in the review run. Accuracy here checks execution only; random splits can lack a
+class, so this is unsuitable for reliable AUC estimation.
 
-## Critical things to get right
+`set_task` fits processors before this split. This prototype therefore learns its
+vocabulary from the whole cohort. For strict held-out evaluation, partition raw
+patients first, fit processors on training samples only, then reuse them for
+validation/test; see [examples](references/examples.md). Learned adjacency matrices
+(e.g. GAMENet) must also use training records only.
 
-These are the mistakes that PyHealth code most commonly trips on. Internalize them before writing pipelines:
+## Critical API and scientific checks
 
-1. **Models take a `SampleDataset`, not a `BaseDataset`.** `MIMIC3Dataset(...)` returns a `BaseDataset` (a queryable patient registry). Only after `.set_task(task)` do you get a `SampleDataset`, which is what models, splitters, and DataLoaders expect. If you pass `base` to a model, it will fail or behave wrong.
+- **MIMIC-IV:** `MIMIC4Dataset(ehr_root=..., ehr_tables=[...])`; the simpler
+  `MIMIC4EHRDataset(root=..., tables=[...])` is also available. The root contains both
+  `hosp/` and `icu/`, not just `hosp/`.
+- **Caches exist by default.** `cache_dir=None` selects the user cache directory;
+  a supplied path selects its root. Cache identity does not hash raw file contents
+  or custom task source. Use a fresh cache root after changing data/config/task code.
+- **Patient access:** `patient.get_events(event_type=..., filters=[(...)])`, not
+  `patient.visits` or `visit.get_code_list(...)`.
+- **Patient independence:** visit-level random splitting can put one patient's
+  admissions in multiple partitions. Choose the split to match the deployment claim.
+- **Outcome availability:** discharge diagnoses and notes are unavailable for many
+  early prediction times. Feature timestamps and recording/store times both matter.
+- **Clinical interpretation:** attention weights and DDI penalties are modeling tools;
+  they do not establish causal explanation, prescribing safety or deployment readiness.
+- **Network resources:** medical-code tables download on first use and are cached.
+  Mapping may be one-to-many or empty; retain coding-system version and provenance.
 
-2. **Always split by patient (or visit), not by sample.** Random sample-level splits leak information across train/test because the same patient can appear in both. Use `split_by_patient` for patient-level prediction, `split_by_visit` only when visits are independent.
+## Reference files
 
-3. **Match the task to the dataset.** Tasks are dataset-specific: `MortalityPredictionMIMIC3` won't work on MIMIC-IV — use `MortalityPredictionMIMIC4` or `InHospitalMortalityMIMIC4`. The full mapping is in `references/tasks.md`.
-
-4. **Pick `monitor` to match the task type.** For binary classification use `"pr_auc"` or `"roc_auc"`. For multilabel (drug rec) use `"pr_auc_samples"` or `"jaccard_samples"`. For multiclass use `"accuracy"` or `"f1_macro"`. Wrong monitor → checkpoint selection saves the wrong epoch.
-
-5. **MIMIC-IV uses `ehr_root=`, not `root=`.** This is the one inconsistency in the dataset constructors.
-
-6. **For reproducible work, point `cache_dir=` somewhere persistent.** PyHealth caches the parsed dataset; without `cache_dir`, you re-parse every run.
-
-7. **Define the prediction time before extracting features.** Record the observation window and outcome horizon for the chosen task; a full-stay mortality task and an early-warning task answer different questions. Exclude events unavailable at prediction time, including discharge outcomes embedded in codes or notes. Patient-level splitting does not prevent this within-visit temporal leakage. Inspect the task definition, not just its class name; the [upstream mortality-window contract](https://pyhealth.readthedocs.io/en/latest/api/tasks/pyhealth.tasks.InHospitalMortalityMEDS.html) illustrates explicit admission-to-prediction windows.
-
-## How to use this skill
-
-PyHealth has a large API surface — there's no point loading it all at once. Read the reference file that matches the user's task:
-
-| If the user is asking about… | Read |
+| Need | Read |
 |---|---|
-| Installing, env setup, MIMIC access, GPU | `references/installation.md` |
-| Which dataset class to use, loading patterns, splitting | `references/datasets.md` |
-| What prediction task to choose (mortality, readmission, drug rec, sleep…) | `references/tasks.md` |
-| Picking a model architecture, model-specific arguments | `references/models.md` |
-| Looking up or cross-mapping ICD/ATC/NDC/RxNorm/CCS codes, tokenizers | `references/medcode.md` |
-| End-to-end recipes for common scenarios | `references/examples.md` |
-
-For multi-step tasks (e.g., "build a drug recommendation pipeline on MIMIC-IV"), read `tasks.md` + `models.md` + `examples.md` together — they cross-reference each other.
-
-## A note on style
-
-Write minimal, idiomatic PyHealth. The library is opinionated; lean into its abstractions instead of reimplementing them in raw PyTorch. If you find yourself writing a custom training loop, ask whether `Trainer` would do the job — it almost always will, and it handles checkpointing, logging, and best-model selection for free.
-
-When the user has private MIMIC access, point them at the local CSV root; for demos and learning, the synthetic MIMIC-III bucket (`https://storage.googleapis.com/pyhealth/Synthetic_MIMIC-III/`) is fine and works without credentialing.
+| Dependencies, devices, restricted data and caches | [installation](references/installation.md) |
+| Dataset classes, constructors, event access and splitting | [datasets](references/datasets.md) |
+| Task schemas, label semantics and custom tasks | [tasks](references/tasks.md) |
+| Model compatibility and training contracts | [models](references/models.md) |
+| Code lookup, mappings and tokenizer shapes | [medical codes](references/medcode.md) |
+| Adaptable recipes and train-only preprocessing | [examples](references/examples.md) |
 
 ## Citing Scientific Agent Skills
 

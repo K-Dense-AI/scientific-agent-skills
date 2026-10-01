@@ -33,7 +33,7 @@ rna = my_seq.transcribe()
 protein = my_seq.translate()
 
 # Back-transcription (RNA to DNA)
-dna = rna_seq.back_transcribe()
+dna = rna.back_transcribe()
 ```
 
 ### Sequence Methods
@@ -120,10 +120,11 @@ record.id = "new_id"
 record.description = "New description"
 
 # Extract subsequences
-sub_record = record[10:30]  # Slicing preserves annotations
+sub_record = record[10:30]  # Keeps per-letter data and fully contained features
+# Most record.annotations and dbxrefs are deliberately omitted; review before copying.
 
-# Modify sequence
-record.seq = record.seq.reverse_complement()
+# Reverse sequence AND transform its features/quality scores
+record = record.reverse_complement(id=True, name=True, description=True)
 ```
 
 ## Working with Large Files
@@ -186,17 +187,23 @@ with open("reads.fastq") as handle:
 
 ## Compressed Files
 
-Bio.SeqIO automatically handles compressed files:
+Open ordinary gzip files explicitly in text mode. BGZF supports indexed random access;
+ordinary gzip does not. Consume lazy parsers before closing their handle.
 
 ```python
-# Works with gzip compression
-for record in SeqIO.parse("sequences.fasta.gz", "fasta"):
-    print(record.id)
+import gzip
+from Bio import SeqIO
 
-# BGZF format for random access
-from Bio import bgzf
-with bgzf.open("sequences.fasta.bgz", "r") as handle:
-    records = SeqIO.parse(handle, "fasta")
+with gzip.open("sequences.fasta.gz", "rt") as handle:
+    for record in SeqIO.parse(handle, "fasta"):
+        print(record.id)
+
+# A BGZF file can be indexed directly; close the index after use.
+seq_index = SeqIO.index("sequences.fasta.bgz", "fasta")
+try:
+    print(list(seq_index))
+finally:
+    seq_index.close()
 ```
 
 ## Data Extraction Patterns
@@ -233,7 +240,7 @@ SeqIO.write(long_sequences, "filtered.fasta", "fasta")
 3. **Use index_db()** for millions of records or multi-file scenarios
 4. **Use low-level parsers** for high-throughput data when speed is critical
 5. **Download once, reuse locally** rather than repeated network access
-6. **Close indexed files** explicitly or use context managers
+6. **Close indexed files** explicitly, ideally in a `finally` block
 7. **Validate input** before writing with SeqIO.write()
 8. **Use appropriate format strings** - always lowercase (e.g., "fasta", not "FASTA")
 
@@ -245,9 +252,10 @@ SeqIO.write(long_sequences, "filtered.fasta", "fasta")
 # GenBank to FASTA
 SeqIO.convert("input.gbk", "genbank", "output.fasta", "fasta")
 
-# Multiple format conversion
+# Multiple format conversion: molecule_type is required for GenBank/EMBL.
+# Choose DNA/RNA/protein from the input provenance; FASTA does not encode it.
 for fmt in ["fasta", "genbank", "embl"]:
-    SeqIO.convert("input.fasta", "fasta", f"output.{fmt}", fmt)
+    SeqIO.convert("input.fasta", "fasta", f"output.{fmt}", fmt, molecule_type="DNA")
 ```
 
 ### Quality Filtering (FASTQ)

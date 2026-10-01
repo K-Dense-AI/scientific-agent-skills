@@ -1,6 +1,8 @@
 # Cell Free Protein Expression, Purification, and Quantification
 
 **URL:** https://cloud.ginkgo.bio/protocols/cfps-expression-purification-quantification
+**Service terms:** https://cloud.ginkgo.bio/terms/cfps-expression-purification
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $159/sample
 **Turnaround:** up to 12 days
@@ -8,7 +10,7 @@
 
 ## Overview
 
-End-to-end automated cell-free expression, Strep-tag purification, and quantification of StrepII-tagged proteins, combining A280 yield with LabChip purity/size assessment. Linear DNA templates are expressed in CFPS reactions for 8 hours, purified with magnetic beads on the Agilent Bravo, quantified by A280 on the BMG PHERAstar, then characterized for purity and apparent molecular weight on the Revvity LabChip.
+End-to-end automated cell-free expression, Strep-tag purification, and quantification of StrepII-tagged proteins, combining A280 yield with LabChip purity/size assessment. CFPS products are purified with magnetic beads on the Agilent Bravo, quantified by A280 on the BMG PHERAstar, then characterized on the Revvity LabChip. The catalog describes an 8-hour expression step while terms describe reactions typically completed within 20 hours; confirm the run-specific incubation rather than treating either as fixed.
 
 ## Input
 
@@ -21,6 +23,7 @@ End-to-end automated cell-free expression, Strep-tag purification, and quantific
 - **Expression Confirmation:** Verification of the target protein at the expected molecular weight
 - **Baseline Titer:** Initial quantitative yield measurement (mg/L)
 - **Initial Purity:** Percentage of target protein vs. impurities, delivered with virtual gel images
+- **Purified concentration:** A280 eluate concentration in mg/mL with annotated CE-SDS data, QC report, and raw CSV files; do not conflate eluate concentration with reaction titer.
 
 ## Automated Workflow
 

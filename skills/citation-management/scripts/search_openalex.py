@@ -253,7 +253,8 @@ class OpenAlexSearcher:
         if entry_type == 'misc':
             if venue:
                 fields['howpublished'] = venue
-            fields['note'] = 'Preprint'
+            if metadata.get('type') in ('preprint', 'posted-content'):
+                fields['note'] = 'Preprint'
 
         if not fields['doi'] and metadata.get('openalex_id'):
             fields['url'] = metadata['openalex_id']

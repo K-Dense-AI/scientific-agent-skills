@@ -103,8 +103,10 @@ model = models.ESM(
 )
 ```
 
-The release notes add ESM-2 support, but checkpoint names and availability
-should be verified against the API/source before use. Do not use the unsupported
+The released source supports `ESM-2-8M`, `ESM-2-35M`, `ESM-2-150M`,
+`ESM-2-650M`, `ESM-2-3B`, and `ESM-2-15B`. These use `fair-esm==2.0.0`;
+constructor calls download pretrained weights and remain illustrative here.
+Do not use the unsupported
 pattern `models.ESM(path="checkpoint-file.pt")`; `path` is the directory where
 TorchDrug stores model weights.
 

@@ -21,6 +21,10 @@ phase. Upstream `bruker.read` and `bruker.remove_digital_filter` are possible bu
 blocks, but no vendor-reader workflow is claimed as tested here. Consult the
 [Bruker reference](https://nmrglue.readthedocs.io/en/latest/reference/bruker.html) before
 adapting it and verify against a trusted processed reference.
+`remove_digital_filter(dic, data, truncate=True, post_proc=False)` returns data, not a
+`(dictionary, data)` pair. `post_proc=True` returns a frequency-domain correction and
+must not be passed into this FID helper. Its default truncation may discard useful data;
+record the resulting point count and correction settings.
 
 ## Verify frequency sign before fitting phase
 
@@ -30,6 +34,15 @@ offsets. If a known reference appears mirrored about the carrier, revisit quadra
 and sign convention. Reversing a plotted axis does not correct the data-to-ppm mapping.
 A reference offset correction should update the carrier and be recorded, rather than
 moving a plotted label without moving integration limits.
+
+For the even zero-filled size `N`, the first sample is
+`carrier_ppm + spectral_width_hz / (2 * observation_mhz)` and each step is
+`-spectral_width_hz / (N * observation_mhz)` ppm. The final sample is one digital
+step above the lower bandwidth edge; the two Nyquist edges are not both sampled.
+`unit_conversion` receives carrier in Hz, whereas the NMRPipe `FDF2CAR` header is ppm.
+`proc_base.em` receives `line_broadening_hz / spectral_width_hz`, not Hz directly.
+`proc_base.ps` multiplies the complex spectrum by the positive phase exponential in
+degrees; first-order phase is measured across indices, with no implicit pivot.
 
 ## Processing comparisons that change conclusions
 
@@ -56,8 +69,24 @@ within float32 header rounding tolerance. Selected header fields are preserved i
 report. The sign convention is still explicit: the file format alone does not establish
 the acquisition's physical frequency sign or whether vendor conversion conjugated it.
 
-Only synthetic canonical files generated with nmrglue were round-trip validated. This
-exercises the actual binary reader and recovered spectral coordinates, but does not
-establish that every experimental converter writes equivalent headers or samples.
+`FDF2TDSIZE` must also match the stored point count. This prevents known prior zero
+filling or truncation from being reported as acquired time. The centered axis checks
+use `CENTER = floor(N / 2) + 1` and
+`ORIG = CAR * OBS - SW * (N - CENTER) / N`, following
+[nmrglue 0.12's NMRPipe source](https://github.com/jjhelmus/nmrglue/blob/v0.12/nmrglue/fileio/pipe.py).
+The ORIG tolerance allows float32 header rounding, including cancellation near zero.
+An inconsistent ORIG cannot be ignored: `pipe.make_uc` uses it to derive the carrier.
+Headers can still be wrong or incomplete; these checks do not authenticate acquisition
+history. For NPZ input, acquired duration assumes every supplied point was acquired.
+
+Synthetic canonical files generated with nmrglue were round-trip validated. An upstream
+2,176-byte fixture generated with `simTimeND` / `nmrPipe -fn SET` separately verifies
+stored real/imaginary order and calibration. Its source and checksum are recorded in
+the repository test fixtures. This exercises the actual binary reader and recovered
+spectral coordinates, but does not establish that every experimental converter writes
+equivalent headers or samples.
 Digital-filter removal and earlier apodization are not inferred or undone. Check the
 upstream acquisition and conversion record before applying the processing settings.
+Neither `nmrPipe` nor `nmrDraw` was available for an independent live comparison.
+Linear baseline least squares is tested; resonance line-shape fitting and automatic
+phase fitting are outside this helper's scope.

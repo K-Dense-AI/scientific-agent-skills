@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import os
+import math
 import sys
 
 try:
@@ -24,21 +25,59 @@ except ImportError:
     sys.exit(1)
 
 
-def index_peptides(fasta, prot_ids, pep_ids):
+def index_peptides(fasta, prot_ids, pep_ids, decoy_string="DECOY_"):
     fasta_entries = []
     ms.FASTAFile().load(fasta, fasta_entries)
     indexer = ms.PeptideIndexing()
     p = indexer.getParameters()
-    p.setValue("decoy_string", "DECOY_")
-    p.setValue("missing_decoy_action", "warn")
+    p.setValue("decoy_string", decoy_string)
+    p.setValue("missing_decoy_action", "error")
     indexer.setParameters(p)
-    indexer.run(fasta_entries, prot_ids, pep_ids)
+    result = indexer.run(fasta_entries, prot_ids, pep_ids)
+    if result[0] != ms.PeptideIndexing.ExitCodes.EXECUTION_OK:
+        raise ValueError(f"Peptide indexing failed: {result[0]}")
     print(f"Indexed against {len(fasta_entries)} proteins")
+
+
+
+def filter_psm_qvalues(pep_ids, threshold):
+    """Target-decoy q-values for comparable top-hit PSMs from one search run."""
+    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError("q-value threshold must be finite and between 0 and 1")
+    contexts = set()
+    labels = set()
+    for pid in pep_ids:
+        hits = pid.getHits()
+        if not hits:
+            continue
+        if not pid.getScoreType() or pid.getScoreType().lower() in {"q-value", "fdr"}:
+            raise ValueError("FDR estimation needs original search scores, not existing q-values/FDR")
+        contexts.add((pid.getIdentifier(), pid.getScoreType(), pid.isHigherScoreBetter()))
+        for hit in hits:
+            if not math.isfinite(hit.getScore()) or not hit.metaValueExists("target_decoy"):
+                raise ValueError("Every hit needs a finite score and target_decoy annotation")
+            if hit.getMetaValue("target_decoy") not in {"target", "decoy", "target+decoy"}:
+                raise ValueError("Invalid target_decoy annotation")
+        best = max(hits, key=lambda h: h.getScore()) if pid.isHigherScoreBetter() else min(hits, key=lambda h: h.getScore())
+        labels.add(best.getMetaValue("target_decoy"))
+    if len(contexts) != 1:
+        raise ValueError("Process one search run with one score type/direction at a time")
+    if "decoy" not in labels or not labels.intersection({"target", "target+decoy"}):
+        raise ValueError("FDR estimation requires both target and decoy top-scoring PSMs")
+    fdr = ms.FalseDiscoveryRate()
+    p = fdr.getParameters()
+    p.setValue("no_qvalues", "false")
+    p.setValue("use_all_hits", "false")
+    p.setValue("add_decoy_peptides", "false")
+    fdr.setParameters(p)
+    fdr.apply(pep_ids)
+    ms.IDFilter().filterHitsByScore(pep_ids, threshold)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Filter and export peptide identifications.")
     parser.add_argument("input", help="Input idXML")
+    parser.add_argument("--decoy-prefix", default="DECOY_", help="FASTA decoy accession prefix for re-indexing")
     parser.add_argument("--fasta", help="Protein FASTA (target+decoy) for re-indexing")
     parser.add_argument("--out", help="Output filtered idXML")
     parser.add_argument("--csv", help="Output CSV of peptide hits")
@@ -62,12 +101,10 @@ def main():
           f"{sum(len(p.getHits()) for p in pep_ids)} peptide hits")
 
     if args.fasta:
-        index_peptides(args.fasta, prot_ids, pep_ids)
+        index_peptides(args.fasta, prot_ids, pep_ids, args.decoy_prefix)
 
     if args.fdr is not None:
-        fdr = ms.FalseDiscoveryRate()
-        fdr.apply(pep_ids)
-        ms.IDFilter().filterHitsByScore(pep_ids, args.fdr)
+        filter_psm_qvalues(pep_ids, args.fdr)
         print(f"Applied FDR filter (q <= {args.fdr})")
 
     if args.best_per_spectrum:
@@ -101,7 +138,7 @@ def main():
                 st = pid.getScoreType()
                 for hit in pid.getHits():
                     td = hit.getMetaValue("target_decoy") if hit.metaValueExists("target_decoy") else ""
-                    accs = ";".join(a.decode() for a in hit.extractProteinAccessionsSet())
+                    accs = ";".join(a.decode() if isinstance(a, bytes) else a for a in hit.extractProteinAccessionsSet())
                     w.writerow([f"{rt:.2f}", f"{mz:.4f}", hit.getSequence().toString(),
                                 hit.getCharge(), hit.getScore(), st, td, accs])
         print(f"Wrote {args.csv}")

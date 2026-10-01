@@ -191,6 +191,22 @@ class BatchSequenceAnalysisTests(WorkingDirectoryTestCase):
         self.assertFalse((output / "seq0_blast.csv").exists())
         self.assertTrue((output / "seq1_blast.csv").exists())
 
+    def test_headers_cannot_escape_output_or_overwrite_duplicate_records(self):
+        self.stub("blast", return_value=blast_frame())
+        self.stub("muscle")
+        fasta = self.root / "unsafe.fasta"
+        fasta.write_text(">../escaped\nMKK\n>../escaped\nMKK\n>/tmp/absolute\nMKK\n")
+        out = self.root / "out"
+        self.quietly(batch.analyze_sequences, fasta, output_dir=str(out))
+        self.assertEqual(len(list(out.glob("*_blast.csv"))), 3)
+        self.assertFalse((self.root / "escaped_blast.csv").exists())
+
+    def test_default_database_is_selected_by_gget(self):
+        blast = self.stub("blast", return_value=blast_frame())
+        self.quietly(batch.analyze_sequences, self.fasta(1), align=False,
+                     output_dir=str(self.root / "out"))
+        self.assertEqual(blast.call_args.kwargs["database"], "default")
+
     def test_alignment_asks_gget_to_write_the_file(self) -> None:
         # gget.muscle returns None, so the alignment must be requested via
         # `out=`; writing the return value would raise TypeError.
@@ -283,8 +299,8 @@ def enrichr_frame(term: str = "p53 signaling pathway") -> pd.DataFrame:
     """An enrichment table shaped like gget.enrichr returns."""
     return pd.DataFrame(
         [
-            {"name": term, "adjusted_p_value": 1e-8},
-            {"name": "apoptosis", "adjusted_p_value": 0.002},
+            {"path_name": term, "adj_p_val": 1e-8},
+            {"path_name": "apoptosis", "adj_p_val": 0.002},
         ]
     )
 
@@ -293,9 +309,9 @@ def archs4_frame() -> pd.DataFrame:
     """A tissue-expression table; 'lung' is the clear maximum."""
     return pd.DataFrame(
         [
-            {"tissue": "liver", "median": 3.5},
-            {"tissue": "lung", "median": 9.25},
-            {"tissue": "kidney", "median": 1.0},
+            {"id": "liver", "median": 3.5},
+            {"id": "lung", "median": 9.25},
+            {"id": "kidney", "median": 1.0},
         ]
     )
 
@@ -303,6 +319,59 @@ def archs4_frame() -> pd.DataFrame:
 class EnrichmentPipelineTests(WorkingDirectoryTestCase):
     #: The five Enrichr categories the script sweeps, in order.
     DATABASES = ["pathway", "ontology", "transcription", "diseases_drugs", "celltypes"]
+    LIBRARIES = ["KEGG_2021_Human", "GO_Biological_Process_2021", "ChEA_2016", "GWAS_Catalog_2019", "PanglaoDB_Augmented_2021"]
+
+    def test_pipeline_consumes_installed_enrichr_adapter_response(self):
+        # Exercise the installed adapter's normalization, not a hand-written
+        # DataFrame mock that could silently invent nonexistent field names.
+        import importlib
+        import json
+        from types import SimpleNamespace
+
+        adapter = importlib.import_module("gget.gget_enrichr")
+        added = SimpleNamespace(ok=True, json=lambda: {"userListId": 123})
+
+        def enrichment_response(url, params, **kwargs):
+            row = [1, "DNA repair", 0.001, 2.0, 12.0, ["TP53"], 0.02, 0, 0]
+            return SimpleNamespace(ok=True, text=json.dumps({params["backgroundType"]: [row]}))
+
+        self.stub("archs4", return_value=archs4_frame())
+        with patch.object(gget, "enrichr", adapter.enrichr), \
+             patch.object(adapter.requests, "post", return_value=added), \
+             patch.object(adapter.requests, "get", side_effect=enrichment_response):
+            self.assertTrue(self.quietly(pipeline.enrichment_pipeline, ["TP53"],
+                                        output_prefix="actual", plot=False))
+        result = pd.read_csv(self.root / "actual_summary.csv")
+        self.assertEqual(result.iloc[0]["Top Term"], "DNA repair")
+        self.assertEqual(result.iloc[0]["Top Adjusted P-value"], 0.02)
+
+    def test_failed_sweep_is_not_reported_as_success(self):
+        self.stub("enrichr", side_effect=RuntimeError("service unavailable"))
+        self.stub("archs4", return_value=archs4_frame())
+        self.assertFalse(self.quietly(pipeline.enrichment_pipeline, ["TP53"], plot=False))
+
+    def test_nonhuman_libraries_require_explicit_names_and_skip_archs4(self):
+        enrichr = self.stub("enrichr", return_value=enrichr_frame())
+        with self.assertRaisesRegex(ValueError, "species-specific"):
+            self.quietly(pipeline.enrichment_pipeline, ["gene"], species="fly")
+        self.quietly(pipeline.enrichment_pipeline, ["gene"], species="fly",
+                     databases=["Example_Fly_Library"], plot=False)
+        self.assertEqual(enrichr.call_args.kwargs["database"], "Example_Fly_Library")
+        self._modules["archs4"].assert_not_called()
+
+    def test_mouse_expression_keeps_mouse_species(self):
+        self.stub("enrichr", return_value=enrichr_frame())
+        archs4 = self.stub("archs4", return_value=archs4_frame())
+        self.quietly(pipeline.enrichment_pipeline, ["Trp53"], species="mouse")
+        self.assertEqual(archs4.call_args.kwargs["species"], "mouse")
+
+    def test_summary_preserves_library_name_and_adjusted_p_value(self):
+        self.stub("enrichr", return_value=enrichr_frame())
+        self.stub("archs4", return_value=archs4_frame())
+        self.quietly(pipeline.enrichment_pipeline, ["TP53"], output_prefix="run")
+        result = pd.read_csv(self.root / "run_summary.csv")
+        self.assertEqual(result.iloc[0]["Database"], "KEGG_2021_Human")
+        self.assertEqual(result.iloc[0]["Top Adjusted P-value"], 1e-8)
 
     def test_every_documented_database_is_queried_once_in_order(self) -> None:
         enrichr = self.stub("enrichr", return_value=enrichr_frame())
@@ -310,7 +379,7 @@ class EnrichmentPipelineTests(WorkingDirectoryTestCase):
         self.quietly(pipeline.enrichment_pipeline, ["TP53"], output_prefix="run")
         self.assertEqual(
             [call.kwargs["database"] for call in enrichr.call_args_list],
-            self.DATABASES,
+            self.LIBRARIES,
         )
 
     def test_species_background_and_plotting_are_forwarded(self) -> None:
@@ -419,19 +488,20 @@ def search_frame(ensembl_id: str = "ENSG00000141510") -> pd.DataFrame:
 
 def info_frame() -> pd.DataFrame:
     return pd.DataFrame(
-        [{"uniprot_id": "P04637", "pdb_id": "1TUP", "gene_name": "TP53"}]
+        [{"uniprot_id": "P04637", "pdb_id": ["1TUP"], "primary_gene_name": "TP53", "ensembl_gene_name": "TP53"}],
+        index=["ENSG00000141510"]
     )
 
 
 def correlation_frame() -> pd.DataFrame:
     return pd.DataFrame(
-        [{"gene_symbol": "MDM2", "correlation": 0.81}]
+        [{"gene_symbol": "MDM2", "pearson_correlation": 0.81}]
     )
 
 
 def diseases_frame() -> pd.DataFrame:
     return pd.DataFrame(
-        [{"disease_name": "Li-Fraumeni syndrome", "overall_score": 0.9}]
+        [{"disease.name": "Li-Fraumeni syndrome", "score": 0.9}]
     )
 
 
@@ -449,7 +519,41 @@ class GeneAnalysisTests(WorkingDirectoryTestCase):
             ),
         }
 
-    def test_the_search_is_scoped_to_the_species_and_a_single_hit(self) -> None:
+    def test_exact_symbol_is_selected_after_unrelated_substring_hits(self):
+        self.stub_everything()
+        wrong = search_frame("ENSG00000000001")
+        wrong["gene_name"] = "TP53BP1"
+        self.stub("search", return_value=pd.concat([wrong, search_frame()], ignore_index=True))
+        self.quietly(gene_analysis.analyze_gene, "TP53")
+        self.assertEqual(self._modules["info"].call_args.args[0], ["ENSG00000141510"])
+
+    def test_ambiguous_exact_symbol_is_rejected(self):
+        self.stub("search", return_value=pd.concat([search_frame(), search_frame("OTHER")]))
+        self.assertFalse(self.quietly(gene_analysis.analyze_gene, "TP53"))
+        self._modules["info"].assert_not_called()
+
+    def test_current_service_fields_are_displayed_without_warning(self):
+        self.stub_everything()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            gene_analysis.analyze_gene("TP53")
+        self.assertIn("MDM2: r = 0.810", output.getvalue())
+        self.assertIn("Li-Fraumeni syndrome: score = 0.900", output.getvalue())
+        self.assertNotIn("Warning:", output.getvalue())
+        info = pd.read_csv(self.root / "tp53_info.csv")
+        self.assertEqual(info.loc[0, "query_ensembl_id"], "ENSG00000141510")
+
+    def test_mouse_queries_do_not_use_human_association_or_correlation_services(self):
+        self.stub_everything()
+        found = search_frame("ENSMUSG00000059552")
+        found["gene_name"] = "Trp53"
+        self.stub("search", return_value=found)
+        archs4 = self.stub("archs4", return_value=archs4_frame())
+        self.quietly(gene_analysis.analyze_gene, "Trp53", species="mus_musculus")
+        archs4.assert_called_once_with("Trp53", which="tissue", species="mouse")
+        self._modules["opentargets"].assert_not_called()
+
+    def test_the_search_is_scoped_to_species_without_truncating_exact_match_candidates(self) -> None:
         stubs = self.stub_everything()
         self.assertTrue(
             self.quietly(gene_analysis.analyze_gene, "TP53", "homo_sapiens")
@@ -458,7 +562,7 @@ class GeneAnalysisTests(WorkingDirectoryTestCase):
         call = stubs["search"].call_args
         self.assertEqual(call.args[0], ["TP53"])
         self.assertEqual(call.kwargs["species"], "homo_sapiens")
-        self.assertEqual(call.kwargs["limit"], 1)
+        self.assertNotIn("limit", call.kwargs)
 
     def test_a_gene_that_does_not_exist_stops_before_any_other_request(self) -> None:
         # Without the early return the Ensembl ID lookup would index an empty
@@ -495,6 +599,13 @@ class GeneAnalysisTests(WorkingDirectoryTestCase):
         self.quietly(gene_analysis.analyze_gene, "TP53")
         text = (self.root / "tp53_nucleotide.fasta").read_text(encoding="utf-8")
         self.assertEqual(text, ">ENSG00000141510\nATGGAG\n")
+
+    def test_missing_sequences_do_not_create_empty_fasta_outputs(self):
+        self.stub_everything()
+        self.stub("seq", return_value=None)
+        self.assertFalse(self.quietly(gene_analysis.analyze_gene, "TP53"))
+        self.assertFalse((self.root / "tp53_nucleotide.fasta").exists())
+        self._modules["archs4"].assert_not_called()
 
     def test_an_already_joined_string_is_written_unchanged(self) -> None:
         # Older gget releases returned one string; both shapes must work.

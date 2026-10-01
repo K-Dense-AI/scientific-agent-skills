@@ -1,7 +1,7 @@
 # Alpha Vantage API Reference
 
 ## Overview
-Alpha Vantage provides free APIs for real-time and historical stock prices, forex rates, cryptocurrency data, technical indicators, and fundamental data (earnings, balance sheets, income statements). Covers global equities, ETFs, mutual funds, and commodities.
+Alpha Vantage provides APIs with free and paid entitlements for current and historical stock prices, forex rates, cryptocurrency data, technical indicators, and fundamental data (earnings, balance sheets, income statements). Covers global equities, ETFs, mutual funds, and commodities.
 
 ## Base URL
 ```
@@ -15,7 +15,7 @@ All requests use a single endpoint with `function` parameter to select the data 
 - Pass as query parameter: `&apikey=YOUR_KEY`
 
 ## Rate Limits
-- **Free tier:** 25 requests per day. 5 calls per minute (as of late 2024; previously was 5/min + 500/day).
+- **Free tier:** 25 requests per day for available free endpoints. Entitlement and per-minute quotas vary by plan; do not assume every documented function is free.
 - **Premium tiers** available for higher limits (30, 75, 150+ calls/min).
 - Exceeding limits returns a polite JSON message, not an error code.
 
@@ -124,6 +124,10 @@ https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=microsoft&apik
 ```
 GET /query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=YOUR_KEY
 ```
+
+The default quote updates at end of day. Real-time and delayed US quotes require
+the relevant entitlement; intraday, daily-adjusted and some indicators (including
+MACD) are premium. Check function-specific documentation before choosing a call.
 
 Returns latest price, volume, change, change percent for a single symbol.
 
@@ -257,5 +261,5 @@ GET /query?function=TREASURY_YIELD&interval=monthly&maturity=10year&apikey=YOUR_
 - Time series data is keyed by date/timestamp strings, not arrays.
 - When rate limited, the API returns: `{"Note": "Thank you for using Alpha Vantage! ..."}`
 - For `outputsize=full`, daily data goes back 20+ years.
-- The `datatype=csv` option returns simpler CSV output for any endpoint.
+- `datatype=csv` is available only on endpoints that document it. Inspect JSON `Information`, `Note`, and `Error Message` fields even after HTTP 200.
 - Free tier is very restrictive (25/day). For production use, a premium key is recommended.

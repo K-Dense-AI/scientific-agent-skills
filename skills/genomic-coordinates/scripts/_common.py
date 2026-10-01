@@ -103,7 +103,7 @@ _REGION_RE = re.compile(
     r"^\s*(?:\{(?P<braced>[^}]+)\}|(?P<contig>[^\s:]+))"
     r"(?::(?P<start>[\d,_]+)"
     r"(?:\s*(?:-|\.\.)\s*(?P<end>[\d,_]+))?)?"
-    r"(?::(?P<strand>[-+.]))?\s*$"
+    r"(?::(?P<strand>-1|1|[-+.]))?\s*$"
 )
 
 
@@ -150,12 +150,20 @@ def parse_region(text: str, conv: Convention) -> tuple[str, int, int, str | None
             "write the end explicitly"
         )
     end = int(m.group("end").replace(",", "").replace("_", ""))
-    return contig, start, end, m.group("strand")
+    strand = m.group("strand")
+    if conv.name == "ensembl" and strand not in {None, "1", "-1", "+", "-"}:
+        raise ValueError("Ensembl REST strand must be 1 or -1")
+    return contig, start, end, strand
 
 
-def format_region(contig: str, start: int, end: int, strand: str | None = None) -> str:
+def format_region(contig: str, start: int, end: int, strand: str | None = None,
+                  convention: str = "samtools") -> str:
     """Render a region string, brace-quoting names that would otherwise be
     ambiguous (GRCh38 HLA contigs contain colons)."""
+    if convention == "ensembl":
+        direction = {"+": "1", "-": "-1", "1": "1", "-1": "-1"}.get(strand)
+        text = f"{contig}:{start}..{end}"
+        return f"{text}:{direction}" if direction else text
     name = f"{{{contig}}}" if ":" in contig else contig
     text = f"{name}:{start}-{end}"
     return f"{text}:{strand}" if strand else text
@@ -210,10 +218,9 @@ class ReferenceError(Exception):
 class Reference:
     """Random access to a FASTA, through its ``.fai`` index when one exists.
 
-    With an index, only the bases actually asked for are read. Without one the
-    contig is read into memory on first use, which is fine for the small
-    references these scripts are usually pointed at and slow but correct for a
-    whole genome.
+    Supports uncompressed FASTA only. With an index, only the requested bases
+    are read. Without one the whole FASTA is loaded into memory at construction.
+    Contig names must match exactly; a naming alias is not sequence identity.
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -222,14 +229,14 @@ class Reference:
             raise ReferenceError(f"reference not found: {self.path}")
         self._index: dict[str, tuple[int, int, int, int]] = {}
         self._cache: dict[str, str] = {}
-        self._alias: dict[str, str] = {}
+        with self.path.open("rb") as handle:
+            if handle.read(2) == b"\x1f\x8b":
+                raise ReferenceError("compressed FASTA is unsupported; use an uncompressed FASTA")
         fai = Path(str(self.path) + ".fai")
         if fai.exists():
             self._load_fai(fai)
         else:
             self._load_all()
-        for name in list(self._index) + list(self._cache):
-            self._alias.setdefault(canonical_contig(name), name)
 
     def _load_fai(self, fai: Path) -> None:
         for line in fai.read_text().splitlines():
@@ -239,7 +246,13 @@ class Reference:
             if len(parts) < 5:
                 raise ReferenceError(f"malformed .fai line: {line!r}")
             name, length, offset, linebases, linewidth = parts[:5]
-            self._index[name] = (int(length), int(offset), int(linebases), int(linewidth))
+            try:
+                meta = tuple(map(int, (length, offset, linebases, linewidth)))
+            except ValueError as exc:
+                raise ReferenceError(f"non-integer .fai fields for {name}") from exc
+            if name in self._index or meta[0] <= 0 or meta[1] < 0 or meta[2] <= 0 or meta[3] < meta[2]:
+                raise ReferenceError(f"duplicate name or invalid .fai geometry for {name}")
+            self._index[name] = meta
 
     def _load_all(self) -> None:
         name = None
@@ -249,26 +262,28 @@ class Reference:
                 if line.startswith(">"):
                     if name is not None:
                         self._cache[name] = "".join(chunks)
-                    name = line[1:].split()[0]
+                    names = line[1:].split()
+                    if not names or names[0] in self._cache:
+                        raise ReferenceError("empty or duplicate FASTA sequence name")
+                    name = names[0]
                     chunks = []
                 elif name is not None:
                     chunks.append(line.strip())
         if name is not None:
             self._cache[name] = "".join(chunks)
+        if not self._cache:
+            raise ReferenceError("FASTA contains no sequences")
 
     def _resolve(self, contig: str) -> str:
         if contig in self._index or contig in self._cache:
             return contig
-        alias = self._alias.get(canonical_contig(contig))
-        if alias is None:
-            available = sorted(set(self._index) | set(self._cache))
-            shown = ", ".join(available[:8]) + ("..." if len(available) > 8 else "")
-            raise ReferenceError(
-                f"contig {contig!r} is not in {self.path.name} (has: {shown}). "
-                "A missing contig usually means a chr-prefix mismatch or the wrong "
-                "assembly -- run check_contigs.py before going further."
-            )
-        return alias
+        available = sorted(set(self._index) | set(self._cache))
+        shown = ", ".join(available[:8]) + ("..." if len(available) > 8 else "")
+        raise ReferenceError(
+            f"contig {contig!r} is not in {self.path.name} (has: {shown}). "
+            "Exact names are required. Check aliases and assembly with check_contigs.py "
+            "before explicitly renaming inputs."
+        )
 
     @property
     def contigs(self) -> dict[str, int]:
@@ -300,7 +315,10 @@ class Reference:
             stop = offset + (end0 // linebases) * linewidth + (end0 % linebases)
             handle.seek(begin)
             raw = handle.read(stop - begin)
-        return re.sub(rb"\s", b"", raw).decode("ascii").upper()
+        sequence = re.sub(rb"\s", b"", raw).decode("ascii").upper()
+        if len(sequence) != end0 - start0 or set(sequence) - set("ACGTRYSWKMBDHVN"):
+            raise ReferenceError("FASTA/index disagree; rebuild the .fai from this FASTA")
+        return sequence
 
 
 # --------------------------------------------------------------------------
@@ -328,6 +346,8 @@ def iter_data_lines(path: str | Path):
     with Path(path).open() as handle:
         for lineno, line in enumerate(handle, start=1):
             stripped = line.rstrip("\n\r")
+            if stripped == "##FASTA":
+                break
             if not stripped.strip():
                 continue
             if stripped.startswith(("#", "track ", "browser ", "@")):

@@ -9,7 +9,7 @@ data at EBI." It is not a paper index.
 Find the paper in PubMed / Europe PMC, then come here with an accession or
 a keyword that appears in the study record.
 
-All figures below verified 2026-09-10.
+The dated page-mode examples below are historical observations. Cursor pagination was verified against current help and a public two-page query on 2026-09-30.
 
 ## Base URL
 
@@ -45,7 +45,7 @@ Verified: HTTP 200 with
 | `pageSize` | 2 | |
 | `totalHits` | 4195, then 4480 on a later call | **Approximate** |
 | `isTotalHitsExact` | `false` | Do not reconcile as if this were Europe PMC `hitCount` |
-| `nextCursor` | `null` | Page with `page=`, not a cursor |
+| `nextCursor` | `null` in page mode | Start with `pagination=cursor` for a cursor walk |
 | `hits` | 2 study summaries | |
 
 A hit has `accession`, `type` (`study`), `title`, `author`, `files` (count),
@@ -56,8 +56,22 @@ be an empty string.
 `isTotalHitsExact` stayed false. Report "about N studies" and the page you
 fetched. Do not claim a complete walk against that number.
 
-Page 2 (`page=2&pageSize=2`) returned different accessions and still
-`nextCursor: null`. Keep incrementing `page` until `hits` is empty.
+Use `page=2` for normal browsing. For exhaustive retrieval, use the documented
+cursor mode:
+
+```bash
+curl -fsS --get 'https://www.ebi.ac.uk/biostudies/api/v1/search' \
+  --data-urlencode 'query=organoid' \
+  --data-urlencode 'pagination=cursor' \
+  --data-urlencode 'pageSize=2'
+```
+
+Send the opaque returned `nextCursor` as `cursor` on the next request,
+keeping the same query and page size. Stop at `nextCursor: null`; do not
+construct or decode cursors, or stop based on an approximate `totalHits`.
+The official example uses `pageSize=1000` for bulk walks; use a small bound
+for interactive work. This traverses the live index, not a frozen snapshot,
+so record access times and deduplicate accessions.
 
 ### 2. One study
 
@@ -103,4 +117,8 @@ A 404 means no such public accession.
 | Treated `totalHits` as exact | Count drifts; `isTotalHitsExact` is false | Say "about N"; do not exit-4 reconcile |
 | Expected search fields on `/studies/{acc}` | No `title`, no `files` count | Read `attributes` and `section` |
 | Used BioStudies as PubMed | Studies, not articles | Search literature APIs first |
-| Waited for `nextCursor` | It stays `null` | Use `page` |
+| Expected a cursor in page mode | `nextCursor` is null | Start with `pagination=cursor`; then send `cursor` |
+
+## Official sources reviewed 2026-09-30
+
+- https://www.ebi.ac.uk/biostudies/help#api

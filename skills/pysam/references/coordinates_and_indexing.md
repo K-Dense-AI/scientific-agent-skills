@@ -1,12 +1,12 @@
 # Coordinates and Indexing
 
 Coordinate mistakes and stale indexes are the most common causes of plausible
-but wrong genomic results. This reference targets pysam 0.24.0.
+but wrong genomic results. This reference targets pysam 0.24.1.
 
 ## The Pysam Rule
 
-For Python API numeric arguments and properties, pysam uses **0-based,
-half-open** intervals:
+For region API numeric arguments and span properties such as `reference_start`
+and `VariantRecord.start/stop`, pysam uses **0-based, half-open** intervals:
 
 ```text
 [start, stop)
@@ -15,7 +15,8 @@ half-open** intervals:
 The first base is `0`; `start` is included and `stop` is excluded. Interval
 length is `stop - start`.
 
-The main exception is a textual samtools-style region string, which is
+`VariantRecord.pos` preserves the VCF 1-based POS field. A textual
+samtools-style region string is also
 **1-based, inclusive**:
 
 ```text
@@ -51,7 +52,14 @@ Do not treat numeric `VariantFile.fetch()` arguments as VCF text coordinates.
 
 For VCF structural variants, symbolic alleles, breakends, and records with
 `INFO/END`, use `VariantRecord.start` and `VariantRecord.stop` rather than
-reconstructing the interval from `len(REF)`.
+reconstructing the interval from `len(REF)`. This is the indexed local record
+span, not a complete biological event: BND mate loci, confidence intervals,
+per-allele SVLEN, and sample-specific lengths require their own interpretation.
+VCF 4.5 deprecates INFO/END in favor of computed end semantics.
+
+SAM text POS and CRAM absolute alignment starts are 1-based; BAM/BCF binary
+positions are 0-based. Pysam translates the stored encodings; never apply a
+second conversion to its numeric span properties.
 
 ## Single Positions
 
@@ -98,8 +106,9 @@ Pysam parser objects normalize coordinates:
 
 - `asBed().start` / `.end`: 0-based, half-open
 - `asGTF().start` / `.end`: exposed in Python coordinate convention
-- `asVCF().pos`: parser-specific lightweight field; use `VariantFile` for full
-  VCF record semantics
+- `asVCF().pos`: **0-based**, unlike 1-based `VariantRecord.pos`; use
+  `VariantFile` for full VCF record semantics
+- `asGFF3().start` / `.end`: 0-based, half-open
 
 When creating a custom tabix index:
 
@@ -230,8 +239,9 @@ pysam.bcftools.index(
 )
 ```
 
-Tabix tables must be sorted before `tabix_index()`. The Python function does
-not verify sort order.
+Tabix tables must be sorted before `tabix_index()`. The Python wrapper does
+not sort or perform a full preflight; HTSlib rejects detected ordering errors
+while building the index. Treat any indexing failure as invalid output.
 
 ## Safe Tabix Creation
 
@@ -289,8 +299,9 @@ with pysam.AlignmentFile("sample.bam", "rb") as bam:
     bam.check_index()
 ```
 
-Variant and tabix constructors open a discovered index automatically; a region
-fetch fails when none is available. Reopen output and test known regions rather
+Variant constructors discover TBI/CSI indexes. `TabixFile` defaults only to
+`<filename>.tbi`; pass `index="<filename>.csi"` for CSI. Region fetches require
+an index. Reopen output and test known regions rather
 than checking only that an index filename exists.
 
 ## Boundary Tests

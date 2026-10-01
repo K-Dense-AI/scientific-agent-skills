@@ -61,6 +61,9 @@ _COMMAND_PATH = re.compile(
 _PERSONAL_PATH = re.compile(
     r"/(?:mnt/[a-z]/Users|home|Users)/(?!<|\$|\{)([A-Za-z0-9._-]+)/"
 )
+# A public website path can legitimately contain /home/<section>/ or /Users/.
+# Stop before query/fragment data, which may itself contain a local filename.
+_HTTP_URL_PATH = re.compile(r"https?://[^/\s<>\"'`?#]+[^\s<>\"'`?#]*", re.IGNORECASE)
 
 # Service and platform accounts that legitimately appear in documentation --
 # `/home/dnanexus/` is where a DNAnexus worker runs, not somebody's laptop --
@@ -422,7 +425,10 @@ def personal_path_problems(skill: Path) -> list[str]:
         for number, line in enumerate(
             document.read_text(encoding="utf-8", errors="replace").splitlines(), 1
         ):
+            web_paths = [match.span() for match in _HTTP_URL_PATH.finditer(line)]
             for match in _PERSONAL_PATH.finditer(line):
+                if any(start <= match.start() < end for start, end in web_paths):
+                    continue
                 if match.group(1).lower() in _IMPERSONAL_ACCOUNTS:
                     continue
                 problems.append(

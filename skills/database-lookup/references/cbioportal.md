@@ -22,7 +22,7 @@ Most list endpoints support these:
 |---|---|---|---|
 | `projection` | string | Detail level: `ID`, `SUMMARY`, `DETAILED`, `META` | `SUMMARY` |
 | `pageNumber` | int | Zero-based page index | `0` |
-| `pageSize` | int | Results per page | `10000000` |
+| `pageSize` | int | Results per page; explicitly request a bounded size | Route-dependent, often `10000000` |
 | `sortBy` | string | Property to sort by | varies |
 | `direction` | string | `ASC` or `DESC` | `ASC` |
 
@@ -94,8 +94,8 @@ GET https://www.cbioportal.org/api/studies/brca_tcga/molecular-profiles
 Parameters for GET:
 | Parameter | Type | Description |
 |---|---|---|
-| `sampleListId` | string | Sample list to query (e.g. `brca_tcga_all`) |
-| `entrezGeneId` | int | Filter by gene |
+| `sampleListId` | string | Required: sample list to query (e.g. `brca_tcga_all`) |
+| `entrezGeneId` | int | Required: filter by gene |
 | `projection` | string | `SUMMARY`, `DETAILED`, `ID`, `META` |
 
 Example — TP53 mutations in TCGA breast cancer:
@@ -103,7 +103,7 @@ Example — TP53 mutations in TCGA breast cancer:
 GET https://www.cbioportal.org/api/molecular-profiles/brca_tcga_mutations/mutations?sampleListId=brca_tcga_all&entrezGeneId=7157&projection=DETAILED
 ```
 
-POST body for multi-gene fetch:
+POST body for `/molecular-profiles/{profileId}/mutations/fetch` (multi-gene, single profile; `/mutations/fetch` uses a different multi-study schema):
 ```json
 {
   "sampleListId": "brca_tcga_all",
@@ -119,7 +119,6 @@ Response fields: `entrezGeneId`, `sampleId`, `patientId`, `proteinChange`, `muta
 |---|---|---|
 | GET | `/molecular-profiles/{profileId}/discrete-copy-number` | CNA data |
 | POST | `/molecular-profiles/{profileId}/discrete-copy-number/fetch` | Filtered CNA query |
-| POST | `/discrete-copy-number/fetch` | Multi-profile CNA fetch |
 
 ### Molecular Data (expression, methylation)
 
@@ -171,12 +170,9 @@ GET https://www.cbioportal.org/api/studies/brca_tcga/clinical-data?clinicalDataT
 | GET | `/gene-panels/{genePanelId}` | Panel details with gene list |
 | POST | `/gene-panel-data/fetch` | Which panels cover which samples |
 
-### Treatments
+### API surface and versions
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/treatments/patient` | Patient-level treatment data |
-| POST | `/treatments/sample` | Sample-level treatment data |
+Use the public OpenAPI schema at `https://www.cbioportal.org/api/v3/api-docs/public` for the selected instance. The current public schema does not expose `/treatments/patient`, `/treatments/sample`, or a global `/discrete-copy-number/fetch`; do not infer these routes from internal UI requests or older installations.
 
 ### System
 

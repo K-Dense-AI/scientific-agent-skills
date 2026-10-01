@@ -16,6 +16,7 @@ import re
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,7 @@ pytest.importorskip("defusedxml", reason="pptx scripts need defusedxml")
 
 import add_slide  # noqa: E402
 import clean  # noqa: E402
+import thumbnail  # noqa: E402
 
 OfficeTests = skill_contract.office.office_test_case(SKILL_ROOT)
 CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
@@ -52,7 +54,9 @@ class Deck:
 
         total = count + orphans
         for number in range(1, total + 1):
-            (self.slides / f"slide{number}.xml").write_text("<p:sld/>", encoding="utf-8")
+            (self.slides / f"slide{number}.xml").write_text(
+                f'<p:sld xmlns:p="{clean.PRESENTATION_NS}"/>', encoding="utf-8"
+            )
             (self.slides / "_rels" / f"slide{number}.xml.rels").write_text(
                 f'<Relationships xmlns="{RELATIONSHIPS_NS}"/>', encoding="utf-8"
             )
@@ -75,6 +79,22 @@ class Deck:
             f"<p:sldIdLst>{slide_ids}</p:sldIdLst></p:presentation>",
             encoding="utf-8",
         )
+        overrides = "".join(
+            f'<Override PartName="/ppt/slides/slide{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
+            for n in range(1, total + 1)
+        )
+        (root / "[Content_Types].xml").write_text(
+            f'<Types xmlns="{clean.CONTENT_TYPES_NS}">{overrides}</Types>', encoding="utf-8"
+        )
+
+    def alternate_prefixes(self) -> None:
+        for path in (self.root / "ppt/presentation.xml", self.root / "ppt/_rels/presentation.xml.rels", self.root / "[Content_Types].xml"):
+            xml = path.read_text().replace("<p:", "<pres:").replace("</p:", "</pres:").replace("xmlns:p=", "xmlns:pres=")
+            xml = xml.replace("r:id", "rel:id").replace("xmlns:r=", "xmlns:rel=")
+            xml = xml.replace("<Relationships xmlns=", "<pkg:Relationships xmlns:pkg=")
+            xml = xml.replace("</Relationships>", "</pkg:Relationships>").replace("<Relationship ", "<pkg:Relationship ")
+            xml = xml.replace("<Types xmlns=", "<ct:Types xmlns:ct=").replace("</Types>", "</ct:Types>").replace("<Override ", "<ct:Override ")
+            path.write_text(xml.replace('"', "'"), encoding="utf-8")
 
 
 class DeckTestCase(unittest.TestCase):
@@ -136,15 +156,38 @@ class SlideIdTests(unittest.TestCase):
             {"chart", "diagramData", "oleObject", "package"},
         )
 
-    def test_the_relationship_pattern_matches_both_element_forms(self) -> None:
-        both = (
-            '<Relationship Id="rId1" Target="a.xml"/>'
-            '<Relationship Id="rId2" Target="b.xml"></Relationship>'
-        )
-        self.assertEqual(len(add_slide.RELATIONSHIP_RE.findall(both)), 2)
-
 
 class OrphanDetectionTests(DeckTestCase):
+    def test_alternate_prefixes_and_single_quotes_preserve_registered_slides(self) -> None:
+        deck = Deck(self.root, count=2, orphans=1)
+        deck.alternate_prefixes()
+        clean.clean_unused_files(self.root)
+        self.assertEqual(sorted(p.name for p in deck.slides.glob("*.xml")), ["slide1.xml", "slide2.xml"])
+        self.assertNotIn("slide3.xml", (self.root / "[Content_Types].xml").read_text())
+
+    def test_one_missing_slide_relationship_refuses_even_when_others_resolve(self) -> None:
+        deck = Deck(self.root, count=2, orphans=1)
+        path = self.root / "ppt/presentation.xml"
+        path.write_text(path.read_text().replace('r:id="rId2"', 'r:id="missing"'))
+        with self.assertRaises(clean.RefusedToClean):
+            clean.clean_unused_files(self.root)
+        self.assertEqual(len(list(deck.slides.glob("*.xml"))), 3)
+
+    def test_missing_presentation_metadata_refuses_before_deletion(self) -> None:
+        deck = Deck(self.root, count=2)
+        (self.root / "ppt/presentation.xml").unlink()
+        with self.assertRaises(clean.RefusedToClean):
+            clean.clean_unused_files(self.root)
+        self.assertEqual(len(list(deck.slides.glob("*.xml"))), 2)
+
+    def test_malformed_content_types_refuses_before_deletion(self) -> None:
+        from xml.parsers.expat import ExpatError
+        deck = Deck(self.root, count=1, orphans=1)
+        (self.root / "[Content_Types].xml").write_text("<Types>")
+        with self.assertRaises(ExpatError):
+            clean.clean_unused_files(self.root)
+        self.assertEqual(len(list(deck.slides.glob("*.xml"))), 2)
+
     def test_registered_slides_are_reported_as_referenced(self) -> None:
         Deck(self.root, count=3)
         self.assertEqual(
@@ -220,6 +263,58 @@ class TrashRemovalTests(DeckTestCase):
 
     def test_a_package_without_one_is_untouched(self) -> None:
         self.assertEqual(clean.remove_trash_directory(self.root), [])
+
+
+class PackageEditingTests(DeckTestCase):
+    def test_duplicate_with_alternate_prefixes_registers_and_removes_notes(self) -> None:
+        deck = Deck(self.root, count=2)
+        deck.alternate_prefixes()
+        rels = deck.slides / "_rels/slide1.xml.rels"
+        rels.write_text(
+            f'<pkg:Relationships xmlns:pkg="{RELATIONSHIPS_NS}">'
+            f'<pkg:Relationship Id="rId1" Type="{clean.OFFICE_REL_NS}/notesSlide" Target="../notesSlides/notesSlide1.xml"/>'
+            f'<pkg:Relationship Id="rId2" Type="{clean.OFFICE_REL_NS}/chart" Target="../charts/chart1.xml"/>'
+            '</pkg:Relationships>'
+        )
+        created = add_slide.add_slide(self.root, "slide1.xml", after="slide1.xml")
+        self.assertEqual(created, "slide3.xml")
+        dom = add_slide._read_xml(self.root / "ppt/presentation.xml", clean.PRESENTATION_NS, "presentation")
+        self.assertEqual([n.getAttribute("id") for n in add_slide._slide_ids(dom)], ["256", "258", "257"])
+        copied_rels = (deck.slides / "_rels/slide3.xml.rels").read_text()
+        self.assertNotIn("notesSlide", copied_rels)
+        self.assertIn("../charts/chart1.xml", copied_rels)
+        self.assertEqual(clean.get_slides_in_sldidlst(self.root), {"slide1.xml", "slide2.xml", "slide3.xml"})
+
+    def test_bad_content_types_leaves_no_new_slide(self) -> None:
+        from xml.parsers.expat import ExpatError
+        deck = Deck(self.root, count=1)
+        (self.root / "[Content_Types].xml").write_text("<Types>")
+        with self.assertRaises(ExpatError):
+            add_slide.add_slide(self.root, "slide1.xml")
+        self.assertEqual([p.name for p in deck.slides.glob("*.xml")], ["slide1.xml"])
+
+    def test_thumbnail_order_and_hidden_status_follow_namespaced_ids(self) -> None:
+        deck = Deck(self.root, count=2)
+        deck.alternate_prefixes()
+        slide = deck.slides / "slide2.xml"
+        slide.write_text(slide.read_text().replace("/>", ' show="0"/>'))
+        package = self.root / "test.pptx"
+        with zipfile.ZipFile(package, "w") as zf:
+            for file in self.root.rglob("*.xml"):
+                zf.write(file, file.relative_to(self.root))
+            for file in self.root.rglob("*.rels"):
+                zf.write(file, file.relative_to(self.root))
+        self.assertEqual(thumbnail.get_slide_info(package), [
+            {"name": "slide1.xml", "hidden": False}, {"name": "slide2.xml", "hidden": True},
+        ])
+
+    def test_thumbnail_refuses_mismatched_render_count(self) -> None:
+        with self.assertRaisesRegex(ValueError, "mislabeled"):
+            thumbnail.build_slide_list([{"name": "slide1.xml", "hidden": False}], [], self.root)
+
+    def test_thumbnail_rejects_nonpositive_columns(self) -> None:
+        with self.assertRaises(ValueError):
+            thumbnail.create_grids([], 0, 300, self.root / "grid.jpg")
 
 
 class ThumbnailConstantTests(unittest.TestCase):

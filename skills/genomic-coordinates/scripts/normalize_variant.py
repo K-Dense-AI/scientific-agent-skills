@@ -11,13 +11,15 @@ left-alignment procedure of Tan, Abecasis & Kang (2015), which is what
     python3 normalize_variant.py --fasta ref.fa --input variants.vcf
     python3 normalize_variant.py --fasta ref.fa --compare chr1:7:CAC:C chr1:3:CAC:C
 
-Exit codes: 0 all records verified against the reference, 1 at least one REF
-mismatch or invalid record, 2 usage or reference error.
+Exit codes: 0 no literal-allele failure (may include unvalidated nonliteral
+pass-through rows), 1 mismatch, invalid/incomplete normalization, or an
+unverifiable comparison, 2 usage or reference error. Inspect ref_check per row.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -35,8 +37,16 @@ COLUMNS = [
     "detail",
 ]
 
-SYMBOLIC_PREFIXES = ("<", "*", ".")
 DEFAULT_WINDOW = 1000
+BASES = set("ACGTN")
+
+
+def special_alt(alt: str) -> bool:
+    """Recognize nonliteral alleles; pass-through is not structural validation."""
+    return (alt in {"*", "."}
+            or re.fullmatch(r"<[^<>\s,]+>", alt) is not None
+            or "[" in alt or "]" in alt
+            or (len(alt) > 1 and (alt.startswith(".") or alt.endswith("."))))
 
 
 class VariantError(ValueError):
@@ -48,9 +58,9 @@ def classify(ref: str, alt: str) -> str:
         return "snv"
     if len(ref) == len(alt):
         return "mnv"
-    if len(ref) == 1 and len(alt) > 1 and alt.startswith(ref):
+    if len(ref) == 1 and len(alt) > 1 and (alt.startswith(ref) or alt.endswith(ref)):
         return "insertion"
-    if len(alt) == 1 and len(ref) > 1 and ref.startswith(alt):
+    if len(alt) == 1 and len(ref) > 1 and (ref.startswith(alt) or ref.endswith(alt)):
         return "deletion"
     return "complex"
 
@@ -73,9 +83,13 @@ def normalize(
     """
     if pos < 1:
         raise VariantError(f"POS {pos} is not 1-based; VCF positions start at 1")
-    if not ref:
-        raise VariantError("REF is empty; VCF requires at least the anchor base")
-    if alt.startswith(SYMBOLIC_PREFIXES):
+    if window < 1:
+        raise VariantError("window must be a positive integer")
+    if not ref or set(ref.upper()) - BASES:
+        raise VariantError("REF must be a non-empty ACGTN sequence")
+    if "," in alt:
+        raise VariantError("multiple ALT alleles: use --split before allele-wise normalization")
+    if special_alt(alt):
         return {
             "pos": pos,
             "ref": ref,
@@ -83,8 +97,10 @@ def normalize(
             "shifted": 0,
             "ref_check": "skipped",
             "type": "symbolic",
-            "detail": "symbolic, missing, or spanning-deletion ALT: left as written",
+            "detail": "nonliteral ALT: passed through without REF, structure, or equivalence validation",
         }
+    if not alt or set(alt.upper()) - BASES:
+        raise VariantError("ALT must be a non-empty ACGTN sequence or a supported nonliteral allele")
 
     ref, alt = ref.upper(), alt.upper()
     observed = reference.fetch(contig, pos - 1, pos - 1 + len(ref))
@@ -99,7 +115,7 @@ def normalize(
             "detail": (
                 f"REF says {ref} but the reference has {observed or '(past contig end)'} "
                 f"at {contig}:{pos}. Do not normalise this record -- the variants and "
-                "the FASTA are different assemblies, or the coordinates are off by one"
+                "the FASTA may differ in assembly, sequence, orientation, or coordinates"
             ),
         }
     if ref == alt:
@@ -107,15 +123,19 @@ def normalize(
 
     start_pos = pos
     limit = max(0, pos - 1 - window)
+    incomplete = False
 
     # Right-trim and left-extend until the alleles no longer share a final base.
     while ref[-1] == alt[-1]:
         if len(ref) == 1 or len(alt) == 1:
             if pos - 1 <= limit:
+                incomplete = pos > 1
                 break
             base = reference.fetch(contig, pos - 2, pos - 1)
             if not base:
                 break
+            if base not in BASES:
+                raise VariantError("left alignment reached an ambiguous reference base outside ACGTN")
             pos -= 1
             ref, alt = base + ref, base + alt
         ref, alt = ref[:-1], alt[:-1]
@@ -127,7 +147,7 @@ def normalize(
 
     shifted = start_pos - pos
     detail = ""
-    if shifted and pos - 1 <= limit:
+    if incomplete:
         detail = (
             f"left-alignment stopped at the {window} bp window; the repeat may extend "
             "further. Re-run with a larger --window to confirm"
@@ -137,7 +157,7 @@ def normalize(
         "ref": ref,
         "alt": alt,
         "shifted": shifted,
-        "ref_check": "ok",
+        "ref_check": "incomplete" if incomplete else "ok",
         "type": classify(ref, alt),
         "detail": detail,
     }
@@ -145,7 +165,7 @@ def normalize(
 
 def parse_spec(text: str) -> tuple[str, int, str, str]:
     """Parse ``contig:pos:ref:alt``."""
-    parts = text.split(":")
+    parts = text.rsplit(":", 3)
     if len(parts) != 4:
         raise VariantError(f"expected contig:pos:ref:alt, got {text!r}")
     contig, pos, ref, alt = parts
@@ -197,7 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="split comma-separated ALTs into one record each before normalising",
     )
-    parser.add_argument("--window", type=int, default=DEFAULT_WINDOW)
+    parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
+                        help="maximum left shift (default 1000); hitting it is incomplete and exits 1")
     parser.add_argument("--format", choices=("tsv", "json"), default="tsv")
     parser.add_argument("-o", "--output")
     return parser
@@ -240,6 +261,10 @@ def run(records, reference, window) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.window < 1:
+        parser.error("--window must be positive")
+    if args.compare and len(args.compare) < 2:
+        parser.error("--compare needs at least two records")
 
     try:
         reference = Reference(args.fasta)
@@ -283,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
-    return 1 if any(row["ref_check"] in {"MISMATCH", "error"} for row in rows) else 0
+    return 1 if any(row["ref_check"] in {"MISMATCH", "error", "incomplete"} for row in rows) else 0
 
 
 if __name__ == "__main__":

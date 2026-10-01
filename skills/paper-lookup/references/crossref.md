@@ -10,16 +10,16 @@ https://api.crossref.org
 
 ## Authentication
 
-None required. Add `mailto=you@example.com` to get into the **polite pool** (2x faster rate limits).
+None required. Add `mailto=you@example.com` to get into the **polite pool** (higher list and single-record limits).
 
 ## Rate Limits
 
-| Pool | Rate | Concurrency |
-|------|------|-------------|
-| Public (no mailto) | 5 req/sec | 1 concurrent |
-| Polite (with mailto) | 10 req/sec | 3 concurrent |
+| Pool | Single record | List/search | Concurrency |
+|------|---------------|-------------|-------------|
+| Public (no mailto) | 5 req/sec | 1 req/sec | 1 |
+| Polite (with mailto) | 10 req/sec | 3 req/sec | 3 |
 
-HTTP 429 = temporarily blocked.
+These limits took effect 2025-12-01. Inspect rate-limit headers and honor `Retry-After`; HTTP 429 is a throttle, not an empty search.
 
 ## Key Endpoints
 
@@ -135,7 +135,8 @@ GET /members/{id}/works?rows={n}
 1. First request: `?cursor=*&rows=100`
 2. Response includes `next-cursor`
 3. Next request: `?cursor={next-cursor-value}&rows=100`
-4. Cursors expire after 5 minutes
+4. Stop when `message.items` is shorter than requested `rows` (or empty). A cursor can remain present on the last page; its presence alone does not mean more records.
+5. Cursors expire after 5 minutes
 
 ## Response Format
 
@@ -179,3 +180,9 @@ GET /members/{id}/works?rows={n}
 ```
 
 Note: `title` and `container-title` are arrays. `published.date-parts` is `[[year, month, day]]`. Abstract may contain HTML tags.
+
+## Official sources reviewed 2026-09-30
+
+- https://www.crossref.org/documentation/retrieve-metadata/rest-api/
+- https://github.com/CrossRef/rest-api-doc
+- https://www.crossref.org/blog/announcing-changes-to-rest-api-rate-limits/

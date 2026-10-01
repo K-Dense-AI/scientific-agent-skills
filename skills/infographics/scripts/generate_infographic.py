@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Generate professional infographics using Nano Banana Pro.
+Generate professional infographics using Nano Banana 2.
 
 This script generates infographics with smart iterative refinement:
-- Uses Nano Banana Pro (Gemini 3.1 Flash Image) for generation
-- Uses Gemini 3.6 Flash for quality review
+- Uses Nano Banana 2 (Gemini 3.1 Flash Image) for generation
+- Uses Gemini 3.7 Flash for quality review
 - Only regenerates if quality is below threshold
 - Supports 10 infographic types and industry style presets
 
@@ -131,9 +131,9 @@ STYLE PRESETS (--style):
 
 COLORBLIND-SAFE PALETTES (--palette):
 ------------------------------------------------------------------------------
-  wong          Wong's palette (7 colors) - most widely recommended
-  ibm           IBM colorblind-safe (8 colors)
-  tol           Tol's qualitative (12 colors)
+  wong          Okabe-Ito/Wong (7 chromatic colors plus black)
+  ibm           Legacy IBM preset (5 data colors)
+  tol           Tol's muted qualitative (9 data colors)
 
 DOCUMENT TYPES (--doc-type):
 ------------------------------------------------------------------------------
@@ -157,15 +157,15 @@ Examples:
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
-        description="Generate infographics using Nano Banana Pro with smart iterative refinement",
+        description="Generate infographics using Nano Banana 2 with smart iterative refinement",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 How it works:
   1. (Optional) Research phase - gather facts using Perplexity Sonar
   2. Describe your infographic in natural language
-  3. Nano Banana Pro generates it automatically with:
+  3. Nano Banana 2 generates it automatically with:
      - Smart iteration (only regenerates if quality is below threshold)
-     - Quality review by Gemini 3.6 Flash
+     - Quality review by Gemini 3.7 Flash
      - Document-type aware quality thresholds
      - Professional-quality output
 
@@ -215,6 +215,8 @@ Environment Variables:
                        help="Verbose output")
     parser.add_argument("--research", "-r", action="store_true",
                        help="Research the topic first using Perplexity Sonar for accurate data")
+    parser.add_argument("--context-image", action="append", default=[],
+                       help="Reference image path; repeat for up to 14 images")
     parser.add_argument("--list-options", action="store_true",
                        help="List all available types, styles, and palettes")
     
@@ -231,6 +233,13 @@ Environment Variables:
     if not args.output:
         parser.error("--output is required")
     
+    if args.iterations < 1:
+        parser.error("--iterations must be at least 1")
+    if Path(args.output).suffix.lower() != ".png":
+        parser.error("--output must end in .png")
+    if len(args.context_image) > 14:
+        parser.error("--context-image accepts at most 14 references")
+
     # Check for API key — resolves --api-key, the environment, then any .env file
     api_key = resolve_api_key(args.api_key)
     if not api_key:
@@ -278,6 +287,9 @@ Environment Variables:
     if args.research:
         cmd.append("--research")
     
+    for image_path in args.context_image:
+        cmd.extend(["--context-image", image_path])
+
     # Execute — pass API key via environment to avoid exposure in process listings
     try:
         result = subprocess.run(cmd, check=False, env=build_subprocess_env(api_key))

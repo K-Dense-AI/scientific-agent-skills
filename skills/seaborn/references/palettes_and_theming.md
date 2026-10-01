@@ -15,7 +15,7 @@ Distinguish categories through hue variation:
 - `"pastel"` - Light, desaturated
 - `"bright"` - Highly saturated
 - `"dark"` - Dark values
-- `"colorblind"` - Safe for color vision deficiency
+- `"colorblind"` - Designed to improve distinction for common color vision deficiencies; also use shapes, line styles, or direct labels
 
 ```python
 sns.set_palette("colorblind")
@@ -96,8 +96,8 @@ with sns.axes_style("white"):
 ### Contexts
 
 Scale elements for different use cases:
-- `"paper"` - Smallest (default)
-- `"notebook"` - Slightly larger
+- `"paper"` - Smallest
+- `"notebook"` - Default context, slightly larger
 - `"talk"` - Presentation slides
 - `"poster"` - Large format
 
@@ -108,3 +108,5 @@ sns.set_context("talk", font_scale=1.2)
 with sns.plotting_context("poster"):
     sns.barplot(data=df, x='category', y='value')
 ```
+
+Reviewed against [the palette tutorial](https://seaborn.pydata.org/tutorial/color_palettes.html) and [plotting_context](https://seaborn.pydata.org/generated/seaborn.plotting_context.html), 2026-10-01. A palette name alone does not establish accessibility for a finished figure.

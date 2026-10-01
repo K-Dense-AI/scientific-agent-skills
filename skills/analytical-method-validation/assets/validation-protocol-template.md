@@ -23,11 +23,12 @@
 - Decision the result supports: [ ] release / stability / in-process / clinical / other
 - Specification or reporting limits served: [ ]
 - Required reportable range, derived from the specification: [ ]
-- Performance characteristics and criteria (the ATP): [ ]
+- Performance characteristics and criteria (formal ATP optional under Q14): [ ]
 
 ## 2. Pre-stated acceptance criteria
 
-State a numeric criterion and its justification for every characteristic to be validated. A
+State an appropriate criterion and its justification for every characteristic to be validated;
+identity or specificity criteria need not always be numeric. A
 criterion with no justification traceable to the specification, the ATP, or development data is not
 defensible.
 
@@ -57,6 +58,8 @@ defensible.
 - Replicate count matches the routine reportable result: [ ] yes / [ ] justified deviation: [ ]
 - Calibration model and weighting, fixed in advance: [ ] unweighted / 1/x / 1/x² / non-linear / multivariate
 - Randomisation and run order: [ ]
+- Independent preparation, sample, group, and injection identifiers: [ ]
+- CI unit of independence and handling of unbalanced groups: [ ]
 - Prior knowledge or development data used in place of a test, with justification: [ ]
 
 ## 4. Materials

@@ -226,6 +226,7 @@ They answer different questions.
 
 ```python
 def positive_probability(frame):
+    frame = pd.DataFrame(frame, columns=raw_background.columns)
     return pipeline.predict_proba(frame)[:, positive_class_index]
 
 masker = shap.maskers.Independent(raw_background, max_samples=100)
@@ -242,6 +243,8 @@ explanation = explainer(
 ```
 
 Benefits: source-level attribution.
+
+This fragment assumes numeric raw columns. Mixed categorical/object data require a tested domain masker or a numeric transformed representation; restoring DataFrame column names alone does not fix numeric masker invariance checks.
 
 Costs: slower model-agnostic evaluation and potentially unrealistic raw-column combinations.
 
@@ -264,29 +267,53 @@ shap.plots.bar(cohorts, max_display=20)
 
 Include group sizes. Different attribution magnitudes do not identify the cause of error by themselves.
 
-### Decompose tree log loss
+### Decompose a defined classification loss
 
-For supported tree models:
+Do not assume `TreeExplainer(model_output="log_loss")` computes scikit-learn's cross entropy for every classifier. In 0.52.0, sklearn 1.9.1 gradient-boosting classifiers can have an unrecognized objective, and random forests can feed class probabilities into a logistic-margin loss transform. Test the actual per-row loss numerically; successful construction is insufficient.
+
+For numeric tabular inputs, a model-agnostic callable gives an explicit alternative. Explain each true-label cohort with that label held fixed; labels are not players in the feature game:
+
+```python
+epsilon = 1e-15  # The explained loss is explicitly clipped negative log likelihood.
+loss_explanations = {}
+for class_index, label in enumerate(model.classes_):
+    rows = X_test.loc[np.asarray(y_test) == label]
+    if rows.empty:
+        continue
+
+    def row_loss(batch, output_index=class_index):
+        frame = pd.DataFrame(batch, columns=X_train.columns)
+        probability = model.predict_proba(frame)[:, output_index]
+        return -np.log(np.clip(probability, epsilon, 1.0))
+
+    loss_explainer = shap.PermutationExplainer(
+        row_loss, background, seed=7,
+    )
+    loss_exp = loss_explainer(rows, max_evals=(2 * rows.shape[1] + 1) * 5)
+    np.testing.assert_allclose(
+        loss_exp.base_values + loss_exp.values.sum(axis=1),
+        row_loss(rows), rtol=1e-5, atol=1e-6,
+    )
+    loss_explanations[str(label)] = loss_exp
+```
+
+The following specialized path passed a tiny native binary XGBoost 3.4.1 fixture. For that numeric-only fixture the model was constructed with `enable_categorical=False`; XGBoost 3.4.1 defaults this flag to true, which SHAP 0.52.0 rejects on the interventional path even for purely numeric inputs. Preserve actual categorical semantics rather than disabling the flag on a model that uses categorical features:
 
 ```python
 loss_explainer = shap.TreeExplainer(
-    model,
-    data=background,
-    feature_perturbation="interventional",
-    model_output="log_loss",
+    binary_margin_model, data=background,
+    feature_perturbation="interventional", model_output="log_loss",
 )
-loss_exp = loss_explainer(X_test, y_test)
+loss_exp = loss_explainer(X_eval, y_encoded)  # Labels encoded as 0/1.
+# 0.52.0 can return callable base_values. Materialize each label's baseline.
+loss_exp.base_values = np.asarray([
+    loss_explainer.expected_value(int(label)) for label in y_encoded
+])
 ```
 
-Log-loss explanations require labels at call time and decompose loss rather than prediction. Some classifier families retain an output axis, so inspect `loss_exp.values.shape`, select the intended output before plotting, and validate against the model-specific loss quantity on a small batch. Label plots as log-loss contributions.
+Before plotting this path, compare the reconstruction with explicit per-row negative log likelihood from that exact model. Inspect any output axis and use only the intended output. Regression models with supported squared-error objectives can use squared loss under the same API name, so do not label their units as log loss.
 
-Use this to investigate:
-
-- features associated with high model loss;
-- cohort-specific sources of loss;
-- training/test behavior differences.
-
-Do not call a high loss attribution proof of label error; inspect data and model residuals separately.
+Loss attributions describe the model's loss under masking. A high value does not prove label error or the cause of poor performance; inspect residuals, labels, calibration, and the reference design separately.
 
 ## Workflow 7: Cohort and Fairness Investigation
 
@@ -370,7 +397,10 @@ shap.plots.scatter(explanation[:, feature_name], color=explanation)
 For tree interactions:
 
 ```python
-interaction = tree_explainer.shap_interaction_values(X_subset)
+interaction_explainer = shap.TreeExplainer(
+    model, model_output="raw", feature_perturbation="tree_path_dependent",
+)
+interaction = interaction_explainer.shap_interaction_values(X_subset)
 ```
 
 Use interaction values as model diagnostics, not proof of real-world synergy.
@@ -452,7 +482,8 @@ importance_runs = []
 
 for seed in range(10):
     background = shap.sample(X_train, 100, random_state=seed)
-    exp = shap.Explainer(model, background)(X_test)
+    masker = shap.maskers.Independent(background, max_samples=len(background))
+    exp = shap.Explainer(model, masker)(X_test)
     if exp.values.ndim == 3:
         exp = exp[..., class_index]
     importance_runs.append(np.abs(exp.values).mean(axis=0))
@@ -563,3 +594,5 @@ Set thresholds from historical variability and operational consequences, not arb
 - TreeExplainer: https://shap.readthedocs.io/en/latest/generated/shap.TreeExplainer.html
 - Explanation: https://shap.readthedocs.io/en/latest/generated/shap.Explanation.html
 - Causal interpretation caution: https://shap.readthedocs.io/en/latest/example_notebooks/overviews/Be%20careful%20when%20interpreting%20predictive%20models%20in%20search%20of%20causal%20insights.html
+
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/explainers/_tree.py

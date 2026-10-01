@@ -1,8 +1,10 @@
 # Dask DataFrames
 
+Reviewed with Dask/distributed 2026.8.0. File paths, deployment settings, and undefined application functions are illustrative; executed local checks and current official sources are in [review.md](review.md).
+
 ## Overview
 
-Dask DataFrames enable parallel processing of large tabular data by distributing work across multiple pandas DataFrames. As described in the documentation, "Dask DataFrames are a collection of many pandas DataFrames" with identical APIs, making the transition from pandas straightforward.
+Dask DataFrames enable parallel processing of large tabular data by distributing work across multiple pandas DataFrames. As described in the documentation, "Dask DataFrames are a collection of many pandas DataFrames" with a supported subset of the pandas API; global operations can require shuffles or be unavailable.
 
 Since **dask 2025.1.0**, the expression-based implementation with logical query planning is the only DataFrame backend. Import from `dask.dataframe` only — avoid legacy submodule paths. DataFrame I/O requires **PyArrow 16+** (dask 2026.1.2+).
 
@@ -16,8 +18,7 @@ A Dask DataFrame is divided into multiple pandas DataFrames (partitions) along t
 ## Key Capabilities
 
 ### Scale
-- Process 100 GiB on a laptop
-- Process 100 TiB on a cluster
+- Capacity is workload-dependent; budget partition, shuffle, and result memory
 - Handle datasets exceeding available RAM
 
 ### Compatibility
@@ -68,12 +69,12 @@ ddf = dd.read_parquet('s3://mybucket/data/*.parquet', storage_options={'anon': F
 ddf = dd.read_parquet('data.parquet', columns=['col1', 'col2'])
 
 # Control partitioning
-ddf = dd.read_csv('data.csv', blocksize='64MB')  # Creates 64MB partitions
+ddf = dd.read_csv('data.csv', blocksize='64MB')  # About 64 MB of source bytes, not in-memory pandas size
 ```
 
 ## Common Operations
 
-All operations are lazy until `.compute()` is called.
+Most transformations build lazy graphs. Reads may sample metadata; `head`, index-division discovery, `persist`, and writes can also execute work.
 
 ### Filtering
 ```python
@@ -146,11 +147,11 @@ ddf = ddf.map_partitions(custom_partition_function)
 
 **To Rows (Less Efficient)**:
 ```python
-# Apply to each row (creates many tasks)
+# Python row calls execute within each partition; prefer vectorized operations
 ddf['result'] = ddf.apply(lambda row: custom_function(row), axis=1, meta=('result', 'float'))
 ```
 
-**Note**: Always prefer `map_partitions` over row-wise `apply` for better performance.
+**Note**: Use vectorized pandas code inside `map_partitions` when possible. Merely moving the same row loop into a partition function does not remove its Python overhead.
 
 ### Meta Parameter
 
@@ -160,6 +161,7 @@ When Dask can't infer output structure, specify the `meta` parameter:
 ddf['new'] = ddf.apply(func, axis=1, meta=('new', 'float64'))
 
 # For map_partitions
+import pandas as pd
 ddf = ddf.map_partitions(func, meta=pd.DataFrame({
     'col1': pd.Series(dtype='float64'),
     'col2': pd.Series(dtype='int64')
@@ -172,7 +174,7 @@ ddf = ddf.map_partitions(func, meta=pd.DataFrame({
 ```python
 # These operations are lazy (instant, no computation)
 filtered = ddf[ddf['value'] > 100]
-aggregated = filtered.groupby('category').mean()
+aggregated = filtered.groupby('category')[['value']].mean()
 final = aggregated[aggregated['value'] < 500]
 
 # Nothing has computed yet
@@ -192,21 +194,25 @@ result1, result2, result3 = dask.compute(
 ```
 
 ### Persist in Memory
+
+Persist only a reusable intermediate that fits worker memory, after projection/filtering. It blocks downstream optimizer pushdown through that boundary.
 ```python
 # Keep results in distributed memory for reuse
 ddf_cached = ddf.persist()
 
 # Now multiple operations on ddf_cached won't recompute
-result1 = ddf_cached.mean().compute()
-result2 = ddf_cached.sum().compute()
+result1 = ddf_cached['value'].mean().compute()
+result2 = ddf_cached['value'].sum().compute()
 ```
 
 ## Index Management
 
 ### Setting Index
 ```python
-# Set index (required for efficient joins and certain operations)
-ddf = ddf.set_index('timestamp', sorted=True)
+# Shuffle unsorted input into sorted index partitions
+ddf = ddf.set_index('timestamp')
+# sorted=True asserts the column is ALREADY globally sorted across partitions.
+# It does not sort input. Use it only after verifying ordering and divisions.
 ```
 
 ### Index Properties
@@ -243,7 +249,7 @@ pdf = ddf.compute()
 - Sorting: Requires data shuffle across workers
 - GroupBy with many groups: May require shuffle
 - Complex joins: Depends on data distribution
-- Row-wise apply: Creates many tasks
+- Row-wise apply: Python row-loop overhead within partitions
 
 ### Optimization Tips
 
@@ -289,10 +295,12 @@ ddf['amount'] = ddf['amount'].astype('float64')
 ddf = ddf.dropna(subset=['important_col'])
 
 # Aggregate
-summary = ddf.groupby('category').agg({
-    'amount': ['sum', 'mean'],
-    'quantity': 'count'
-})
+# Named aggregations keep string column names required by Dask's Parquet writer.
+summary = ddf.groupby('category').agg(
+    amount_sum=('amount', 'sum'),
+    amount_mean=('amount', 'mean'),
+    quantity_count=('quantity', 'count'),
+)
 
 # Write results
 summary.to_parquet('output/summary.parquet')
@@ -303,11 +311,12 @@ summary.to_parquet('output/summary.parquet')
 # Read time series data
 ddf = dd.read_parquet('timeseries/*.parquet')
 
-# Set timestamp index
-ddf = ddf.set_index('timestamp', sorted=True)
+# Parse timestamps and sort globally; do not assert unverified input ordering
+ddf['timestamp'] = dd.to_datetime(ddf['timestamp'])
+ddf = ddf.set_index('timestamp')
 
 # Resample time series (requires sorted datetime index)
-hourly = ddf.resample('1h').mean()
+hourly = ddf[['value']].resample('1h').mean()
 
 # Compute statistics
 result = hourly.compute()
@@ -364,6 +373,8 @@ result = ddf.compute()
 ```
 
 ### Check Dtypes
+
+Specify `dtype=` at CSV read time when later partitions can contain nulls or mixed types absent from the initial sample. A successful `head()` does not validate every file. If `map_partitions` changes the index, use `clear_divisions=True`; `meta` defines structure but does not cast result dtypes.
 ```python
 # Verify data types are correct
 print(ddf.dtypes)

@@ -6,7 +6,7 @@ https://api.fda.gov
 ```
 
 ## Auth
-Optional free API key (40 req/min without, 240 req/min with). Register at https://open.fda.gov/apis/authentication/
+Optional free API key (240 req/min with or without). Register at https://open.fda.gov/apis/authentication/
 Pass as: `?api_key=YOUR_KEY`
 
 ## Key Endpoints
@@ -60,5 +60,7 @@ Pass as: `?api_key=YOUR_KEY`
 ## Rate Limits
 | Tier | Requests/min | Requests/day |
 |------|-------------|-------------|
-| No API key | 40 | 1,000 |
+| No API key | 240 | 1,000 |
 | With API key (free) | 240 | 120,000 |
+
+FAERS reports are not incidence estimates or proof that a drug caused an event. Preserve report versions and avoid double-counting follow-ups. OpenFDA harmonization is incomplete; a missing harmonized name is not evidence of absence.

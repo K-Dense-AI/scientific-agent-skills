@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import struct
 import sys
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -228,6 +229,17 @@ def finite_statistics(
         values = events[:, array_index]
         finite_mask = np.isfinite(values)
         finite_values = values[finite_mask]
+        # A direct sum can overflow even when every value and the true mean
+        # are finite (FCS supports double-precision DATA). Scale first.
+        mean = None
+        if finite_values.size:
+            magnitude = float(np.max(np.abs(finite_values)))
+            mean = (
+                float(np.clip(np.mean(finite_values / magnitude), -1.0, 1.0))
+                * magnitude
+                if magnitude
+                else 0.0
+            )
         records.append(
             {
                 "array_index": array_index,
@@ -242,9 +254,7 @@ def finite_statistics(
                 "maximum": (
                     float(finite_values.max()) if finite_values.size else None
                 ),
-                "mean": (
-                    float(finite_values.mean()) if finite_values.size else None
-                ),
+                "mean": mean,
             }
         )
     return records
@@ -288,9 +298,17 @@ def dataset_record(
         record["analysis"] = flow.analysis
 
     if stats:
+        expected_values = flow.event_count * flow.channel_count
+        if flow.events is None or len(flow.events) != expected_values:
+            actual_values = None if flow.events is None else len(flow.events)
+            raise ValueError(
+                f"dataset {dataset_index}: DATA has {actual_values} values, "
+                f"but $TOT * $PAR declares {expected_values}; "
+                "refusing inconsistent event counts before as_array()"
+            )
         events = flow.as_array(preprocess=not raw)
         record["event_semantics"] = (
-            "encoded DATA values reshaped; preprocess=False"
+            "decoded DATA values reshaped; preprocess=False; integer range masks retained"
             if raw
             else "gain/log/time scaled; uncompensated; ungated"
         )
@@ -324,6 +342,12 @@ def inspect_file(args: argparse.Namespace) -> dict[str, Any]:
         ignore_offset_discrepancy=args.ignore_offset_discrepancy,
         use_header_offsets=args.use_header_offsets,
     ):
+        if metadata_flow.event_count < 0 or metadata_flow.channel_count <= 0:
+            raise ValueError("$TOT must be nonnegative and $PAR must be positive")
+        if metadata_flow.text.get("mode", "").upper() != "L":
+            raise ValueError("only list-mode ($MODE=L) DATA is supported")
+        if metadata_flow.data_type.upper() not in {"I", "F", "D"}:
+            raise ValueError("only integer, float, and double DATA are supported")
         estimated_array_bytes = (
             metadata_flow.event_count * metadata_flow.channel_count * 8
         )
@@ -420,6 +444,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         write_report(report, args.output)
     except (
         FlowIOException,
+        EOFError,
         FileExistsError,
         IndexError,
         KeyError,
@@ -427,6 +452,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         NotImplementedError,
         OSError,
         OverflowError,
+        struct.error,
         TypeError,
         ValueError,
     ) as error:

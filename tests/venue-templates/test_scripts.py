@@ -14,9 +14,11 @@ binary.
 from __future__ import annotations
 
 import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import skill_contract
 
@@ -153,9 +155,52 @@ class FontAndMetadataTests(unittest.TestCase):
     def test_font_result_covers_missing_binary_empty_and_populated(self) -> None:
         self.assertEqual(validate_format.font_result(None)["status"], "skip")
         self.assertEqual(validate_format.font_result([])["status"], "manual")
-        populated = validate_format.font_result(["ABCDEF+NimbusRomNo9L"])
+        populated = validate_format.font_result([
+            {"name": "ABCDEF+NimbusRomNo9L", "embedded": True}
+        ])
         self.assertEqual(populated["status"], "info")
         self.assertIn("does not verify font family", populated["message"])
+
+    def test_nonembedded_fonts_fail_even_when_other_fonts_are_embedded(self) -> None:
+        result = validate_format.font_result([
+            {"name": "ABCDEF+NimbusRoman", "embedded": True},
+            {"name": "Helvetica", "embedded": False},
+        ])
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("Helvetica", result["message"])
+
+    def test_poppler_font_rows_support_multiword_types_and_embedding_flags(self) -> None:
+        output = (
+            "name type encoding emb sub uni object ID\n"
+            "-------------------------------------------\n"
+            "ABCDEF+Roman Type 1 Custom yes yes no 8 0\n"
+            "Helvetica Type 1 WinAnsi no no no 9 0\n"
+            "GHIJKL+Sans CID TrueType Identity-H yes yes yes 10 0\n"
+        )
+        with patch.object(validate_format, "run_poppler", return_value=
+                          subprocess.CompletedProcess([], 0, stdout=output)):
+            self.assertEqual(validate_format.embedded_fonts(Path("p.pdf")), [
+                {"name": "ABCDEF+Roman", "embedded": True},
+                {"name": "Helvetica", "embedded": False},
+                {"name": "GHIJKL+Sans", "embedded": True},
+            ])
+
+    def test_malformed_font_row_is_not_reported_as_embedded(self) -> None:
+        with patch.object(validate_format, "run_poppler", return_value=
+                          subprocess.CompletedProcess([], 0, stdout="header\n---\ncorrupt row\n")):
+            with self.assertRaisesRegex(RuntimeError, "Unrecognized"):
+                validate_format.embedded_fonts(Path("p.pdf"))
+
+    def test_poppler_paths_are_absolute_and_timeout_is_bounded(self) -> None:
+        with patch.object(validate_format.subprocess, "run") as run:
+            validate_format.run_poppler("pdfinfo", Path("-option.pdf"))
+            args, kwargs = run.call_args
+            self.assertEqual(args[0], ["pdfinfo", str(Path("-option.pdf").resolve())])
+            self.assertEqual(kwargs["timeout"], 30)
+        with patch.object(validate_format.subprocess, "run", side_effect=
+                          subprocess.TimeoutExpired("pdffonts", 30)):
+            with self.assertRaisesRegex(RuntimeError, "timed out"):
+                validate_format.run_poppler("pdffonts", Path("p.pdf"))
 
     def test_metadata_result_flags_identity_fields_for_blind_review(self) -> None:
         self.assertEqual(validate_format.metadata_result(None)["status"], "skip")
@@ -222,6 +267,50 @@ class ReportTests(unittest.TestCase):
 
 
 class CustomizeTests(unittest.TestCase):
+    def test_template_lookup_rejects_paths_and_nontex_files(self) -> None:
+        for filename in ("../SKILL.md", "/tmp/template.tex", "journals/nature_article.tex", "elsarticle-num.bst"):
+            self.assertIsNone(customize_template.find_template(filename))
+
+    def test_latex_commands_are_preserved_in_replacements(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out.tex"
+            customize_template.customize_template(
+                ASSETS / "journals" / "nature_article.tex", output,
+                title=r"Study of \textit{RNA} \& DNA",
+                authors=r"A. Researcher\textsuperscript{1}",
+                affiliations=r"Biology \& Chemistry, Research Institute",
+            )
+            text = output.read_text(encoding="utf-8")
+            self.assertIn(r"\title{Study of \textit{RNA} \& DNA}", text)
+            self.assertIn("\\author{\nA. Researcher\\textsuperscript{1}\n}", text)
+            self.assertNotIn("Second Author", text)
+            self.assertIn(r"Biology \& Chemistry, Research Institute\\", text)
+
+    def test_poster_author_replacement_preserves_nested_macro_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out.tex"
+            customize_template.customize_template(
+                ASSETS / "posters" / "beamerposter_academic.tex", output,
+                authors=r"One Author\inst{1}", affiliations="Example Institute",
+            )
+            text = output.read_text(encoding="utf-8")
+            self.assertIn(r"\author{One Author\inst{1}}", text)
+            self.assertNotIn("Second Author", text)
+            self.assertIn(r"\inst{1} Example Institute\\", text)
+            self.assertIn(r"\inst{2} Institute of Research", text)
+
+    def test_neurips_title_is_replaced_without_identifying_review_authors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out.tex"
+            customize_template.customize_template(
+                ASSETS / "journals" / "neurips_article.tex", output,
+                title="An Illustrative Title", authors="Should not change anonymous mode",
+            )
+            text = output.read_text(encoding="utf-8")
+            self.assertIn(r"\title{An Illustrative Title}", text)
+            self.assertIn("Anonymous Authors", text)
+            self.assertNotIn("Should not change anonymous mode", text)
+
     def test_find_template_searches_every_asset_category(self) -> None:
         for filename in (
             "nature_article.tex",
@@ -288,6 +377,31 @@ class CustomizeTests(unittest.TestCase):
             output = Path(directory) / "out.tex"
             customize_template.customize_template(source, output, title="")
             self.assertIn("Insert Your Title Here", output.read_text(encoding="utf-8"))
+
+
+class CliFailureTests(unittest.TestCase):
+    def test_customization_missing_or_unknown_template_returns_error(self) -> None:
+        for args in ([], ["--template", "missing.tex", "--output", "unused.tex"]):
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "customize_template.py"), *args],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 2)
+
+    def test_conflicting_limits_are_rejected_before_inspection(self) -> None:
+        result = subprocess.run([
+            sys.executable, str(SCRIPTS / "validate_format.py"),
+            "--file", "unused.pdf", "--venue", "neurips-2026", "--max-pages", "10",
+        ], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("not allowed with argument", result.stderr)
+
+    def test_empty_check_does_not_return_success(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            pdf = Path(directory) / "empty.pdf"
+            pdf.write_bytes(b"%PDF-1.4\n")
+            with patch.object(sys, "argv", ["validate_format.py", "--file", str(pdf), "--check", ","]):
+                self.assertEqual(validate_format.main(), 2)
 
 
 if __name__ == "__main__":

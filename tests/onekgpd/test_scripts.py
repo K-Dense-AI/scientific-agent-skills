@@ -553,6 +553,7 @@ class RecordingClient:
 
     def __init__(self, target=None, **kwargs) -> None:
         self.target = target
+        self.connection_options = kwargs
         self.calls: list[tuple[str, dict]] = []
         self.results: dict = {}
         RecordingClient.instances.append(self)
@@ -722,13 +723,30 @@ class AnnotationFilterTests(unittest.TestCase):
                 region_args(consequence="MISSENSE_VARIANTS")
             )
 
-    def test_numeric_thresholds_pass_through_including_zero(self) -> None:
-        # af_lt=0 is falsy; a truthiness test would drop it.
+    def test_positive_numeric_thresholds_reach_the_filter(self) -> None:
         built = onekgpd_api._build_annotation_filter(
-            region_args(af_lt=0.0, gnomad_exomes_af_gt=0.25)
+            region_args(af_lt=1.0, gnomad_exomes_af_gt=1e-12)
         )
-        self.assertEqual(built.af_lt, 0.0)
-        self.assertEqual(built.gnomad_exomes_af_gt, 0.25)
+        self.assertEqual(built.af_lt, 1.0)
+        self.assertEqual(built.gnomad_exomes_af_gt, 1e-12)
+
+    def test_zero_nonfinite_and_out_of_range_bounds_are_refused(self) -> None:
+        # Proto3 zero means unset, not a strict > 0 filter. A missing-annotation
+        # exclusion must never silently become a whole-cohort query.
+        for flag, _ in onekgpd_api._FLOAT_FIELDS:
+            for value in (0.0, -0.1, 1.1, float("nan"), float("inf")):
+                with self.subTest(flag=flag, value=value):
+                    with self.assertRaisesRegex(ValueError, "zero means an unset"):
+                        onekgpd_api._build_annotation_filter(region_args(**{flag: value}))
+
+    def test_a_float32_underflow_cannot_silently_disable_the_filter(self) -> None:
+        with self.assertRaisesRegex(ValueError, "underflows"):
+            onekgpd_api._build_annotation_filter(region_args(gnomad_exomes_af_gt=1e-100))
+
+    def test_empty_vocabulary_csv_cannot_silently_disable_the_filter(self) -> None:
+        for field, _ in onekgpd_api._CSV_FIELDS:
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "at least one term"):
+                onekgpd_api._build_annotation_filter(region_args(**{field: ", ,"}))
 
     def test_boolean_flags_are_only_set_when_asked(self) -> None:
         default = onekgpd_api._build_annotation_filter(region_args(af_lt=0.1))
@@ -968,6 +986,21 @@ class CountCommandTests(ApiCommandTestCase):
         )
         self.assertEqual(self.client.target, onekgpd_api.DEFAULT_ENDPOINT)
         self.assertEqual(onekgpd_api.DEFAULT_ENDPOINT, "db.dnaerys.org:443")
+        self.assertEqual(self.client.connection_options,
+                         {"tls": True, "assembly": "GRCh38", "default_timeout": 30.0})
+
+    def test_custom_timeout_reaches_the_rpc_client(self) -> None:
+        RecordingClient.canned["count_variants"] = dnaerys.CountResult(count=0, metadata=metadata())
+        emitted(onekgpd_api.cmd_count_variants,
+                **vars(region_args(chrom="chr1", start=1, end=2, timeout=7.5)))
+        self.assertEqual(self.client.connection_options["default_timeout"], 7.5)
+
+    def test_empty_sample_csv_never_falls_through_to_cohort_wide_query(self) -> None:
+        for handler in (onekgpd_api.cmd_count_variants_in_samples,
+                        onekgpd_api.cmd_select_variants_in_samples):
+            with self.subTest(handler=handler.__name__), self.assertRaisesRegex(ValueError, "at least one individual"):
+                handler(region_args(chrom="chr1", start=1, end=2, samples=", ,"))
+        self.assertEqual(RecordingClient.instances, [])
 
     def test_named_individuals_are_split_from_the_csv_flag(self) -> None:
         RecordingClient.canned["count_variants"] = dnaerys.CountResult(
@@ -1164,6 +1197,30 @@ class HomozygousReferenceTests(ApiCommandTestCase):
         self.assertTrue(data["variant_present"])
         self.assertIn("no individual is homozygous reference", buffer.getvalue())
 
+    def test_incomplete_hom_ref_counts_do_not_assert_variant_absence(self) -> None:
+        for count in (-1, 0, 5):
+            with self.subTest(count=count):
+                RecordingClient.canned["count_samples_hom_ref"] = dnaerys.CountResult(
+                    count=count, metadata=metadata(affected=True)
+                )
+                data = emitted(onekgpd_api.cmd_count_samples_hom_ref, **self.arguments())
+                self.assertTrue(data["result_incomplete"])
+                self.assertIsNone(data["variant_present"])
+
+    def test_incomplete_hom_ref_names_remain_marked_partial(self) -> None:
+        RecordingClient.canned["select_samples_hom_ref"] = dnaerys.SamplesResult(
+            samples=("HG00096",), metadata=metadata(affected=True)
+        )
+        data = emitted(onekgpd_api.cmd_select_samples_hom_ref, **self.arguments())
+        self.assertTrue(data["result_incomplete"])
+
+    def test_nonpositive_hom_ref_position_is_refused_before_connecting(self) -> None:
+        for handler in (onekgpd_api.cmd_count_samples_hom_ref,
+                        onekgpd_api.cmd_select_samples_hom_ref):
+            with self.subTest(handler=handler.__name__), self.assertRaisesRegex(ValueError, "start must"):
+                handler(Namespace(**{**self.arguments(), "position": 0}))
+        self.assertEqual(RecordingClient.instances, [])
+
     def test_listing_hom_ref_individuals_echoes_the_position(self) -> None:
         RecordingClient.canned["select_samples_hom_ref"] = dnaerys.SamplesResult(
             samples=("HG00096",), metadata=metadata()
@@ -1271,6 +1328,11 @@ class ApiMainTests(unittest.TestCase):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 onekgpd_api.main([])
+
+    def test_rpc_timeout_must_be_finite_and_positive(self) -> None:
+        for value in ("0", "-1", "nan", "inf"):
+            with self.subTest(value=value), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                onekgpd_api.build_parser().parse_args(["dataset-info", "--timeout", value])
 
     def test_the_documented_subcommands_all_parse(self) -> None:
         parser = onekgpd_api.build_parser()

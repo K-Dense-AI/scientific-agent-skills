@@ -1,10 +1,11 @@
 ---
 name: qiskit
-description: Build, simulate, transpile, and execute quantum circuits with Qiskit and IBM Quantum Runtime. Use for Qiskit 2.x circuits and operators, V2 Sampler or Estimator primitives, target-aware transpilation, local or noisy simulation, IBM QPU execution, Runtime sessions or batches, error mitigation, and Qiskit ecosystem packages.
+description: Builds, simulates, transpiles, and executes quantum circuits with Qiskit and IBM Quantum Runtime. Use for Qiskit 2.x circuits and operators, V2 Sampler or Estimator primitives, target-aware transpilation, local or noisy simulation, IBM QPU execution, Runtime sessions or batches, error mitigation, and Qiskit ecosystem packages.
 license: Apache-2.0
 compatibility: Python 3.10+ on a supported 64-bit platform. Local SDK workflows need qiskit; noisy simulation needs qiskit-aer; IBM QPU access needs qiskit-ibm-runtime, network access, an IBM Quantum Platform account, and an API key.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -12,17 +13,19 @@ metadata:
 
 Use current Qiskit 2.x APIs to build circuits, prepare hardware-compatible instruction set architecture (ISA) circuits, and execute them through V2 primitives.
 
-This skill was verified on **2026-07-23** against the PyPI releases `qiskit==2.5.0`, `qiskit-ibm-runtime==0.48.0`, and `qiskit-aer==0.17.2`. Check [references/sources.md](references/sources.md) before changing pins or documenting newly released behavior.
+Reviewed **2026-10-01** with local tests on `qiskit==2.5.2`, `qiskit-ibm-runtime==0.50.0`, and `qiskit-aer==0.17.2`. IBM account, QPU, session, and batch examples are illustrative and documentation/source-checked; no remote workloads were submitted. See [references/sources.md](references/sources.md) for the verification boundary.
+
+Runtime 0.50 deprecates the top-level `SamplerV2`/`EstimatorV2` implementations. New code imports `Sampler` from `qiskit_ibm_runtime.executor_sampler` and `Estimator` from `qiskit_ibm_runtime.executor_estimator`. These still implement the V2 PUB interface, using client-side processing and `Executor`. Use option models from `qiskit_ibm_runtime.options_models`.
 
 ## Choose the Right Path
 
 | Goal | Recommended interface |
 |---|---|
-| Exact local sampling | `qiskit.primitives.StatevectorSampler` |
+| Ideal evolution with finite-shot sampling | `qiskit.primitives.StatevectorSampler` |
 | Exact local expectation values | `qiskit.primitives.StatevectorEstimator` |
 | High-performance or noisy simulation | Qiskit Aer |
-| IBM QPU sampling | `qiskit_ibm_runtime.SamplerV2` |
-| IBM QPU expectation values and mitigation | `qiskit_ibm_runtime.EstimatorV2` |
+| IBM QPU sampling | `qiskit_ibm_runtime.executor_sampler.Sampler` |
+| IBM QPU expectation values and mitigation | `qiskit_ibm_runtime.executor_estimator.Estimator` |
 | Backend without native primitives | `BackendSamplerV2` or `BackendEstimatorV2` |
 | Open-system or master-equation dynamics | Prefer QuTiP |
 | Differentiable quantum machine learning | Prefer PennyLane unless Qiskit integration is required |
@@ -36,10 +39,10 @@ uv venv --python 3.13
 source .venv/bin/activate
 
 # Core SDK plus plotting support
-uv pip install "qiskit[visualization]==2.5.0"
+uv pip install "qiskit[visualization]==2.5.2"
 
 # Add only when needed
-uv pip install "qiskit-ibm-runtime==0.48.0"
+uv pip install "qiskit-ibm-runtime==0.50.0"
 uv pip install "qiskit-aer==0.17.2"
 ```
 
@@ -78,7 +81,7 @@ print(counts)
 
 Sampler V2 preserves shots and classical-register structure. Access the register by its actual name; `measure_all()` uses `meas`.
 
-For circuits with multiple classical registers, each register’s counts are a marginal distribution. Preserve shot alignment when computing cross-register correlations; multiplying marginal frequencies destroys those correlations. Use `SamplerPubResult.join_data` with an explicit register order for joint bitstrings and record that order in the result labels. See the [join-data contract](https://quantum.cloud.ibm.com/docs/en/api/qiskit/2.3/qiskit.primitives.SamplerPubResult).
+For circuits with multiple classical registers, each register’s counts are a marginal distribution. Preserve shot alignment when computing cross-register correlations; multiplying marginal frequencies destroys those correlations. Use `SamplerPubResult.join_data` with an explicit register order for joint bitstrings and record that order in the result labels. Qiskit 2.5.2 puts the first joined `BitArray` register in the least-significant bits, contrary to the current docstring; verify with an asymmetric state. See [references/primitives.md](references/primitives.md).
 
 ## Quick Local Estimation
 
@@ -112,7 +115,8 @@ This example assumes credentials were saved securely as described in [references
 ```python
 from qiskit import QuantumCircuit
 from qiskit.transpiler import generate_preset_pass_manager
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 service = QiskitRuntimeService()
 backend = service.least_busy(
@@ -149,7 +153,7 @@ Runtime Estimator requires both an ISA circuit and observables mapped through th
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.transpiler import generate_preset_pass_manager
-from qiskit_ibm_runtime import EstimatorV2 as Estimator
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 circuit = QuantumCircuit(2)
 circuit.h(0)
@@ -175,7 +179,7 @@ pub_result = estimator.run(
 print(pub_result.data.evs, pub_result.data.stds)
 ```
 
-Error mitigation is not guaranteed to improve every workload and increases cost. Record the complete options and result metadata.
+Error mitigation is not guaranteed to improve every workload and increases cost. Record finalized options (`estimator.finalize_options().model_dump()`), result metadata, and usage. A Runtime `dry_run=True` call is a server submission returning randomized mock data, not a local simulator or scientific validation.
 
 ## Non-Negotiable Qiskit 2.x Rules
 
@@ -183,11 +187,11 @@ Error mitigation is not guaranteed to improve every workload and increases cost.
 - Runtime primitives accept ISA circuits; they do not perform layout, routing, and basis translation for you.
 - Apply the transpiler layout to Estimator observables with `observable.apply_layout(isa_circuit.layout)`.
 - Use `mode=backend`, `mode=session`, or `mode=batch` for Runtime primitives.
-- Use `EstimatorV2` for resilience levels and expectation-value mitigation. Sampler has different noise-management options and no Estimator-style resilience levels.
+- Use the Runtime client-side `Estimator` for resilience levels and expectation-value mitigation. Sampler has different noise-management options and no Estimator-style resilience levels.
 - Treat `BackendV2.target`, `backend.operation_names`, `backend.coupling_map`, and direct backend attributes as the source of hardware constraints. Do not use `backend.configuration()` or `BackendProperties`.
 - Read Sampler output by classical register name. Bitstrings are displayed most-significant bit first; Qiskit qubit 0 is conventionally the least-significant bit.
 - Use a fixed `seed_transpiler` when comparing compilation settings. A simulator seed does not make QPU results deterministic.
-- `qiskit.pulse` was removed in Qiskit 2.0. Use supported fractional gates for IBM hardware or Qiskit Dynamics for pulse-model research.
+- `qiskit.pulse` was removed in Qiskit 2.0. Use supported fractional gates for IBM hardware. Qiskit Dynamics is archived; isolate legacy pulse-model research and verify its dependency stack separately.
 - QPY is the Qiskit-native circuit serialization format. Do not use Python pickle for untrusted circuit artifacts.
 
 See [references/migration.md](references/migration.md) for a detailed old-to-current API map.
@@ -201,7 +205,8 @@ Choose based on workload shape and account plan:
 - **Session mode**: iterative jobs that benefit from prioritized follow-on execution; unavailable on the Open Plan.
 
 ```python
-from qiskit_ibm_runtime import Batch, SamplerV2 as Sampler
+from qiskit_ibm_runtime import Batch
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 with Batch(backend=backend, max_time="10m") as batch:
     sampler = Sampler(mode=batch)

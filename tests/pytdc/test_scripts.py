@@ -126,6 +126,21 @@ class LoaderTests(unittest.TestCase):
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_duplicate_normalized_benchmarks_are_rejected(self) -> None:
+        with self.assertRaises(common.CliError):
+            benchmark.normalize_predictions(
+                {"Caco2_Wang": [1], "caco2_wang": [2]}, mode="single",
+                available=["caco2_wang"], selected_dataset=None,
+            )
+
+    def test_each_run_requires_same_benchmarks_and_lengths(self) -> None:
+        for last in ({"hia_hou": [1]}, {"caco2_wang": [1, 2]}):
+            with self.assertRaises(common.CliError):
+                benchmark.normalize_predictions(
+                    [{"caco2_wang": [1]}] * 4 + [last], mode="many",
+                    available=["caco2_wang", "hia_hou"], selected_dataset=None,
+                )
+
     def test_many_run_prediction_schema(self) -> None:
         payload = {
             "runs": [
@@ -207,6 +222,15 @@ class MolecularTests(WorkingDirectoryTestCase):
 
 
 class CacheAuditTests(WorkingDirectoryTestCase):
+    def test_file_limit_at_directory_boundary_is_not_complete(self) -> None:
+        root = Path("cache")
+        (root / "nested").mkdir(parents=True)
+        (root / "one.csv").write_text("a")
+        (root / "nested" / "two.csv").write_text("b")
+        result = cache_audit.audit_cache(root, max_files=1, largest_limit=1)
+        self.assertFalse(result["scan_complete"])
+        self.assertEqual(result["file_count"], 1)
+
     def test_manifest_is_bounded_and_skips_symlinks(self) -> None:
         root = Path("data")
         root.mkdir()

@@ -5,8 +5,9 @@ Local repository tooling; not part of any shipped skill.
 
 Two stages, both through OpenRouter on one OPENROUTER_API_KEY:
 
-1. Read the whole skill -- SKILL.md, everything under references/, and a
-   manifest of scripts/ and assets/ -- and have a text model distil it into a
+1. Read the skill documentation -- SKILL.md, root-level Markdown guides,
+   everything under references/, and a manifest of scripts/ and assets/ --
+   and have a text model distil it into a
    description of one diagram. An image model cannot digest a few hundred
    kilobytes of markdown, so something has to decide what the diagram shows
    before any pixels are requested.
@@ -14,9 +15,9 @@ Two stages, both through OpenRouter on one OPENROUTER_API_KEY:
 
 The image model is fixed to openai/gpt-image-2.5-sunburst, so the parameters
 accepted below are that model's advertised set rather than the API-wide
-superset. It does not accept ``resolution``, ``size``, ``seed``, or
-``output_format``, and OpenRouter rejects unsupported parameters with an
-HTTP 400 rather than ignoring them.
+superset. This tool does not expose ``resolution``, ``size``, ``seed``, or
+``output_format``. Provider handling of unsupported fields can differ; use
+the live endpoint capability record before extending the request body.
 
 Standard library only.
 
@@ -40,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 IMAGE_MODEL = "openai/gpt-image-2.5-sunburst"
-PROMPT_MODEL = "anthropic/claude-opus-5"
+PROMPT_MODEL = "openai/gpt-6-astra"
 
 IMAGES_URL = "https://openrouter.ai/api/v1/images"
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -50,7 +51,7 @@ SKILLS_DIR = REPO_ROOT / "skills"
 IMAGES_DIR = REPO_ROOT / "docs" / "images"
 
 # openai/gpt-image-2.5-sunburst capabilities, from
-# GET /api/v1/images/models/openai/gpt-image-2.5-sunburst/endpoints (checked 2026-09-13).
+# GET /api/v1/images/models/openai/gpt-image-2.5-sunburst/endpoints (checked 2026-09-30).
 ASPECT_RATIOS = ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9", "auto"]
 QUALITIES = ["auto", "low", "medium", "high", "xhigh", "max"]
 BACKGROUNDS = ["auto", "transparent", "opaque"]
@@ -91,10 +92,18 @@ DIAGRAM_STYLE = (
     "Roles: steps deep indigo, inputs muted teal, outputs warm amber, automatic checks "
     "slate grey, and human approval gates rose red; each role shows as the badge or "
     "accent colour with a pale tint of the same hue behind its area. "
+    "Checkpoint symbols are optional, not a default decoration. Draw a diamond only "
+    "when the diagram content explicitly names a checkpoint condition and its route. "
+    "When reviews stay inside cards or the content specifies no checkpoints, use "
+    "plain directional connectors with triangular arrowheads throughout; there must "
+    "be no diamonds on those connectors. Every diamond must have the requested "
+    "condition label. A diamond is never an arrowhead or a decorative separator. "
     "Checkpoints: a small diamond sitting on the connector between two steps, its label "
     "set just beside it, never inside a card. Approval gates are rose diamonds, "
     "automatic checks slate diamonds. If a legend is given, set it small at the bottom "
-    "right with one diamond swatch per entry. "
+    "right with one diamond swatch per entry. Draw a legend only when the diagram "
+    "content explicitly requests one, and include only roles actually shown. If there "
+    "is no human approval gate, omit every approval-gate legend entry or swatch. "
     "Inputs and outputs: tinted panels at the start and end of the flow, each item on "
     "its own line as a small file-or-document glyph followed by its name. "
     "Watch-for strip: a full-width band along the bottom with a small uppercase heading "
@@ -105,10 +114,30 @@ DIAGRAM_STYLE = (
     "from the same family — indigo, teal, amber, rose, sage. "
     "Connectors: thin lines of uniform weight in soft slate with small solid arrowheads, "
     "routed at clean right angles with rounded corners, never crossing a card or any "
-    "text. The flow runs left to right along the first row, drops down at the right "
-    "edge, and runs left to right again along the second row, so the numbers always "
-    "increase in reading order. Every connector leaves the edge of one card and lands on "
+    "text. Cards increase left to right in each row. The row-change connector runs "
+    "from the last upper card to the first lower card at the far left, through clear "
+    "space outside the cards; do not shortcut into the lower-right card. "
+    "Every connector leaves the edge of one card and lands on "
     "the edge of exactly the card it leads to. "
+    "Draw every explicitly requested feedback or refinement loop back to its named "
+    "earlier step; the cards' reading order does not prohibit backward loop arrows. "
+    "A conditional feedback arrow must visibly leave the decision node itself, never "
+    "branch from that node's incoming connector or an ambiguous shared junction. "
+    "Every arrow starts and ends on its named nodes, with no dangling end in whitespace. "
+    "Use exactly one arrowhead at the destination; draw a two-headed arrow only for "
+    "an explicitly documented bidirectional relationship. "
+    "Never place an extra arrowhead at an elbow, crossing, or source edge. In "
+    "particular, a long feedback connector has a single arrowhead touching its "
+    "earlier destination card; all intervening bends are plain lines. "
+    "Feedback routes are dashed and use their own lane, separate from forward "
+    "routes and row changes. They never share a line segment or junction with a "
+    "forward route. A finish/output card never originates a continuation loop "
+    "unless the content explicitly names it as the source. "
+    "State badges inside a card are labels, not an implied sequence: do not connect "
+    "them with arrows unless the prompt explicitly defines those transitions. In "
+    "particular, never draw an arrow from completed or success into failed or error. "
+    "Keep each checkpoint on the exact connector named in the prompt: a result check "
+    "must follow the operation producing that result. Never move it earlier to fit. "
     "Typography: one clean geometric sans-serif for everything except tool chips. "
     "Every line of text must stay comfortably legible when the image is shown at half "
     "size; when space is tight, shrink motifs, never text. "
@@ -117,9 +146,51 @@ DIAGRAM_STYLE = (
     "Spell every piece of text exactly as written. The quoted text in the prompt is the "
     "COMPLETE text inventory: render each item once, where the prompt places it, and add "
     "NO other text anywhere. Motifs are unlabelled; plots have no numbers, ticks or "
-    "annotations; tables show only the headers given. Never invent example identifiers, "
+    "annotations; tables show only the headers given. If no table headers are explicitly "
+    "quoted, leave the header cells blank; never invent field names. Never invent example identifiers, "
     "sequences, URLs, citations, code, JSON, prices, measurements, scores, clinical "
     "classifications, dates, or biological relationships. "
+    "Chemical motifs stay abstract and unlabelled; do not invent atom labels, bond "
+    "structures, or reaction pairs when no exact validated structure is supplied. "
+    "Quantum circuit motifs use circuit-definition record sheets or code-file icons "
+    "unless the content supplies a complete validated gate sequence. Never invent, "
+    "omit or rearrange gates, controls, measurements or wire connections to make a "
+    "decorative circuit; a bare measured zero-state circuit is not a Bell circuit. "
+    "If the documented model fixes an array or state dimension, any depicted "
+    "operator matrix, ket, register or tensor must match it exactly. Use a plain "
+    "record-sheet icon when that dimension is not explicitly specified; a "
+    "three-entry ket or three-by-three operator cannot illustrate a two-level model. "
+    "Medical imaging and microscopy motifs are simple flat outline icons, never "
+    "realistic scan thumbnails, tissue textures, or fabricated analysis-result images. "
+    "A missing-data gap in a plot is empty space: end the trace before the gap and "
+    "restart it after the gap. Never bridge missing observations with dots, dashes, "
+    "a faint stroke, or a solid interpolation line. This applies to every repeated "
+    "plot motif, including thumbnails inside export or inspection cards. "
+    "When the content requests records without curves or plotted results, never "
+    "substitute a generic forecast, learning curve, uncertainty band or trend chart, "
+    "even as a small thumbnail drawn inside a file icon. Those imply unsupported "
+    "results. Use plain text-line record sheets or empty tables instead. "
+    "Repeated motifs of the same graph must preserve exactly its node and edge set, "
+    "including isolated nodes, through inspection, scoring, layout and export. "
+    "Only alter connectivity or remove records when the named operation explicitly "
+    "does so. Layout changes position, not topology; scoring changes attributes, "
+    "not which observations exist. "
+    "If the prompt supplies no exact graph connectivity, use abstract node/edge "
+    "record sheets and file icons instead of drawing an invented network. A "
+    "generic graph icon must not masquerade as changing analysis data. "
+    "A checkpoint diamond lies on its named step-to-step route only; do not add "
+    "a connector from an adjacent input panel or a second shortcut to its next card. "
+    "A guarded transition has exactly one route: source card, diamond, destination "
+    "card. This replaces the ordinary direct arrow between those cards. If the "
+    "diamond route bends below a row, omit the horizontal arrow between the cards "
+    "entirely; otherwise the diagram incorrectly permits bypassing the check. "
+    "For checkpoints between cards in the same row, reserve a wide horizontal "
+    "gutter and place the diamond there, directly between its two cards. Do not "
+    "put a same-row checkpoint in a separate lane below the cards. Narrow the "
+    "cards and reduce their motifs to make the checkpoint gutter fit. "
+    "A checkpoint assigned to the last upper card and first lower card belongs "
+    "on the long row-transition connector itself. Never shift that checkpoint "
+    "to a gutter between lower-row cards, or move later checkpoints downstream. "
     "No photorealism, no 3D, no isometric perspective, no people, no stock clip art, no "
     "generic gear or cloud or lightbulb icons, no gradients, no drop shadows, no glow, no "
     "decorative background, no watermark."
@@ -151,9 +222,15 @@ motifs this field would recognise.
 - Checkpoints: where the documented workflow validates, blocks, or needs the user's \
 explicit approval, place a checkpoint on the arrow between the two steps it guards, or on \
 the arrow from the last step into the outputs panel -- never inside a card -- labelled \
-with its condition in at most 32 characters. At most four checkpoints. Say for each whether it is an \
-automatic check or a user approval gate. If both kinds appear, add a two-entry legend \
-labelled "Automatic check" and "Needs your approval".
+with its condition in at most 32 characters. At most four checkpoints. Include an automatic \
+diamond only for a named executable check; qualitative agent review belongs in a step \
+card, not an automatic checkpoint. Include a user approval gate only when the documented \
+workflow actually requires approval. A workflow may have no diamonds. Say for each \
+checkpoint whether it is an automatic check or a user approval gate. If both kinds appear, add a two-entry legend \
+labelled "Automatic check" and "Needs your approval". Name every checkpoint's exact \
+source and destination step numbers and titles, for example "step 2 Audit -> check -> \
+step 3 Transform"; never locate it only as "after audit" or "before training". Reserve \
+space on that specific connector so a check cannot move before its producing step.
 - Outputs panel at the right of the second row, fed by the last step: up to four \
 artifacts the skill actually returns, named concretely.
 - A full-width strip along the bottom headed "Watch for", holding three or four of the \
@@ -170,15 +247,121 @@ standard, a version. Never ask for example data, identifiers, measurements, pric
 scores, dates, or results; data-bearing motifs stay schematic and unlabelled, and tables \
 show at most a header row. A diagram must not fabricate evidence or imply that a \
 prediction is a measured result.
+- Preserve indispensable input dimensions, units, and physical scale when a mismatch \
+invalidates the documented model workflow. Put the documented target in the quoted \
+input or step text; a generic instruction to check resolution or shape is insufficient \
+when the reader needs that exact target to understand the workflow.
+- Put required version pins and execution prerequisites inside the input panel or the \
+specific step card that establishes them. Do not place critical requirements in floating \
+notes between rows or above several cards; give them a definite text slot and keep the \
+card concise enough to render every required label.
+- For chemistry workflows, use coordinate clouds, record cards, or unlabelled abstract \
+shapes as motifs. Do not request molecular bond structures or reaction/tautomer pairs \
+unless the documentation supplies an exact validated structure for the drawing.
+- For medical imaging and microscopy without supplied specimen images, request slide-file \
+icons, empty tile grids and mask-record symbols. Do not request tissue thumbnails, \
+stained textures, segmentation overlays or before/after result pictures: those invite \
+fabricated biological evidence even when the prompt calls them schematic.
+- For network workflows without an exact input graph, request node/edge record sheets \
+and abstract file icons, not invented connected-node diagrams. When exact connectivity \
+is supplied, preserve its full node/edge set, including isolates, in every repeated motif \
+unless an explicit transformation changes that set.
+- For quantum workflows, request circuit-definition record sheets or code-file icons \
+unless you specify a complete validated gate sequence from the documentation. Do not \
+request decorative quantum wires or gate motifs: omitted entangling gates or invented \
+connections change the operation, even when every numerical result is left blank.
+- When illustrating a model with fixed dimensions, specify the correct matrix/state \
+shape for every array motif or use plain record sheets instead. Empty matrix and ket \
+grids still imply dimensions; do not let decoration contradict the model's dimensions.
+- For forecasting or model-fitting workflows without supplied results, use text-only \
+record sheets or empty tables, never forecast curves, uncertainty bands, trend charts \
+or learning curves, even inside file icons. Explicitly prohibit those plot thumbnails \
+when requesting a record motif so the renderer does not turn a report into fake results.
 - Ground everything in the documentation. Do not invent a step, tool, rule, or \
 relationship it does not state, and never substitute a different command or an invented \
 abbreviation for a real one. Independent operations must not be chained as consecutive \
 steps; preserve any review or resolution gate before downstream work.
+- Keep conditional behavior conditional: asynchronous polling belongs only to operations \
+that return a job or task handle. Mutually exclusive outcomes such as success and failure \
+must branch from their shared prior state; never connect them as consecutive stages.
+- When only one refinement is permitted, show the initial operation and review followed \
+by the conditional refinement and second review as forward stages, with an early-success \
+bypass. Do not draw a backward loop that could imply unlimited repetitions. For an \
+example that needs no refinement, put the optional second pass in a supporting note.
+- Keep API contracts attached to their own operation. Never pair one helper with another \
+helper's response fields or outputs. When a short label cannot preserve that distinction, \
+describe the check in plain language instead of naming a response attribute.
+- Preserve artifact ownership: name an intermediate file in the step that creates it, \
+not as a new output of a later step that only reads it. If the output panel collects \
+artifacts from the whole workflow, label it "Workflow artifacts" and explicitly include \
+collecting those artifacts in the final handoff step. Otherwise list only the final \
+step's own outputs, retaining earlier files as supporting text in their producing cards.
+- An automatic checkpoint may assert only a property the documented executable actually \
+checks. A declared field, schema check, or common-key screen cannot establish that data \
+are private, aggregate-only, authorized, authentic, or scientifically valid. Show such \
+substantive judgments as an explicitly labelled human-review step when required by the \
+documentation, rather than an automatic pass gate. Put any essential limitation in the \
+quoted visible text inventory; an unquoted instruction to the renderer is not a caveat \
+the reader of the diagram will see.
+- Distinguish nonempty inputs or definitions from nonempty scientific results. For \
+gating workflows, say "strategy contains gate definitions", never "nonempty gates": \
+valid gated populations may contain no events. Preserve undefined percentages for \
+empty parent populations. Use plain-language labels when shortening an exact condition \
+would change which inputs or results are allowed.
+- Motifs must preserve the documented data flow as carefully as the step text. When \
+an artifact or processor is fitted on one dataset and reused on others, show one fitted \
+artifact with reuse connections; do not depict a separate fit for each dataset. Avoid \
+decorative arrows that reverse provenance or imply unperformed computations.
+- For plots with missing observations, explicitly require a blank interval between \
+disconnected trace segments in every repeated motif. Dotted or dashed bridges imply \
+interpolation and must not stand in for missing-data gaps.
+- Preserve training, validation and test roles in every label: a validation metric can \
+select a checkpoint, but that does not mean the model is trained on validation data. \
+Use a title such as "Train and select" when validation guides model selection.
+- Preserve the scope of caveats. A rule against reconfiguring or deleting an existing \
+resource must not become a blanket ban on authorized use of that resource. Precautions \
+for running temporary tests must not contradict the depicted production workflow.
 - If the skill covers several separate operations or APIs, diagram its main end-to-end \
 workflow and give the others one supporting mention at most. API discovery and \
 authentication are supporting detail, never the step that produces the result.
+- Choose one concrete worked example before choosing the step cards. Every operation \
+and output in the main flow must belong to that example. Optional operations that the \
+example does not perform belong in a supporting note, not an extra numbered step.
+- Show the actions the agent actually performs. When the worked example invokes a \
+bundled helper or CLI, keep that invocation as one step; do not turn its private API \
+calls, response parsing, or internal retry decisions into separate agent actions. \
+Explain critical internal behavior in that card or a supporting note. Low-level \
+format checks belong in the producing card or caveats, not separate flow diamonds.
+- Include prerequisites needed by later steps: identifiers must come from an earlier \
+step or a named input. A review or inspection is not a user approval gate unless the \
+documentation explicitly requires user consent; represent ordinary verification as \
+a check, without inventing a permission requirement.
+- Before returning the prompt, trace every identifier and prerequisite from input to \
+output. Include session creation or model selection when the example needs it; combine \
+related operations in one card if necessary. Treat citation review and evidence \
+verification as checks, not consent gates. Include an approval legend only when the \
+example explicitly asks the user to authorize an action.
+- Label checkpoints with the positive condition required to continue, such as \
+"Successful results available". Put failure conditions in the caveat strip or on an \
+explicit stop branch; never label a forward path with an error. Producing a read-only \
+report or a dry-run plan does not require approval. Only show a consent gate before \
+an actual authorized write, submission, or other action requiring that consent.
+- Distinguish requested targets from achieved results. A desired reference count is a \
+target, not a promised output. Placing an order in a cart does not produce an accepted \
+order or scientific measurements. Include only outputs actually produced by the \
+depicted steps; mark later deliverables as conditional supporting detail.
+- Use a high-level label when a short code chip would omit necessary branches, such \
+as different cleanup for a newly created versus reused session. Do not simplify a \
+conditional API contract into an unconditional call.
+- Preserve required shutdown and cleanup order in both labels and code chips. If \
+disposing a handle does not close its subprocesses, include the documented shutdown \
+operation before disposal; do not suggest that the final call alone is sufficient.
 - Name each element's role (input, step, checkpoint, output, supporting note), never a \
 colour.
+- For a backward continuation or refinement loop, include its source and destination \
+step numbers in the visible connector label, for example "Continue: step 5 to step 2". \
+Specify a separate dashed lane from the actual source card to the named destination; \
+never attach that loop to a finish card or to a row-transition connector.
 - Describe structure and content only. Say nothing about colours, fonts, line weights, \
 textures, shading or rendering style -- those are art-directed separately, and anything \
 you add will fight them.
@@ -288,7 +471,8 @@ def collect_skill_text(skill_dir: Path, max_chars: int) -> tuple[str, list[str]]
     """Gather the skill's documentation into one string, plus a read log.
 
     SKILL.md is always included whole; it is the part that has to be right, and
-    the repository caps it at 500 lines anyway. References share what is left.
+    the repository caps it at 500 lines anyway. Supporting guides share what
+    is left, including legacy root-level Markdown files such as PDF forms.md.
     """
     sections: list[str] = []
     log: list[str] = []
@@ -297,11 +481,14 @@ def collect_skill_text(skill_dir: Path, max_chars: int) -> tuple[str, list[str]]
     sections.append(f"===== SKILL.md =====\n{skill_md}")
     log.append(f"SKILL.md ({len(skill_md):,} chars)")
 
-    references = sorted(
-        path
-        for path in (skill_dir / "references").rglob("*")
+    references = sorted({
+        path for path in (skill_dir / "references").rglob("*")
         if path.is_file() and path.suffix.lower() in READABLE_SUFFIXES
-    )
+    } | {
+        path for path in skill_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == ".md"
+        and path.name != "SKILL.md" and not path.stem.lower().startswith("license")
+    })
 
     if references:
         contents = {
@@ -408,8 +595,8 @@ def post_json(url: str, api_key: str, payload: dict, timeout: float) -> Any:
 
     Rate limits and upstream hiccups are retried with exponential backoff:
     running many skills at once will meet 429s, and a whole-repository batch is
-    too expensive to abandon over one transient failure. A failed generation is
-    not billed, so a retry costs nothing extra.
+    too expensive to abandon over one transient failure. An ambiguous transport
+    failure may occur after processing; retries are not a billing guarantee.
     """
     body_bytes = json.dumps(payload).encode("utf-8")
     headers = {
@@ -712,7 +899,7 @@ Examples:
         type=int,
         default=DEFAULT_MAX_CHARS,
         help=f"Documentation budget sent to the reader (default: {DEFAULT_MAX_CHARS:,}). "
-        "SKILL.md is always sent whole; references share what is left.",
+        "SKILL.md is always sent whole; supporting guides share what is left.",
     )
     parser.add_argument(
         "--input",

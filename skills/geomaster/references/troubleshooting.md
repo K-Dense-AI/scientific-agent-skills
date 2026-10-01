@@ -1,439 +1,130 @@
-# GeoMaster Troubleshooting Guide
+# GeoMaster troubleshooting
 
-Solutions to common geospatial problems and debugging strategies.
+Reviewed 2026-10-01. Diagnose the specific contract before changing data. Preserve
+original inputs and report excluded/changed records.
 
-## Installation Issues
+## Installation and ABI
 
-### GDAL Installation Problems
-
-```bash
-# Problem: "gdal-config not found" or rasterio install fails
-
-# Solution 1: Use conda (recommended)
-conda install -c conda-forge gdal rasterio
-
-# Solution 2: System packages (Ubuntu/Debian)
-sudo apt-get install gdal-bin libgdal-dev
-export CPLUS_INCLUDE_PATH=/usr/include/gdal
-export C_INCLUDE_PATH=/usr/include/gdal
-uv pip install rasterio
-
-# Solution 3: Wheel files
-uv pip install rasterio --find-links=https://gis.wheelwrights.com/
-
-# Verify installation
-python -c "from osgeo import gdal; print(gdal.__version__)"
-python -c "import rasterio; print(rasterio.__version__)"
-```
-
-### Python Binding Issues
-
-```bash
-# Problem: "DLL load failed" on Windows
-# Solution: Reinstall with conda
-conda install -c conda-forge --force-reinstall gdal rasterio fiona
-
-# Problem: "Symbol not found" on macOS
-# Solution: Rebuild from source or use conda
-brew install gdal
-uv pip install rasterio --no-binary rasterio
-
-# Problem: GEOS errors
-brew install geos
-uv pip install shapely --no-binary shapely
-```
-
-## Runtime Errors
-
-### CRS Transformation Errors
+Use one coherent wheel or conda-forge stack. Rasterio wheels bundle GDAL; they do
+not supply `from osgeo import gdal` or every native driver. Building GDAL bindings
+requires compatible native GDAL and headers. Avoid unverified third-party wheel
+indexes or mixing independently built GEOS/GDAL/PROJ binaries into one environment.
+Use the official package installation guides and capture actual runtime versions.
 
 ```python
-# Problem: "Invalid projection" or "CRS mismatch"
-import geopandas as gpd
-
-# Check CRS
-print(f"CRS: {gdf.crs}")
-
-# If None, set it
-if gdf.crs is None:
-    gdf.set_crs("EPSG:4326", inplace=True)
-
-# If unknown, try to detect
-gdf = gdf.to_crs(gdf.estimate_utm_crs())
+import sys, rasterio, geopandas, pyproj
+print(sys.version)
+print('GeoPandas', geopandas.__version__)
+print('Rasterio', rasterio.__version__, 'GDAL', rasterio.__gdal_version__)
+print('PyProj', pyproj.__version__, 'PROJ', pyproj.proj_version_str)
 ```
 
-### Memory Errors with Large Rasters
+`gdal.VersionInfo('PROJ')` is not the way to query the PROJ version.
+QGIS/ArcPy/GRASS need their application environment; `pip install` is not a substitute
+for native runtime initialization or a licensed ArcGIS installation.
+
+## CRS and units
+
+- Unknown CRS: retrieve authoritative metadata. Plausible lon/lat bounds do not prove
+  EPSG:4326, and `estimate_utm_crs()` cannot infer an unknown source CRS.
+- `set_crs` assigns a label without moving points; `to_crs` transforms known coordinates.
+- Use `Transformer.from_crs(..., always_xy=True)` for explicit x/y order and
+  `errcheck=True` for failures. `always_z` is not a Transformer option.
+- `GeoDataFrame.to_crs` has no `geometry_precision` argument. Simplification/precision
+  reduction changes geometry and must be an explicit separate operation in known units.
+- Check area of use, units, datum epochs and transformation grids. A round trip is a
+  numerical consistency check, not proof of geographic accuracy.
 
 ```python
-# Problem: "MemoryError" when reading large files
-# Solution: Read in chunks or use windows
+from pyproj import Transformer, Geod
 
-import rasterio
-from rasterio.windows import Window
-
-# Windowed reading
-with rasterio.open('large.tif') as src:
-    window = Window(0, 0, 1000, 1000)  # (col_off, row_off, width, height)
-    subset = src.read(1, window=window)
-
-# Block-by-block processing
-with rasterio.open('large.tif') as src:
-    for i, window in src.block_windows(1):
-        block = src.read(1, window=window)
-        # Process block...
-
-# Use Dask for very large files
-import dask.array as da
-dask_array = da.from_rasterio('large.tif', chunks=(1, 1024, 1024))
+forward = Transformer.from_crs(4326, 32610, always_xy=True)
+inverse = Transformer.from_crs(32610, 4326, always_xy=True)
+x, y = forward.transform(-122.4, 37.7, errcheck=True)
+lon2, lat2 = inverse.transform(x, y, errcheck=True)
+_, _, roundtrip_metres = Geod(ellps='WGS84').inv(-122.4, 37.7, lon2, lat2)
+assert roundtrip_metres < 0.001
 ```
 
-### Geometry Validation Errors
+Do not measure geographic-coordinate `.distance()` then print the degree result as metres.
+
+## Geometry failures
 
 ```python
-# Problem: "TopologyException" or "Self-intersection"
-import geopandas as gpd
-from shapely.validation import make_valid
-
-# Check invalid geometries
-invalid = gdf[~gdf.is_valid]
-print(f"Invalid geometries: {len(invalid)}")
-
-# Fix invalid geometries
-gdf['geometry'] = gdf.geometry.make_valid()
-
-# Buffer with 0 to fix (alternative method)
-gdf['geometry'] = gdf.geometry.buffer(0)
+report = {'missing': int(gdf.geometry.isna().sum()),
+          'empty': int(gdf.geometry.is_empty.sum()),
+          'invalid': int((~gdf.geometry.is_valid & gdf.geometry.notna()).sum()),
+          'types': gdf.geom_type.value_counts().to_dict()}
+repaired = gdf.copy()
+repaired.geometry = repaired.geometry.make_valid()
 ```
 
-### Coordinate Order Confusion
+Inspect the repair: it can split polygons or produce GeometryCollections/lines.
+Compare area/type/count against the original and retain failed features separately.
+`buffer(0)` is not a guaranteed equivalent repair. Missing and empty geometries are
+different; `.is_empty` does not identify every null geometry. `.x`/`.y` apply to
+points, not arbitrary polygons/lines.
+
+Spatial join predicates encode meaning: `within` excludes boundary points,
+`intersects` includes them. Nearest joins need suitable projected units and may return
+multiple equidistant matches. Indexing accelerates candidates but does not fix wrong
+CRS or unwanted duplicate matches.
+
+## Memory and storage
+
+Read windows or use `rioxarray.open_rasterio(..., chunks=...)`. Dask has no
+`array.from_rasterio`. A lazy object can still force a full in-memory array via
+`.values`, `.compute()` or output drivers. Bound spatial extent as well as chunk size.
+Global statistics and focal filters must be independent of arbitrary chunk boundaries.
+
+Rasterio mask/crop returns a new affine transform. Update height/width/transform
+when writing cropped/resampled data. Store arrays as `(bands, rows, columns)`;
+`dst.write(array, 1)` expects a 2D single-band array, while `dst.write(array)` expects
+3D. Update dtype/count/nodata together. Categorical outputs must not inherit NaN
+nodata in an integer dtype or a reflectance nodata code that collides with a class.
+
+Compression and tiling do not certify a COG. Use the COG driver or rio-cogeo, then
+validate. Zarr v3 removed `DirectoryStore`; use `LocalStore` or an Xarray path with
+explicit format. In GeoParquet, pandas `index=True` is not a spatial index.
+
+## Optical/SAR data
+
+Band positions are not universal Sentinel names. Inspect descriptions/assets and
+record the stack manifest. Separate optical DN calibration from SCL categorical
+codes; do not scale QA bands. Apply product-specific additive offsets before ratios,
+and physical reflectance before EVI/SAVI. Unsigned subtraction can wrap.
 
 ```python
-# Problem: Points in wrong location (lon/lat swapped)
-from pyproj import Transformer
-
-# Common mistake: lon, lat vs lat, lon
-# Always specify axis order
-transformer = Transformer.from_crs(
-    "EPSG:4326",
-    "EPSG:32610",
-    always_xy=True  # Input: x=lon, y=lat (not y=lat, x=lon)
-)
-
-# Correct usage
-x, y = transformer.transform(lon, lat)  # not lat, lon
+import numpy as np
+# NumPy SCL array: invalid is True for the listed classes.
+invalid = np.isin(scl_array, [0, 1, 3, 8, 9, 10])
+# Earth Engine equivalent uses image remap or explicit comparisons, not .isin().
+keep = scl_image.eq(4).Or(scl_image.eq(5)).Or(scl_image.eq(6))
+clean = ee_image.updateMask(keep)
 ```
 
-## Performance Issues
-
-### Slow Spatial Joins
-
-```python
-# Problem: sjoin takes too long
-import geopandas as gpd
-
-# Solution: Use spatial index
-gdf1.sindex  # Auto-created
-gdf2.sindex
-
-# For nearest neighbor joins, use specialized function
-result = gpd.sjoin_nearest(gdf1, gdf2, max_distance=1000)
-
-# Use intersection predicate (faster than 'intersects' for points)
-result = gpd.sjoin(points, polygons, predicate='within')
-
-# Clip to bounding box first
-bbox = gdf1.total_bounds
-gdf2_clipped = gdf2.cx[bbox[0]:bbox[2], bbox[1]:bbox[3]]
-result = gpd.sjoin(gdf1, gdf2_clipped, predicate='intersects')
-```
-
-### Slow Raster I/O
-
-```python
-# Problem: Reading/writing rasters is slow
-import rasterio
-
-# Solution 1: Use compression when writing
-profile.update(
-    compress='DEFLATE',
-    predictor=2,
-    zlevel=4
-)
-
-# Solution 2: Use tiled output
-profile.update(
-    tiled=True,
-    blockxsize=256,
-    blockysize=256
-)
-
-# Solution 3: Enable caching
-from osgeo import gdal
-gdal.SetCacheMax(2**30)  # 1GB
-
-# Solution 4: Use COG format for cloud access
-from rio_cogeo.cogeo import cog_translate
-cog_translate('input.tif', 'output.tif', profile)
-```
-
-### Slow Reprojection
-
-```python
-# Problem: to_crs() is very slow
-import geopandas as gpd
-
-# Solution 1: Simplify geometry first
-gdf_simple = gdf.geometry.simplify(tolerance=0.0001)
-gdf_reproj = gdf_simple.to_crs(target_crs)
-
-# Solution 2: Use lower precision for display
-gdf_reproj = gdf.to_crs(target_crs, geometry_precision=2)
-
-# Solution 3: Reproject in parallel
-import multiprocessing as mp
-from functools import partial
-
-def reproj_chunk(chunk, target_crs):
-    return chunk.to_crs(target_crs)
-
-chunks = np.array_split(gdf, mp.cpu_count())
-with mp.Pool() as pool:
-    results = pool.map(partial(reproj_chunk, target_crs=target_crs), chunks)
-gdf_reproj = gpd.GeoDataFrame(pd.concat(results))
-```
-
-## Common Pitfalls
-
-### Area in Degrees
-
-```python
-# WRONG: Area in square degrees
-gdf = gpd.read_file('data.geojson')
-area = gdf.geometry.area  # Wrong!
-
-# CORRECT: Use projected CRS
-gdf_proj = gdf.to_crs(gdf.estimate_utm_crs())
-area_sqm = gdf_proj.geometry.area
-area_sqkm = area_sqm / 1_000_000
-```
-
-### Buffer in Geographic CRS
-
-```python
-# WRONG: Buffer of 1000 degrees
-gdf['buffer'] = gdf.geometry.buffer(1000)
-
-# CORRECT: Project first
-gdf_proj = gdf.to_crs("EPSG:32610")
-gdf_proj['buffer_km'] = gdf_proj.geometry.buffer(1000)  # 1000 meters
-```
-
-### Web Mercator Distortion
-
-```python
-# WRONG: Area calculation in Web Mercator
-gdf = gdf.to_crs("EPSG:3857")
-area = gdf.geometry.area  # Significant distortion!
-
-# CORRECT: Use appropriate projection
-gdf = gdf.to_crs(gdf.estimate_utm_crs())
-area = gdf.geometry.area  # Accurate
-```
-
-### Mixing CRS
-
-```python
-# WRONG: Spatial join without checking CRS
-result = gpd.sjoin(gdf1, gdf2, predicate='intersects')
-
-# CORRECT: Ensure same CRS
-if gdf1.crs != gdf2.crs:
-    gdf2 = gdf2.to_crs(gdf1.crs)
-result = gpd.sjoin(gdf1, gdf2, predicate='intersects')
-```
-
-## Data Issues
-
-### Missing/Missing CRS
-
-```python
-# Problem: CRS is None
-gdf = gpd.read_file('data.geojson')
-if gdf.crs is None:
-    # Try to detect from data extent
-    lon_min, lat_min, lon_max, lat_max = gdf.total_bounds
-
-    if -180 <= lon_min <= 180 and -90 <= lat_min <= 90:
-        gdf.set_crs("EPSG:4326", inplace=True)
-        print("Assumed WGS 84 (EPSG:4326)")
-    else:
-        gdf.set_crs(gdf.estimate_utm_crs(), inplace=True)
-        print("Estimated UTM zone")
-```
-
-### Invalid Coordinates
-
-```python
-# Problem: Coordinates out of valid range
-gdf = gpd.read_file('data.geojson')
-
-# Check for invalid coordinates
-invalid_lon = (gdf.geometry.x < -180) | (gdf.geometry.x > 180)
-invalid_lat = (gdf.geometry.y < -90) | (gdf.geometry.y > 90)
-
-if invalid_lon.any() or invalid_lat.any():
-    print("Warning: Invalid coordinates found")
-    gdf = gdf[~invalid_lon & ~invalid_lat]
-```
-
-### Empty Geometries
-
-```python
-# Problem: Processing fails with empty geometries
-# Remove empty geometries
-gdf = gdf[~gdf.geometry.is_empty]
-
-# Or fill with None
-gdf.loc[gdf.geometry.is_empty, 'geometry'] = None
-
-# Check before operations
-if gdf.geometry.is_empty.any():
-    print(f"Warning: {gdf.geometry.is_empty.sum()} empty geometries")
-```
-
-## Remote Sensing Issues
-
-### Sentinel-2 Band Ordering
-
-```python
-# Problem: Wrong band indices
-# Sentinel-2 L2A SAFE structure:
-# B01 (60m), B02 (10m), B03 (10m), B04 (10m), B05 (20m),
-# B06 (20m), B07 (20m), B08 (10m), B08A (20m), B09 (60m),
-# B11 (20m), B12 (20m)
-
-# Sentinel-2 (resampled to 10m):
-# B02=1, B03=2, B04=3, B05=4, B06=5, B07=6, B08=7, B8A=8, B11=9, B12=10
-
-# For 10m bands only:
-blue = src.read(1)   # B02
-green = src.read(2)  # B03
-red = src.read(3)    # B04
-nir = src.read(4)    # B08
-```
-
-### Cloud Shadow Masking
-
-```python
-# Problem: Clouds and shadows not properly masked
-def improved_cloud_mask(scl):
-    """
-    Improved cloud masking using SCL layer.
-    Classes: 0=No data, 1=Saturated, 2=Dark, 3=Cloud shadow,
-    4=Vegetation, 5=Bare soil, 6=Water, 7=Cloud low prob,
-    8=Cloud med prob, 9=Cloud high prob, 10=Thin cirrus
-    """
-    # Mask: clouds, cloud shadows, saturated
-    mask = scl.isin([0, 1, 3, 8, 9, 10])
-    return mask
-
-# Apply
-scl = s2_image.select('SCL')
-cloud_mask = improved_cloud_mask(scl)
-image_clean = s2_image.updateMask(cloud_mask.Not())
-```
-
-## Error Messages Reference
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `CRS mismatch` | Different coordinate systems | `gdf2 = gdf2.to_crs(gdf1.crs)` |
-| `TopologyException` | Invalid/self-intersecting geometry | `gdf.geometry = gdf.geometry.make_valid()` |
-| `MemoryError` | Large dataset | Use Dask or chunked reading |
-| `Invalid projection` | Unknown CRS code | Check EPSG code, use `CRS.from_user_input()` |
-| `Empty geometry` | Null geometries | `gdf = gdf[~gdf.geometry.is_empty]` |
-| `Bounds error` | Coordinates out of range | Filter invalid coordinates |
-| `DLL load failed` | GDAL not installed | Use conda: `conda install gdal` |
-| `Symbol not found` | Library linking issue | Reinstall with binary wheels or conda |
-| `Self-intersection` | Invalid polygon | Buffer(0) or make_valid() |
-
-## Debugging Strategies
-
-### 1. Check Data Integrity
-
-```python
-def check_geodataframe(gdf):
-    """Comprehensive GeoDataFrame health check."""
-    print(f"Shape: {gdf.shape}")
-    print(f"CRS: {gdf.crs}")
-    print(f"Bounds: {gdf.total_bounds}")
-    print(f"Invalid geometries: {(~gdf.is_valid).sum()}")
-    print(f"Empty geometries: {gdf.geometry.is_empty.sum()}")
-    print(f"None geometries: {gdf.geometry.isna().sum()}")
-    print(f"Duplicate geometries: {gdf.geometry.duplicated().sum()}")
-    print("\nGeometry types:")
-    print(gdf.geometry.type.value_counts())
-    print("\nCoordinate range:")
-    print(f"  X: {gdf.geometry.x.min():.2f} to {gdf.geometry.x.max():.2f}")
-    print(f"  Y: {gdf.geometry.y.min():.2f} to {gdf.geometry.y.max():.2f}")
-
-check_geodataframe(gdf)
-```
-
-### 2. Test Transformations
-
-```python
-def test_reprojection(gdf, target_crs):
-    """Test if reprojection is reversible."""
-    original = gdf.copy()
-    gdf_proj = gdf.to_crs(target_crs)
-    gdf_back = gdf_proj.to_crs(gdf.crs)
-
-    diff = original.geometry.distance(gdf_back.geometry).max()
-    if diff > 1:  # More than 1 meter
-        print(f"Warning: Max error: {diff:.2f}m")
-        return False
-    return True
-```
-
-### 3. Profile Code
-
-```python
-import time
-
-def time_operation(func, *args, **kwargs):
-    """Time a geospatial operation."""
-    start = time.time()
-    result = func(*args, **kwargs)
-    elapsed = time.time() - start
-    print(f"{func.__name__}: {elapsed:.2f}s")
-    return result
-
-# Usage
-time_operation(gdf.to_crs, "EPSG:32610")
-```
-
-## Getting Help
-
-### Check Versions
-
-```python
-import sys
-import geopandas as gpd
-import rasterio
-from osgeo import gdal
-
-print(f"Python: {sys.version}")
-print(f"GeoPandas: {gpd.__version__}")
-print(f"Rasterio: {rasterio.__version__}")
-print(f"GDAL: {gdal.__version__}")
-print(f"PROJ: {gdal.VersionInfo('PROJ')}")
-```
-
-### Useful Resources
-
-- **GeoPandas docs**: https://geopandas.org/
-- **Rasterio docs**: https://rasterio.readthedocs.io/
-- **PROJ datab**: https://epsg.org/
-- **Stack Overflow**: Tag with `gis` and `python`
-- **GIS Stack Exchange**: https://gis.stackexchange.com/
+Decide separately how to treat dark/unclassified/snow cells. Scene cloud percentage
+is not a per-pixel mask. QA60 has a documented historical gap in harmonized S2 SR;
+use SCL or a suitable supported cloud product for that interval.
+
+SAR dB inputs must not be passed through `10*log10` again. Calibrate raw inputs before
+linear power ratios; handle nonpositive/masked cells. A VV/VH ratio is not a measured
+soil-moisture fraction.
+
+## API and result debugging
+
+- Empty STAC search: inspect bbox order, dates, collection IDs, item geometry and
+  filter extension support. Use `.items()`; `limit` is a page size.
+- Expired Planetary Computer URLs: re-sign near access time; retain unsigned item
+  provenance. Missing calibration metadata requires product-level verification.
+- Earth Engine: authenticate, register/initialize the correct project, keep server-side
+  objects server-side, and inspect export task status. Constructor success is not output.
+- CDS: current PAT configuration and dataset terms are required. Use `data_format`
+  and the download form's current generated request.
+- Google geocoder: HTTP200 with non-OK JSON status is a service error/empty result,
+  not a usable first location. Keep ambiguity rather than silently selecting a result.
+- OSM services: comply with documented use limits and identity; do not retry tight
+  loops or mistake timeout/partial results for a complete AOI.
+
+See [data-sources.md](data-sources.md) for reviewed endpoints and official links;
+[core-libraries.md](core-libraries.md) for current local APIs.

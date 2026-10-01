@@ -1,4 +1,9 @@
 # OneKGPd annotation vocabularies
+Verified against `dnaerys 0.2.1` / protobuf R1.20.0 on 2026-09-30.
+These are the API's accepted enums, not every term in the latest upstream VEP or
+ClinVar vocabulary. A valid enum need not occur in the hosted cohort.
+[Official enum source](https://github.com/dnaerys/dnaerys-python/blob/master/src/dnaerys/_enums.py).
+
 Controlled-vocabulary terms accepted by the CSV annotation-filter flags of
 `onekgpd_api.py`. Values are **case-insensitive** and resolved by exact member
 name; pass them as comma-separated lists (e.g.

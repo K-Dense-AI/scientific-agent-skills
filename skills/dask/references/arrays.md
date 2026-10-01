@@ -1,5 +1,7 @@
 # Dask Arrays
 
+Reviewed with Dask/distributed 2026.8.0. File paths, deployment settings, and undefined application functions are illustrative; executed local checks and current official sources are in [review.md](review.md).
+
 ## Overview
 
 Dask Array implements NumPy's ndarray interface using blocked algorithms. It coordinates many NumPy arrays arranged into a grid to enable computation on datasets larger than available memory, utilizing parallelism across multiple cores.
@@ -65,7 +67,7 @@ Dask Arrays intentionally don't implement certain NumPy features:
 - Memory-inefficient operations (converting to lists, iterating via loops)
 - Many specialized functions (driven by community needs)
 
-**Workarounds**: For unsupported operations, consider using `map_blocks` with custom NumPy code.
+**Workarounds**: `map_blocks` is appropriate only when each block can be processed independently. A block FFT is not a global FFT; neighborhood filters need overlap; global reductions need a valid combine step.
 
 ## Creating Dask Arrays
 
@@ -98,23 +100,29 @@ empty = da.empty((10000, 10000), chunks=(1000, 1000))
 
 ### From Functions
 ```python
-# Create array from function
-def create_block(block_id):
-    return np.random.random((1000, 1000)) * block_id[0]
+import dask
+import dask.array as da
+import numpy as np
 
-x = da.from_delayed(
-    [[dask.delayed(create_block)((i, j)) for j in range(10)] for i in range(10)],
-    shape=(10000, 10000),
-    dtype=float
-)
+def create_block(i, j):
+    # Deterministic small synthetic block
+    return np.full((4, 5), i * 10 + j, dtype='float64')
+
+blocks = [[da.from_delayed(dask.delayed(create_block)(i, j),
+                           shape=(4, 5), dtype='float64')
+           for j in range(3)] for i in range(2)]
+x = da.block(blocks)  # (8, 15); from_delayed accepts ONE delayed value
 ```
 
 ### From Disk
 ```python
 # Load from HDF5
 import h5py
-f = h5py.File('myfile.hdf5', mode='r')
-x = da.from_array(f['/data'], chunks=(1000, 1000))
+with h5py.File('myfile.hdf5', mode='r') as f:
+    x = da.from_array(f['/data'], chunks=(1000, 1000))
+    mean = x.mean().compute(scheduler='threads')  # While handle is open
+# h5py handles cannot be pickled for process/distributed workers.
+# For those schedulers, open files inside worker tasks and return concrete chunks.
 
 # Load from Zarr
 import zarr
@@ -184,7 +192,10 @@ AT = A.T
 
 ### Linear Algebra
 ```python
-# SVD (Singular Value Decomposition)
+# Exact SVD/QR need a single column of chunks here.
+# Check that a full-width block and decomposition workspaces fit memory.
+import dask
+A = da.random.default_rng(42).random((40, 6), chunks=(10, 6))
 U, s, Vt = da.linalg.svd(A)
 U_computed, s_computed, Vt_computed = dask.compute(U, s, Vt)
 
@@ -220,9 +231,9 @@ Chunking is critical for Dask Array performance.
 ### Chunk Size Guidelines
 
 **Good Chunk Sizes**:
-- Each chunk: ~10-100 MB (compressed)
-- ~1 million elements per chunk for numeric data
-- Balance between parallelism and overhead
+- Measure uncompressed bytes (`prod(chunk_shape) * dtype.itemsize`)
+- Start around 100 MiB for substantial arrays, then measure task duration and peak memory
+- Budget concurrent input, output, and temporary buffers; align chunks with storage
 
 **Example Calculation**:
 ```python
@@ -265,29 +276,29 @@ import numpy as np
 
 def custom_function(block):
     # Apply custom NumPy operation
-    return np.fft.fft2(block)
+    return np.log1p(block)
 
 x = da.random.random((10000, 10000), chunks=(1000, 1000))
-result = da.map_blocks(custom_function, x, dtype=x.dtype)
+result = da.map_blocks(custom_function, x, dtype='float64',
+                       meta=np.empty((0, 0), dtype='float64'))
 
 # Compute
 output = result.compute()
 ```
 
+For a global FFT use `da.fft.fft2(x.rechunk({0: -1, 1: -1}))` only if that full transform fits memory: each transform axis must have one chunk. Mapping `np.fft.fft2` independently over chunks changes the scientific calculation.
+
 ### map_blocks with Different Output Shape
 ```python
 def reduction_function(block):
-    # Returns scalar for each block
-    return np.array([block.mean()])
+    # Preserve rank: one 1x1 output for each two-dimensional input block
+    return np.array([[block.mean()]], dtype='float64')
 
-result = da.map_blocks(
-    reduction_function,
-    x,
-    dtype='float64',
-    drop_axis=[0, 1],  # Output has no axes from input
-    new_axis=0,        # Output has new axis
-    chunks=(1,)        # One element per block
-)
+result = da.map_blocks(reduction_function, x, dtype='float64',
+                       chunks=(1, 1), meta=np.empty((0, 0), dtype='float64'))
+# result.shape == x.numblocks. Do not average these means unweighted when
+# edge chunks have different sizes; x.mean() is the correct global reduction.
+# drop_axis concatenates chunks along dropped axes before calling the function.
 ```
 
 ## Lazy Evaluation and Computation
@@ -332,14 +343,15 @@ numpy_array = dask_array.compute()
 
 ### To Disk
 ```python
-# Save to Zarr (dask 2026.1+: use mode= and zarr_array_kwargs= for zarr-python 3)
-da.to_zarr(x, 'output.zarr', mode='w')
+# Save to Zarr; mode='w-' fails if output exists. mode='w' replaces it.
+# **zarr_array_kwargs means direct keywords, e.g. zarr_format=3, not a nested dict.
+da.to_zarr(x, 'output.zarr', mode='w-', zarr_format=3)
 
 # Save to HDF5
 import h5py
 with h5py.File('output.hdf5', mode='w') as f:
     dset = f.create_dataset('/data', shape=x.shape, dtype=x.dtype)
-    da.store(x, dset)
+    da.store(x, dset, scheduler='threads')  # Local open HDF5 handle
 ```
 
 ## Performance Considerations
@@ -361,8 +373,8 @@ with h5py.File('output.hdf5', mode='w') as f:
 **1. Choose Good Chunk Sizes**
 ```python
 # Aim for balanced chunks
-# Good: ~100 MB per chunk
-x = da.random.random((100000, 10000), chunks=(10000, 10000))
+# About 100 MB of float64 per chunk (2500 * 5000 * 8)
+x = da.random.random((100000, 10000), chunks=(2500, 5000))
 ```
 
 **2. Align Chunks for Operations**
@@ -399,12 +411,17 @@ import dask.array as da
 # Load large image stack
 images = da.from_zarr('images.zarr')
 
-# Apply filtering
-def apply_gaussian(block):
-    from scipy.ndimage import gaussian_filter
-    return gaussian_filter(block, sigma=2)
+# Assume axes (frame, y, x): filter spatial axes only, in floating point.
+# sigma=2 and radius=8 must agree with the overlap depth.
+from scipy.ndimage import gaussian_filter
+images = images.astype('float64')
 
-filtered = da.map_blocks(apply_gaussian, images, dtype=images.dtype)
+def apply_gaussian(block):
+    return gaussian_filter(block, sigma=(0, 2, 2), radius=(0, 8, 8), mode='reflect')
+
+filtered = da.map_overlap(apply_gaussian, images, depth=(0, 8, 8),
+                          boundary='reflect', trim=True, dtype='float64')
+# Compare to SciPy on a fixture spanning chunk boundaries and image edges.
 
 # Compute statistics
 mean_intensity = filtered.mean().compute()
@@ -413,12 +430,12 @@ mean_intensity = filtered.mean().compute()
 ### Scientific Computing
 ```python
 # Large-scale numerical simulation
-x = da.random.random((100000, 100000), chunks=(10000, 10000))
+x = da.random.default_rng(42).random((1000, 1000), chunks=(250, 250))
 
 # Apply iterative computation
 for i in range(num_iterations):
     x = da.exp(-x) * da.sin(x)
-    x = x.persist()  # Keep in memory for next iteration
+    x = x.persist()  # Budget all retained chunks and temporary arrays
 
 # Final result
 result = x.compute()
@@ -432,10 +449,11 @@ data = da.from_zarr('measurements.zarr')
 # Compute statistics
 mean = data.mean(axis=0)
 std = data.std(axis=0)
-normalized = (data - mean) / std
+normalized = (data - mean) / da.where(std > 0, std, 1)
+# Define a separate policy for NaNs; constant columns become zero.
 
 # Save normalized data
-da.to_zarr(normalized, 'normalized.zarr')
+da.to_zarr(normalized, 'normalized.zarr', mode='w-')
 ```
 
 ## Integration with Other Tools
@@ -471,7 +489,7 @@ X_scaled = scaler.fit_transform(X)
 # Visualize computation graph (for small arrays)
 x = da.random.random((100, 100), chunks=(10, 10))
 y = x + 1
-y.visualize(filename='graph.png')
+y.visualize(filename='graph.png')  # Needs Python graphviz and system Graphviz
 ```
 
 ### Check Array Properties
@@ -490,6 +508,6 @@ small_x = da.random.random((100, 100), chunks=(50, 50))
 result_small = computation(small_x).compute()
 
 # Validate, then scale
-large_x = da.random.random((100000, 100000), chunks=(10000, 10000))
-result_large = computation(large_x).compute()
+large_x = da.random.default_rng(42).random((1000, 1000), chunks=(250, 250))
+result_large = computation(large_x).mean().compute()  # Or write partitioned output
 ```

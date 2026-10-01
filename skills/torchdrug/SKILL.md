@@ -1,12 +1,13 @@
 ---
 name: torchdrug
-description: Build and troubleshoot TorchDrug 0.2.1 workflows for molecular graphs, property prediction, self-supervised pretraining, molecule generation, retrosynthesis, protein representation learning, and knowledge graph reasoning. Use when code imports torchdrug or needs its datasets, models, tasks, or Engine.
+description: Builds and troubleshoots TorchDrug 0.2.1 workflows for molecular graphs, property prediction, self-supervised pretraining, molecule generation, retrosynthesis, protein representation learning, and knowledge graph reasoning. Use when code imports torchdrug or needs its datasets, models, tasks, or Engine.
 license: Apache-2.0 license
-compatibility: TorchDrug 0.2.1 requires Python 3.7-3.10 and supports PyTorch 1.8-2.0. Apple Silicon is CPU-only; MPS is unsupported.
+compatibility: Requires Python 3.7-3.10, PyTorch 1.8-2.0, compatible torch-scatter/torch-cluster, RDKit, and fair-esm. Apple Silicon is CPU-only and requires native builds; MPS is unsupported. Network access is needed for uncached datasets and weights.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-10-01"
 ---
 
 # TorchDrug
@@ -18,7 +19,8 @@ Use TorchDrug as a modular PyTorch graph-learning stack:
 3. wrap it in a `tasks.*` objective,
 4. train and evaluate it with `core.Engine`.
 
-The current official documentation and latest release are both **0.2.1**. Treat
+The current official documentation and latest published release are both **0.2.1**
+(released July 2023; rechecked October 1, 2026). Treat
 newer Python or PyTorch combinations as unverified rather than silently assuming
 compatibility.
 
@@ -49,28 +51,41 @@ Prefer a dedicated Python 3.10 environment and pin the TorchDrug release:
 ```bash
 uv venv --python 3.10
 source .venv/bin/activate
-uv pip install "torch==2.0.0"
+uv pip install "torch==2.0.0" "numpy==1.26.4" "setuptools<81" wheel
 ```
 
 Install `torch-scatter` and `torch-cluster` wheels matched to the exact PyTorch
 and CUDA pair, following the
 [official installation page](https://torchdrug.ai/docs/installation.html). For a
-CPU-only PyTorch 2.0 environment, one reproducible wheel combination is:
+CPU-only PyTorch 2.0 environment on a platform listed in that wheel index, use:
 
 ```bash
-uv pip install "torch-scatter==2.1.1" "torch-cluster==1.6.1" \
+uv pip install --only-binary :all: "torch-scatter==2.1.2" "torch-cluster==1.6.3" \
   --find-links "https://data.pyg.org/whl/torch-2.0.0+cpu.html"
-uv pip install "torchdrug==0.2.1"
+uv pip install "torchdrug==0.2.1" "numpy==1.26.4" "scipy==1.13.1" \
+  "rdkit-pypi==2022.9.5" "fair-esm==2.0.0" "decorator==5.1.1"
 ```
 
 Do not copy a CUDA wheel URL between environments. Match the PyTorch version,
 CUDA build, Python ABI, and platform. On Apple Silicon, the official docs require
-building `torch-scatter` and `torch-cluster` from source; pin reviewed source
-revisions and expect CPU execution.
+building `torch-scatter` and `torch-cluster` from source; the wheel index above
+has no macOS ARM64 wheels. Install PyTorch before building with
+`--no-build-isolation`. A working compiler/SDK is also required; having PyTorch
+installed alone does not guarantee a successful native build. See
+[review and environment evidence](references/review.md) for the exact audit stack.
+Use the **fair-esm** distribution, which imports as `esm`; the newer distribution
+named `esm` is a different SDK. Do not install both RDKit distributions (`rdkit`
+and `rdkit-pypi`) into one environment. NumPy 1.x avoids the old binary stack's
+NumPy 2 ABI incompatibility; `setuptools<81` retains `pkg_resources` for PyTorch 2.0.
 
 ## Canonical property-prediction workflow
 
 Use the documented ClinTox → GIN → `PropertyPrediction` → `Engine` pattern. The random split below is a tutorial baseline. For generalization to new molecular scaffolds, use `data.scaffold_split` or the benchmark's specified split, keep duplicate molecules in one partition, and record the actual split sizes and class counts. Scaffold-group allocation may not match the requested lengths exactly.
+
+First run the [ClinTox cache preparation](references/datasets.md#clintox-download-repair).
+The release's old HTTP download URL fails; the current official HTTPS asset has
+the identical release MD5. The full training examples are illustrative and were
+not run to convergence during this review.
 
 ```python
 import torch
@@ -79,7 +94,9 @@ from torchdrug import core, datasets, models, tasks
 dataset = datasets.ClinTox("~/molecule-datasets/")
 lengths = [int(0.8 * len(dataset)), int(0.1 * len(dataset))]
 lengths.append(len(dataset) - sum(lengths))
-train_set, valid_set, test_set = torch.utils.data.random_split(dataset, lengths)
+train_set, valid_set, test_set = torch.utils.data.random_split(
+    dataset, lengths, generator=torch.Generator().manual_seed(1)
+)
 
 model = models.GIN(
     input_dim=dataset.node_feature_dim,
@@ -132,8 +149,9 @@ from older releases.
 - InfoGraph: `models.InfoGraph(gin_model, separate_model=False)` wrapped by
   `tasks.Unsupervised`.
 - Attribute masking: `tasks.AttributeMasking(model, mask_rate=0.15)`.
-- Recreate the same encoder for fine-tuning, then load the checkpoint with
-  `strict=False` before training `tasks.PropertyPrediction`.
+- Recreate the same encoder for fine-tuning. AttributeMasking and InfoGraph
+  checkpoints have different encoder key prefixes; verify transferred weights
+  as described in the reference before training `tasks.PropertyPrediction`.
 - Read [molecular property prediction](references/molecular_property_prediction.md).
 
 ### Molecule generation
@@ -182,13 +200,17 @@ from older releases.
 3. **Let `Engine` preprocess tasks.** If composing pre-trained tasks without
    constructing their solvers, call each task's `preprocess()` manually.
 4. **Keep paired splits synchronized.** For retrosynthesis, reset the same random
-   seed before splitting reaction and synthon datasets.
+   seed before splitting reaction and synthon datasets, then verify source
+   `"sample id"` sets agree across views and are disjoint between partitions.
 5. **Use TorchDrug collation.** Use `data.graph_collate` or `core.Engine`;
    generic PyTorch collation does not know how to pack TorchDrug graphs.
-6. **Separate model, task, and engine arguments.** A common source of invented
+6. **Match protein targets and views.** EnzymeCommission and GeneOntology yield
+   a `"targets"` vector; use `MultipleBinaryClassification` with integer task IDs
+   and an explicit residue view for sequence encoders.
+7. **Separate model, task, and engine arguments.** A common source of invented
    code is passing task options to a model or passing raw models where a composed
    task is required.
-7. **Validate generated chemistry.** Treat model outputs as candidates, not as
+8. **Validate generated chemistry.** Treat model outputs as candidates, not as
    experimentally valid or synthesizable compounds.
 
 ## Troubleshooting
@@ -231,6 +253,7 @@ solver, use `solver.save()` and `solver.load()`.
 - [Molecular generation](references/molecular_generation.md)
 - [Retrosynthesis](references/retrosynthesis.md)
 - [Knowledge graph reasoning](references/knowledge_graphs.md)
+- [Review evidence and native environment limits](references/review.md)
 
 ## Upstream sources
 

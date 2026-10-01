@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(
       description=(
           "Inspect installed PyLabRobot version, known backend symbols, frontend "
-          "methods, and stable support labels. Imports are lazy; no class is "
+          "methods, and release availability. Imports are lazy; no backend is "
           "instantiated and no setup, serial, USB, or network operation is performed."
       )
   )
@@ -49,7 +49,7 @@ def _class_record(
       "class": class_object.__name__,
       "import_path": f"{class_object.__module__}.{class_object.__name__}",
       "signature": str(inspect.signature(class_object)),
-      "stable_support": support,
+      "support_note": support,
       "transport": transport,
       "declared_methods": {
           method: hasattr(class_object, method)
@@ -66,7 +66,7 @@ def inspect_installation(expected_version: str) -> dict[str, Any]:
     package_metadata = metadata("PyLabRobot")
   except PackageNotFoundError:
     return {
-        "ok": True,
+        "ok": False,
         "installed": False,
         "expected_version": expected_version,
         "connection_attempted": False,
@@ -104,25 +104,25 @@ def inspect_installation(expected_version: str) -> dict[str, Any]:
         ),
         _class_record(
             STARBackend,
-            support="Full",
+            support="released symbol; model capability requires review",
             transport="vendor firmware over USB",
             methods=operation_methods,
         ),
         _class_record(
             VantageBackend,
-            support="Mostly",
+            support="released symbol; model capability requires review",
             transport="vendor firmware over USB",
             methods=operation_methods,
         ),
         _class_record(
             EVOBackend,
-            support="Basic",
-            transport="vendor firmware interface",
+            support="released symbol; model capability requires review",
+            transport="vendor firmware over USB",
             methods=operation_methods,
         ),
         _class_record(
             OpentronsOT2Backend,
-            support="Mostly",
+            support="released symbol; model capability requires review",
             transport="HTTP to explicitly configured host",
             methods=operation_methods,
         ),
@@ -158,8 +158,8 @@ def inspect_installation(expected_version: str) -> dict[str, Any]:
             PlateReader,
             ("setup", "stop", "open", "close", "read_absorbance", "read_fluorescence"),
         ),
-        "Pump": (Pump, ("setup", "stop", "run_for_duration", "run_continuously", "halt")),
-        "Scale": (Scale, ("setup", "stop", "get_weight", "tare", "zero")),
+        "Pump": (Pump, ("setup", "stop", "run_for_duration", "run_continuously", "pump_volume", "halt")),
+        "Scale": (Scale, ("setup", "stop", "read_weight", "tare", "zero")),
         "HeaterShaker": (
             HeaterShaker,
             ("setup", "stop", "set_temperature", "shake", "stop_shaking"),
@@ -180,8 +180,14 @@ def inspect_installation(expected_version: str) -> dict[str, Any]:
   except (ImportError, AttributeError) as error:
     import_errors.append(f"equipment: {type(error).__name__}: {error}")
 
+  missing_methods = [
+      f"{name}.{method}"
+      for name, methods in frontends.items()
+      for method, present in methods.items()
+      if not present
+  ]
   return {
-      "ok": not import_errors and installed_version == expected_version,
+      "ok": not import_errors and not missing_methods and installed_version == expected_version,
       "installed": True,
       "installed_version": installed_version,
       "expected_version": expected_version,
@@ -193,8 +199,9 @@ def inspect_installation(expected_version: str) -> dict[str, Any]:
       "backends": backends,
       "frontends": frontends,
       "import_errors": import_errors,
+      "missing_methods": missing_methods,
       "stable_status_note": (
-          "Support labels are the PyLabRobot 0.2.1 stable supported-machines labels; "
+          "Exports inspected against PyLabRobot 0.2.2; hosted support tables can describe development APIs. "
           "availability and capabilities remain model/firmware/configuration specific."
       ),
   }

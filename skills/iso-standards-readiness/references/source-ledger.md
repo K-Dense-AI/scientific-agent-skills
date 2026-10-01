@@ -1,26 +1,14 @@
 # Official Source Ledger
 
-**Baseline research date:** 2026-07-23 — device lanes (ISO 13485, ISO 14971, FDA
-QMSR, MDSAP, EU MDR/IVDR), established with targeted `parallel-cli search` and
-`parallel-cli extract` against official publishers and regulator/program sites.
+**Research baseline:** 2026-10-01. This refresh directly read official ISO catalogue
+metadata, FDA/eCFR, MDSAP, Global ACI, CMS/CAP, and Commission sources. It replaces
+the July 2026 baseline. Retrieval exceptions are recorded below; search-indexed
+metadata is not a controlled requirements source.
 
-**Extension research date:** 2026-07-26 — laboratory lanes (ISO/IEC 17025,
-ISO 15189), ISO/TR 24971, and accreditation-scheme documents, established with web
-search against official publishers, accreditation bodies, and CMS.
-
-**Purpose:** version baseline for this skill; not legal advice, an applicability
-decision, certification or accreditation criteria, or a substitute for controlled
-source copies.
-
-**Provenance limitation on the 2026-07-26 additions.** `iso.org` returned HTTP 403
-to automated fetching during that research, so the ISO catalogue metadata below was
-taken from search-result summaries and from accreditation-body and ILAC pages rather
-than read directly off the ISO catalogue page. Entries carrying that limitation are
-marked **[confirm on iso.org]**. Confirm each against the linked official page, or an
-authorized copy, before relying on an edition, date, or stage.
-
-Recheck every source before operational use. Web pages and consolidated texts can
-change after the research date.
+**Purpose:** version baseline for evidence preparation; not an applicability decision,
+certification or accreditation criteria, or a substitute for controlled source copies.
+No proprietary standard text is reproduced. Recheck time-sensitive sources before
+operational use, and obtain authorized standards and scheme documents.
 
 ## ISO standards and copyright
 
@@ -29,8 +17,7 @@ change after the research date.
 - Official page:
   [ISO 13485:2016](https://www.iso.org/standard/59752.html)
 - Verified metadata: Edition 3; publication date 2016-03; stage 90.93
-  (confirmed); 2025 systematic review closed 2025-06-05 and confirmation recorded
-  2025-10-31.
+  (confirmed); confirmation recorded 2025-10-31.
 - Use: identifies the current international edition and lifecycle status.
 - Limitation: the ISO page is not the complete normative text. Obtain an authorized
   copy.
@@ -43,9 +30,14 @@ change after the research date.
   [Consolidated Decision (EU) 2021/1182, 2026-06-17](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:02021D1182-20260617)
 - IVDR amendment decision:
   [Decision (EU) 2022/729](https://eur-lex.europa.eu/eli/dec_impl/2022/729/oj)
-- Verified fact: current EU lists include EN ISO 13485:2016, AC:2018, and
-  A11:2021. A11:2021 is a European EN amendment, not an ISO international
+- Commission summary lists for both MDR and IVDR, generated 2026-06-17, directly
+  confirmed EN ISO 13485:2016, AC:2018, and A11:2021. A11:2021 is a European EN amendment, not an ISO international
   “Amendment 1:2021.”
+- Evidence: [MDR summary source page](https://single-market-economy.ec.europa.eu/single-market/goods/european-standards/harmonised-standards/medical-devices_en)
+  and [IVDR summary source page](https://single-market-economy.ec.europa.eu/single-market/goods/european-standards/harmonised-standards/iv-diagnostic-medical-devices_en).
+  The linked PDF contents were read; their filenames retain older dates. Direct
+  EUR-Lex decision retrieval returned an access challenge. Commission summaries have
+  no independent legal effect.
 - Limitation: verify the latest OJEU citation and the exact requirements for which
   presumption of conformity is claimed; use of harmonised standards is not a blanket
   product-conformity decision.
@@ -54,11 +46,11 @@ change after the research date.
 
 - Official page:
   [ISO 14971:2019](https://www.iso.org/standard/72704.html)
-- Verified metadata: Edition 3; publication 2019-12; reviewed and confirmed in 2025.
+- Verified metadata: Edition 3; publication 2019-12; stage 90.93, confirmed 2025-03-07.
 - EU source:
   [Decision (EU) 2022/757](https://eur-lex.europa.eu/eli/dec_impl/2022/757/oj/eng)
-- Verified fact: EN ISO 14971:2019/A11:2021 is cited for MDR and, through the
-  corresponding IVDR decision, IVDR support. A11 is European; it does not change the
+- Verified fact: the Commission MDR and IVDR summary PDFs cited above both list
+  EN ISO 14971:2019/A11:2021. A11 is European; it does not change the
   international ISO 14971 normative part.
 - Limitation: risk-management evidence remains product- and jurisdiction-specific.
 
@@ -66,8 +58,11 @@ change after the research date.
 
 - Official page:
   [ISO/TR 24971:2020](https://www.iso.org/standard/74437.html)
-- Verified metadata: Edition 2; guidance companion to ISO 14971:2019, with the same
-  clause structure and numbering. **[confirm on iso.org]**
+- Verified catalogue metadata: Edition 2, published 2020-06; remains the published
+  guidance companion to ISO 14971:2019. Stage 90.92 (to be revised), 2026-07-06.
+- Proposed successor: [ISO/AWI TS 24971-1](https://www.iso.org/standard/94297.html),
+  stage 20.00 (new project registered). This is an approved work item under
+  development, not a published replacement, amendment, or new normative requirement.
 - Verified status: a Technical Report. Its guidance is informative, not normative, and
   conformity is claimed to ISO 14971, never to ISO/TR 24971.
 - Limitation: a TR cannot be used to relax or reinterpret a normative requirement.
@@ -79,11 +74,12 @@ change after the research date.
   [ISO/IEC 17025:2017](https://www.iso.org/standard/66912.html)
 - Landing page:
   [ISO/IEC 17025 — Testing and calibration laboratories](https://www.iso.org/ISO-IEC-17025-testing-and-calibration-laboratories.html)
-- Verified metadata: Edition 3; published 2017; no successor edition identified at the
-  research date. **[confirm on iso.org]**
+- Verified catalogue metadata: Edition 3, published 2017-11, confirmed 2023-08-18;
+  no successor edition identified. Listed 2018 corrections concern French and
+  Spanish versions, not a replacement English edition.
 - Use: identifies the current edition for laboratory competence work.
-- Limitation: ISO/IEC 17025 is an accreditation standard, not a certification scheme
-  and not a product standard. Accreditation is granted by an accreditation body for a
+- Limitation: use laboratory accreditation as the assurance lane here; a private
+  certificate or an ISO 9001 certificate does not establish ISO/IEC 17025 accreditation. Accreditation is granted by an accreditation body for a
   defined scope of laboratory activities; nothing in this skill grants or predicts it.
 
 ### ISO 15189:2022
@@ -93,11 +89,10 @@ change after the research date.
 - ILAC announcement:
   [ISO 15189:2022 for medical labs published](https://ilac.org/latest_ilac_news/iso-151892022-for-medical-labs-published/)
 - Verified metadata: Edition 4; published December 2022; cancels and replaces
-  ISO 15189:2012. **[confirm on iso.org]**
+  ISO 15189:2012. Catalogue lists ISO 15189:2012 and ISO 22870:2016 as withdrawn.
 - Verified structural facts: the 2022 edition aligns structurally with
   ISO/IEC 17025:2017 and incorporates point-of-care testing requirements previously
-  held in ISO 22870. Do not cite ISO 22870 as a separate current POCT basis without
-  confirming its status.
+  held in ISO 22870. Scheme coverage can still be narrower: CAP 15189 excludes POCT.
 - Verified transition: the ILAC-agreed transition period for accredited medical
   laboratories ran to **December 2025**. Treat the 2022 edition as implemented, not
   upcoming; a 2012-based quality system is out of date, not "in transition."
@@ -185,21 +180,21 @@ change after the research date.
 
 - Source:
   [MDSAP Audit Approach](https://www.mdsap.global/documents/library/audit-approach)
-- Current document: **MDSAP AU P0002.010**.
-- Version date: **2026-02-02**.
+- Current document: **MDSAP AU P0002.011**.
+- Version date: **2026-08-03**, confirmed in the current 171-page document.
 - Verified high-level model: process-based regulatory audit by recognized Auditing
   Organizations, with four primary process areas, supporting purchasing linkages, a
   risk-management foundation, jurisdiction-specific requirements, and a three-year
   audit cycle.
-- Superseded baseline observed during research: FDA-hosted P0002.009 dated
-  2024-08-06. Use the current MDSAP.global library instead.
+- Direct document: [AU P0002.011 PDF](https://www.mdsap.global/sites/default/files/2026-07/MDSAP%20AU%20P0002.011%20MDSAP%20Audit%20Approach.pdf).
+  Its URL directory is not its version date. The former .010 baseline is superseded.
 
 ### MDSAP program and IMDRF foundation
 
 - Current program site:
   [MDSAP.global](https://www.mdsap.global/)
 - IMDRF background:
-  [IMDRF MDSAP working group](https://www.imdrf.org/working-groups/medical-device-single-audit-program-mdsap)
+  [IMDRF MDSAP working group](https://www.imdrf.org/working-groups/closed-working-groups/medical-device-single-audit-program-mdsap)
 - FDA program page:
   [Medical Device Single Audit Program](https://www.fda.gov/medical-devices/cdrh-international-affairs/medical-device-single-audit-program-mdsap)
 - Verified status: IMDRF development work moved to implementation; current MDSAP
@@ -212,8 +207,11 @@ change after the research date.
 ### MDR
 
 - Source:
-  [Regulation (EU) 2017/745, consolidated 2026-01-01](https://eur-lex.europa.eu/eli/reg/2017/745/2026-01-01/eng)
-- Verified status as of research: consolidated version dated 2026-01-01.
+  [Regulation (EU) 2017/745, consolidated 2026-07-19](https://eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng)
+- Official EUR-Lex search-indexed metadata identifies the current consolidation as
+  2026-07-19. Direct retrieval of consolidated legal text returned an access challenge;
+  the contents and any changes since the earlier baseline were not independently
+  assessed in this refresh.
 - Relevant scope for this skill: manufacturer QMS, technical documentation,
   conformity assessment, notified bodies, postmarket surveillance, vigilance, and
   market surveillance.
@@ -224,7 +222,9 @@ change after the research date.
 
 - Source:
   [Regulation (EU) 2017/746, consolidated 2025-01-10](https://eur-lex.europa.eu/eli/reg/2017/746/2025-01-10/eng)
-- Verified status as of research: 2025-01-10 was the current consolidated version.
+- Official EUR-Lex search-indexed metadata still identifies 2025-01-10 as the current
+  consolidation. Direct legal-text retrieval returned an access challenge; this is
+  metadata verification only, not a fresh review of every operative provision.
 - Relevant scope for this skill: IVD QMS, technical/performance documentation,
   conformity assessment, notified bodies, postmarket surveillance, vigilance, and
   market surveillance.
@@ -255,22 +255,23 @@ change after the research date.
   lists the current notified scope.
 - Operational rule: verify legislation, annex/task, and designation-code scope.
   Accreditation or ISO certification alone is not notified-body designation.
+- Retrieval limit: NANDO returned a JavaScript shell; no individual body's current
+  designation was verified. Resolve that scope in the live registry for the actual case.
 
 ### ISO 13485 certification-body accreditation
 
 - Current Global ACI documents:
   [Global ACI document library](https://global-aci.org/en/global_aci-documents/)
 - Current cross-reference:
-  [Global ACI–IAF/ILAC table, version 1.2, 2026-06-10](https://sys.global-aci.org/uploads/documents/Global_ACI_IAF_and_ILAC_Document_Cross-Reference_Table_10_June_20262.pdf)
-- Carried document:
-  [IAF MD 9:2023 Issue 5](https://sys.global-aci.org/uploads/documents/IAF_MD9_Issue_5_20112023.pdf)
-- Verified transition: Global Accreditation Cooperation Incorporated began full
-  operations on 2026-01-01, replacing IAF/ILAC operational functions. The
-  2026-06-10 table showed successor Global ACI documents for former MD 8/MD 9 as
-  in process while the prior documents remained in the current library.
-- Verified boundary: MD 9 concerns bodies auditing/certifying management systems to
-  ISO 13485 under ISO/IEC 17021-1. It does not establish product conformity,
-  notified-body designation, regulatory applicability, or market authorization.
+  [Global ACI–IAF/ILAC table, version 14.0, 2026-09-14](https://sys.global-aci.org/uploads/documents/2026-09-14_Global_ACI_IAF_and_ILAC_Document_Cross-Reference_Table_v14_0.pdf)
+- Published replacements: **Global ACI-TECH-3-006 (M)** replaces IAF MD 8:2023;
+  **Global ACI-TECH-3-007 (M)** replaces IAF MD 9:2023. Both are version 1.0,
+  issued 2026-07-10 with library implementation date **2026-08-28**. The former
+  June table's “in process” status is no longer current.
+- Boundary: these documents address accreditation/certification bodies applying
+  ISO/IEC 17011 or ISO/IEC 17021-1 for ISO 13485 certification. They do not establish
+  product conformity, notified-body designation, regulatory applicability, or market
+  authorization. Check the current scheme and issuer's scope for the actual case.
 
 ### Accreditation: GLOBAC and the recognition arrangement
 
@@ -291,67 +292,66 @@ change after the research date.
 
 ### Accreditation: traceability and decision-rule policy
 
-- Policy series:
-  [ILAC policy series (P documents)](https://ilac.org/publications-and-resources/ilac-policy-series/)
-- Metrological traceability: **ILAC P10:07/2020**, implementation date July 2021,
-  revised to reflect ISO/IEC 17025:2017.
-- Decision rules and statements of conformity: **ILAC G8:09/2019**; JCGM 106:2012 /
-  ISO/IEC Guide 98-4 is the companion metrological basis.
-- Limitation and open item: no GLOBAC renumbering of the P/G series was identified at
-  the research date, and the ILAC designations above were still in use. Confirm the
-  current designation and issue before citing either document in a controlled
-  procedure — this is the most likely item in this ledger to have moved.
-- Boundary: a stated decision rule is a documented rule for declaring conformity
-  against a specification. It is not a compliance determination, and this skill does
-  not evaluate whether a chosen rule is fit for a customer's purpose.
+Use the current Global ACI library and September cross-reference above together:
+
+| Topic | Current document at review | Legacy document / status |
+| --- | --- | --- |
+| Metrological traceability | ILAC P10:07/2020, implementation July 2021 | Proposed Global ACI-TECH-1-011 remains “in process” |
+| Decision rules and statements of conformity | Global ACI-TECH-1-002 (G), v1.0, issued/implemented 2026-06-26 | Replaces ILAC G8:09/2019 |
+| Calibration uncertainty and CMCs | Global ACI-TECH-1-009 (M), v1.0, issued/implemented 2026-06-26 | Replaces ILAC P14:09/2020 |
+
+- Prior archive: [ILAC policy series](https://ilac.org/publications-and-resources/ilac-policy-series/).
+  Do not infer current designations from the legacy archive alone.
+- Metrological companion: [BIPM JCGM publications](https://www.bipm.org/en/committees/jc/jcgm/publications)
+  still lists JCGM 106:2012, *The role of measurement uncertainty in conformity
+  assessment* (also published as ISO/IEC Guide 98-4:2012).
+- Boundary: documenting a decision rule does not establish its fitness for the
+  customer's purpose. These local tools neither compute uncertainty nor decide
+  conformity. Check controlled scheme requirements before adopting a policy.
 
 ### United States medical laboratories: CLIA is a separate lane
 
-- CMS program page:
-  [Clinical Laboratory Improvement Amendments (CLIA)](https://www.cms.gov/medicare/quality/clinical-laboratory-improvement-amendments)
-- Accreditation and exemption page:
-  [CLIA accreditation and testing](https://www.cms.gov/medicare/quality/clinical-laboratory-improvement-amendments/accreditation-exemptions)
+- CMS program: [CLIA](https://www.cms.gov/medicare/quality/clinical-laboratory-improvement-amendments).
+- Applicability: [42 CFR 493.3](https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-G/part-493/subpart-A/section-493.3)
+  covers applicable clinical testing; it explicitly exempts research laboratories
+  that do not report patient-specific results for diagnosis, prevention, treatment,
+  or assessment of health. Do not state that every US laboratory handling human
+  specimens requires CLIA certification. Other exceptions and state rules require
+  case-specific review by the authorized owner.
+- Current CMS overview:
+  [Certification, accreditation, and test complexity](https://www.cms.gov/medicare/health-safety-standards/clinical-laboratory-improvement-amendments-clia/getting-started-clia/understanding-clia-certification-accreditation-test-complexity).
 - Approved accreditation organizations:
-  [Specialty/subspecialty information for approved AOs](https://www.cms.gov/Regulations-and-Guidance/Legislation/CLIA/Downloads/AOList.pdf)
-- Verified facts: CLIA certification by CMS is mandatory before a US laboratory may
-  accept human specimens for testing. CMS approves a limited set of accreditation
-  organizations whose standards must meet or exceed CLIA requirements; approval is
-  reapplied for every six years or more often. Seven approved AOs were reported at the
-  research date — read the current AO list rather than repeating that count.
-- Verified boundary: **ISO 15189 accreditation does not satisfy CLIA and cannot
-  replace a CLIA-based accreditation for a US laboratory.** Deemed status flows only
-  from a CMS-approved accreditation organization's program, not from ISO 15189 itself.
-- Program note: the CAP 15189 program is layered on top of CAP Laboratory
-  Accreditation Program accreditation rather than offered as a standalone substitute.
-  See [CAP 15189](https://www.cap.org/laboratory-improvement/accreditation/cap-15189-accreditation-program);
-  confirm current program prerequisites with CAP.
-- Operational rule: never present an ISO 15189 readiness output as CLIA compliance,
-  deemed status, licensure, or an inspection result. Keep the CLIA decision with the
-  authorized laboratory director and compliance owner.
+  [CMS specialty/subspecialty list](https://www.cms.gov/media/678411).
+  Verify the actual approved program and scope; do not infer deemed status from an
+  organization's name or from ISO 15189 itself.
+- Program-specific evidence: [CAP 15189 accreditation process](https://www.cap.org/laboratory-quality-solutions/accreditation/cap-15189-accreditation-program/cap-15189-accreditation-process/)
+  requires CAP Laboratory Accreditation Program participation, excludes POCT, and
+  requires a quality manual even though ISO 15189:2022 itself does not require one.
+- Operational rule: keep ISO 15189 readiness, CLIA certification/deemed status,
+  licensure, and inspection outcomes separate. Authorized laboratory and compliance
+  owners determine the applicable route.
 
-## Research queries used
+## Citation API and local-tool boundary
 
-Parallel searches/extracts covered:
+The shared citation footer links an arXiv record; none of this skill's scripts calls a
+network API. The [arXiv API manual](https://info.arxiv.org/help/api/user-manual.html)
+documents the public GET `https://export.arxiv.org/api/query` endpoint, an `id_list`
+query parameter (comma-separated IDs), and an Atom XML response, without credentials
+or a request body. Pagination uses `start` (default 0) and `max_results` (default 10).
+An unversioned ID resolves to the latest version. On the review date a read-only GET
+with `id_list=2609.00065` returned the expected `2609.00065v2` record; the footer's
+HTTP endpoint redirected to HTTPS. This verifies citation metadata, not the paper's
+scientific claims. Publisher websites, document downloads, and NANDO above are source
+links, not APIs implemented by these local tools.
 
-- ISO 13485 edition, review/confirmation, and amendment metadata;
-- ISO versus EN A11:2021 distinction and current EU citations;
-- FDA final rule, QMSR page/FAQ, eCFR Part 820, and Compliance Program 7382.850;
-- current MDSAP/IMDRF program and Audit Approach version;
-- current MDR/IVDR consolidated versions and MDCG guidance;
-- ISO 14971 and EN A11 status;
-- NANDO/notified-body designation boundaries; and
-- the 2026 Global ACI transition and current MD 8/MD 9 documents.
+## Verification limits
 
-The 2026-07-26 extension searched:
-
-- ISO/IEC 17025 revision status and whether a successor edition exists;
-- ISO 15189 edition, POCT consolidation, and the ILAC transition deadline;
-- ISO/TR 24971 edition and its status relative to ISO 14971;
-- the GLOBAC launch date, its MRA, and transitional recognition wording;
-- ILAC P10 and ILAC G8 current issues; and
-- CMS CLIA certification, approved accreditation organizations, and whether
-  ISO 15189 confers deemed status.
-
-No Parallel research JSON was saved in the repository. Several 2026-07-26 results came
-from secondary summaries of ISO catalogue pages because `iso.org` refused automated
-access; those entries are marked **[confirm on iso.org]** above.
+- Official catalogue metadata was directly available in this refresh; the former
+  “confirm on iso.org” retrieval limitation is resolved. Full normative standards
+  were neither copied nor used to derive a clause-by-clause compliance checklist.
+- Current Commission summary PDFs and guidance were read. EUR-Lex consolidation
+  dates were only verified through official indexed metadata after access challenges;
+  obtain and assess the operative legal text before relying on a transition or deadline.
+- NANDO entity-level designation and organization-specific accreditation recognition
+  were not tested. No certificate, laboratory, device, or organizational evidence was
+  assessed for conformity. Local tests use synthetic records.

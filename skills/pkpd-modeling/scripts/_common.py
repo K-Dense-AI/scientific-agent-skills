@@ -71,8 +71,10 @@ def parse_float(text: Any, field_name: str = "value", allow_missing: bool = Fals
         raise InputError(f"{field_name}: missing")
     if isinstance(text, (int, float)):
         x = float(text)
-        if math.isnan(x) and not allow_missing:
-            raise InputError(f"{field_name}: not a number")
+        if math.isnan(x) and allow_missing:
+            return None
+        if not math.isfinite(x):
+            raise InputError(f"{field_name}: must be finite")
         return x
     s = str(text).strip()
     if s.lower() in _MISSING:
@@ -80,7 +82,10 @@ def parse_float(text: Any, field_name: str = "value", allow_missing: bool = Fals
             return None
         raise InputError(f"{field_name}: missing")
     try:
-        return float(s)
+        x = float(s)
+        if not math.isfinite(x):
+            raise InputError(f"{field_name}: must be finite")
+        return x
     except ValueError as exc:
         raise InputError(f"{field_name}: {s!r} is not a number") from exc
 
@@ -244,7 +249,7 @@ class Report:
                 "findings": self.findings,
                 "notes": self.notes,
             }
-            print(json.dumps(payload, indent=2, default=_json_default), file=stream)
+            print(json.dumps(_json_finite(payload), indent=2, allow_nan=False, default=_json_default), file=stream)
         elif fmt_name == "tsv":
             for key, value in self.scalars.items():
                 print(f"{key}\t{fmt(value)}", file=stream)
@@ -268,6 +273,27 @@ class Report:
                 print(f"finding: {finding}", file=err)
 
         return EXIT_FINDINGS if self.findings else EXIT_OK
+
+
+def _json_finite(obj: Any) -> Any:
+    """Missing numerical diagnostics become JSON null, never nonstandard NaN/Infinity."""
+    if isinstance(obj, dict):
+        return {k: _json_finite(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_finite(v) for v in obj]
+    if hasattr(obj, "tolist"):
+        return _json_finite(obj.tolist())
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    return obj
+
+
+def validate_numeric_args(args: argparse.Namespace) -> None:
+    """Reject nonfinite CLI scalars before they enter a numerical model."""
+    for name, value in vars(args).items():
+        values = value if isinstance(value, (list, tuple)) else [value]
+        if any(isinstance(v, float) and not math.isfinite(v) for v in values):
+            raise InputError(f"--{name.replace('_', '-')}: must be finite")
 
 
 def _json_default(obj: Any) -> Any:

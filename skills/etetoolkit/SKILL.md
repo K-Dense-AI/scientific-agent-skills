@@ -1,11 +1,12 @@
 ---
 name: etetoolkit
-description: Analyze, manipulate, compare, annotate, and visualize phylogenetic or other hierarchical trees with ETE 4. Use for Newick/Nexus tree I/O, topology edits and pattern matching, Robinson-Foulds comparisons, gene-tree evolutionary events and reconciliation, NCBI/GTDB taxonomy, SmartView exploration, and publication rendering. Do not use it to infer trees from raw sequences; align sequences and infer a tree first.
+description: Analyzes, manipulates, compares, annotates, and visualizes phylogenetic or other hierarchical trees with ETE 4. Supports Newick/Nexus tree I/O, topology edits and pattern matching, Robinson-Foulds comparisons, gene-tree evolutionary events and reconciliation, NCBI/GTDB taxonomy, SmartView exploration, and publication rendering. Applies to existing trees after alignment and phylogenetic inference, rather than inferring trees from raw sequences.
 license: GPL-3.0-or-later
 allowed-tools: Read Write Edit Bash Python
-compatibility: Bundled scripts require Python 3.10+ and ete4 4.4.0 (upstream ete4 supports Python >=3.7). Taxonomy setup and SmartView exploration need network access; static SmartView PNG rendering needs ete4[render-sm], and Qt PDF/SVG rendering needs ete4[treeview].
+compatibility: Bundled scripts require Python 3.10+ and ete4 4.4.0 (upstream metadata requires Python >=3.7). Public taxonomy acquisition needs internet access. SmartView uses a local browser/server; static PNG rendering needs ete4[render-sm] and Chrome/Chromium, and Qt PDF/SVG rendering needs ete4[treeview].
 metadata:
-  version: "2.2"
+  version: "3.0"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -31,7 +32,10 @@ another inference tool; then load the resulting tree into ETE.
 ## Current Target
 
 This skill targets **ETE 4.4.0**, released September 3, 2025 and verified as the
-current PyPI release on July 23, 2026.
+current PyPI release on September 30, 2026.
+Core, phylogeny, local synthetic taxonomy and helper checks target this released
+package, not unreleased upstream changes. See
+[`references/review.md`](references/review.md) for executed coverage and limitations.
 
 Use `https://etetoolkit.github.io/ete/` for ETE 4 documentation. The
 `etetoolkit.org/docs/latest` pages are legacy ETE 3 documentation despite the
@@ -72,7 +76,7 @@ uv pip install "ete4[treeview]==4.4.0"
 Confirm the active environment:
 
 ```bash
-uv run --with "ete4==4.4.0" python -c "import ete4; print(ete4.__version__)"
+uv run --no-project --isolated --with "ete4==4.4.0" python -c "import ete4; print(ete4.__version__)"
 ```
 
 No credentials are required. NCBI and GTDB workflows download public taxonomy
@@ -165,12 +169,13 @@ tree_b = Tree("((A,C),(B,D));")
     discarded_b,
 ) = tree_a.robinson_foulds(tree_b)
 
-normalized_rf = rf / max_rf if max_rf else 0.0
+normalized_rf = rf / max_rf if max_rf > 0 else None
 print(rf, max_rf, normalized_rf, sorted(common_leaves))
 ```
 
 RF comparison uses shared leaf labels and requires meaningful, preferably
-unique names. Decide explicitly whether rooted or unrooted comparison is
+unique names. A zero maximum means no comparable splits; normalized RF is
+undefined (`None`), not evidence of agreement. Decide explicitly whether rooted or unrooted comparison is
 scientifically appropriate.
 
 ### Detect duplication and speciation events
@@ -247,49 +252,57 @@ faces, remote exploration, and renderer selection.
 ## Bundled Scripts
 
 Run from this skill directory. The commands below use a pinned, isolated ETE 4
-runtime through `uv run --with`.
+runtime through `uv run --no-project --isolated --with`.
 
 ### Tree operations
 
 ```bash
-uv run --with "ete4==4.4.0" python scripts/tree_operations.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/tree_operations.py \
   stats tree.nw --parser 1
-uv run --with "ete4==4.4.0" python scripts/tree_operations.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/tree_operations.py \
   ascii tree.nw --parser 1 --props name,dist
-uv run --with "ete4==4.4.0" python scripts/tree_operations.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/tree_operations.py \
   convert tree.nw output.nw \
   --input-parser 1 --output-parser 1
-uv run --with "ete4==4.4.0" python scripts/tree_operations.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/tree_operations.py \
   reroot tree.nw rooted.nw \
   --parser 1 --midpoint
-uv run --with "ete4==4.4.0" python scripts/tree_operations.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/tree_operations.py \
   prune tree.nw pruned.nw \
   --parser 1 --keep species1 species2 species3
-uv run --with "ete4==4.4.0" python scripts/tree_operations.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/tree_operations.py \
   compare tree_a.nw tree_b.nw
 ```
 
 Use `--keep-file taxa.txt` instead of `--keep ...` for one taxon per line.
-The script refuses ambiguous or missing requested names rather than silently
-producing a partial tree.
+The script refuses ambiguous or missing requested leaf names and selects actual
+leaf objects even if an internal node shares a tip name. `--output-parser 0` is
+honored explicitly. RF needs at least two shared tips and reports JSON `null`
+for normalized RF when there are no comparable splits.
 
 ### Visualization
 
 ```bash
 # Interactive SmartView
-uv run --with "ete4==4.4.0" python scripts/quick_visualize.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/quick_visualize.py \
   tree.nw --parser 1
 
 # SmartView PNG (requires ete4[render-sm])
-uv run --with "ete4[render-sm]==4.4.0" python scripts/quick_visualize.py \
+uv run --no-project --isolated --with "ete4[render-sm]==4.4.0" python scripts/quick_visualize.py \
   tree.nw tree.png \
-  --parser support --mode circular --show-support --color-by-support
+  --parser support --mode circular --show-support --color-by-support --support-scale percent
 
 # Vector output via Qt treeview (requires ete4[treeview])
-uv run --with "ete4[treeview]==4.4.0" python scripts/quick_visualize.py \
+uv run --no-project --isolated --with "ete4[treeview]==4.4.0" python scripts/quick_visualize.py \
   tree.nw tree.svg \
   --parser 1 --engine treeview --title "Species phylogeny"
 ```
+
+Support coloring requires the source convention: `--support-scale percent` for
+0–100 values or `fraction` for 0–1. A value of 1 means 1% in the former and
+full support in the latter; do not infer the scale from individual nodes.
+Version 3.0 changes the helper contract: support coloring requires this flag,
+and undefined normalized RF is JSON `null` instead of zero.
 
 ## Quality and Interpretation Checks
 

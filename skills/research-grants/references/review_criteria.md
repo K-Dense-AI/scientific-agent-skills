@@ -1,93 +1,51 @@
-# Review Criteria by Agency
+# Review criteria by agency
 
-How NIH, NSF, DOE, and DARPA evaluate proposals, criterion by criterion, and what each
-one rewards in practice.
+Reviewed 2026-10-01. Extract the actual opportunity's rubric before critiquing a
+proposal. Do not average unrelated factors, invent weights or infer fundability from
+a generic score. Use a table linking each criterion to the applicant's evidence,
+remaining weakness and proposed revision.
 
-## Review Criteria by Agency
+## NSF
 
-Understanding how proposals are evaluated is critical for writing competitive applications.
+[Intellectual Merit and Broader Impacts](https://www.nsf.gov/policies/pappg/24-1/ch-3-proposal-processing-review)
+both receive full consideration; this is not a fixed 50/50 arithmetic weighting.
+Assess knowledge advancement, originality, design, team/resources, societal benefit
+and assessment, together with any additional solicitation criteria. Broader impacts
+can arise through the research itself. See [nsf_guidelines.md](nsf_guidelines.md).
 
-### NSF Review Criteria
+## NIH
 
-**Intellectual Merit** (primary):
-- What is the potential for the proposed activity to advance knowledge?
-- How well-conceived and organized is the proposed activity?
-- Is there sufficient access to resources?
-- How well-qualified is the individual, team, or institution to conduct proposed activities?
+For applicable RPG due dates on/after January 25, 2025, the
+[simplified framework](https://www.grants.nih.gov/policy-and-compliance/policy-topics/peer-review/simplifying-review/framework)
+uses Importance of the Research (significance/innovation) and Rigor and Feasibility
+(approach), each scored 1-9, plus Expertise and Resources assessed for sufficiency.
+All inform overall impact. Check the mechanism: not every NIH application uses this
+framework. Research Strategy headings remain those required in the application guide.
 
-**Broader Impacts** (equally important):
-- What is the potential for the proposed activity to benefit society?
-- To what extent does the proposal address broader impacts in meaningful ways?
+Additional review criteria can influence impact despite having no separate score;
+these differ from considerations such as budget that do not determine scientific merit.
+Match protections, inclusion, clinical-trial timeline and other checks to the NOFO.
+Current modified review practices can leave competitive applications undiscussed;
+see [nih_guidelines.md](nih_guidelines.md). Do not convert a score or percentile to
+predicted funding odds or use old paylines as present policy.
 
-**Additional Considerations**:
-- Integration of research and education
-- Diversity and inclusion
-- Results from prior NSF support (if applicable)
+## DOE
 
-### NIH Review Criteria
+Use the NOFO's scientific/technical merit, method, personnel/facilities, budget,
+mission relevance, programmatic selection factors and any defined weighting/order.
+Do not apply an ARPA-E impact rubric to an SC basic-science application. Distinguish
+concept-paper assessment from full-application review; see [doe_guidelines.md](doe_guidelines.md).
 
-**Scored Criteria** (1-9 scale, 1 = exceptional, 9 = poor):
+## DARPA
 
-1. **Significance**
-   - Addresses important problem or critical barrier
-   - Improves scientific knowledge, technical capability, or clinical practice
-   - Aligns with NIH mission
+Use the solicitation's actual evaluation factors and award instrument. Technical
+merit, national-security relevance and cost realism commonly matter, but their exact
+role is solicitation-specific. Test goals against baselines, credible measurements,
+risks, milestones and transition evidence. See [darpa_guidelines.md](darpa_guidelines.md).
 
-2. **Investigator(s)**
-   - Well-suited to the project
-   - Track record of accomplishments
-   - Adequate training and expertise
+## Taiwan NSTC
 
-3. **Innovation**
-   - Novel concepts, approaches, methodologies, or interventions
-   - Challenges existing paradigms
-   - Addresses important problem in creative ways
-
-4. **Approach**
-   - Well-reasoned and appropriate
-   - Rigorous and reproducible
-   - Adequately accounts for potential problems
-   - Feasible within timeline
-
-5. **Environment**
-   - Institutional support and resources
-   - Scientific environment contributes to probability of success
-
-**Additional Review Considerations** (not scored but discussed):
-- Protections for human subjects
-- Inclusion of women, minorities, and children
-- Vertebrate animal welfare
-- Biohazards
-- Resubmission response (if applicable)
-- Budget and timeline appropriateness
-
-### DOE Review Criteria
-
-Varies by program office, but generally includes:
-- Scientific and/or technical merit
-- Appropriateness of proposed method or approach
-- Competency of personnel and adequacy of facilities
-- Reasonableness and appropriateness of budget
-- Relevance to DOE mission and program goals
-
-### DARPA Review Criteria
-
-**DARPA-specific considerations**:
-- Overall scientific and technical merit
-- Potential contribution to DARPA mission
-- Realism of proposed costs and availability of funds
-
-Frame proposals with DARPA-style impact questions when appropriate:
-- **What if you succeed?** — Impact if the research works
-- **What if you're right?** — Implications of your hypothesis
-- **Who cares?** — Why it matters for national security
-
-### NSTC Review Criteria
-
-**Core Evaluation Dimensions**:
-1. **Innovation (創新性)**: Novelty of concept and approach.
-2. **Feasibility (可行性)**: Methodology rigor and preliminary data.
-3. **PI Capability (主持人能力)**: Track record and expertise.
-4. **Value (價值)**: Academic contribution and societal/industrial impact.
-
-For detailed review criteria, refer to `references/nstc_guidelines.md`.
+Use the division/program's published criteria and current application forms.
+Innovation, feasibility, investigator capability and contribution are useful drafting
+questions, not a universal numeric rubric or passing-score threshold. Differentiate
+project outputs from claimed societal outcomes; see [nstc_guidelines.md](nstc_guidelines.md).

@@ -95,11 +95,12 @@ GROUPS: tuple[dict[str, Any], ...] = (
             "velocity": "[length] / [time]",
         },
         "regimes": [
-            [None, 0.1, "transport-limited; reaction barely proceeds in transit"],
+            [None, 0.1, "slow reaction relative to residence time; low conversion"],
             [0.1, 10.0, "reaction and transport comparable"],
-            [10.0, None, "reaction-limited; reagent consumed near the inlet"],
+            [10.0, None, "fast reaction relative to residence time; high ideal conversion"],
         ],
-        "note": "first-order Damkohler number Da_I, for a first-order rate constant",
+        "note": "first-order Da_I = residence time / reaction time; conversion also "
+        "depends on reactor geometry and mixing, not an automatic mass-transfer verdict",
         "source": "Fogler, Elements of Chemical Reaction Engineering, 6th ed.",
     },
     {
@@ -161,10 +162,11 @@ GROUPS: tuple[dict[str, Any], ...] = (
             "surface_tension": "[mass] / [time] ** 2",
         },
         "regimes": [
-            [None, 0.001, "interface shape set by surface tension alone"],
-            [0.001, None, "viscous stress deforms the interface"],
+            [None, 0.001, "small viscous-to-capillary stress ratio"],
+            [0.001, None, "viscous effects may deform the interface"],
         ],
-        "note": "governs droplet breakup and wetting in microfluidics",
+        "note": "illustrative 1e-3 scale, not a universal deformation or breakup threshold; "
+        "geometry, wetting, viscosity ratio and other stresses matter",
         "source": "Bruus, Theoretical Microfluidics, ch. 7",
     },
     {
@@ -178,11 +180,12 @@ GROUPS: tuple[dict[str, Any], ...] = (
             "surface_tension": "[mass] / [time] ** 2",
         },
         "regimes": [
-            [None, 1.0, "surface tension holds the drop together"],
-            [1.0, 12.0, "deformation without breakup"],
-            [12.0, None, "aerodynamic breakup"],
+            [None, 1.0, "small inertial-to-capillary stress ratio"],
+            [1.0, 12.0, "deformation possible; breakup depends on other parameters"],
+            [12.0, None, "bag breakup possible in low-Ohnesorge aerodynamic conditions"],
         ],
-        "note": "the critical Weber number for bag breakup is about 12",
+        "note": "the approximate We=12 bag-breakup threshold assumes ambient-fluid density, "
+        "relative speed, droplet diameter and low Ohnesorge number",
         "source": "Pilch and Erdman, Int. J. Multiphase Flow 13:741 (1987)",
     },
     {
@@ -216,12 +219,12 @@ GROUPS: tuple[dict[str, Any], ...] = (
             "length": "[length]",
         },
         "regimes": [
-            [None, 0.1, "particles follow streamlines; tracer assumption holds"],
+            [None, 0.1, "small inertial lag in the Stokes-drag model"],
             [0.1, 1.0, "partial slip; sampling bias likely"],
-            [1.0, None, "ballistic; particles leave the flow and impact"],
+            [1.0, None, "large inertial lag; particles may leave streamlines"],
         ],
         "note": "the tracer assumption behind particle image velocimetry needs "
-        "Stk well below 0.1",
+        "Stk well below 0.1; also check particle Reynolds number, buoyancy and size",
         "source": "Raffel et al., Particle Image Velocimetry, 3rd ed., ch. 2",
     },
     {
@@ -250,12 +253,13 @@ GROUPS: tuple[dict[str, Any], ...] = (
             "length": "[length]",
         },
         "regimes": [
-            [None, 0.05, "early transient; semi-infinite solution applies"],
+            [None, 0.05, "early relative to the internal diffusion timescale"],
             [0.05, 1.0, "transient"],
-            [1.0, None, "effectively equilibrated"],
+            [1.0, None, "beyond internal diffusion timescale; equilibrium not established"],
         ],
         "note": "dimensionless time for conduction; the same form with a mass "
-        "diffusivity governs diffusion",
+        "diffusivity governs diffusion; equilibrium also depends on Biot number, "
+        "geometry and boundary conditions",
         "source": "Incropera et al., Fundamentals of Heat and Mass Transfer, ch. 5",
     },
     {
@@ -268,8 +272,8 @@ GROUPS: tuple[dict[str, Any], ...] = (
             "diffusivity": "[length] ** 2 / [time]",
         },
         "regimes": [
-            [None, 10.0, "gases; momentum and mass diffuse comparably"],
-            [10.0, None, "liquids; momentum diffuses far faster than solute"],
+            [None, 10.0, "momentum and mass diffusion timescales comparable within an order"],
+            [10.0, None, "momentum diffuses much faster than solute"],
         ],
         "note": "about 1 for gases and 1e3 with small molecules in water",
         "source": "Cussler, Diffusion, 3rd ed., ch. 9",
@@ -324,8 +328,8 @@ SCALES: tuple[dict[str, Any], ...] = (
         "expression": "R_gas * temperature",
         "inputs": {"temperature": "[temperature]"},
         "unit": "kJ/mol",
-        "note": "a binding free energy below this is indistinguishable from "
-        "thermal noise",
+        "note": "compare a specified standard-state free-energy difference with RT; "
+        "smaller energies still change equilibrium probabilities",
         "source": "Phillips et al., Physical Biology of the Cell, 2nd ed., ch. 6",
     },
     {
@@ -370,8 +374,8 @@ SCALES: tuple[dict[str, Any], ...] = (
             "ionic_strength": "[substance] / [length] ** 3",
         },
         "unit": "nm",
-        "note": "for a symmetric monovalent electrolyte; about 0.96 nm at 100 mM "
-        "and 0.7 nm at physiological ionic strength",
+        "note": "Debye-Huckel continuum estimate using I = 0.5*sum(c_i*z_i**2) in mol/m^3; "
+        "about 0.96 nm at 100 mM and 0.8 nm at 150 mM in water at 25 C",
         "source": "Israelachvili, Intermolecular and Surface Forces, 3rd ed., ch. 14",
     },
     {
@@ -382,8 +386,8 @@ SCALES: tuple[dict[str, Any], ...] = (
             "density": "[mass] / [length] ** 3",
         },
         "unit": "mm",
-        "note": "below this size a drop is held by surface tension and does not "
-        "puddle; about 2.7 mm for water",
+        "note": "density is the density contrast; liquid density approximates it for "
+        "liquid-air interfaces. About 2.7 mm for water-air",
         "source": "de Gennes et al., Capillarity and Wetting Phenomena, ch. 2",
     },
 )
@@ -401,8 +405,8 @@ BANDS: tuple[dict[str, Any], ...] = (
      "source": "Bloomfield et al., Nucleic Acids: Structures and Properties"},
     {"name": "ribosome_diameter", "low": 20.0, "high": 30.0, "unit": "nm",
      "source": "Milo and Phillips, Cell Biology by the Numbers, ch. 1"},
-    {"name": "protein_molar_mass", "low": 5.0, "high": 1000.0, "unit": "kDa",
-     "source": "Milo and Phillips, Cell Biology by the Numbers, ch. 1"},
+    {"name": "protein_molar_mass", "low": 5.0, "high": 1000.0, "unit": "kg/mol",
+     "source": "Illustrative protein molar-mass band; Milo and Phillips, Cell Biology by the Numbers"},
     {"name": "human_capillary_diameter", "low": 5.0, "high": 10.0, "unit": "um",
      "source": "Guyton and Hall, Textbook of Medical Physiology, 14th ed., ch. 16"},
     {"name": "mammalian_body_temperature", "low": 306.0, "high": 315.0, "unit": "K",
@@ -418,7 +422,7 @@ BANDS: tuple[dict[str, Any], ...] = (
     {"name": "dynamic_viscosity_water", "low": 0.5, "high": 1.5, "unit": "mPa*s",
      "source": "IAPWS R12-08, viscosity of ordinary water substance"},
     {"name": "surface_tension_water", "low": 0.06, "high": 0.08, "unit": "N/m",
-     "source": "IAPWS R1-76, surface tension of ordinary water substance"},
+     "source": "IAPWS R1-76(2014); illustrative near-ambient liquid-water band"},
     {"name": "sound_speed_water", "low": 1400.0, "high": 1560.0, "unit": "m/s",
      "source": "Del Grosso and Mader, J. Acoust. Soc. Am. 52:1442 (1972)"},
     {"name": "sound_speed_air", "low": 320.0, "high": 350.0, "unit": "m/s",
@@ -428,13 +432,13 @@ BANDS: tuple[dict[str, Any], ...] = (
     {"name": "earth_surface_gravity", "low": 9.76, "high": 9.84, "unit": "m/s**2",
      "source": "WGS 84 normal gravity at the ellipsoid"},
     {"name": "visible_wavelength", "low": 380.0, "high": 750.0, "unit": "nm",
-     "source": "CIE S 017:2020, International Lighting Vocabulary"},
+     "source": "Illustrative conventional window; CIE e-ILV states visibility has no precise limits"},
     {"name": "noncovalent_bond_energy", "low": 1.0, "high": 40.0, "unit": "kJ/mol",
      "source": "Israelachvili, Intermolecular and Surface Forces, 3rd ed., ch. 2"},
     {"name": "covalent_bond_energy", "low": 150.0, "high": 1000.0, "unit": "kJ/mol",
      "source": "Atkins and de Paula, Physical Chemistry, 12th ed., data section"},
     {"name": "atp_hydrolysis_energy", "low": 40.0, "high": 60.0, "unit": "kJ/mol",
-     "source": "Milo and Phillips, Cell Biology by the Numbers, ch. 4"},
+     "source": "Milo and Phillips, Cell Biology by the Numbers; magnitude of cellular hydrolysis free energy, not signed standard-state delta G"},
 )
 
 CATALOGUE = {
@@ -513,7 +517,14 @@ def evaluate(
         raise CliError(f"{entry['name']} needs: {wanted}")
     for name in required:
         check_dimensionality(name, supplied[name], entry["inputs"].get(name, ""))
-    values = {name: supplied[name] for name in required}
+        quantity = supplied[name]
+        # Temperature must be absolute, even when the caller supplied degC.
+        physical = quantity.m_as("kelvin") if name == "temperature" else quantity.to_base_units().magnitude  # audit-units: ignore UNIT003
+        allow_zero = name in {"velocity", "time", "angular_frequency", "rate_constant", "relaxation_time", "density_difference"}
+        signed = name == "density_difference" and entry["name"] == "stokes_settling_velocity"
+        if not math.isfinite(float(physical)) or (not signed and (physical < 0 or (physical == 0 and not allow_zero))):
+            raise CliError(f"{name} must be physically positive (non-negative for zero-flow/time limits)")
+    values = {name: (supplied[name].to("kelvin") if name == "temperature" else supplied[name]) for name in required}
     values.update({name: constants[name] for name in needed & set(constants)})
     return _common.reduce_expression(tree, values, {"sqrt": lambda q: q**0.5})
 
@@ -559,6 +570,8 @@ def evaluate_group(
             "dimensionless; an input carries the wrong quantity"
         )
     value = float(result.m_as("dimensionless"))
+    if not math.isfinite(value):
+        raise CliError("dimensionless result is not finite")
     return {
         "name": entry["name"],
         "symbol": entry["symbol"],
@@ -583,6 +596,8 @@ def evaluate_scale(
             f"{entry['name']} evaluated to {result.units:~P}, which cannot be "
             f"expressed in {entry['unit']}: {exc}"
         ) from exc
+    if not math.isfinite(magnitude):
+        raise CliError("characteristic scale is not finite")
     return {
         "name": entry["name"],
         "expression": entry["expression"],
@@ -616,6 +631,7 @@ def evaluate_band(
             "implausible" if decades is None or abs(decades) >= 1 else "questionable"
         )
     return {
+        "interpretation": "comparison with an illustrative typical-value band, not a physical limit",
         "quantity": name,
         "band": entry["name"],
         "value": magnitude,
@@ -808,7 +824,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
             f"{item['range'][0]:.4g}-{item['range'][1]:.4g} {item['unit']}"
         )
     for item in groups:
-        if item["value"] <= 0:
+        if item["value"] < 0:
             warnings.append(
                 f"{item['symbol']} is not positive, which no physical "
                 "configuration produces; check the sign of an input"
@@ -822,6 +838,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         "scales": scales,
         "bands": bands,
         "verdict": overall_verdict(bands),
+        "scope": "verdict covers only requested bands; groups and scales are model diagnostics, not validity certificates",
         "warnings": warnings,
     }
 

@@ -36,7 +36,7 @@ python scripts/search_google_scholar.py "machine learning protein folding" \
 - Search by author: `author:LeCun`
 - Search in title: `intitle:"neural networks"`
 - Exclude terms: `machine learning -survey`
-- Find highly cited papers using sort options
+- Use citation counts to inspect the retrieved sample, not as a global Scholar sort
 - Filter by date ranges to get recent work
 
 **Best Practices**:
@@ -144,9 +144,9 @@ python scripts/extract_metadata.py --input identifiers.txt --output citations.bi
 4. **DataCite API**: Research datasets, software, other resources
    - Metadata for non-traditional scholarly outputs
    - DOIs for datasets and code
-   - Free access
+   - `doi_to_bibtex.py` retrieves BibTeX through DOI content negotiation; `extract_metadata.py --doi` is Crossref-only
 
-**What Gets Extracted**:
+**Fields to verify after extraction** (availability differs by source; not all are emitted by every script):
 - **Required fields**: author, title, year
 - **Journal articles**: journal, volume, number, pages, DOI
 - **Books**: publisher, ISBN, edition
@@ -215,7 +215,7 @@ parallel-cli extract "https://doi.org/10.XXXX/YYYY" --json \
   -o sources/extract_doi_CITATIONKEY.json
 ```
 
-**Option C — Search CrossRef API directly** (programmatic, fast):
+**Option C — Search the web for a Crossref record** (this command is web search, not a direct API call):
 ```bash
 parallel-cli search "crossref DOI metadata FIRST_AUTHOR TITLE" \
   --json --max-results 10 \
@@ -386,9 +386,9 @@ python scripts/validate_citations.py references.bib \
 **Validation Checks** (see `references/citation_validation.md`):
 
 1. **DOI Verification**:
-   - DOI resolves correctly via doi.org
-   - Metadata matches between BibTeX and CrossRef
-   - No broken or invalid DOIs
+   - With `--check-dois`, check registration through Crossref, then DataCite and resolver fallback
+   - Failed/rate-limited lookups remain `doi_unverified` warnings
+   - Compare title/authors/year manually; the script does not perform metadata matching
 
 2. **Required Fields**:
    - All required fields present for entry type
@@ -397,9 +397,9 @@ python scripts/validate_citations.py references.bib \
 
 3. **Data Consistency**:
    - Year is valid (4 digits, reasonable range)
-   - Volume/number are numeric
+   - Review volume/issue values manually; supplements may be alphanumeric
    - Pages formatted correctly (e.g., 123--145)
-   - URLs are accessible
+   - Check landing URLs manually; the script does not fetch arbitrary bibliography URLs
 
 4. **Duplicate Detection**:
    - Same DOI used multiple times
@@ -442,20 +442,13 @@ python scripts/validate_citations.py references.bib \
 }
 ```
 
-#### Citation Count Standards by Venue
+#### Citation Counts
 
-**Citations must always be high in number based on standards for journal and conference publications in the venue of choice or recommendation.** Never settle for a sparse reference list; establish an authoritative, rich context with dense, verified citations.
-
-| Venue Type | Target Citation Count |
-|------------|----------------------|
-| High-impact multidisciplinary journals (Nature, Science, Cell) | **35-50+** |
-| ML / CS conferences (NeurIPS, ICML, ICLR, CVPR, ACL) | **30-45+** |
-| Comprehensive literature reviews / market research reports | **40-65+** |
-| Medical journals (NEJM, Lancet, JAMA) | **30-45+** |
-
-Always adjust the citation target upward depending on standard density and practices of the target venue. Avoid 'lazy' citation over-repetition — do not repeatedly cite the same 1 or 2 papers to support multiple unrelated claims; draw from a diverse, high-quality set of reputable references.
-
-Enforce these standards programmatically with `validate_citations.py --venue <venue>` or `--min-count <N>`.
+Use enough relevant, verified references to support the claims. The script's
+venue figures are editorial heuristics, not current submission requirements.
+`--venue` produces warnings; `--min-count` enforces an explicit user-specified
+floor. Check the target venue's current author instructions directly and do not
+add irrelevant citations merely to meet a numeric target.
 
 #### Mandatory Post-Writing Reference Checks (Non-Negotiable)
 
@@ -463,8 +456,8 @@ Once the entire scientific report or paper has been drafted and written, perform
 
 1. **Verify No Missing or Unresolved Citations**: Check the draft or compiled document to ensure that every in-text citation correctly resolves to a reference in `references.bib`. There must be ZERO broken citation keys, missing identifiers, or unresolved references (e.g., `[?]` or `[citation needed]`).
 2. **Verify No Unused (Dangling) Bibliography Entries**: Check that every entry in `references.bib` is actually cited in the body of the report. Remove any unused entries to keep the bibliography perfectly clean.
-3. **Verify Citation Quantity Against Target Standards**: Ensure the final citation count meets or exceeds the high standard of the chosen or recommended venue (see table above). If the count is below standard, perform additional literature search first, find high-quality papers, and integrate them into appropriate sections.
-4. **Verify Metadata Completeness**: Confirm that all cited entries contain complete, fully-verified fields (all author names, complete journal/conference names, exact year, volume, issue, page range, and valid DOI).
+3. **Verify Evidence Coverage**: Confirm each claim is supported by relevant evidence and any explicit reference-count requirement is met.
+4. **Verify Metadata Completeness**: Confirm that all cited entries contain verified applicable fields; record missing/not-yet-assigned fields without inventing values.
 
 Run all of these checks in one command:
 
@@ -548,15 +541,15 @@ When the user already keeps references in Zotero, treat the Zotero library as th
 
 **Combined Workflow**:
 1. Use `pyzotero` to pull the working set from the Zotero library, filtered by collection or tag
-2. Export it as BibTeX with `zot.add_parameters(format='bibtex')` (see `pyzotero` → `references/exports.md`)
+2. Export it as BibTeX using the `pyzotero` skill's export workflow. `format='bibtex'` returns a `bibtexparser` object, not a text string; serialize it and handle pagination.
 3. Use `citation-management` to validate the exported entries and repair incomplete metadata
 4. Use `citation-management` to format for the target venue
 5. Optionally use `pyzotero` to write corrected fields back so the library benefits from the fixes
 
 ```bash
 # 1-2. Export the desired collection from Zotero as BibTeX (pyzotero skill)
-#      zot.add_parameters(format='bibtex'); bibtex = zot.collection_items(collection_id)
-#      → write to zotero_export.bib
+#      Follow the pyzotero export workflow: collect all pages, serialize the
+#      returned bibtexparser object, and verify the exported item count.
 
 # 3. Validate the exported bibliography
 python scripts/validate_citations.py zotero_export.bib --report zotero_validation.json
@@ -567,3 +560,5 @@ python scripts/format_bibtex.py zotero_export.bib \
 ```
 
 Zotero exports are only as good as what was captured — browser-connector entries in particular often carry missing DOIs, truncated author lists, or preprint metadata for papers since published. Run the validation step before submission rather than trusting the export, and prefer writing corrections back to Zotero so the same errors do not resurface in the next manuscript.
+
+Pyzotero export return types and pagination: [official documentation](https://pyzotero.readthedocs.io/en/latest/). The Zotero handoff is illustrative; authenticated library export was not tested in this refresh.

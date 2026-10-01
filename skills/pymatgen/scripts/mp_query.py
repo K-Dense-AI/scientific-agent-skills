@@ -27,7 +27,7 @@ from _common import (
 
 
 FIELD_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,79}$")
-MATERIAL_ID_PATTERN = re.compile(r"^(?:mp|mvc)-[0-9]+$")
+MATERIAL_ID_PATTERN = re.compile(r"^(?:mp|mvc)-(?:[0-9]{1,30}|[a-z]{1,30})$")
 TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9.+\-()]+$")
 MAX_RESULTS = 100
 MAX_FIELDS = 20
@@ -192,7 +192,7 @@ def plan_payload(
         "rate_and_error_handling": {
             "custom_retries": False,
             "client_behavior": (
-                "mp-api 0.46.4 retries 429, 502, and 504 according to its "
+                "mp-api 0.46.5 retries 429, 502, and 504 according to its "
                 "configured retry policy and respects Retry-After"
             ),
             "numeric_service_quota_assumed": False,
@@ -202,7 +202,7 @@ def plan_payload(
             "license": "CC BY 4.0 for Materials Project data; contributed data may differ",
             "citation_required": True,
             "computed_data_is_experimental_truth": False,
-            "database_version_recorded_automatically": False,
+            "database_version_recorded_automatically": True,
         },
     }
 
@@ -252,6 +252,7 @@ def execute_query(
     try:
         with MPRester(
             api_key=api_key,
+            endpoint="https://api.materialsproject.org/",
             include_user_agent=False,
             mute_progress_bars=True,
             notify_db_version=False,

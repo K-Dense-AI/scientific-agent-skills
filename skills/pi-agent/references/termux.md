@@ -2,11 +2,13 @@
 
 Source: https://pi.dev/docs/latest/termux
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi runs on Android through Termux.
 
 ## Prerequisites
 
-Install Termux from GitHub or F-Droid, not Google Play. Install Termux:API for clipboard and device integrations.
+Install Termux from GitHub or F-Droid, not Google Play. Optionally install Termux:API from the same distribution source as Termux for clipboard and device integrations.
 
 ## Install
 
@@ -28,4 +30,4 @@ Add Termux environment notes to `~/.pi/agent/AGENTS.md`: OS is Android/Termux, h
 
 ## Limitations and Troubleshooting
 
-No image clipboard. Some optional native binaries may be unavailable on Android ARM64. Run `termux-setup-storage` once for `/storage/emulated/0`. If npm fails, try `npm cache clean --force`.
+No image clipboard. Some optional native binaries may be unavailable on Android ARM64. Run `termux-setup-storage` once for `/storage/emulated/0`. If `pi` is not found, open a fresh shell, check `npm prefix -g` and `command -v pi`, then ensure the global npm binary directory is on PATH.

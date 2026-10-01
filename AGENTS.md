@@ -292,7 +292,7 @@ DemoBlockTests = skill_contract.cli.demo_test_case(SKILL_ROOT, ("doe_designs.py"
 The project environment deliberately does not carry the skills' scientific packages. Their upstream
 pins are mutually exclusive — `opentrons` needs `numpy<2`, `esm` caps `transformers` below the
 version the `transformers` skill targets, `geniml` and `spikeinterface` pin `zarr<3` against the
-`zarr-python` skill's 3.x, `bioservices` caps `lxml<6` against `matchms`, and `pytdc`, `molfeat`,
+`zarr-python` skill's 3.x, `bioservices` caps `lxml<6` against `matchms`, and `pytdc`,
 `deepchem`, `histolab`, `vaex`, and `ete3` each need an interpreter older than 3.13. Installing them
 together forces every one of those skills to the losing side of a version fight.
 
@@ -308,6 +308,11 @@ Each entry lists the packages that skill documents, plus an optional `python` wh
 run on the default interpreter; uv downloads that interpreter on demand. Packages that cannot be
 installed at all — a GitHub-only SDK, a conda-forge-only library, a CUDA build — are recorded under
 `[unavailable]` with the reason, and the runner prints them so the gap shows up in test output.
+
+For a package needing extra isolated-build dependencies, an entry may set
+`uv_config = "tests/<name>/uv.toml"`. The runner applies that file only to that skill's uv
+process. Keep it inside the skill's test directory; `tests/_meta` checks the path and TOML.
+This supplies build dependencies, not missing system compilers or native libraries.
 
 Adding a skill with `scripts/` means adding its `[skills.<name>]` entry — `tests/_meta` fails
 without one. Use `packages = []` for skills whose bundled tooling is standard-library only; they

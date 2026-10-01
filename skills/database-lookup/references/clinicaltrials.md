@@ -31,7 +31,7 @@ Key parameters:
 - `query.spons` — sponsor
 - `query.id` — NCT ID
 - `filter.overallStatus` — pipe-delimited: `RECRUITING|COMPLETED|ACTIVE_NOT_RECRUITING|...`
-- `filter.phase` — `PHASE1|PHASE2|PHASE3|PHASE4|NA`
+- `filter.advanced` — Essie expression, e.g. `AREA[Phase]PHASE3`; there is no `filter.phase` parameter
 - `filter.geo` — `distance(lat,lon,dist)` e.g. `distance(38.89,-77.03,50mi)`
 - `fields` — comma-separated field list to reduce payload
 - `sort` — e.g. `LastUpdatePostDate:desc`
@@ -41,7 +41,7 @@ Key parameters:
 
 Example — recruiting Phase 3 breast cancer trials:
 ```
-/studies?query.cond=breast+cancer&filter.overallStatus=RECRUITING&filter.phase=PHASE3&pageSize=5&countTotal=true
+/studies?query.cond=breast+cancer&filter.overallStatus=RECRUITING&filter.advanced=AREA%5BPhase%5DPHASE3&pageSize=5&countTotal=true
 ```
 
 Response structure:
@@ -71,8 +71,10 @@ Example: `/studies/NCT05123456`
 
 ### Study count
 ```
-GET /stats/size?query.cond={condition}&filter.overallStatus=RECRUITING
+GET /studies?query.cond={condition}&filter.overallStatus=RECRUITING&pageSize=1&countTotal=true
 ```
+
+Read `totalCount` from the first response. `/stats/size` accepts no search parameters and reports registry-wide statistics, not a filtered count.
 
 ### Field metadata
 ```

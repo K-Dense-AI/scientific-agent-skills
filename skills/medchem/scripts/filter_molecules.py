@@ -11,7 +11,7 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 try:
     import pandas as pd
@@ -51,7 +51,10 @@ def load_molecules(
             print(f"Available columns: {', '.join(df.columns)}")
             sys.exit(1)
         print("Converting SMILES to molecules...")
-        mols = [dm.to_mol(smi) for smi in tqdm(df[smiles_column], desc="Parsing")]
+        mols = [
+            dm.to_mol(smi) if isinstance(smi, str) and smi.strip() else None
+            for smi in tqdm(df[smiles_column], desc="Parsing")
+        ]
 
     elif suffix == ".txt":
         print(f"Loading text file: {input_file}")
@@ -90,10 +93,11 @@ def apply_rule_filters(
 def apply_common_alerts(mols: List[Chem.Mol], n_jobs: int) -> pd.DataFrame:
     """Apply ChEMBL-derived common structural alerts."""
     print("\nApplying common structural alerts...")
-    alert_filter = mc.structural.CommonAlertsFilters()
+    alert_filter = mc.structural.CommonAlertsFilters(alerts_set=["BMS"])
     results = alert_filter(mols=mols, n_jobs=n_jobs, progress=True)
     return results.drop(columns=["mol"], errors="ignore").rename(
-        columns={"pass_filter": "passes_common_alerts", "status": "common_alert_status"}
+        columns={"pass_filter": "passes_common_alerts", "status": "common_alert_status",
+                 "reasons": "common_alert_reasons"}
     )
 
 
@@ -102,34 +106,41 @@ def apply_nibr(mols: List[Chem.Mol], n_jobs: int) -> pd.DataFrame:
     print("\nApplying NIBR filters...")
     nibr_filter = mc.structural.NIBRFilters()
     results = nibr_filter(mols=mols, n_jobs=n_jobs, progress=True)
+    # The class excludes explicit exclusion alerts; enforce the accumulated
+    # severity cutoff as well, matching functional.nibr_filter's default.
+    results["pass_filter"] &= results["severity"] < 10
     return results.drop(columns=["mol"], errors="ignore").rename(
-        columns={"pass_filter": "passes_nibr", "status": "nibr_status"}
+        columns={"pass_filter": "passes_nibr", "status": "nibr_status",
+                 "reasons": "nibr_reasons"}
     )
 
 
 def apply_alert_catalog(
     mols: List[Chem.Mol], alerts: List[str], n_jobs: int
-) -> pd.DataFrame:
+):
     """Apply named alert catalogs (pains, brenk, etc.)."""
     print(f"\nApplying alert catalogs: {', '.join(alerts)}")
+    unknown = set(alerts) - set(mc.catalogs.list_named_catalogs())
+    if unknown:
+        raise ValueError(f"Unknown named catalogs: {', '.join(sorted(unknown))}")
     for alert in alerts:
-        passes = mc.functional.alert_filter(
-            mols=mols, alerts=[alert], n_jobs=n_jobs, progress=True
+        passes = mc.functional.catalog_filter(
+            mols=mols, catalogs=[alert], n_jobs=n_jobs, progress=True
         )
         yield alert, passes
 
 
 def apply_lilly(mols: List[Chem.Mol], max_demerits: int, n_jobs: int) -> pd.DataFrame:
-    """Apply Lilly demerit filter (requires lilly-medchem-rules)."""
+    """Apply Lilly demerits; a requested but unavailable filter is an error."""
     print(f"\nApplying Lilly demerits filter (max={max_demerits})...")
     try:
         passes = mc.functional.lilly_demerit_filter(
             mols=mols, max_demerits=max_demerits, n_jobs=n_jobs, progress=True
         )
     except ImportError as e:
-        print(f"Warning: Lilly filter unavailable: {e}")
-        print("Install with: mamba install -c conda-forge lilly-medchem-rules")
-        return pd.DataFrame({"passes_lilly": [None] * len(mols)})
+        raise RuntimeError(
+            "Lilly filter unavailable. Install native tools with: medchem install-lilly"
+        ) from e
     return pd.DataFrame({"passes_lilly": passes})
 
 
@@ -159,16 +170,24 @@ def apply_query(mols: List[Chem.Mol], query: str, n_jobs: int) -> pd.DataFrame:
 def apply_groups(mols: List[Chem.Mol], groups: List[str]) -> pd.DataFrame:
     """Detect chemical group matches."""
     print(f"\nDetecting chemical groups: {', '.join(groups)}")
-    detector = mc.groups.ChemicalGroup(groups=groups)
-    return pd.DataFrame(
-        {f"has_{g}": [detector.has_match(mol) for mol in mols] for g in groups}
-    )
+    unknown = set(groups) - set(mc.groups.list_default_chemical_groups())
+    if unknown:
+        raise ValueError(f"Unknown chemical groups: {', '.join(sorted(unknown))}")
+    results = {}
+    for group in groups:
+        detector = mc.groups.ChemicalGroup(groups=[group])
+        results[f"has_{group}"] = [detector.has_match(mol) for mol in mols]
+    return pd.DataFrame(results)
 
 
-def generate_summary(df: pd.DataFrame, output_file: Path) -> None:
+def generate_summary(
+    df: pd.DataFrame, output_file: Path, pass_columns: list[str] | None = None
+) -> None:
     """Write a text summary of filtering results."""
     summary_file = output_file.parent / f"{output_file.stem}_summary.txt"
-    pass_cols = [c for c in df.columns if c.startswith("passes_") or c == "pass_all"]
+    pass_cols = pass_columns if pass_columns is not None else [
+        c for c in df.columns if c.startswith("passes_") or c == "pass_all"
+    ]
 
     with open(summary_file, "w") as f:
         f.write("=" * 80 + "\nMEDCHEM FILTERING SUMMARY\n" + "=" * 80 + "\n\n")
@@ -183,8 +202,7 @@ def generate_summary(df: pd.DataFrame, output_file: Path) -> None:
         if pass_cols:
             bool_cols = [c for c in pass_cols if c in df.columns and df[c].dtype == bool]
             if bool_cols:
-                df["_passes_all"] = df[bool_cols].all(axis=1)
-                n_all = df["_passes_all"].sum()
+                n_all = df[bool_cols].all(axis=1).sum()
                 pct = 100 * n_all / len(df) if len(df) else 0
                 f.write(f"\n  All filters passed: {n_all} ({pct:.1f}%)\n")
 
@@ -205,9 +223,9 @@ def main() -> None:
 
     parser.add_argument("--rules", help="Comma-separated rules (e.g. rule_of_five,rule_of_cns)")
     parser.add_argument("--query", help='Medchem query string (e.g. MATCHRULE("rule_of_five") AND NOT HASALERT("pains"))')
-    parser.add_argument("--common-alerts", action="store_true", help="Apply common structural alerts")
+    parser.add_argument("--common-alerts", action="store_true", help="Apply BMS common structural alerts")
     parser.add_argument("--nibr", action="store_true", help="Apply NIBR filters")
-    parser.add_argument("--lilly", action="store_true", help="Apply Lilly demerits (requires lilly-medchem-rules)")
+    parser.add_argument("--lilly", action="store_true", help="Apply Lilly demerits (requires medchem install-lilly)")
     parser.add_argument("--lilly-max", type=int, default=160, help="Max Lilly demerits (default: 160)")
     parser.add_argument(
         "--alerts",
@@ -238,6 +256,8 @@ def main() -> None:
         sys.exit(1)
 
     df, mols = load_molecules(args.input, args.smiles_column)
+    if not mols:
+        parser.error("No valid molecules remain after parsing; no filters were evaluated")
     result_parts = [df.reset_index(drop=True)]
 
     if args.rules:
@@ -279,21 +299,29 @@ def main() -> None:
         result_parts.append(apply_groups(mols, group_list))
 
     df_final = pd.concat(result_parts, axis=1)
+    # Input metadata may also use passes_* names. Only freshly evaluated
+    # filters may affect retention or the scientific summary.
+    pass_cols = [
+        column for part in result_parts[1:] for column in part.columns
+        if column.startswith("passes_") or column == "pass_all"
+    ]
+    duplicate_columns = df_final.columns[df_final.columns.duplicated()].tolist()
+    if duplicate_columns:
+        parser.error(f"Input and result columns collide: {duplicate_columns}; rename input columns")
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    if not args.no_summary:
+        generate_summary(df_final, args.output, pass_columns=pass_cols)
 
     if args.filter_output:
-        pass_cols = [c for c in df_final.columns if c.startswith("passes_") or c == "pass_all"]
         bool_cols = [c for c in pass_cols if c in df_final.columns and df_final[c].dtype == bool]
         if bool_cols:
             mask = df_final[bool_cols].all(axis=1)
             df_final = df_final[mask]
             print(f"\nFiltered to {len(df_final)} molecules passing all filters")
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
     df_final.to_csv(args.output, index=False)
     print(f"\nResults saved to: {args.output}")
-
-    if not args.no_summary:
-        generate_summary(df_final, args.output)
 
     print("\nDone!")
 

@@ -1,6 +1,6 @@
 # Source, Labeling, and Governance Boundaries
 
-Last reviewed: **2026-07-23**
+Last reviewed: **2026-10-01**
 
 ## General source rule
 
@@ -67,7 +67,7 @@ WHO transition guidance supports process concepts such as:
 - explicit ownership and follow-up;
 - standardized terminology, checklists, and tracking.
 
-Joint Commission materials similarly emphasize reliable identification, handoff communication, and continuity. Use these sources only to structure documentation and local governance.
+Joint Commission materials similarly emphasize reliable identification, handoff communication, and continuity. Its National Performance Goals chapter replaced the National Patient Safety Goals chapter for the Hospital and Critical Access Hospital accreditation programs effective January 1, 2026; do not generalize that change to every program. Use these sources only to structure documentation and local governance.
 
 Do not copy proprietary standards, claim accreditation compliance, or convert process guidance into patient-specific content. The current institution policy controls.
 

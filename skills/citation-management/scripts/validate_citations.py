@@ -9,6 +9,7 @@ import re
 import requests
 import argparse
 import json
+import time
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 from urllib.parse import quote
@@ -191,7 +192,7 @@ class CitationValidator:
         
         return errors, warnings
     
-    def verify_doi(self, doi: str) -> Tuple[bool, Optional[Dict]]:
+    def verify_doi(self, doi: str) -> Tuple[Optional[bool], Optional[Dict]]:
         """
         Verify DOI resolves correctly and get metadata.
         
@@ -199,19 +200,23 @@ class CitationValidator:
             doi: Digital Object Identifier
             
         Returns:
-            Tuple of (is_valid, metadata)
+            (True, metadata) when registered, (False, None) on resolver 404,
+            or (None, None) when the lookup could not be completed.
         """
         # Ask the registration agency, not the publisher. A HEAD request to
         # doi.org follows the redirect to the publisher, and several publishers
         # answer HEAD with 403 or 405 behind a bot check -- which made a
         # perfectly good DOI look unresolvable.
         try:
+            time.sleep(0.21)  # Stay below Crossref's public single-record limit.
             crossref_url = f'https://api.crossref.org/works/{quote(doi, safe="")}'
             metadata_response = self.session.get(crossref_url, timeout=10)
 
             if metadata_response.status_code == 200:
                 data = metadata_response.json()
                 message = data.get('message', {})
+                if not isinstance(message, dict) or str(message.get('DOI', '')).lower() != doi.lower():
+                    return None, None
 
                 # Extract key metadata
                 metadata = {
@@ -227,15 +232,28 @@ class CitationValidator:
                 datacite_url = f'https://api.datacite.org/dois/{quote(doi, safe="")}'
                 datacite_response = self.session.get(datacite_url, timeout=10)
                 if datacite_response.status_code == 200:
+                    record = datacite_response.json().get('data', {})
+                    if str(record.get('id', '')).lower() == doi.lower():
+                        return True, None
+                    return None, None
+                if datacite_response.status_code != 404:
+                    return None, None
+                # Other agencies mint DOIs too. Check the resolver itself,
+                # without following publishers' bot-blocked landing pages.
+                resolver = self.session.get(f'https://doi.org/{quote(doi, safe="/")}',
+                                            allow_redirects=False, timeout=10)
+                if resolver.status_code == 404:
+                    return False, None
+                if resolver.status_code in (301, 302, 303, 307, 308) and resolver.headers.get('Location'):
                     return True, None
-                return False, None
+                return None, None
 
             # Any other status is a transport problem on our side, not
             # evidence that the DOI is bad.
-            return True, None
+            return None, None
 
-        except requests.exceptions.RequestException:
-            return True, None
+        except (requests.exceptions.RequestException, ValueError, TypeError, AttributeError):
+            return None, None
     
     def detect_duplicates(self, entries: List[Dict]) -> List[Dict]:
         """
@@ -405,7 +423,15 @@ class CitationValidator:
                     print(f'Verifying DOI {i+1}: {doi}', file=sys.stderr)
                     is_valid, metadata = self.verify_doi(doi)
                     
-                    if not is_valid:
+                    if is_valid is None:
+                        all_warnings.append({
+                            'type': 'doi_unverified',
+                            'entry': entry['key'],
+                            'doi': doi,
+                            'severity': 'medium',
+                            'message': f'Entry {entry["key"]}: DOI lookup inconclusive; retry or verify manually: {doi}'
+                        })
+                    elif is_valid is False:
                         doi_errors.append({
                             'type': 'invalid_doi',
                             'entry': entry['key'],
@@ -685,4 +711,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

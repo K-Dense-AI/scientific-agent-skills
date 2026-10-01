@@ -15,8 +15,10 @@ revised in June 2026, alongside the disclosure standards below.
 
 ## Survey evidence
 
-Follow the [AAPOR Disclosure Standards](https://aapor.org/standards-and-ethics/disclosure-standards/)
-for any survey claim. Record:
+Use the current [AAPOR Code](https://aapor.org/standards-and-ethics/) for survey
+disclosure. The separate [Disclosure Standards page](https://aapor.org/standards-and-ethics/disclosure-standards/)
+still quotes the April 2021 code; read it alongside the June 2026 revision rather
+than treating the older excerpt as the complete current standard. Record:
 
 - sponsor, funder, and fieldwork organization;
 - research objective and target population;
@@ -30,6 +32,12 @@ for any survey claim. Record:
 - imputation, exclusions, attention checks, coding, and quality controls;
 - appropriate precision measure and assumptions;
 - coverage, nonresponse, measurement, processing, and model limitations.
+
+The June 2026 code explicitly distinguishes human respondents from AI-generated
+cases. Label simulated responses as AI-generated; do not describe them as a
+human survey, count them as recruited participants, or use them as observed
+customer demand. Disclose AI's role in collection or processing, the platform and
+coding rules when used, and the human checks performed (or that these are unknown).
 
 Do not:
 
@@ -120,7 +128,7 @@ tier, and as-of date.
 
 Competitive analysis is descriptive unless qualified counsel performs a legal
 assessment. The
-[2023 U.S. Merger Guidelines](https://www.ftc.gov/system/files/ftc_gov/pdf/2023_merger_guidelines_final_12.18.2023.pdf)
+[2023 U.S. Merger Guidelines](https://www.justice.gov/atr/merger-guidelines)
 and the
 [2024 European Commission Market Definition Notice](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C_202401645)
 show why product/geographic market definition, shares, concentration, entry,

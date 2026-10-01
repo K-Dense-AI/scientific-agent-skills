@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -31,7 +31,7 @@ from inventory_images import build_inventory
 EXPECTED_VERSIONS = {
     "python-pptx": "1.0.2",
     "Pillow": "12.3.0",
-    "lxml": "6.1.1",
+    "lxml": "6.1.3",
 }
 
 
@@ -44,7 +44,7 @@ def _require_exact_dependencies() -> dict[str, str]:
             raise CliError(
                 f"{distribution}=={expected} is required; install exact pins with "
                 '`uv pip install "python-pptx==1.0.2" "Pillow==12.3.0" '
-                '"lxml==6.1.1"`'
+                '"lxml==6.1.3"`'
             ) from exc
         if actual != expected:
             raise CliError(
@@ -181,7 +181,7 @@ def _build_presentation(
         raise CliError(
             "python-pptx is required; install the exact pins with "
             '`uv pip install "python-pptx==1.0.2" "Pillow==12.3.0" '
-            '"lxml==6.1.1"`'
+            '"lxml==6.1.3"`'
         ) from exc
 
     presentation = Presentation()
@@ -205,7 +205,12 @@ def _build_presentation(
     normalized_time = (
         approved_at[:-1] + "+00:00" if approved_at.endswith("Z") else approved_at
     )
-    approval_time = datetime.fromisoformat(normalized_time)
+    # python-pptx serializes core dates as UTC without converting an offset.
+    approval_time = (
+        datetime.fromisoformat(normalized_time)
+        .astimezone(timezone.utc)
+        .replace(tzinfo=None)
+    )
     core.created = approval_time
     core.modified = approval_time
 

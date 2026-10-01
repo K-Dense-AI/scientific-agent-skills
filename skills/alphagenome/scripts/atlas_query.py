@@ -18,14 +18,15 @@ Four subcommands, all against the ``alphagenome.atlas`` gRPC client:
 
 Coordinates: variants are 1-based ``chr:pos:ref>alt``; ``--interval`` is a
 1-based closed ``chr:start-end``. The Atlas is GRCh38 (hg38) only and the REF
-allele must match the reference: a swapped REF/ALT is a lookup miss, not an
-error. Reads the API key from ALPHAGENOME_API_KEY (or ALPHA_GENOME_API_KEY).
+allele must match the reference: swapped REF/ALT can cause a lookup miss.
+Returned variant identities are checked against the request. Reads the API
+key from ALPHAGENOME_API_KEY (or ALPHA_GENOME_API_KEY).
 
 Examples:
-  python atlas_query.py avi --variant chr22:36201698:A>C chr9:128225994:G>A
+  python atlas_query.py avi --variant "chr22:36201698:A>C" "chr9:128225994:G>A"
   python atlas_query.py avi --input candidates.vcf --min-phred 20 -o avi.tsv
   python atlas_query.py avi --interval chr11:5225727-5226575 --top-k 25
-  python atlas_query.py scores --variant chr22:36201698:A>C \\
+  python atlas_query.py scores --variant "chr22:36201698:A>C" \\
       --scorers RNA_SEQ SPLICE_SITE_USAGE --ontology UBERON:0001157 -o scores.tsv
   python atlas_query.py scorers
   python atlas_query.py tracks --scorer CHIP_TF --query GATA1
@@ -303,6 +304,14 @@ def _query_each(
     def one(spec: common.VariantSpec):
         try:
             result = client.query_variant(to_genome_variant(spec), requested_scorers=list(requested_scorers), **filters)
+            for scorer, adata in result.items():
+                if adata.obs is not None and "variant" in adata.obs:
+                    returned = set(_obs_variant_strings(adata))
+                    if returned - {str(spec)}:
+                        raise ValueError(
+                            f"{scorer} returned a different variant: {sorted(returned)}; "
+                            f"requested {spec}. Check REF and genome build."
+                        )
             return spec, result, ""
         except Exception as error:  # noqa: BLE001 - surfaced per variant
             return spec, None, f"{type(error).__name__}: {error}"
@@ -424,10 +433,15 @@ def cmd_scores(args: argparse.Namespace) -> int:
             rows.extend(tidy_atlas_scores(scores))
 
     if args.min_abs_quantile is not None:
+        calibrated = [row for row in rows if "quantile_score" in row]
+        if not calibrated and any(not row.get("error") for row in rows):
+            raise SystemExit("no calibrated quantiles returned; omit --min-abs-quantile and inspect raw scores")
         rows = [
             row
             for row in rows
-            if "quantile_score" not in row or abs(row["quantile_score"] - 0.5) * 2 >= args.min_abs_quantile
+            if row.get("error") or (
+                "quantile_score" in row and abs(row["quantile_score"]) >= args.min_abs_quantile
+            )
         ]
     if not args.output and len(rows) > 200 and not args.force_stdout:
         raise SystemExit(f"{len(rows)} rows; write them with -o FILE (or pass --force-stdout)")
@@ -497,7 +511,7 @@ def build_parser() -> argparse.ArgumentParser:
     scores.add_argument("--ontology", nargs="+", metavar="CURIE", help="keep tracks for these ontology terms, e.g. UBERON:0001157 CL:0000084")
     scores.add_argument("--gene", nargs="+", metavar="SYMBOL", help="gene-centric scorers: keep these gene symbols")
     scores.add_argument("--gene-id", nargs="+", metavar="ENSG", help="gene-centric scorers: keep these Ensembl gene IDs")
-    scores.add_argument("--min-abs-quantile", type=float, help="keep rows whose quantile is at least this far from 0.5, rescaled to 0..1 (0.99 keeps the 0.5%% tails)")
+    scores.add_argument("--min-abs-quantile", type=common.unit_interval, help="keep |quantile_score| >= threshold in [0,1]; signed scorers use [-1,1], unsigned use [0,1]")
     _add_common(scores)
     scores.set_defaults(func=cmd_scores)
 

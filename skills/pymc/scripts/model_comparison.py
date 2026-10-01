@@ -31,7 +31,7 @@ SUPPORTED_IC = ('loo', 'elpd')
 
 def compare_models(models_dict: Dict[str, Any],
                    ic='loo',
-                   verbose=True):
+                   verbose=True, var_name=None):
     """
     Compare multiple models by expected log pointwise predictive density.
 
@@ -70,9 +70,11 @@ def compare_models(models_dict: Dict[str, Any],
         print(" " * 25 + "MODEL COMPARISON (LOO)")
         print("="*70)
 
+    _validate_comparable_observations(models_dict, var_name)
+
     # round_to='none' keeps the columns numeric; the default formats them for
     # display, which turns every comparison below into a string comparison.
-    comparison = az.compare(models_dict, round_to='none')
+    comparison = az.compare(models_dict, var_name=var_name, round_to='none')
 
     if verbose:
         print("\nModel Rankings:")
@@ -82,15 +84,15 @@ def compare_models(models_dict: Dict[str, Any],
         print("\n" + "="*70)
         print("INTERPRETATION GUIDE")
         print("="*70)
-        print("• rank:       Model ranking (0 = best)")
-        print("• elpd:       PSIS-LOO ELPD estimate (higher is better)")
-        print("• p:          Effective number of parameters")
-        print("• elpd_diff:  ELPD minus the best model's ELPD (0 for the best)")
-        print("• weight:     Model probability (stacking weights)")
-        print("• se:         Standard error of the ELPD estimate")
-        print("• dse:        Standard error of the difference")
-        print("• p_worse:    Probability the model is worse than the best one")
-        print("• diag_elpd:  Reliability diagnostic for the ELPD estimate")
+        print("- rank:       Model ranking (0 = best)")
+        print("- elpd:       PSIS-LOO ELPD estimate (higher is better)")
+        print("- p:          Effective number of parameters")
+        print("- elpd_diff:  ELPD minus the best model's ELPD (0 for the best)")
+        print("- weight:     Predictive stacking weight (not model probability)")
+        print("- se:         Standard error of the ELPD estimate")
+        print("- dse:        Standard error of the difference")
+        print("- p_worse:    Probability the model is worse than the best one")
+        print("- diag_elpd:  Reliability diagnostic for the ELPD estimate")
 
         print("\n" + "="*70)
         print("MODEL SELECTION GUIDELINES")
@@ -111,12 +113,12 @@ def compare_models(models_dict: Dict[str, Any],
                 print("    Consider model averaging or choose based on simplicity")
             elif delta > 2 * delta_se:
                 print(
-                    f"  -> STRONG evidence for {best_model} "
+                    f"  -> Larger estimated predictive score for {best_model} "
                     f"(ELPD difference {delta:.1f} > 2 SE)"
                 )
             else:
                 print(
-                    f"  -> MODERATE evidence for {best_model} "
+                    f"  -> Uncertain estimated advantage for {best_model} "
                     f"(ELPD difference {delta:.1f}, within 2 SE)"
                 )
 
@@ -135,78 +137,68 @@ def compare_models(models_dict: Dict[str, Any],
     return comparison
 
 
-def check_loo_reliability(models_dict: Dict[str, Any],
-                          threshold=0.7,
-                          verbose=True):
-    """
-    Check LOO-CV reliability using Pareto-k diagnostics.
-
-    Parameters
-    ----------
-    models_dict : dict
-        Dictionary mapping model names to PyMC posterior objects
-    threshold : float
-        Pareto-k threshold for flagging observations (default: 0.7)
-    verbose : bool
-        Print detailed diagnostics (default: True)
-
-    Returns
-    -------
-    dict
-        Dictionary with Pareto-k diagnostics for each model
-    """
-    if verbose:
-        print("="*70)
-        print(" " * 20 + "LOO RELIABILITY CHECK")
-        print("="*70)
-
-    results = {}
-
+def _validate_comparable_observations(models_dict, var_name=None):
+    """Reject mismatched observed values/order; predictive-unit choice remains scientific."""
+    if not models_dict:
+        raise ValueError("At least one model is required")
+    reference = None
+    reference_layout = None
+    selected_name = var_name
     for name, idata in models_dict.items():
-        if verbose:
-            print(f"\n{name}:")
-            print("-"*70)
+        if not hasattr(idata, 'log_likelihood') or not hasattr(idata, 'observed_data'):
+            raise ValueError(f"{name}: log_likelihood and observed_data groups are required")
+        names = list(idata.log_likelihood.data_vars)
+        if selected_name is None:
+            if len(names) != 1:
+                raise ValueError("Specify var_name when there are multiple likelihoods")
+            selected_name = names[0]
+        if selected_name not in idata.log_likelihood or selected_name not in idata.observed_data:
+            raise ValueError(f"{name}: missing likelihood/observations for {selected_name}")
+        observed = idata.observed_data[selected_name]
+        loglik = idata.log_likelihood[selected_name]
+        if not np.isfinite(loglik.values).all():
+            raise ValueError(f"{name}: log likelihood contains nonfinite values")
+        if not {'chain', 'draw'}.issubset(loglik.dims):
+            raise ValueError(f"{name}: log likelihood needs chain and draw dimensions")
+        layout = loglik.isel(chain=0, draw=0, drop=True)
+        if reference is None:
+            reference = observed
+            reference_layout = layout
+        elif not observed.identical(reference):
+            raise ValueError("Models must use identical observed outcomes, dimensions and coordinates")
+        elif layout.dims != reference_layout.dims or layout.sizes != reference_layout.sizes or not layout.coords.equals(reference_layout.coords):
+            raise ValueError("Pointwise likelihood dimensions and coordinates must match")
+    return selected_name
 
-        # Compute LOO with pointwise results
-        loo_result = az.loo(idata, pointwise=True)
-        pareto_k = loo_result.pareto_k.values
 
-        # Count problematic observations
-        n_high = (pareto_k > threshold).sum()
-        n_very_high = (pareto_k > 1.0).sum()
+def check_loo_reliability(models_dict: Dict[str, Any], threshold=None,
+                          verbose=True, var_name=None):
+    """Report PSIS diagnostics; default to each result's sample-size-aware good_k.
 
+    A custom threshold may be stricter. Nonfinite k values are always flagged.
+    This checks importance sampling, not convergence or the chosen predictive unit.
+    """
+    if threshold is not None and not np.isfinite(threshold):
+        raise ValueError("threshold must be finite or None")
+    _validate_comparable_observations(models_dict, var_name)
+    results = {}
+    for name, idata in models_dict.items():
+        loo_result = az.loo(idata, pointwise=True, var_name=var_name)
+        pareto_k = np.asarray(loo_result.pareto_k.values)
+        cutoff = float(loo_result.good_k if threshold is None else threshold)
+        invalid = ~np.isfinite(pareto_k)
+        n_high = int(((pareto_k > cutoff) | invalid).sum())
         results[name] = {
-            'pareto_k': pareto_k,
-            'n_high': n_high,
-            'n_very_high': n_very_high,
-            'max_k': pareto_k.max(),
-            'loo': loo_result
+            'pareto_k': pareto_k, 'n_high': n_high,
+            'n_very_high': int((pareto_k > 1).sum()),
+            'n_nonfinite': int(invalid.sum()), 'threshold': cutoff,
+            'max_k': float(pareto_k.max()), 'loo': loo_result,
         }
-
         if verbose:
-            print(f"Pareto-k diagnostics:")
-            print(f"  • Good (k < 0.5):       {(pareto_k < 0.5).sum()} observations")
-            print(f"  • OK (0.5 <= k < 0.7):    {((pareto_k >= 0.5) & (pareto_k < 0.7)).sum()} observations")
-            print(f"  • Bad (0.7 <= k < 1.0):   {((pareto_k >= 0.7) & (pareto_k < 1.0)).sum()} observations")
-            print(f"  • Very bad (k >= 1.0):    {(pareto_k >= 1.0).sum()} observations")
-            print(f"  • Maximum k: {pareto_k.max():.3f}")
-
-            if n_high > 0:
-                print(f"\n[WARN]  {n_high} observations with k > {threshold}")
-                print("  LOO approximation may be unreliable for these points")
-                print("  Solutions:")
-                print("  -> Use WAIC instead (less sensitive to outliers)")
-                print("  -> Investigate influential observations")
-                print("  -> Consider more flexible model")
-
-                if n_very_high > 0:
-                    print(f"\n[WARN]  {n_very_high} observations with k > 1.0")
-                    print("  These points have very high influence")
-                    print("  -> Strongly consider K-fold CV or other validation")
-            else:
-                print(f"[OK] All Pareto-k values < {threshold}")
-                print("  LOO estimates are reliable")
-
+            print(f"{name}: {n_high} observations fail Pareto-k <= {cutoff:.3f}")
+            if n_high:
+                print('[WARN] Investigate influential units; refit LOO cases or use structured K-fold CV.')
+                print('Switching to WAIC does not repair unreliable PSIS-LOO.')
     return results
 
 
@@ -247,134 +239,76 @@ def plot_model_comparison(comparison, output_path=None, show=True):
     return fig
 
 
-def model_averaging(models_dict: Dict[str, Any],
-                    weights=None,
-                    var_name='y_obs',
-                    ic='loo'):
-    """
-    Perform Bayesian model averaging using model weights.
+def model_averaging(models_dict: Dict[str, Any], weights=None, var_name='y_obs',
+                    ic='loo', *, group='posterior_predictive', n_samples=None,
+                    random_seed=None):
+    """Sample a predictive mixture, preserving within-draw dependence and variance.
 
-    Parameters
-    ----------
-    models_dict : dict
-        Dictionary mapping model names to PyMC posterior objects
-    weights : array-like, optional
-        Model weights. If None, taken from `compare_models` (stacking weights)
-    var_name : str
-        Name of the predicted variable (default: 'y_obs')
-    ic : str
-        Information criterion for computing weights if not provided
-
-    Returns
-    -------
-    np.ndarray
-        Averaged predictions across models
-    np.ndarray
-        Model weights used
+    Returns (draws, weights_in_input_model_order). Draws have shape
+    (n_samples, *prediction_dimensions), not (chain, draw, ...). Each draw selects
+    one model then one complete joint predictive draw. It never averages paired
+    draws. Stacking weights are predictive weights, not posterior model probabilities.
+    All models must provide the same explicit group, variable, dimensions and
+    coordinates; missing predictions and invalid weights raise ValueError.
     """
+    names = list(models_dict)
+    if not names:
+        raise ValueError("At least one model is required")
     if weights is None:
         comparison = compare_models(models_dict, ic=ic, verbose=False)
-        weights = comparison['weight'].values
-        model_names = comparison.index.tolist()
-    else:
-        model_names = list(models_dict.keys())
-        weights = np.array(weights)
-        weights = weights / weights.sum()  # Normalize
-
-    print("="*70)
-    print(" " * 22 + "BAYESIAN MODEL AVERAGING")
-    print("="*70)
-    print("\nModel weights:")
-    for name, weight in zip(model_names, weights):
-        print(f"  {name}: {weight:.4f} ({weight*100:.2f}%)")
-
-    # Extract predictions and average
-    predictions = []
-    for name in model_names:
+        weights = comparison.loc[names, 'weight'].to_numpy()
+    weights = np.asarray(weights, dtype=float)
+    if weights.shape != (len(names),) or not np.isfinite(weights).all() or (weights < 0).any():
+        raise ValueError("Supply one finite nonnegative weight per model")
+    if weights.sum() <= 0 or not np.isfinite(weights.sum()):
+        raise ValueError("Weights must have a finite positive sum")
+    weights = weights / weights.sum()
+    predictions, reference = [], None
+    for name in names:
         idata = models_dict[name]
-        if hasattr(idata, 'posterior_predictive') and var_name in idata.posterior_predictive:
-            pred = idata.posterior_predictive[var_name].values
-        elif hasattr(idata, 'predictions') and var_name in idata.predictions:
-            pred = idata.predictions[var_name].values
-        else:
-            print(f"Warning: {name} missing posterior_predictive/predictions for {var_name}, skipping")
-            continue
-        predictions.append(pred)
+        if not hasattr(idata, group) or var_name not in idata[group]:
+            raise ValueError(f"{name}: missing {group}/{var_name}")
+        pred = idata[group][var_name]
+        if not {'chain', 'draw'}.issubset(pred.dims):
+            raise ValueError(f"{name}: predictions need chain and draw dimensions")
+        dims = [d for d in pred.dims if d not in ('chain', 'draw')]
+        ordered = pred.transpose('chain', 'draw', *dims)
+        layout = ordered.isel(chain=0, draw=0, drop=True)
+        if reference is None:
+            reference = layout
+        elif layout.dims != reference.dims or layout.sizes != reference.sizes or not layout.coords.equals(reference.coords):
+            raise ValueError("Prediction dimensions and coordinates must match exactly")
+        values = ordered.values.reshape((-1, *layout.shape))
+        if not np.isfinite(values).all():
+            raise ValueError(f"{name}: nonfinite predictive draws")
+        predictions.append(values)
+    if n_samples is None:
+        n_samples = min(len(p) for p in predictions)
+    if not isinstance(n_samples, (int, np.integer)) or n_samples <= 0:
+        raise ValueError("n_samples must be a positive integer")
+    rng = np.random.default_rng(random_seed)
+    choices = rng.choice(len(names), size=n_samples, p=weights)
+    mixture = np.empty((n_samples, *reference.shape), dtype=np.result_type(*predictions))
+    for index, pred in enumerate(predictions):
+        mask = choices == index
+        mixture[mask] = pred[rng.integers(len(pred), size=int(mask.sum()))]
+    return mixture, weights
 
-    # Weighted average
-    averaged = sum(w * p for w, p in zip(weights, predictions))
 
-    print(f"\n[OK] Model averaging complete")
-    print(f"  Combined predictions using {len(predictions)} models")
-
-    return averaged, weights
-
-
-def cross_validation_comparison(models_dict: Dict[str, Any],
-                                k=10,
-                                verbose=True):
-    """
-    Perform k-fold cross-validation comparison (conceptual guide).
-
-    Note: This function provides guidance. Full k-fold CV requires
-    re-fitting models k times, which should be done in the main script.
-
-    Parameters
-    ----------
-    models_dict : dict
-        Dictionary of model names to PyMC posterior objects
-    k : int
-        Number of folds (default: 10)
-    verbose : bool
-        Print guidance
-
-    Returns
-    -------
-    None
-    """
+def cross_validation_comparison(models_dict: Dict[str, Any], k=10, verbose=True):
+    """Print a conceptual K-fold guide; this function does not fit or score models."""
+    if not isinstance(k, int) or k < 2:
+        raise ValueError("k must be an integer >= 2")
     if verbose:
-        print("="*70)
-        print(" " * 20 + "K-FOLD CROSS-VALIDATION GUIDE")
-        print("="*70)
-        print(f"\nTo perform {k}-fold CV:")
-        print("""
-1. Split data into k folds
-2. For each fold:
-   - Train all models on k-1 folds
-   - Compute log-likelihood on held-out fold
-3. Sum log-likelihoods across folds for each model
-4. Compare models using total CV score
-
-Example code:
--------------
-from sklearn.model_selection import KFold
-
-kf = KFold(n_splits=k, shuffle=True, random_seed=42)
-cv_scores = {name: [] for name in models_dict.keys()}
-
-for train_idx, test_idx in kf.split(X):
-    X_train, X_test = X[train_idx], X[test_idx]
-    y_train, y_test = y[train_idx], y[test_idx]
-
-    for name in models_dict.keys():
-        # Fit model on train set
-        with create_model(name, X_train, y_train) as model:
-            idata = pm.sample()
-
-        # Compute log-likelihood on test set
-        with model:
-            pm.set_data({'X': X_test, 'y': y_test})
-            log_lik = pm.compute_log_likelihood(idata).sum()
-
-        cv_scores[name].append(log_lik)
-
-# Compare total CV scores
-for name, scores in cv_scores.items():
-    print(f"{name}: {np.sum(scores):.2f}")
-        """)
-
-    print("\nNote: K-fold CV is expensive but most reliable for model comparison")
-    print("      Use when LOO has reliability issues (high Pareto-k values)")
+        print(f"K-fold guide: {k} folds; no fits have been performed.")
+        print("Choose independent units (rows, groups, or future time blocks) before splitting.")
+        print("For each fold: fit preprocessing and model only on training data; diagnose it.")
+        print("Update predictor AND observed pm.Data containers and coordinates for held-out data.")
+        print("Compute held-out log likelihood with extend_inferencedata=False to preserve training groups.")
+        print("For each held-out unit, compute logsumexp(log_lik over posterior draws) - log(n_draws).")
+        print("Sum these log predictive densities over units; do NOT sum log likelihood over draws.")
+        print("For a joint held-out group, sum log likelihood within that group BEFORE logsumexp.")
+        print("Compare paired fold/unit scores and uncertainty on the same outcome scale.")
 
 
 # Example usage
@@ -388,11 +322,13 @@ if __name__ == '__main__':
     # Fit multiple models (must include log_likelihood)
     with pm.Model() as model1:
         # ... define model 1 ...
-        idata1 = pm.sample(idata_kwargs={'log_likelihood': True})
+        idata1 = pm.sample()
+        pm.compute_log_likelihood(idata1)
 
     with pm.Model() as model2:
         # ... define model 2 ...
-        idata2 = pm.sample(idata_kwargs={'log_likelihood': True})
+        idata2 = pm.sample()
+        pm.compute_log_likelihood(idata2)
 
     # Compare models
     models = {'Simple': idata1, 'Complex': idata2}

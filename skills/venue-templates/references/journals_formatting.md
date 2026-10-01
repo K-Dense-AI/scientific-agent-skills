@@ -2,7 +2,7 @@
 
 Journal requirements vary by journal, article type, and submission stage. Publisher-wide conventions are useful for discovery but do not replace the target journal's current Guide for Authors.
 
-**Reviewed:** 2026-07-20
+**Reviewed:** 2026-10-01
 
 ## Verification Workflow
 
@@ -49,7 +49,7 @@ Do not assume that Nature, Nature Communications, Scientific Reports, and subjec
 
 - Science author instructions: https://www.science.org/content/page/instructions-authors
 
-Resolve the exact journal and contribution type before applying length, abstract, reference, or supplementary-material rules. Science, Science Advances, and specialist journals have different workflows.
+Resolve the exact journal and contribution type before applying length, abstract, reference, or supplementary-material rules. Fresh Science author-page retrieval was blocked in this audit; this skill therefore does not assert a current Science word or reference limit. Science, Science Advances, and specialist journals have different workflows.
 
 No Science template is bundled in this skill. Use the official instructions and files provided by the target journal.
 
@@ -58,7 +58,7 @@ No Science template is bundled in this skill. Use the official instructions and 
 **Official resources**
 
 - PLOS ONE submission guidelines: https://journals.plos.org/plosone/s/submission-guidelines
-- PLOS journal-specific LaTeX pages are linked from each journal's author resources.
+- PLOS ONE LaTeX package: https://journals.plos.org/plosone/s/latex
 
 PLOS supplies an official LaTeX package and BibTeX style for LaTeX submissions. Follow the target PLOS journal's package and upload instructions; manuscript and figure-file handling can be specific to the journal and submission stage.
 
@@ -80,7 +80,7 @@ Check the exact journal and article type for:
 - data/code availability declarations; and
 - generative-AI or AI-assisted-technology declarations.
 
-No Cell Press LaTeX template is bundled. Use `references/cell_press_style.md` for writing guidance and the official author resources for submission requirements.
+No Cell Press LaTeX template is bundled. Use `references/cell_press_style.md` for writing guidance and the official author resources for submission requirements. Current Cell reference citations are numbered superscripts, not the older author-year style.
 
 ## IEEE
 
@@ -117,17 +117,19 @@ Bundled examples:
 | File | Citation mode | Matching bibliography style |
 |---|---|---|
 | `assets/journals/elsarticle-template-num.tex` | numeric | `elsarticle-num.bst` |
-| `assets/journals/elsarticle-template-num-names.tex` | numeric, sorted/compressed | `elsarticle-num-names.bst` |
+| `assets/journals/elsarticle-template-num-names.tex` | numeric with author names | `elsarticle-num-names.bst` |
 | `assets/journals/elsarticle-template-harv.tex` | author-year | `elsarticle-harv.bst` |
 
-These are examples for the `elsarticle` workflow. Compare them with the current class documentation and target journal instructions before submission.
+The six bundled Elsevier files match the official CTAN `elsarticle` 3.5 bundle (2026-01-09); their LPPL notices are preserved. `elsarticle-num-names.bst` supports author names with numeric citations; sorting and compression are separate natbib options. The plain numeric style does not provide author metadata for `\citet`; use the numeric-with-names style when textual author citations are required. The current upstream sample repeats the label `fig1` for a table and figure: assign unique labels in your working copy. The class itself is not bundled. Compile with the current class and target journal settings. Elsevier Editorial Manager requires source files at one folder level; confirm journal upload item types, and include a compiled PDF when permitted.
+
+Official package: https://ctan.org/pkg/elsarticle
 
 ## Other Publisher and Society Starting Points
 
 | Publisher or journal | Official starting point | Key caution |
 |---|---|---|
 | Springer Nature journals | Target journal's “Submission Guidelines” | Template and reference style vary by journal |
-| BMC | https://www.biomedcentral.com/getpublished | Article type and declaration sections vary |
+| BMC | https://link.springer.com/brands/bmc/why-publish-with-bmc | Article type and declaration sections vary |
 | Frontiers | https://www.frontiersin.org/guidelines/author-guidelines | Check article-type limits and required statements |
 | PNAS | https://www.pnas.org/author-center | Check article type and current significance-statement rules |
 | APS / PRL | https://journals.aps.org/authors | Use current REVTeX and journal-specific length rules |

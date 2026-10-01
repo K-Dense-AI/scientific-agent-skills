@@ -4,6 +4,10 @@ All ten types with their `--type` value, what each is for, the data shape it exp
 worked prompts: statistical, timeline, process, comparison, list, geographic,
 hierarchical, anatomical, resume, and social.
 
+Commands below are illustrative and were not sent to paid APIs during review.
+Replace sample numerical claims with verified, dated sources and units. Supply exact
+charts/maps as references when scientific geometry matters.
+
 ## Infographic Types
 
 ### 1. Statistical/Data-Driven (`--type statistical`)
@@ -14,8 +18,8 @@ Best for: Presenting numbers, percentages, survey results, and quantitative data
 
 ```bash
 python skills/infographics/scripts/generate_infographic.py \
-  "Global internet usage 2025: 5.5 billion users (68% of population), \
-   Asia Pacific 53%, Europe 15%, Americas 20%, Africa 12%" \
+  "Synthetic survey of 1000 respondents: 680 use the internet (68%), \
+   respondent regions A 53%, B 15%, C 20%, D 12%; label all data synthetic" \
   -o figures/internet_stats.png --type statistical --style technology
 ```
 
@@ -90,8 +94,8 @@ Best for: Regional data, demographics, location-based statistics, global trends.
 
 ```bash
 python skills/infographics/scripts/generate_infographic.py \
-  "Renewable energy adoption by region: Iceland 100%, Norway 98%, \
-   Germany 50%, USA 22%, India 20%" \
+  "Synthetic renewable electricity shares: fictional Region A 80%, Region B 60%, \
+   Region C 40%, Region D 20%; percent of annual generation; label hypothetical" \
   -o figures/renewable_map.png --type geographic --style nature
 ```
 
@@ -150,7 +154,7 @@ Best for: Instagram, LinkedIn, Twitter/X posts, shareable graphics.
 
 ```bash
 python skills/infographics/scripts/generate_infographic.py \
-  "Save Water, Save Life: 2.2 billion people lack safe drinking water. \
+  "Save Water: Fix leaks, monitor use, and follow local conservation guidance. \
    Tips: shorter showers, fix leaks, full loads only" \
   -o figures/water_social.png --type social --style marketing
 ```

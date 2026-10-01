@@ -118,14 +118,23 @@ def normalize_title(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (title or "").lower()).strip()
 
 
-def source_text(source: dict[str, Any]) -> str:
-    """Join source title and excerpts into searchable text."""
-    excerpts = source.get("excerpts") or []
+def source_excerpts(source: dict[str, Any]) -> list[str]:
+    """Prefer Extract evidence over candidate snippets after retrieval succeeds."""
+    excerpts = (
+        source.get("extraction_excerpts")
+        if source.get("extracted") and "extraction_excerpts" in source
+        else source.get("excerpts")
+    ) or []
     if isinstance(excerpts, str):
         excerpts = [excerpts]
+    return [excerpt for excerpt in excerpts if isinstance(excerpt, str) and excerpt.strip()]
+
+
+def source_text(source: dict[str, Any]) -> str:
+    """Join source title and excerpts into searchable text."""
     return "\n".join(
         part.strip()
-        for part in [str(source.get("title") or ""), *map(str, excerpts)]
+        for part in [str(source.get("title") or ""), *source_excerpts(source)]
         if part and str(part).strip()
     )
 
@@ -285,6 +294,11 @@ def deduplicate_sources(sources: Iterable[dict[str, Any]]) -> list[dict[str, Any
         )
         if source.get("extracted"):
             current["extracted"] = True
+            current["extraction_excerpts"] = list(
+                dict.fromkeys([
+                    *(current.get("extraction_excerpts") or []), *source_excerpts(source)
+                ])
+            )
         for key in keys:
             key_to_index[key] = existing
 
@@ -344,9 +358,7 @@ def normalize_reference(source: dict[str, Any], index: int) -> dict[str, Any]:
     outcomes = extract_label(text, ("outcomes", "outcome", "endpoints", "endpoint"))
     verification_status = (
         "extracted"
-        if source.get("extracted")
-        else "identifier-verified"
-        if doi or pmid
+        if source.get("extracted") and source_excerpts(source)
         else "search-only"
     )
 
@@ -381,7 +393,7 @@ def normalize_reference(source: dict[str, Any], index: int) -> dict[str, Any]:
         "corrected": corrected,
         "verification_status": verification_status,
         "manuscript_sections": relevance_tags(text, publication_type),
-        "supporting_excerpts": list(source.get("excerpts") or [])[:5],
+        "supporting_excerpts": source_excerpts(source)[:5],
         "facets": list(source.get("facets") or []),
         "scholarly_source": is_scholarly_url(url),
     }
@@ -398,7 +410,6 @@ def reference_score(reference: dict[str, Any]) -> tuple[int, int, int, int]:
     }.get(str(reference.get("evidence_quality")), 0)
     verification_score = {
         "extracted": 2,
-        "identifier-verified": 1,
         "search-only": 0,
     }.get(str(reference.get("verification_status")), 0)
     try:
@@ -424,13 +435,17 @@ def _claim_map(references: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "claim": finding,
                     "reference_ids": [reference["reference_id"]],
                     "supporting_excerpts": (reference.get("supporting_excerpts") or [])[:2],
-                    "status": "single-source",
+                    "status": (
+                        "single-source" if reference.get("verification_status") == "extracted"
+                        else "unverified-source"
+                    ),
                 }
             )
     return claims
 
 
 def _synthesis(references: list[dict[str, Any]]) -> dict[str, Any]:
+    references = [reference for reference in references if not reference.get("retracted")]
     conflict_terms = (
         "conflict",
         "contradict",
@@ -455,7 +470,11 @@ def _synthesis(references: list[dict[str, Any]]) -> dict[str, Any]:
         for reference in references
     )
     gaps: list[str] = []
-    if not any(reference.get("evidence_quality") == "high" for reference in references):
+    if not any(
+        reference.get("evidence_quality") == "high"
+        and reference.get("verification_status") == "extracted"
+        for reference in references
+    ):
         gaps.append("No high-tier synthesis or trial evidence was verified.")
     if not conflicts:
         gaps.append(
@@ -491,6 +510,8 @@ def _section_briefs(references: list[dict[str, Any]]) -> dict[str, Any]:
         },
     }
     for reference in references:
+        if reference.get("retracted"):
+            continue
         for section in reference.get("manuscript_sections") or []:
             brief = briefs.get(section)
             if not brief:
@@ -515,7 +536,7 @@ def _coverage(
     verified = [
         reference
         for reference in references
-        if reference.get("verification_status") != "search-only"
+        if reference.get("verification_status") == "extracted"
         and not reference.get("retracted")
     ]
     years = Counter(
@@ -555,8 +576,9 @@ def _coverage(
             if not reference.get("doi") and not reference.get("pmid")
         ),
         "full_text_note": (
-            "Extraction verifies available public page content; paywalled full text may "
-            "remain unavailable and must not be represented as reviewed."
+            "Verified means nonempty excerpts were retrieved by Extract, not that "
+            "bibliographic identity or claims were manually verified. Paywalled full "
+            "text may remain unavailable and must not be represented as reviewed."
         ),
     }
 

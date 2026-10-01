@@ -5,10 +5,10 @@ license: MIT
 compatibility: Python 3.11+; bundled CLIs use only the standard library and bounded local JSON/Markdown files, with no network access or credentials.
 allowed-tools: Read Write Bash Glob
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
   supersedes: iso-13485-certification
-  last-reviewed: "2026-07-26"
+  last-reviewed: "2026-10-01"
 ---
 
 # ISO Standards Readiness Evidence Preparation
@@ -20,8 +20,8 @@ records, traceability, and readiness evidence for substantive human review again
 named standard. It summarizes process workflows and provides deterministic local
 checks. It contains no clause text and performs no audit.
 
-This is a router. `SKILL.md` holds the boundary, the lane discipline, the shared
-workflow, and the CLI contract. Per-standard depth lives in `references/`.
+`SKILL.md` holds the boundary, lane discipline, shared evidence workflow, and CLI
+contract. Per-standard preparation details live in `references/`.
 
 ## Non-negotiable boundary
 
@@ -64,7 +64,7 @@ one carries its own current edition, lane, domain vocabulary, and failure modes.
 | Standard | Profile key | Lane | Reference |
 | --- | --- | --- | --- |
 | ISO 13485 medical device QMS | `iso-13485` | Certification | `references/iso-13485.md` |
-| ISO 14971 device risk management | `iso-14971` | No lane of its own | `references/iso-14971.md` |
+| ISO 14971 device risk management | `iso-14971` | Supports a declared lane | `references/iso-14971.md` |
 | ISO/IEC 17025 testing and calibration laboratories | `iso-17025` | Accreditation | `references/iso-17025.md` |
 | ISO 15189 medical laboratories | `iso-15189` | Accreditation | `references/iso-15189.md` |
 
@@ -78,7 +78,8 @@ a different standard produces a report that looks complete and means nothing.
   **EN ISO 13485:2016/A11:2021** is a European amendment, not an ISO international
   "Amendment 1:2021."
 - **ISO 14971:2019** Edition 3, confirmed in 2025, with **ISO/TR 24971:2020** as its
-  informative guidance companion. There is no ISO 14971 certificate.
+  informative guidance companion. Its proposed successor **ISO/AWI TS 24971-1**
+  is under development, not a published replacement or a new normative basis.
 - **ISO/IEC 17025:2017** Edition 3 remains current; no successor edition identified.
 - **ISO 15189:2022** Edition 4 replaced the 2012 edition, absorbed the POCT
   requirements formerly in ISO 22870, and its accreditation transition closed in
@@ -86,8 +87,8 @@ a different standard produces a report that looks complete and means nothing.
 - **FDA QMSR** effective and enforced since **2026-02-02**; Part 820 is titled
   *Quality Management System Regulation*; QSIT is retired in favour of Compliance
   Program **7382.850**.
-- **MDSAP** current Audit Approach is **MDSAP AU P0002.010**, version date
-  **2026-02-02**.
+- **MDSAP** current Audit Approach is **MDSAP AU P0002.011**, version date
+  **2026-08-03**.
 - **Accreditation recognition:** Global Accreditation Cooperation Incorporated
   commenced full operations **2026-01-01**, replacing ILAC and IAF, with its own MRA;
   former IAF MLA / ILAC MRA outputs stay recognized during the transition.
@@ -95,8 +96,9 @@ a different standard produces a report that looks complete and means nothing.
   decisions, current MDCG guidance, and the product-specific conformity route.
 
 Read `references/source-ledger.md` before making any time-sensitive statement. It
-records provenance limitations, including which entries still need confirmation against
-the ISO catalogue.
+records catalogue confirmation, published versus draft documents, and the remaining
+EU source-retrieval limitations. The bundled report `basis_date` is this skill
+release's research baseline, not the organization's review date or a freshness guarantee.
 
 ## Keep the assurance lanes separate
 
@@ -202,12 +204,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/check_supplier_controls.py \
 
 For a calibration supplier, link the purchased measurand, range, method, and
 location to the provider's dated accreditation scope and applicable calibration
-and measurement capability, using the [ILAC P14 policy basis](https://ilac.org/publications-and-resources/ilac-policy-series/).
+and measurement capability, using the current
+[Global ACI-TECH-1-009 (M) policy basis](https://global-aci.org/en/global_aci-documents/)
+(successor to ILAC P14; see the source ledger).
 Capture the actual certificate's reported uncertainty separately; a scope CMC is
 not automatically the uncertainty of the delivered calibration. Leave any
 coverage or suitability judgment to the authorized technical owner.
 
-Pending or ineffective CAPA effectiveness evidence blocks closure.
+Pending or ineffective CAPA effectiveness evidence blocks closure. High-risk supplier
 controls stay blocked until risk-based controls and approvals are evidenced.
 
 Note that `check_traceability.py` concerns design and risk traceability, **not**
@@ -262,7 +266,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/gap_analyzer.py \
 The analyzer uses explicit manifest labels. It does not infer evidence from filenames,
 keywords, or proprietary standard text, and does not calculate a compliance score. A
 domain absent from `expected_domains` is reported `not-assessed`, which is **not** a
-not-applicable determination.
+not-applicable determination. Entry-level structural findings, including a requested
+hash mismatch, prevent an `evidence-present-for-human-review` domain label. Always
+read the report-level findings too; domain labels do not establish file authenticity
+or substantive adequacy.
 
 Read `references/gap-analysis-checklist.md` for the fail-closed review questions.
 

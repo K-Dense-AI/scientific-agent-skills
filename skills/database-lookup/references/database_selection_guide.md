@@ -13,7 +13,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | User is asking about... | Primary database(s) | Also consider |
 |---|---|---|
 | Near-Earth objects, asteroids | NASA (NeoWs) | — |
-| Mars rover images | NASA (Mars Rover Photos) | — |
+| Mars rover images | NASA archival imagery (legacy Mars Rover Photos API retired) | — |
 | Exoplanets, orbital parameters | NASA Exoplanet Archive | — |
 | Astronomical objects by name/coordinates | SIMBAD | SDSS |
 | Galaxy/star spectra, photometry | SDSS | SIMBAD |
@@ -24,7 +24,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | User is asking about... | Primary database(s) | Also consider |
 |---|---|---|
 | Earthquakes, seismic events | USGS Earthquakes | — |
-| Water data, streamflow, groundwater | USGS Water Services | — |
+| Water data, streamflow, groundwater | USGS Water Data APIs (legacy NWIS migration) | — |
 | Weather (current, forecast, historical) | OpenWeatherMap | NOAA |
 | Climate data, historical weather stations | NOAA (CDO) | — |
 | Air quality, toxic releases | EPA (Envirofacts) | — |
@@ -81,7 +81,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | SNP/variant data (dbSNP) | dbSNP | ClinVar, gnomAD |
 | Variant consequence / CADD PHRED | Ensembl VEP (`CADD=1`) | dbSNP |
 | Noncoding regulatory evidence | RegulomeDB | ENCODE, JASPAR |
-| Cached variant annotation bundle | MyVariant.info | Ensembl VEP (live scores) |
+| Cached variant annotation bundle | MyVariant.info | Ensembl VEP (check model/build/release) |
 | Population variant frequencies | gnomAD | dbSNP |
 | Sequencing run metadata | SRA | ENA, GEO |
 | Nucleotide sequences (European archive) | ENA | SRA, NCBI Gene |
@@ -104,7 +104,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | Mouse gene data | MouseMine | NCBI Gene |
 | Plasmid repository | Addgene | — |
 
-**Organism/species matters.** Most biology databases cover multiple organisms. If the user's query is about a specific organism, pass it explicitly — don't assume human. Common patterns: Ensembl uses `{species}` in the URL path (e.g. `homo_sapiens`), STRING/BioGRID/QuickGO use NCBI taxon IDs (`species=9606` for human, `10090` for mouse), UniProt uses `organism_id:9606` in search queries, KEGG uses organism codes (`hsa`, `mmu`). GTEx and Human Protein Atlas are human-only. Check the reference file for each database's specific parameter.
+**Organism/species matters.** Most biology databases cover multiple organisms. If the user's query is about a specific organism, pass it explicitly — don't assume human. Common patterns: Ensembl uses `{species}` in the URL path (e.g. `homo_sapiens`), STRING/BioGRID/QuickGO use NCBI taxon IDs with different parameter names (`species`, `taxId`, `taxonId` respectively; human `9606`, mouse `10090`), UniProt uses `organism_id:9606` in search queries, KEGG uses organism codes (`hsa`, `mmu`). GTEx and Human Protein Atlas are human-only. Check the reference file for each database's specific parameter.
 
 **Viral sequence retrieval is high risk.** For NCBI Virus-style requests with filters such as host, geography, collection dates, sequence length, completeness, ambiguous bases, segment, lab passage, source database, or protein annotation, prefer the `gget` skill's `gget virus` deterministic retrieval layer over hand-assembling browser or API workflows. If you must use SRA/ENA/NCBI APIs directly, document which filters were enforced server-side and which were validated locally, then reconcile final accession counts.
 
@@ -131,7 +131,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 |---|---|---|
 | Patents by keyword or technology | USPTO ODP PatentsView bulk (PatentSearch API paused) | — |
 | Patents by inventor or assignee | USPTO ODP PatentsView bulk (PatentSearch API paused) | — |
-| Patent prosecution status | USPTO (PEDS) | — |
+| Patent prosecution status | USPTO ODP Patent File Wrapper (PEDS replacement) | — |
 | Trademark lookup | USPTO (TSDR) | — |
 | SEC company filings, 10-K, 10-Q | SEC EDGAR | — |
 

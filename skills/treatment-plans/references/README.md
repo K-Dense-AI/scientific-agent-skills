@@ -9,8 +9,8 @@ Read in this order:
 3. `documentation_workflow.md` — package lifecycle, deterministic checks, sign-off, and release gates.
 4. `source_boundaries.md` — FDA labeling, Medication Guide, REMS, CMS, and official reporting boundaries.
 5. `shared_decision_handoff.md` — shared-decision records, transitions, reconciliation, and ownership.
-6. `source_ledger.md` — authoritative sources reviewed on 2026-07-23.
-7. `security_validation.md` — baseline security findings and post-redesign validation.
+6. `source_ledger.md` — authoritative sources reviewed on 2026-10-01.
+7. `security_validation.md` — historical security findings and current local validation.
 
 ## Governing rule
 

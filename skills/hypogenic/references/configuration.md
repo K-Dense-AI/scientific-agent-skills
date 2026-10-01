@@ -1,7 +1,7 @@
 # Configuration
 
 Reviewed against `hypogenic` 0.3.5 and source commit
-`8c3800ccae155e333fac5b530afa8abdaac38300` on 2026-07-23.
+`8c3800ccae155e333fac5b530afa8abdaac38300` on 2026-10-01.
 
 ## Two schemas, two purposes
 
@@ -36,7 +36,7 @@ python3 scripts/validate_config.py task --input task_config.json --root .
 For YAML, use only the reviewed parser version:
 
 ```bash
-uv run --with "pyyaml==6.0.2" \
+uv run --no-project --isolated --with "pyyaml==6.0.3" \
   python scripts/validate_config.py task \
   --input task_config.yaml \
   --root . \
@@ -45,7 +45,9 @@ uv run --with "pyyaml==6.0.2" \
 
 The loader uses `yaml.SafeLoader`, rejects duplicate keys, non-string mapping
 keys, aliases, anchors, explicit tags, non-JSON scalar types, excessive depth,
-and oversized files. Package help paths do not import PyYAML.
+and oversized files. Bundled help paths do not import PyYAML. JSON and YAML validation are stricter
+local preflights, not full upstream prompt compilation. The shipped example was
+also rendered through the release BasePrompt with synthetic data in this review.
 
 ### Local run policy
 
@@ -80,6 +82,11 @@ For both local types, the policy requires a reviewed relative
 path can trigger a Hub download. A local path does not by itself prove the
 artifact is trustworthy; record its source revision, license, hashes, and
 review status separately.
+
+The provider/destination fields are declarations, not endpoint enforcement.
+The SDK base-URL overrides and wrapper compatibility defects are described in
+`references/upstream.md` (relative to the skill root). The planner does not
+validate model availability or authorize execution.
 
 ## Credential rules
 
@@ -121,7 +128,8 @@ This is a conservative arithmetic bound, not tokenizer output. It excludes
 local compute, retries beyond the request cap, caching discounts, tiered
 pricing, storage, data transfer, taxes, and provider-specific features. The
 pinned upstream CLI has no hard dollar-budget enforcement; use provider-side
-limits as well.
+limits as well. The cap comparison uses the exact decimal amount before
+rounding the displayed cost; every retry must count toward the request cap.
 
 ## Prompt templates are untrusted content
 

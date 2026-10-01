@@ -210,9 +210,10 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(reference.fetch("chr1", 9, 10), "T")
         self.assertEqual(reference.length("chr1"), 10)
 
-    def test_chr_prefix_is_resolved_both_ways(self):
+    def test_reference_requires_exact_contig_names(self):
         reference = common.Reference(REF_FASTA)
-        self.assertEqual(reference.fetch("1", 0, 2), "GG")
+        with self.assertRaises(common.ReferenceError):
+            reference.fetch("1", 0, 2)
 
     def test_past_the_end_is_an_error_naming_the_assembly(self):
         reference = common.Reference(REF_FASTA)
@@ -595,6 +596,172 @@ class AuditCliTests(unittest.TestCase):
         )
         self.assertEqual(code, 1)
         self.assertIn("10 fatal", err)
+
+
+class BoundaryRegressionTests(unittest.TestCase):
+    def test_invalid_origins_and_inverted_inclusive_intervals(self):
+        for src, start, end in [("bed", -1, 10), ("gff", 0, 2), ("gff", 2, 1)]:
+            with self.subTest(src=src, start=start, end=end):
+                code, out, _ = run_main(convert_coords, ["--from", src, "--to", "bed",
+                                                         "chr1", str(start), str(end)])
+                self.assertEqual(code, 1)
+                self.assertEqual(rows_from_tsv(out)[0]["output"], "")
+
+    def test_ensembl_numeric_strand_roundtrip(self):
+        code, out, _ = run_main(convert_coords, ["--from", "ensembl", "--to", "ensembl",
+                                                 "X:1000000..1000100:-1"])
+        self.assertEqual(code, 0)
+        self.assertEqual(rows_from_tsv(out)[0]["output"], "X:1000000..1000100:-1")
+
+    def test_unimplemented_native_file_reader_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            convert_coords.read_intervals(str(FIXTURES / "clean.bed"), common.get_convention("sam"))
+
+    def test_colon_in_bed_name_is_not_a_region_string(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "name.bed"
+            path.write_text("HLA-DRB1*12:17\t0\t10\n")
+            self.assertEqual(convert_coords.read_intervals(str(path), common.get_convention("bed"))[0],
+                             ("HLA-DRB1*12:17", 0, 10, None))
+
+    def test_structural_vcf_is_not_converted_to_anchor_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sv.vcf"
+            path.write_text("chr1\t3\t.\tC\t<DEL>\t.\t.\tEND=9\n")
+            with self.assertRaises(SystemExit):
+                convert_coords.read_intervals(str(path), common.get_convention("vcf"))
+
+    def test_literal_alleles_reject_unsplit_empty_and_invalid(self):
+        ref = common.Reference(REF_FASTA)
+        for alt in ["A,T", "", "-", "Z", "*garbage", "<DEL"]:
+            with self.subTest(alt=alt), self.assertRaises(normalize_variant.VariantError):
+                normalize_variant.normalize(ref, "chr1", 3, "C", alt)
+
+    def test_breakends_are_skipped_without_changing_case(self):
+        ref = common.Reference(REF_FASTA)
+        for alt in ["C[chr2:10[", "]chr2:10]C", "C.", ".C"]:
+            with self.subTest(alt=alt):
+                result = normalize_variant.normalize(ref, "chr1", 3, "C", alt)
+                self.assertEqual(result["alt"], alt)
+                self.assertEqual(result["ref_check"], "skipped")
+
+    def test_limited_normalization_cannot_claim_equivalence(self):
+        code, out, err = run_main(normalize_variant, ["--fasta", str(REF_FASTA), "--window", "2",
+            "--compare", "chr1:7:CAC:C", "chr1:2:GCA:G"])
+        self.assertEqual(code, 1)
+        self.assertIn("incomplete", out)
+        self.assertIn("cannot compare", err)
+
+    def test_real_contig_start_does_not_claim_window_exhaustion(self):
+        result = normalize_variant.normalize(common.Reference(REF_FASTA), "chr1", 2, "G", "GG")
+        self.assertEqual(result["pos"], 1)
+        self.assertEqual(result["ref_check"], "ok")
+        self.assertEqual(result["detail"], "")
+
+    def test_right_padded_contig_start_variant(self):
+        result = normalize_variant.normalize(common.Reference(REF_FASTA), "chr1", 1, "GG", "G")
+        self.assertEqual((result["pos"], result["ref"], result["alt"]), (1, "GG", "G"))
+
+    def test_window_must_be_positive(self):
+        with self.assertRaises(SystemExit):
+            run_main(normalize_variant, ["--fasta", str(REF_FASTA), "--window", "0", "chr1", "3", "C", "A"])
+
+    def test_colon_contig_variant_spec(self):
+        self.assertEqual(normalize_variant.parse_spec("HLA-DRB1*12:17:3:C:A"),
+                         ("HLA-DRB1*12:17", 3, "C", "A"))
+
+    def test_duplicate_fasta_and_bad_index_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ref.fa"
+            path.write_text(">chr1\nACGT\n>chr1\nTGCA\n")
+            with self.assertRaises(common.ReferenceError):
+                common.Reference(path)
+            path.write_text(">chr1\nACGT\n")
+            Path(str(path) + ".fai").write_text("chr1\t4\t6\t0\t5\n")
+            with self.assertRaises(common.ReferenceError):
+                common.Reference(path)
+
+    def test_narrowpeak_signal_columns_are_not_thick_coordinates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "peaks.narrowPeak"
+            path.write_text("chr1\t10\t20\tp\t100\t.\t2.5\t3.2\t1.5\t4\n")
+            code, out, _ = run_main(audit_intervals, [str(path)])
+            self.assertEqual(code, 0, out)
+            path.write_text("chr1\t10\t20\tp\t100\t.\t2.5\t3.2\t1.5\t10\n")
+            self.assertEqual(run_main(audit_intervals, [str(path)])[0], 1)
+
+    def test_embedded_gff_fasta_is_not_read_as_features(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ref.gff3"
+            path.write_text("##gff-version 3\nchr1\tx\tgene\t1\t10\t.\t+\t.\tID=g\n##FASTA\n>chr1\nACGT\n")
+            self.assertEqual(run_main(audit_intervals, [str(path)])[0], 0)
+            self.assertEqual(len(convert_coords.read_intervals(str(path), common.get_convention("gff3"))), 1)
+
+    def test_circular_gff_overflow_is_not_declared_wrong_assembly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "circular.gff3"
+            path.write_text("chr1\tx\tregion\t1\t100\t.\t+\t.\tID=r;Is_circular=true\nchr1\tx\tgene\t90\t120\t.\t+\t.\tID=g\n")
+            findings = audit_intervals.Findings(5)
+            audit_intervals.audit_gff(path, findings, {"1": 100}, "gff3")
+            self.assertEqual(findings.fatal, 0)
+            self.assertIn("circular_extent_unchecked", findings.counts)
+
+    def test_bed12_rejects_overlapping_and_negative_blocks(self):
+        for sizes, offsets in [("60,50", "0,50"), ("-1,50", "0,50")]:
+            fields = ["chr1", "0", "100", "x", "0", "+", "0", "100", "0", "2", sizes, offsets]
+            findings = audit_intervals.Findings(5)
+            audit_intervals.audit_bed12(findings, 1, fields, 0, 100)
+            self.assertIn("bad_block_geometry", findings.counts)
+
+    def test_partial_vcf_header_does_not_hide_bad_record_contigs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "partial.vcf"
+            path.write_text("##contig=<ID=chr1,length=10>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchr2\t1\t.\tA\tC\t.\t.\t.\n")
+            code, _, err = run_main(check_contigs, [str(path)])
+            self.assertEqual(code, 1)
+            self.assertIn("share no contigs", err)
+            with path.open("a") as handle:
+                handle.write("chr1\t1\t.\tA\tC\t.\t.\t.\n")
+            code, _, err = run_main(check_contigs, [str(path)])
+            self.assertEqual(code, 1)
+            self.assertIn("absent", err)
+
+    def test_vcf_reference_span_checked_even_with_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "overflow.vcf"
+            path.write_text("##contig=<ID=chr1,length=10>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchr1\t9\t.\tAAA\tA\t.\t.\t.\n")
+            code, _, err = run_main(check_contigs, [str(path)])
+            self.assertEqual(code, 1)
+            self.assertIn("past the end", err)
+
+    def test_missing_observed_contig_detected_in_either_file_order(self):
+        left = (Path("data.bed"), {"chr1": 5, "chr2": 5}, "intervals", False)
+        right = (Path("ref.fai"), {"chr1": 10}, "sizes", True)
+        for files in [[left, right], [right, left]]:
+            self.assertTrue(any("absent" in p for p in check_contigs.compare(files)))
+
+    def test_primary_length_outlier_not_accepted_as_same_build(self):
+        sizes = dict(check_contigs.BUILDS["GRCh38/hg38"])
+        sizes["1"] -= 1
+        self.assertEqual(check_contigs.identify(sizes, True)[0], "CONFLICT")
+
+    def test_mitochondrial_alias_mismatch_is_detected(self):
+        problems = check_contigs.compare([(Path("a"), {"MT": 16569}, "sizes", True),
+                                         (Path("b"), {"M": 16569}, "sizes", True)])
+        self.assertTrue(any("exact names" in p for p in problems))
+
+    def test_custom_reference_naming_style_does_not_invalidate_matching_subset(self):
+        self.assertEqual(check_contigs.compare([
+            (Path("regions.bed"), {"chr1": 5}, "intervals", False),
+            (Path("custom.fai"), {"chr1": 10, "spikein": 100}, "sizes", True),
+        ]), [])
+
+    def test_ambiguous_left_extension_cannot_create_non_vcf_allele(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ambiguous.fa"
+            path.write_text(">chr1\nRCCC\n")
+            with self.assertRaises(normalize_variant.VariantError):
+                normalize_variant.normalize(common.Reference(path), "chr1", 3, "CC", "C")
 
 
 # ---------------------------------------------------------------------------

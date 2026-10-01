@@ -1,6 +1,6 @@
 # Data management, h5path, manifests, datasets, and provenance
 
-This reference targets **PathML 3.0.5 stable** and a local, de-identified research
+This reference targets **PathML 3.0.8 stable** and a local, de-identified research
 workflow.
 
 ## Data boundaries
@@ -49,6 +49,8 @@ python scripts/slide_manifest.py validate \
 The validator checks strict CSV structure, duplicate IDs/paths, missing local
 files, unsafe paths, supported suffixes, and patient/slide leakage. It does not
 upload data or inspect arbitrary clinical fields.
+If the `split` column is present, every row must supply it. Without that column,
+the report explicitly leaves patient split isolation unchecked.
 
 ## h5path format
 
@@ -84,18 +86,26 @@ There is no stable `to_hdf5()`, `from_hdf5()`, or
 `load_tiles_from_hdf5()` API. `SlideDataset.write(directory, filenames=None)`
 calls each slide's `write()`.
 
-Stable documentation states HDF5 datasets are stored as `float16`; confirm dtype
-for the exact arrays your workflow writes. Quantitative marker intensities can
-lose precision if silently cast. Record and test expected dtype, range, NaN/Inf,
-compression, and round-trip tolerance.
+Released `h5pathManager.add_tile()` explicitly casts both tile images and tile
+masks to `float16`. Integers through 2048 are exact, but 2049 rounds to 2048 and
+large values can overflow beyond 65504. Thus distinct instance IDs can merge;
+intensity values can also lose precision. This is a storage limitation, even
+when Bio-Formats read with `normalize=False`.
+
+Preserve authoritative quantitative images and integer instance maps in a
+separate lossless, typed format. Check actual label identity and dtype after a
+small h5path round trip before downstream counting. Binary masks are not subject
+to the same instance-ID loss. Record tolerances for float measurements, but
+require exact equality for categorical labels.
 
 ## h5path trust boundary
 
 Treat `.h5path` as a structured binary input, not harmless data:
 
 - HDF5 parsers have a large attack surface; open third-party files in isolation.
-- PathML 3.0.5 `TileDataset` dynamically interprets the stored `tile_shape`
-  attribute as a Python expression. Never open an untrusted `.h5path`.
+- PathML 3.0.8 `TileDataset` and core h5path/tile code dynamically interpret the
+  stored `tile_shape` attribute as a Python expression. Never open an untrusted
+  `.h5path`, including through `SlideData`.
 - Labels can contain sensitive values. Do not copy direct identifiers into HDF5.
 - A malformed file can request large allocations. Check file size and schema
   before loading.
@@ -134,12 +144,18 @@ Shapes:
 - 5-D PathML input `(i, j, z, c, t)` becomes `(T, C, Z, W, H)` in stable
   source; verify axis semantics before use.
 - masks are stacked as `(n_masks, tile_height, tile_width)` when present.
-- label dictionaries are user-defined and may need a custom `collate_fn`.
+- values returned by the dataset are NumPy arrays; the PyTorch loader collates
+  them to tensors. Missing masks are `None`, which default collation cannot
+  handle; use a custom `collate_fn` for missing masks or nonstandard labels.
+
+`TileDataset` does not return coordinates explicitly. Keep a parallel mapping
+from sample index to its stored tile key/coords (HDF5 iteration is not a numeric
+row/column sort), or include validated coordinate metadata in a custom dataset.
 
 Do not assume mask dictionary order carries semantics. Persist ordered mask names
 in a separate schema and assert them when loading.
 
-`pathml.ml.TileDataset` is also exported in 3.0.5, but
+`pathml.ml.TileDataset` is also exported in 3.0.8, but
 `pathml.datasets.TileDataset` is the documented dataset API.
 
 ## SlideDataset
@@ -186,7 +202,9 @@ pannuke = PanNukeDataModule(
 - 7,901 256-pixel patches, 19 tissue types, five nucleus categories plus
   background.
 - `download=False` is the safe default.
-- `download=True` downloads three ZIPs from Warwick and extracts them.
+- `download=True` downloads three ZIPs from
+  `https://warwick.ac.uk/fac/cross_fac/tia/data/pannuke/fold_{1,2,3}.zip` and
+  extracts them. These are binary GETs, without authentication or pagination.
 - `split` must be 1, 2, 3, or `None`; each integer rotates the three published
   folds across train/validation/test.
 - `split=None` exposes the whole dataset; do not use it for performance
@@ -207,13 +225,17 @@ deepfocus = DeepFocusDataModule(
 ```
 
 - focus classification patches derived from four slides/patients and four stains;
-- `download=True` contacts Zenodo;
-- stable code checks the downloaded HDF5 file against a fixed MD5 value.
+- `download=True` GETs
+  `https://zenodo.org/record/1134848/files/outoffocus2017_patches5Classification.h5`
+  without authentication/pagination;
+- the integrity method checks a fixed MD5 before reusing a local file, but the
+  download method does not perform a second post-download check. Verify the
+  completed file independently before use.
 
 MD5 here is an upstream integrity check, not a modern provenance guarantee.
 Record a SHA-256 and dataset license/source separately.
 
-PathML 3.0.5 does **not** export `TCGADataModule`. Use a separately governed data
+PathML 3.0.8 does **not** export `TCGADataModule`. Use a separately governed data
 acquisition process for TCGA/GDC and document its API/version/consent terms.
 
 ## Download consent
@@ -221,13 +243,22 @@ acquisition process for TCGA/GDC and document its API/version/consent terms.
 Before changing any `download` flag to `True`, tell the user:
 
 - exact host and expected dataset;
-- approximate size (stable docs report PanNuke ~37.33 GB and DeepFocus ~10 GB);
+- approximate transfer and expanded sizes (review-time HEAD responses for the
+  three PanNuke ZIPs total 2,077,087,715 bytes; processing/expansion needs much
+  more disk, with upstream docs estimating ~37.33 GB; the DeepFocus HDF5 is
+  10,027,826,144 bytes);
 - destination and available disk;
 - dataset license/terms and citation;
 - whether the environment logs outbound IP/account metadata; and
 - that no local slide or clinical data will be uploaded.
 
 Require explicit opt-in. Never place downloaded archives inside the repository.
+
+Review-time HEAD checks reached all four source URLs; DeepFocus redirected from
+`/record/` to `/records/`. No bodies were downloaded, so this establishes endpoint
+availability, not content integrity, license acceptance, or working extraction.
+The common download helper skips any existing file by name, including a partial
+one; independently verify size/checksum before treating such a file as complete.
 
 ## Graph datasets and unsafe `.pt` files
 
@@ -280,7 +311,7 @@ Recommended strict JSON fields:
 ```json
 {
   "schema_version": "1.0",
-  "pathml_version": "3.0.5",
+  "pathml_version": "3.0.8",
   "source_sha256": "hex-digest",
   "slide_id": "slide-001",
   "patient_id": "patient-001",
@@ -339,7 +370,9 @@ Do not print paths containing identifiers.
 - Test disaster recovery and retention/deletion.
 - Do not commit slide data, model binaries, linkage files, or manifests with PHI.
 
-## Sources, accessed 2026-07-23
+## Sources and further reading
+
+API baseline reviewed 2026-10-01 using the released wheel/tag; hosted docs may lag.
 
 - Stable h5path guide:
   https://pathml.readthedocs.io/en/stable/h5path.html
@@ -348,10 +381,10 @@ Do not print paths containing identifiers.
 - Stable datasets API:
   https://pathml.readthedocs.io/en/stable/api_datasets_reference.html
 - Stable `TileDataset`/`EntityDataset` source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/datasets/datasets.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/datasets/datasets.py
 - Stable PanNuke source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/datasets/pannuke.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/datasets/pannuke.py
 - Stable DeepFocus source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/datasets/deepfocus.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/datasets/deepfocus.py
 - PanNuke extension paper: https://arxiv.org/abs/2003.10778
 - DeepFocus paper: https://doi.org/10.1371/journal.pone.0205387

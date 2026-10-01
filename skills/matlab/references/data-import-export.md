@@ -110,7 +110,9 @@ MAT files are MATLAB binary workspace containers:
 | 7 | `"-v7"` | yes | Unicode and v6 features; under 2 GiB per variable |
 | 7.3 | `"-v7.3"` | yes/chunked | HDF5-based, partial access, variables at least 2 GiB on 64-bit |
 
-Normal `save` operations default to version 7. Creating a new file with
+Factory-default `save` operations use version 7, but the user can change the
+default in MAT and FIG Files settings. Explicitly specify `-v7` or `-v7.3`
+when exchange compatibility matters. Creating a new file with
 `matfile` defaults to version 7.3. File-system limits still apply. Version 7.3
 adds HDF5 metadata/chunk overhead and can be larger for heterogeneous
 containers.
@@ -144,9 +146,19 @@ but invoking MATLAB is itself execution. The bundled
 - never reads dataset values or follows soft/external HDF5 links;
 - never deserializes objects or Python pickle.
 
+HDF5 inventory distinguishes null dataspaces (`shape: null`) from scalar
+datasets (`shape: []`) and zero-length arrays (for example, `shape: [0]`).
+All three are valid HDF5 metadata states, and none is proof of MATLAB v7.3.
+
 An inventory is triage, not a safety certificate. Object-like, opaque,
 function, external-link, malformed, or unsupported content requires
 quarantine and expert review.
+
+R2026b changes failure recovery for loading some scalar and non-heterogeneous
+object arrays: MATLAB can substitute default-constructed objects, or return
+an empty class array if replacement fails. In trusted migration tests, check
+load warnings, classes, dimensions, and field invariants; successful completion
+alone does not prove the saved scientific state was restored.
 
 ## Partial access
 
@@ -204,7 +216,7 @@ Prefer a documented language-neutral format for exchange:
 Python pickle is executable deserialization, not a scientific interchange
 format. Never create, load, or recommend pickle for MATLAB exchange.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [Data Import and Export](https://www.mathworks.com/help/matlab/data-import-and-export.html)
 - [`detectImportOptions`](https://www.mathworks.com/help/matlab/ref/detectimportoptions.html)
@@ -218,4 +230,7 @@ format. Never create, load, or recommend pickle for MATLAB exchange.
 - [Object Save and Load](https://www.mathworks.com/help/matlab/save-and-load.html)
 - [`loadobj`](https://www.mathworks.com/help/matlab/ref/loadobj.html)
 - [HDF5 Files](https://www.mathworks.com/help/matlab/hdf5-files.html)
-- [MATLAB R2026a release notes](https://www.mathworks.com/help/matlab/release-notes.html)
+- [MATLAB release notes](https://www.mathworks.com/help/matlab/release-notes.html)
+
+- [SciPy MAT metadata inventory](https://docs.scipy.org/doc/scipy/reference/generated/scipy.io.whosmat.html)
+- [h5py null dataspaces](https://docs.h5py.org/en/stable/high/dataset.html#creating-and-reading-empty-or-null-datasets-and-attributes)

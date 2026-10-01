@@ -61,7 +61,10 @@
         "dead_volume_uL": 0.0,
         "well_depth_mm": 11.0
       },
-      "initial_volumes_uL": {}
+      "initial_volumes_uL": {
+        "A1": 0.0,
+        "B1": 0.0
+      }
     },
     {
       "name": "tips",

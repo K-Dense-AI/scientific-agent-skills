@@ -5,7 +5,9 @@ license: MIT
 compatibility: Requires Python 3.12+ and uv for SHAP 0.52.0; model-specific libraries are optional.
 allowed-tools: "Read Bash"
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-10-01"
+  upstream-version: "0.52.0"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,12 +17,14 @@ Use SHAP to describe how a fitted predictive model maps inputs to outputs. Work 
 
 This skill is aligned with **SHAP 0.52.0** (released 2026-05-28). That release requires Python 3.12 or newer.
 
+The maintained examples were checked on Python 3.12.10 with SHAP 0.52.0, NumPy 2.5.3, pandas 3.0.6, scikit-learn 1.9.1, and matplotlib 3.11.2. Native tests cover small tree, exact, permutation, partition, linear, additive, kernel, text, and constant-image games; additional numeric XGBoost 3.4.1 smoke checks cover raw, probability, loss, and interaction outputs. Reference snippets that require a project model, framework, or data are adaptation templates; optional pretrained/deep, GPU, and distributed integrations remain illustrative and require their own runtime validation.
+
 ## Operating Rules
 
 1. Explain a fixed, evaluated model; do not use SHAP as a substitute for predictive validation.
 2. Use held-out or clearly labeled analysis rows for explanations. Choose background rows only from an appropriate training or reference population.
 3. State the explained output: regression value, raw margin, probability, log loss, logit, or another model method.
-4. Keep explanations as `shap.Explanation` objects. Call `explainer(X)`; use `.shap_values(X)` only when maintaining legacy code.
+4. Prefer `shap.Explanation` objects and `explainer(X)`. Some specialized options still require `.shap_values(X)`, including deep ranked outputs, gradient sampling budgets, and Kernel SHAP `nsamples`. Preserve their output indexes and baselines explicitly.
 5. For multi-output models, select one output before using tabular plots: `explanation[..., output_index]`.
 6. Check `base_values + values.sum(...)` against the exact model output being explained.
 7. Treat SHAP as a description of model behavior under a masking/background choice. It does not establish causality, fairness, recourse, or scientific mechanism.
@@ -93,10 +97,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
 X, y = load_breast_cancer(as_frame=True, return_X_y=True)
+X = X.astype(np.float32)  # Match sklearn forest prediction inputs.
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
-    test_size=0.2,
+    test_size=0.25,
     stratify=y,
     random_state=7,
 )
@@ -108,6 +113,7 @@ model = RandomForestClassifier(
     n_jobs=-1,
 ).fit(X_train, y_train)
 
+X_test = X_test.iloc[:100]  # Predeclared held-out explanation subset.
 background = shap.sample(X_train, 100, random_state=7)
 explainer = shap.Explainer(model, background, algorithm="tree")
 all_outputs = explainer(X_test)
@@ -142,12 +148,14 @@ background = shap.sample(X_train, 200, random_state=7)
 
 explainer = shap.TreeExplainer(
     model,
-    data=background,
+    data=shap.maskers.Independent(background, max_samples=len(background)),
     feature_perturbation="interventional",
     model_output="probability",
 )
 probability_exp = explainer(X_test)
 ```
+
+A bare background frame is capped at 100 rows by the default masker. The explicit masker above retains all 200 sampled rows; inspect `len(explainer.data)` when reporting or comparing background sizes.
 
 In SHAP 0.52:
 
@@ -171,6 +179,8 @@ explainer = shap.Explainer(
 
 budget = 2 * X_test.shape[1] + 1
 all_outputs = explainer(X_test.iloc[:20], max_evals=budget)
+# 0.52 selector dispatch may drop output_names for permutation.
+all_outputs.output_names = [str(label) for label in model.classes_]
 positive = all_outputs[..., 1]
 ```
 
@@ -215,10 +225,12 @@ Use global plots to locate important patterns, scatter plots to inspect those pa
 Set `output_names` where possible, inspect `explanation.output_names`, and slice an output before plotting:
 
 ```python
-class_exp = explanation[..., "class_name"]
+class_exp = explanation[..., list(explanation.output_names).index("class_name")]
 # or
 class_exp = explanation[..., class_index]
 ```
+
+In 0.52.0, the generic permutation selector may drop supplied output names, and combining an ellipsis with a string output index can fail. Verify the class mapping, set names explicitly when needed, and resolve names to integer indexes before slicing.
 
 Never average signed attributions across classes. For cross-class comparison, preserve the same model, rows, background, output space, and aggregation.
 
@@ -258,6 +270,10 @@ Run a deterministic, self-contained tabular example that writes importance data,
 uv run --no-project --python 3.12 --with "shap[plots]==0.52.0" \
   skills/shap/scripts/tabular_report.py --output-dir /tmp/shap-report
 ```
+
+The script labels the default output as **benign probability**, retains the requested background up to the training-set size, and rejects non-finite validation tolerances. Its synthetic software checks and built-in dataset demo do not validate causal or clinical claims. Some SHAP 0.52.0 forest configurations fail explicit reconstruction (including seed 3 with 150 background rows); the script rejects those without writing report artifacts. See [references/troubleshooting.md](references/troubleshooting.md).
+
+It exports `feature_importance.csv`, `first_row_contributions.csv`, `prediction_reconstruction.csv`, and `metadata.json`, plus `bar.png`, `beeswarm.png`, `waterfall-first-row.png`, and `scatter-top-feature.png`. Plot titles identify the selected class probability.
 
 The script does not download data or deserialize models. Read it as a template, then replace the built-in dataset and model while preserving output selection and additivity validation.
 

@@ -8,7 +8,7 @@
 **Best for:** Chronological events, historical progression, milestones over time, release history
 **When NOT to use:** Task durations/dependencies (use [Gantt](gantt.md)), detailed project plans (use [Gantt](gantt.md))
 
-> ⚠️ **Accessibility:** Timelines do **not** support `accTitle`/`accDescr`. Always place a descriptive _italic_ Markdown paragraph directly above the code block.
+> ⚠️ **Accessibility:** Mermaid 12.0.0 accepts `accTitle`/`accDescr`, but the tested timeline SVG omitted their metadata. Supply a visible description and export alt text.
 
 ---
 
@@ -39,6 +39,7 @@ timeline
 
 - Use `section` to group by year, quarter, or phase
 - Each entry can have multiple items separated by `:`
+- Time labels are categorical strings in source order; horizontal spacing does not encode elapsed duration
 - Keep items concise — 2–4 words each
 - Emoji at the start of key items for visual anchoring
 - **Always** pair with a Markdown text description above for screen readers
@@ -94,3 +95,8 @@ timeline
 - **Business metrics alongside tech milestones** — user counts and team size appear next to architecture decisions. This shows the _pressure_ that drove each evolution (50K users → scaling ceiling → extracted services)
 - **Multiple items per time point** — each quarter packs 2-3 items separated by `:`, giving a dense but scannable view of everything happening in parallel
 - **Emoji anchors the scan** — eyes land on 🧠 ML, 🌐 Multi-region, ⚡ Redis before reading the text. For a quick skim, the emoji alone tells the story
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/timeline.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import base64
 import importlib.util
+import io
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "generate-image"
 SCRIPT = SKILL_ROOT / "scripts" / "generate_image.py"
@@ -140,14 +143,14 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("unrecognized arguments", completed.stderr)
 
-    def test_output_format_does_not_offer_svg(self):
+    def test_output_format_accepts_svg_for_vector_requests(self):
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "a cat", "--output-format", "svg",
              "--no-preflight", "--dry-run"],
             text=True, capture_output=True, timeout=20, check=False,
         )
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("invalid choice", completed.stderr)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn('"output_format": "svg"', completed.stdout)
 
     def test_out_of_range_compression_is_rejected_locally(self):
         completed = subprocess.run(
@@ -320,11 +323,11 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("openai/gpt-image-1", supporting)
         self.assertNotIn("openai/gpt-image-2", supporting)
 
-    def test_suggestions_skip_undocumented_families(self):
-        """FLUX is in the live catalogue but outside this skill's documented set."""
+    def test_suggestions_include_all_advertised_families(self):
+        """Capability suggestions follow the current catalogue, not a stale allowlist."""
         supporting = gi.models_supporting(CATALOGUE, "seed")
         self.assertIn("bytedance-seed/seedream-4.5", supporting)
-        self.assertNotIn("black-forest-labs/flux.2-pro", supporting)
+        self.assertIn("black-forest-labs/flux.2-pro", supporting)
 
 
 class SpecDescriptionTests(unittest.TestCase):
@@ -369,7 +372,7 @@ class ErrorMessageTests(unittest.TestCase):
     def test_auth_failure_mentions_the_key_and_content_policy(self):
         detail = gi.error_detail(403, '{"error": {"message": "forbidden"}}')
         self.assertIn("openrouter.ai/keys", detail)
-        self.assertIn("content-policy", detail)
+        self.assertIn("content policy", detail)
 
     def test_non_json_body_is_passed_through(self):
         self.assertIn("gateway timeout", gi.error_detail(504, "gateway timeout"))
@@ -378,7 +381,7 @@ class ErrorMessageTests(unittest.TestCase):
 class CostReportingTests(unittest.TestCase):
     def test_reports_the_billed_cost(self):
         lines = gi.cost_lines({"cost": 0.0672})
-        self.assertEqual(lines[0], "Cost: $0.0672")
+        self.assertEqual(lines[0], "OpenRouter cost: $0.0672 reported")
 
     def test_byok_upstream_cost_is_not_reported_as_free(self):
         """usage.cost is 0 on a BYOK key; the real spend is upstream."""
@@ -386,11 +389,11 @@ class CostReportingTests(unittest.TestCase):
             {"cost": 0, "is_byok": True,
              "cost_details": {"upstream_inference_cost": 0.03360275}}
         )
-        self.assertIn("$0.03360275", lines[0])
-        self.assertIn("BYOK", lines[0])
+        self.assertIn("$0.03360275", lines[1])
+        self.assertIn("BYOK", lines[1])
 
     def test_genuinely_free_generation_says_so(self):
-        self.assertEqual(gi.cost_lines({"cost": 0}), ["Cost: $0 reported"])
+        self.assertEqual(gi.cost_lines({"cost": 0}), ["OpenRouter cost: $0 reported"])
 
     def test_image_tokens_are_reported_when_present(self):
         lines = gi.cost_lines(
@@ -445,8 +448,8 @@ class OutputPathTests(unittest.TestCase):
         self.assertEqual(gi.output_paths(None, "image/svg+xml", 1), [Path("generated_image.svg")])
         self.assertEqual(gi.output_paths(None, "image/jpeg", 1), [Path("generated_image.jpg")])
 
-    def test_unknown_media_type_falls_back_to_png(self):
-        self.assertEqual(gi.output_paths(None, "image/unheard-of", 1), [Path("generated_image.png")])
+    def test_unknown_media_type_is_not_mislabelled_as_png(self):
+        self.assertEqual(gi.output_paths(None, "image/unheard-of", 1), [Path("generated_image.bin")])
 
     def test_media_type_parameters_are_ignored(self):
         self.assertEqual(gi.output_paths(None, "IMAGE/PNG; charset=binary", 1),
@@ -550,6 +553,128 @@ class SkillDocumentTests(unittest.TestCase):
         text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
         self.assertIn("never evidence", text)
         self.assertIn("cannot be trusted with text", text)
+
+
+class CurrentContractTests(unittest.TestCase):
+    def test_reference_minimum_is_required_even_without_input_flag(self):
+        cat = {"edit": {"supported_parameters": {"input_references": {"type": "range", "min": 1, "max": 1}}}}
+        with self.assertRaisesRegex(gi.RequestRejected, "requires at least 1"):
+            gi.preflight({"model": "edit", "prompt": "edit"}, cat)
+
+    def test_zero_reference_maximum_is_enforced(self):
+        cat = {"text": {"supported_parameters": {"input_references": {"type": "range", "min": 0, "max": 0}}}}
+        with self.assertRaisesRegex(gi.RequestRejected, "accepts at most 0"):
+            gi.preflight({"model": "text", "prompt": "draw", "input_references": [{}]}, cat)
+
+    def test_union_cannot_combine_incompatible_endpoints(self):
+        cat = {"m": {"supported_parameters": {"seed": {"type": "boolean"}, "quality": {"type": "enum", "values": ["high"]}}}}
+        endpoints = [{"supported_parameters": {"seed": {"type": "boolean"}}},
+                     {"supported_parameters": {"quality": {"type": "enum", "values": ["high"]}}}]
+        with self.assertRaisesRegex(gi.RequestRejected, "complete parameter combination"):
+            gi.preflight({"model": "m", "prompt": "p", "seed": 1, "quality": "high"}, cat, endpoints)
+        gi.preflight({"model": "m", "prompt": "p", "seed": 1}, cat, endpoints)
+
+    def test_listed_model_without_endpoints_is_rejected(self):
+        with self.assertRaisesRegex(gi.RequestRejected, "no advertised provider"):
+            gi.preflight({"model": "m", "prompt": "p"}, {"m": {"supported_parameters": {}}}, [])
+
+    def test_explicit_transparent_jpeg_is_rejected(self):
+        cat = {"m": {"supported_parameters": {"output_format": {"type": "enum", "values": ["jpeg"]},
+                                              "background": {"type": "enum", "values": ["transparent"]}}}}
+        with self.assertRaisesRegex(gi.RequestRejected, "not JPEG"):
+            gi.preflight({"model": "m", "prompt": "p", "output_format": "jpeg", "background": "transparent"}, cat)
+
+    def test_extended_quality_is_not_blocked_by_argparse(self):
+        with mock.patch.object(gi, "fetch_catalogue", return_value={"m": {"supported_parameters": {"quality": {"type": "enum", "values": ["max"]}}}}), \
+             mock.patch.object(gi, "fetch_endpoints", return_value=[{"supported_parameters": {"quality": {"type": "enum", "values": ["max"]}}}]), \
+             mock.patch.object(gi, "request_json") as generate:
+            self.assertEqual(gi.main(["p", "-m", "m", "--quality", "max", "--dry-run"]), 0)
+            generate.assert_not_called()
+
+    def test_discovery_failure_does_not_silently_generate(self):
+        with mock.patch.object(gi, "fetch_catalogue", side_effect=gi.ApiError("unavailable")), \
+             mock.patch.object(gi, "request_json") as generate:
+            self.assertEqual(gi.main(["p"]), 1)
+            generate.assert_not_called()
+
+    def test_json_error_envelope_is_surfaced(self):
+        with mock.patch.object(gi, "request_bytes", return_value=b'{"error":{"message":"provider unavailable"}}'):
+            with self.assertRaisesRegex(gi.ApiError, "provider unavailable"):
+                gi.request_json(gi.IMAGES_URL, "key", {}, 1)
+
+    def test_non_object_json_is_rejected(self):
+        with mock.patch.object(gi, "request_bytes", return_value=b'[]'):
+            with self.assertRaisesRegex(gi.ApiError, "not an object"):
+                gi.request_json(gi.IMAGES_URL, "key", {}, 1)
+
+    def test_post_request_contract_and_auth(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"data": []}'
+        with mock.patch.object(gi.urllib.request, "urlopen", return_value=response) as opened:
+            gi.request_json(gi.IMAGES_URL, "test-key", {"model": "m", "prompt": "p"}, 3)
+            request = opened.call_args.args[0]
+            self.assertEqual(request.get_method(), "POST")
+            self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+            self.assertEqual(json.loads(request.data), {"model": "m", "prompt": "p"})
+
+    def test_get_discovery_does_not_attach_auth(self):
+        with mock.patch.object(gi, "request_json", return_value={"endpoints": []}) as called:
+            self.assertEqual(gi.fetch_endpoints("vendor/model", 3), [])
+            called.assert_called_once_with(gi.MODELS_URL + "/vendor/model/endpoints", None, None, 3, 2)
+
+    def test_post_transport_timeout_is_not_replayed(self):
+        with mock.patch.object(gi.urllib.request, "urlopen", side_effect=TimeoutError("timed out")) as opened, \
+             mock.patch.object(gi.time, "sleep") as sleep:
+            with self.assertRaisesRegex(gi.ApiError, "outcome is unknown"):
+                gi.request_bytes(gi.IMAGES_URL, "key", {"model": "m"}, 1, retries=2)
+            self.assertEqual(opened.call_count, 1)
+            sleep.assert_not_called()
+
+    def test_get_transport_timeout_can_retry(self):
+        with mock.patch.object(gi.urllib.request, "urlopen", side_effect=TimeoutError("timed out")) as opened, \
+             mock.patch.object(gi.time, "sleep"):
+            with self.assertRaises(gi.ApiError):
+                gi.request_bytes(gi.MODELS_URL, None, None, 1, retries=2)
+            self.assertEqual(opened.call_count, 3)
+
+    def test_429_retries_but_401_does_not(self):
+        for code, expected in ((429, 3), (401, 1)):
+            with self.subTest(code=code):
+                def fail(*args, **kwargs):
+                    raise gi.urllib.error.HTTPError(gi.IMAGES_URL, code, "error", {"Retry-After": "2"}, io.BytesIO(b'{"error":{"message":"try later"}}'))
+                with mock.patch.object(gi.urllib.request, "urlopen", side_effect=fail) as opened, \
+                     mock.patch.object(gi.time, "sleep"):
+                    with self.assertRaises(gi.ApiError):
+                        gi.request_bytes(gi.IMAGES_URL, "key", {}, 1, retries=2)
+                    self.assertEqual(opened.call_count, expected)
+
+    def test_byok_fee_does_not_hide_upstream_charge(self):
+        lines = gi.cost_lines({"cost": 0.95, "is_byok": True, "cost_details": {"upstream_inference_cost": 19}})
+        self.assertIn("$0.95", lines[0])
+        self.assertIn("$19", lines[1])
+
+    def test_bad_base64_is_a_clear_api_error(self):
+        with self.assertRaisesRegex(gi.ApiError, "invalid base64"):
+            gi.image_bytes({"b64_json": "this is not base64!"}, 1)
+
+    def test_each_image_gets_its_own_media_extension(self):
+        data = base64.b64encode(b"test-image").decode()
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = gi.save_images({"data": [{"b64_json": data, "media_type": "image/png"},
+                                              {"b64_json": data, "media_type": "image/jpeg"}]}, str(Path(tmp) / "art"))
+            self.assertEqual([p.name for p in paths], ["art_1.png", "art_2.jpg"])
+
+    def test_missing_media_type_is_saved_as_bin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = gi.save_images({"data": [{"b64_json": base64.b64encode(b"test-image").decode()}]}, str(Path(tmp) / "unknown"))
+            self.assertEqual(paths[0].suffix, ".bin")
+
+    def test_invalid_cli_limits_fail_before_network(self):
+        for flag, value in (("--n", "11"), ("--timeout", "nan"), ("--timeout", "0"), ("--retries", "-1")):
+            with self.subTest(flag=flag, value=value), mock.patch.object(gi, "fetch_catalogue") as fetch:
+                with self.assertRaises(SystemExit):
+                    gi.main(["p", flag, value])
+                fetch.assert_not_called()
 
 
 if __name__ == "__main__":

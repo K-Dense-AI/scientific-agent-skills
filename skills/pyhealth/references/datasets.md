@@ -1,126 +1,114 @@
-# Datasets
+# Datasets and event access
 
-PyHealth datasets are **queryable patient registries**, not PyTorch `Dataset`s. The PyTorch-compatible object is the `SampleDataset` returned by `base.set_task(task)`. Don't try to index `BaseDataset` like a list — it won't work.
+Contracts below were checked in the released PyHealth 2.0.2 wheel and
+[dataset documentation](https://pyhealth.readthedocs.io/en/latest/api/datasets.html).
+Constructors are not interchangeable across modalities.
 
-## Two-tier object model
+## Two dataset layers
 
-```
-BaseDataset                         SampleDataset
-├── parses raw CSVs                 ├── one row per supervised sample
-├── one row per patient             ├── indexable, length-ed
-├── .set_task(task) → SampleDataset ├── feeds into get_dataloader(...)
-├── .get_patient(id) → Patient      └── feeds into Model(dataset=...)
-└── .iter_patients() → iterator
-```
-
-Always go `BaseDataset → set_task → SampleDataset` before doing anything else.
-
-## EHR / clinical datasets
-
-| Class | Import | Constructor signature highlights |
-|---|---|---|
-| `MIMIC3Dataset` | `from pyhealth.datasets import MIMIC3Dataset` | `root, tables, cache_dir=None, dev=False, num_workers=...` |
-| `MIMIC4Dataset` | `from pyhealth.datasets import MIMIC4Dataset` | `ehr_root, tables, ...` *(note: `ehr_root`, not `root`)* |
-| `eICUDataset` | `from pyhealth.datasets import eICUDataset` | `root, tables, ...` |
-| `OMOPDataset` | `from pyhealth.datasets import OMOPDataset` | `root, tables, ...` |
-| `EHRShotDataset` | `from pyhealth.datasets import EHRShotDataset` | few-shot benchmark |
-| `Support2Dataset` | `from pyhealth.datasets import Support2Dataset` | palliative care outcomes |
-| `MIMICExtractDataset` | `from pyhealth.datasets import MIMICExtractDataset` | pre-processed MIMIC |
-
-### Common MIMIC tables
-
-- **MIMIC-III** (uppercase): `DIAGNOSES_ICD`, `PROCEDURES_ICD`, `PRESCRIPTIONS`, `LABEVENTS`, `NOTEEVENTS`
-- **MIMIC-IV** (lowercase): `diagnoses_icd`, `procedures_icd`, `prescriptions`, `labevents`
-
-### MIMIC-III example
+`BaseDataset` exposes a lazy, table-backed event registry. `get_patient(id)` and
+`iter_patients()` return `Patient` objects; `set_task(task)` builds a processed,
+indexable sample dataset. Use those samples with models, splitters and data loaders.
+`create_sample_dataset(records, input_schema=..., output_schema=...)` is the public
+helper for in-memory dictionaries; `SampleDataset(...)` itself takes a cache path,
+not `samples=`.
 
 ```python
 from pyhealth.datasets import MIMIC3Dataset
-
 base = MIMIC3Dataset(
     root="https://storage.googleapis.com/pyhealth/Synthetic_MIMIC-III/",
-    tables=["DIAGNOSES_ICD", "PROCEDURES_ICD", "PRESCRIPTIONS"],
-    cache_dir="./cache/mimic3",
-    dev=False,
+    tables=["diagnoses_icd", "procedures_icd", "prescriptions"],
+    cache_dir="./cache/mimic3", num_workers=1, dev=True,
 )
 ```
 
-### MIMIC-IV example
+The MIMIC-III constructor automatically adds `patients`, `admissions`, `icustays`.
+All selectors above are lowercase; the bundled config translates them to uppercase
+CSV filenames. `labevents` additionally needs `D_LABITEMS`; note events have their own
+recording-time and availability caveats.
+
+## MIMIC-IV: two supported constructors
 
 ```python
-from pyhealth.datasets import MIMIC4Dataset
+from pyhealth.datasets import MIMIC4Dataset, MIMIC4EHRDataset
 
-base = MIMIC4Dataset(
-    ehr_root="/path/to/mimic-iv-2.2/hosp",      # NOT root=
-    tables=["diagnoses_icd", "procedures_icd", "prescriptions"],
+# Combined EHR/note/CXR wrapper: modality-specific argument names
+combined = MIMIC4Dataset(
+    ehr_root="./data/mimic-iv",
+    ehr_tables=["diagnoses_icd", "procedures_icd", "prescriptions"],
     cache_dir="./cache/mimic4",
 )
+# EHR-only reader: ordinary root/tables arguments
+base = MIMIC4EHRDataset(
+    root="./data/mimic-iv",
+    tables=["diagnoses_icd", "procedures_icd", "prescriptions"],
+    cache_dir="./cache/mimic4-ehr",
+)
 ```
 
-## Signal / sleep datasets
+Both roots contain `hosp/` and `icu/`. `tables=` is not an argument to the combined
+wrapper. Its other modalities use `note_root`/`note_tables`, `cxr_root`/`cxr_tables`.
+These restricted-data examples are illustrative; constructor/config contracts were
+verified, but no private MIMIC-IV records were loaded.
 
-| Class | Use |
+## Available dataset families
+
+These names are exported by 2.0.2; this inventory does not certify every task/model
+combination or dataset release. Read the selected class and bundled config first.
+
+| Family | Classes |
 |---|---|
-| `SleepEDFDataset` | Sleep-EDF polysomnography → sleep stage classification |
-| `SHHSDataset` | Sleep Heart Health Study EEG |
-| `ISRUCDataset` | ISRUC sleep dataset |
-| `TUABDataset` | Temple University abnormal EEG |
-| `TUEVDataset` | Temple University EEG events |
-| `CardiologyDataset` | ECG / cardiology recordings |
-| `DREAMTDataset`, `BMDHSDataset` | Sleep / respiratory recordings |
+| EHR | `MIMIC3Dataset`, `MIMIC4Dataset`, `MIMIC4EHRDataset`, `eICUDataset`, `OMOPDataset`, `MIMICExtractDataset`, `EHRShotDataset`, `Support2Dataset` |
+| Sleep/signals | `SleepEDFDataset`, `SHHSDataset`, `ISRUCDataset`, `TUABDataset`, `TUEVDataset`, `CardiologyDataset`, `DREAMTDataset`, `BMDHSDataset` |
+| Imaging | `COVID19CXRDataset`, `ChestXray14Dataset` |
+| Text | `PhysioNetDeIDDataset`, `MedicalTranscriptionsDataset` |
+| Genomics | `ClinVarDataset`, `COSMICDataset`, `TCGAPRADDataset` |
 
-## Imaging datasets
+In 2.0.2, `SleepEDFDataset(root=..., subset="cassette")` accepts `root`,
+`dataset_name`, `config_path`, `subset`; it does **not** accept `cache_dir` or `dev`.
+The root contains `SC-subjects.xls` and the `sleep-cassette/` subdirectory
+(or the corresponding telemetry files), unless metadata is already prepared.
+Reading raw `.xls` metadata can require the optional pandas engine `xlrd`. Genomics and clinical text
+are not imaging datasets even when they share the pipeline abstraction.
 
-| Class | Use |
-|---|---|
-| `COVID19CXRDataset` | COVID-19 chest X-ray classification |
-| `ChestXray14Dataset` | NIH ChestX-ray14, multi-label |
-| `PhysioNetDeIDDataset` | De-identified clinical notes |
-
-## Genomics datasets
-
-| Class | Use |
-|---|---|
-| `ClinVarDataset` | Variant pathogenicity classification |
-| `COSMICDataset` | Mutation pathogenicity |
-| `TCGAPRADDataset` | Cancer survival, mutation burden |
-
-## Text dataset
-
-| Class | Use |
-|---|---|
-| `MedicalTranscriptionsDataset` | Clinical transcription category classification |
-
-## Splitting and DataLoaders
-
-After `set_task`, split and wrap in DataLoaders. **Always split by patient** (not by sample) for clinical prediction — random sample splits leak the same patient into train and test.
+## Inspect actual events and samples
 
 ```python
-from pyhealth.datasets import split_by_patient, split_by_visit, get_dataloader
+patient = next(base.iter_patients())
+admissions = patient.get_events(event_type="admissions")
+if admissions:
+    diagnoses = patient.get_events(
+        event_type="diagnoses_icd",
+        filters=[("hadm_id", "==", admissions[0].hadm_id)],
+    )
+    print([event.icd9_code for event in diagnoses])  # MIMIC-III only
+```
 
-train, val, test = split_by_patient(samples, [0.8, 0.1, 0.1])
+MIMIC-IV diagnosis events use `icd_code` and `icd_version`. Keep the version when
+harmonizing vocabularies; identically shaped code strings need not mean the same
+thing. `get_events(start=..., end=...)` includes both time boundaries; `return_df=True`
+returns prefixed Polars columns such as `diagnoses_icd/icd9_code`. Missing event
+types can yield an empty frame without the expected columns: check before selecting.
+Do not use the legacy `patient.visits`, `next_visit`, or `visit.get_code_list` APIs.
 
+## Splitting and preprocessing
+
+```python
+from pyhealth.datasets import split_by_patient, get_dataloader
+train, val, test = split_by_patient(samples, [0.6, 0.2, 0.2], seed=42)
 train_loader = get_dataloader(train, batch_size=32, shuffle=True)
-val_loader   = get_dataloader(val,   batch_size=32, shuffle=False)
-test_loader  = get_dataloader(test,  batch_size=32, shuffle=False)
+val_loader = get_dataloader(val, batch_size=32, shuffle=False)
+test_loader = get_dataloader(test, batch_size=32, shuffle=False)
 ```
 
-Use `split_by_visit` only when visits are independent (rare — most clinical tasks need patient-level splits). For time-aware evaluation, use `split_by_patient` with chronological cutoffs from a custom task.
+Check nonempty partitions and pairwise-disjoint patient IDs. Group all recordings
+from the same person together for sleep/EEG as well. `split_by_visit` relies on record
+identifiers and permits patient overlap; it is unsuitable for a new-patient claim.
+`split_by_patient` does not implement time cutoffs or stratification. For a temporal
+study build the date-based partition explicitly and state whether returning patients
+are allowed. Fit feature transforms on training data only; the convenience
+`set_task -> split` route fits processors before splitting. See
+[train-only processing](examples.md).
 
-## Inspecting a dataset
-
-```python
-base.stats()                          # summary printout
-patient = base.get_patient("p001")    # Patient object
-events = patient.get_events()         # all events for that patient
-
-for p in base.iter_patients():        # iterate without loading all into memory
-    ...
-
-len(samples)                          # only valid AFTER set_task
-samples[0]                            # dict of features + label for one sample
-```
-
-## Custom datasets
-
-Subclass `BaseDataset` if the user has a non-standard EHR source. They must implement parsing of patients/events; `set_task` then works as usual. This is more involved than picking a built-in dataset — only suggest it when nothing else fits.
+For custom datasets, inspect `BaseDataset` and its config-driven `load_data`/
+`load_table` interfaces. Do not start from obsolete patient/visit parsers.

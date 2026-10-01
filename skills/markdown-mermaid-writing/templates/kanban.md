@@ -2,17 +2,15 @@
 
 # Kanban Board Documentation Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
-**Use this template for:** Tracking work items, sprint boards, project task management, release planning, or any scenario where you need a persistent, markdown-based view of work status. This board IS the tracking system — a file in your repo that evolves with your codebase.
+**Use this template for:** Tracking work items, sprint boards, project task management, release planning, or any scenario where you need a persistent, markdown-based view of work status. Use it as the primary board or a snapshot only if the project chooses that convention.
 
 **Key features:** Visual Mermaid kanban diagram, work item tables with status tracking, WIP limits, blocked items, explicit Won't Do decisions, aging indicators, flow efficiency metrics, and historical throughput.
 
-**Philosophy:** This board is a file. Modify it in your branch, merge it with your PR. The board evolves WITH the codebase — no external board tool required. Anyone with repo access sees the board, AI agents included.
-
-A kanban board's job is to make work visible. This template serves two purposes: (1) a living board that gets updated as work progresses, and (2) a historical snapshot when archived. The Mermaid diagram gives the instant visual overview; the tables give the detail. Together they answer: What's being worked on? What's blocked? What's done? What's next?
-
-When archived, the board becomes the historical record of what was worked on, what was blocked, and what was completed — all in git history, with full attribution and timestamps. This is the [Everything is Code](../markdown_style_guide.md#-everything-is-code) philosophy: project management data lives in the repo, versioned and portable.
+**Project convention:** Use this optional file-based record only when the project requests
+it. Preserve the established tracker/PR workflow, link the live record, and replace all
+example paths. Editing this Markdown file does not update a hosted issue, PR, or board.
 
 ---
 
@@ -32,7 +30,9 @@ docs/project/kanban/project-auth-migration-phase-1.md
 
 ## The Template
 
-Everything below the line is the template. Copy from here:
+Everything below the line is the template. Copy from here; commands, API routes,
+versions, thresholds, and numerical values are illustrative placeholders. Verify them
+against the actual project before publishing. Follow its existing tracker and PR conventions.
 
 ---
 
@@ -55,24 +55,24 @@ _Kanban board showing current work distribution across backlog, in-progress, rev
 
 ```mermaid
 kanban
-    Backlog
+    backlog[Backlog]
         task1[🔧 Deploy monitoring]
         task2[📝 Write API docs]
-    In Progress
+    in_progress[In Progress]
         task3[⚙️ Build user dashboard]
         task4[🐛 Fix payment timeout]
-    In Review
+    in_review[In Review]
         task5[👀 Add export feature]
-    Done
+    done[Done]
         task6[🚀 Set up CI pipeline]
         task7[📊 Database migration]
-    Blocked
+    blocked[Blocked]
         task8[⛔ Waiting for security approval]
-    Won't Do
+    wont_do[Won't Do]
         task9[❌ Drop mobile support in this sprint]
 ```
 
-> ⚠️ Always show all 6 columns — Even if a column has no items, include it with a placeholder. This makes the board structure explicit and ensures categories are never forgotten. Use a placeholder like [No items yet] when a column is empty.
+> ⚠️ This example uses 6 columns; adapt to the actual workflow — Even if a column has no items, include it with a placeholder. This makes the board structure explicit and ensures categories are never forgotten. Use a placeholder like [No items yet] when a column is empty.
 
 ---
 
@@ -87,7 +87,7 @@ kanban
 | 🚫 **Blocked**     | [N]   | —         | [See blocked section below]                    |
 | 🚫 **Won't Do**    | [N]   | —         | [Explicitly declined with rationale]           |
 
-> ⚠️ **Always include all 6 columns** — Each column represents a workflow state. Even if count is 0, keep the row visible. This prevents categories from being overlooked.
+> ⚠️ **This example includes 6 columns** — Each column represents a workflow state. Even if count is 0, keep the row visible. This prevents categories from being overlooked.
 
 ---
 
@@ -124,7 +124,7 @@ _Items awaiting or in code review. Include at least one placeholder item if empt
 
 | Item        | Author   | Reviewer | PR                                                                                   | Days in review | Aging | Status                                           |
 | ----------- | -------- | -------- | ------------------------------------------------------------------------------------ | -------------- | ----- | ------------------------------------------------ |
-| [Work item] | [Person] | [Person] | [#NNN](../../docs/project/pr/pr-00000001-agentic-docs-and-monorepo-modernization.md) | [N]            | 🟢    | [Awaiting review / Changes requested / Approved] |
+| [Work item] | [Person] | [Person] | #NNN (replace with the project link) | [N]            | 🟢    | [Awaiting review / Changes requested / Approved] |
 |             |          |          |                                                                                      |                |       | _[No items yet]_                                 |
 
 ---
@@ -135,7 +135,7 @@ _Completed this period. Include at least one placeholder item if empty._
 
 | Item        | Assignee | Completed | Cycle time | PR                                                                                   |
 | ----------- | -------- | --------- | ---------- | ------------------------------------------------------------------------------------ |
-| [Work item] | [Person] | [Date]    | [N days]   | [#NNN](../../docs/project/pr/pr-00000001-agentic-docs-and-monorepo-modernization.md) |
+| [Work item] | [Person] | [Date]    | [N days]   | #NNN (replace with the project link) |
 |             |          |           |            | _[No items completed this period]_                                                   |
 
 ---
@@ -179,7 +179,7 @@ _Explicitly out of scope for this board period. Capture rationale so these decis
 | **WIP limit breaches**             | [N]      | 0        | [↑/→/↓] |
 | **Items aging red**                | [N]      | 0        | [↑/→/↓] |
 
-> 💡 **Flow efficiency** = active work time ÷ total cycle time × 100. A healthy team targets 40%+. Below 15% means items spend most of their time waiting, not being worked on.
+> 💡 **Flow efficiency** = active work time ÷ total cycle time × 100. Define active/waiting intervals and set targets from the actual workflow; there is no universal healthy-team threshold.
 
 <details>
 <summary><strong>📊 Historical Throughput</strong></summary>
@@ -214,9 +214,9 @@ _Explicitly out of scope for this board period. Capture rationale so these decis
 
 ## 🔗 References
 
-- [Live project board](../../docs/project/kanban/sprint-2026-w08-crewai-review-hardening-and-memory.md) — Real-time tracking
-- [Previous board](../../docs/project/kanban/sprint-2026-w07-agentic-template-modernization.md) — Last period's snapshot
-- [Status report](../../docs/project/pr/pr-00000001-agentic-docs-and-monorepo-modernization.md) — Executive summary of this period
+- Live project board (replace with the project link) — Real-time tracking
+- Previous board (replace with the project link) — Last period's snapshot
+- Status report (replace with the project link) — Executive summary of this period
 
 ---
 

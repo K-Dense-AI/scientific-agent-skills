@@ -61,9 +61,11 @@ The 0.9 field is:
 params.forcing.tcrandom.time_correlation = "based_on_forcing_rate"
 ```
 
-or a finite time value. Current source derives the default period as a power of
+or a positive finite time value. The rate-derived setting requires positive
+`forcing_rate`. Current source derives the default period as a power of
 the forcing rate and stores two random seeds plus the last-change time in state
-parameters. FluidSim 0.9.0 writes these state parameters into restart files;
+parameters under `/state_params/forcing` (`seed0`, `seed1`, `t_last_change`).
+FluidSim 0.9.0 writes these state parameters into restart files;
 0.8.6 fixed a time-correlated forcing restart bug.
 
 For reproducibility, preserve:
@@ -202,7 +204,8 @@ Avoid private-method snippets from old versions without source review.
 
 ## FluidFFT backend selection
 
-Installed methods are entry points. Discover them:
+Registered methods are entry points, not proof their dependencies load.
+Discover them:
 
 ```python
 from fluidfft import get_methods
@@ -332,10 +335,10 @@ Practical migrations from the previous skill:
 - Do not advertise ParaView direct compatibility without an explicit tested
   conversion/plugin.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
-- [FluidSim forcing base source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/forcing/base.py).
-- [Specific forcing source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/forcing/specific.py).
+- [FluidSim forcing base source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/forcing/base.py).
+- [Specific forcing source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/forcing/specific.py).
 - [Pseudospectral time-step API](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.base.time_stepping.pseudo_spect.html).
 - [FluidSim development tutorial](https://fluidsim.readthedocs.io/en/latest/ipynb/tuto_dev.html).
 - [FluidSim release notes](https://fluidsim.readthedocs.io/en/latest/changes.html).

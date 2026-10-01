@@ -1,8 +1,9 @@
 # Task Resource Configuration
 
-This reference targets `latch==2.76.8`. Resource shapes are operational
+This reference targets `latch==2.77.1`. Resource shapes are operational
 configuration and can change independently of examples. Inspect the installed
-SDK before making cost or capacity guarantees.
+SDK before making cost or capacity guarantees. Task bodies below are illustrative
+resource-configuration skeletons, not complete scientific implementations.
 
 ## Selection Strategy
 
@@ -35,7 +36,7 @@ def assemble_genome():
     ...
 ```
 
-SDK 2.76.8 configures these scheduler requests:
+SDK 2.77.1 configures these scheduler requests:
 
 | Decorator | CPU | RAM | Ephemeral storage |
 |---|---:|---:|---:|
@@ -105,7 +106,7 @@ current docs or with Latch support before promising a specific model to users.
 
 Exact stable signature:
 
-```python
+```text
 custom_task(
     cpu,
     memory,
@@ -135,7 +136,7 @@ def call_variants():
     ...
 ```
 
-In SDK 2.76.8, `custom_task` accepts up to 126 CPU cores, 975 GiB RAM, and
+In SDK 2.77.1, `custom_task` accepts up to 126 CPU cores, 975 GiB RAM, and
 4949 GiB ephemeral storage. Not every arbitrary combination fits a schedulable
 node group; the decorator selects the smallest configured group that satisfies
 all three requests.
@@ -163,7 +164,10 @@ def allocate_storage(files: list[LatchFile]) -> int:
         raise ValueError("unable to determine every input size")
     total_bytes = sum(int(size) for size in sizes)
     estimated_gib = total_bytes / (1024**3)
-    return max(100, int(estimated_gib * 2) + 1)
+    storage = max(100, int(estimated_gib * 2) + 1)
+    if storage > 4949:
+        raise ValueError("estimated storage exceeds the custom_task limit")
+    return storage
 
 
 @custom_task(
@@ -183,7 +187,8 @@ Guardrails:
 - Bound every computed resource.
 - Include overhead for decompression and intermediate files.
 - Keep computation deterministic and fast.
-- Do not make network calls or retrieve secrets from resource functions.
+- Restrict remote lookups to necessary input metadata (such as `file.size()`).
+  Do not download inputs or retrieve secrets in a resource function.
 - Test the exact annotation matching during staging registration.
 
 ## Cache, Retries, and Timeout
@@ -270,5 +275,5 @@ requested storage
 
 - Resource guide: https://wiki.latch.bio/workflows/sdk/python/defining-cloud-resources
 - Resource monitoring: https://wiki.latch.bio/workflows/sdk/console/resource-monitoring
-- Task source in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch/resources/tasks.py
-- Changelog in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/CHANGELOG.md
+- Task source in the 2.77.1 release commit: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/src/latch/resources/tasks.py
+- Changelog in the 2.77.1 release commit: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/CHANGELOG.md

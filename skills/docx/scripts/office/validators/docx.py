@@ -352,20 +352,11 @@ class DOCXSchemaValidator(BaseSchemaValidator):
                 )
             }
 
-            orphaned_ends = range_ends - range_starts
-            for comment_id in sorted(
-                orphaned_ends, key=lambda x: int(x) if x and x.isdigit() else 0
-            ):
+            # An unpaired endpoint is a legal point anchor (ISO 29500
+            # 17.13.4.3/4). Every anchor still needs a commentReference.
+            for comment_id in sorted((range_starts | range_ends) - references, key=str):
                 errors.append(
-                    f'  document.xml: commentRangeEnd id="{comment_id}" has no matching commentRangeStart'
-                )
-
-            orphaned_starts = range_starts - range_ends
-            for comment_id in sorted(
-                orphaned_starts, key=lambda x: int(x) if x and x.isdigit() else 0
-            ):
-                errors.append(
-                    f'  document.xml: commentRangeStart id="{comment_id}" has no matching commentRangeEnd'
+                    f'  document.xml: comment anchor id="{comment_id}" has no commentReference'
                 )
 
             comment_ids = set()
@@ -378,15 +369,12 @@ class DOCXSchemaValidator(BaseSchemaValidator):
                     )
                 }
 
-                marker_ids = range_starts | range_ends | references
-                invalid_refs = marker_ids - comment_ids
-                for comment_id in sorted(
-                    invalid_refs, key=lambda x: int(x) if x and x.isdigit() else 0
-                ):
-                    if comment_id:  
-                        errors.append(
-                            f'  document.xml: marker id="{comment_id}" references non-existent comment'
-                        )
+            marker_ids = range_starts | range_ends | references
+            invalid_refs = marker_ids - comment_ids
+            for comment_id in sorted(invalid_refs, key=str):
+                errors.append(
+                    f'  document.xml: marker id="{comment_id}" references non-existent comment'
+                )
 
         except (lxml.etree.XMLSyntaxError, Exception) as e:
             errors.append(f"  Error parsing XML: {e}")
@@ -398,7 +386,7 @@ class DOCXSchemaValidator(BaseSchemaValidator):
             return False
         else:
             if self.verbose:
-                print("PASSED - All comment markers properly paired")
+                print("PASSED - All comment anchors and references resolve")
             return True
 
     def repair(self) -> int:

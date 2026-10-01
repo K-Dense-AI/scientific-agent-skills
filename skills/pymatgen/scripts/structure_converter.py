@@ -57,6 +57,13 @@ def render_structure(
             from pymatgen.io.vasp import Poscar
 
             text = Poscar(structure).get_str(direct=coordinate_mode == "direct")
+        elif output_format == "xyz":
+            if coordinate_mode != "not-applicable":
+                raise CliError("--coordinate-mode is only meaningful for POSCAR output")
+            from pymatgen.io.xyz import XYZ
+
+            # Structure.to() does not register XYZ; this writer explicitly drops PBC.
+            text = str(XYZ(structure))
         else:
             if coordinate_mode != "not-applicable":
                 raise CliError(
@@ -201,7 +208,7 @@ def main() -> int:
             }
         )
         return 0
-    except (CliError, ImportError) as exc:
+    except (CliError, ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         emit_json(
             {
                 "ok": False,

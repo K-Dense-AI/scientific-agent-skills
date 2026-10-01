@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/tmux
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 tmux strips modifier information from some keys by default, so without configuration `Shift+Enter` and `Ctrl+Enter` are indistinguishable from plain `Enter`.
 
 ## Recommended Configuration
@@ -13,7 +15,7 @@ set -g extended-keys on
 set -g extended-keys-format csi-u
 ```
 
-Then restart tmux fully:
+Save work and close existing sessions before restarting. `tmux kill-server` terminates every session on that server:
 
 ```bash
 tmux kill-server

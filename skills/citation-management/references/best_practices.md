@@ -49,7 +49,7 @@ Search strategy, metadata extraction, BibTeX quality, and validation practices.
 4. **Maintain consistency**:
    - Use consistent author name format
    - Standardize journal abbreviations
-   - Use same DOI format (URL preferred)
+   - Use a bare identifier in the BibTeX `doi` field; use the resolver URL in prose
 
 ### BibTeX Quality
 
@@ -57,7 +57,7 @@ Search strategy, metadata extraction, BibTeX quality, and validation practices.
    - Use meaningful citation keys (FirstAuthor2024keyword)
    - Protect capitalization in titles with {}
    - Use -- for page ranges (not single dash)
-   - Include DOI field for all modern publications
+   - Include the DOI field when a DOI has been assigned
 
 2. **Keep it clean**:
    - Remove unnecessary fields

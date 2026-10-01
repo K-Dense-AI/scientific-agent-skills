@@ -60,10 +60,10 @@ block-beta
 
 - Use `columns N` to control the layout grid
 - Use `space:N` for empty cells (alignment/spacing)
-- Nest `block:name:span { ... }` for grouped sections
+- Nest `block:name:span` followed by its contents and `end` for grouped sections
 - Connect blocks with `-->` arrows
 - Use **emoji in labels** `["🔧 Component"]` for visual distinction
-- Use cylinder `("text")` syntax for databases within blocks
+- Use cylinder `db[("text")]` syntax for databases within blocks
 - Keep to **3–4 rows** with **3–4 columns** for readability
 - **Always** pair with a Markdown text description above for screen readers
 
@@ -119,7 +119,7 @@ block-beta
 
     block:gateway:4
         columns 2
-        apigw["🌐 API **Gateway**"]
+        apigw["🌐 API Gateway"]
         auth["🔐 Auth Service"]
     end
 
@@ -173,5 +173,10 @@ block-beta
 
 - **5 tiers read top-to-bottom** like a network diagram — clients, gateway, services, data, infrastructure. Each tier is a block spanning the full width with its own column layout.
 - **`space:4` creates visual separation** between tiers without unnecessary lines or borders, keeping the diagram clean and scannable.
-- **Cylinder syntax `("text")` for databases** — PostgreSQL renders as a cylinder, instantly recognizable as a data store. Other components use standard rectangles.
+- **Cylinder syntax `db[("text")]` for databases** — PostgreSQL renders as a cylinder, instantly recognizable as a data store. Other components use standard rectangles.
 - **Connections show real data paths** — not every possible connection, just the primary flows. A fully-connected diagram would be unreadable; this shows the key paths an engineer would trace during debugging.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/block.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

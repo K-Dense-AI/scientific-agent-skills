@@ -5,7 +5,9 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -103,6 +105,43 @@ class StaticSafetyTests(unittest.TestCase):
         self.assertIn("metadata:\n  version:", text)
 
 
+class MalformedInputTests(unittest.TestCase):
+    def test_container_data_levels_fail_without_type_errors(self) -> None:
+        cases = (
+            ("artifact_intended_use_template.json", "data_governance", validate_cds_artifact.validate_artifact),
+            ("evidence_profile_template.json", None, lambda d: evidence_profile_check.check_profile(d)[0]),
+            ("aggregate_cohort_table_template.json", "metadata", lambda d: cohort_table_generator._build_table(d, 11)[0]),
+            ("aggregate_model_evaluation_template.json", "metadata", lambda d: model_biomarker_evaluation.evaluate(d, 11)[0]),
+            ("survival_analysis_plan_template.json", "metadata", survival_plan_validator.validate_plan),
+            ("decision_logic_traceability_template.json", "metadata", lambda d: decision_logic_traceability.validate_matrix(d)[0]),
+        )
+        for asset, section, validate in cases:
+            for invalid in ([], {}):
+                with self.subTest(asset=asset, invalid=invalid):
+                    document = resolve_placeholders(load_asset(asset))
+                    target = document[section] if section else document
+                    target["data_level"] = invalid
+                    result = validate(document)
+                    self.assertFalse(result.ok)
+                    self.assertTrue(any("data_level" in error for error in result.errors), result.errors)
+
+    def test_oversized_float_conversion_is_validation_error(self) -> None:
+        with self.assertRaises(_common.InputError):
+            _common.finite_number(10 ** 400, "probability")
+
+    def test_deep_json_is_validation_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "deep.json"
+            path.write_text('{"nested":' + '[' * 2000 + '0' + ']' * 2000 + '}', encoding="utf-8")
+            with self.assertRaises(_common.InputError):
+                _common.load_json_object(str(path))
+
+    def test_large_consistent_counts_do_not_overflow(self) -> None:
+        count = 10 ** 400
+        result = cohort_table_generator._format_count(count, 2 * count)
+        self.assertTrue(result.endswith("(50.0%)"))
+
+
 class ArtifactValidatorTests(unittest.TestCase):
     def test_unresolved_artifact_template_fails_closed(self) -> None:
         document = load_asset("artifact_intended_use_template.json")
@@ -180,6 +219,14 @@ class EvidenceProfileTests(unittest.TestCase):
         self.assertEqual(summaries[0]["human_entered_certainty"], "moderate")
         self.assertFalse(document["auto_grade"])
 
+        outcome["domains"]["imprecision"]["judgment"] = "extremely_serious"
+        outcome["certainty"]["level"] = "very_low"
+        outcome["certainty"]["rationale"] = "Panel judged three-level imprecision concerns under its cited GRADE Book method."
+        result, summaries = evidence_profile_check.check_profile(document)
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(summaries[0]["human_entered_certainty"], "very_low")
+        self.assertFalse(document["auto_grade"])
+
 
 class AggregateEvaluationTests(unittest.TestCase):
     def test_model_evaluation_is_aggregate_and_bounded(self) -> None:
@@ -192,6 +239,62 @@ class AggregateEvaluationTests(unittest.TestCase):
         self.assertEqual(len(report["groups"]), 2)
         self.assertFalse(report["groups"][0]["suppressed"])
         self.assertIn("sensitivity", report["groups"][0]["metrics"])
+
+    def test_single_observed_class_has_undefined_balanced_accuracy(self) -> None:
+        for confusion, missing_metric, events in (
+            ({"tp": 0, "fn": 0, "tn": 100, "fp": 20}, "sensitivity", 0),
+            ({"tp": 100, "fn": 20, "tn": 0, "fp": 0}, "specificity", 120),
+        ):
+            with self.subTest(missing_metric=missing_metric):
+                document = load_asset("aggregate_model_evaluation_template.json")
+                group = document["groups"][0]
+                group["confusion"] = confusion
+                group["calibration_bins"] = [{
+                    "n": 120, "observed_events": events,
+                    "mean_predicted_probability": 0.5,
+                }]
+                log, report = model_biomarker_evaluation.evaluate(document, 11)
+                self.assertTrue(log.ok, log.errors)
+                metrics = report["groups"][0]["metrics"]
+                self.assertIsNone(metrics[missing_metric]["estimate"])
+                self.assertIsNone(metrics["balanced_accuracy"]["estimate"])
+                self.assertTrue(any("undefined" in warning for warning in log.warnings))
+                self.assertNotIn("balanced_accuracy", report["subgroup_performance_differences"])
+
+    def test_invalid_calibration_denominator_is_rejected_before_suppression(self) -> None:
+        document = load_asset("aggregate_model_evaluation_template.json")
+        document["groups"][1]["calibration_bins"] = [
+            {"n": 5, "observed_events": 1, "mean_predicted_probability": 0.2},
+            {"n": 120, "observed_events": 41, "mean_predicted_probability": 0.5},
+        ]
+        log, report = model_biomarker_evaluation.evaluate(document, 11)
+        self.assertFalse(log.ok)
+        self.assertTrue(any("sum to group n" in error for error in log.errors))
+        self.assertEqual(report["groups"], [])
+
+    def test_unsafe_metadata_produces_no_evaluation(self) -> None:
+        document = load_asset("aggregate_model_evaluation_template.json")
+        document["metadata"]["person_level_output"] = True
+        log, report = model_biomarker_evaluation.evaluate(document, 11)
+        self.assertFalse(log.ok)
+        self.assertEqual(report["groups"], [])
+
+    def test_wilson_known_values_and_empty_denominator(self) -> None:
+        result = model_biomarker_evaluation._wilson(50, 100)
+        self.assertEqual(result["estimate"], 0.5)
+        self.assertAlmostEqual(result["ci95"][0], 0.403832, places=6)
+        self.assertAlmostEqual(result["ci95"][1], 0.596168, places=6)
+        self.assertEqual(model_biomarker_evaluation._wilson(0, 0)["ci95"], [None, None])
+
+    def test_csv_labels_are_literal_text(self) -> None:
+        text = cohort_table_generator._to_csv(["Characteristic"], [["  =1+1"]], [])
+        self.assertIn("'  =1+1", text)
+
+    def test_small_group_still_requires_consistent_counts(self) -> None:
+        document = load_asset("aggregate_cohort_table_template.json")
+        document["groups"][0]["n"] = 5
+        with self.assertRaises(_common.InputError):
+            cohort_table_generator._build_table(document, 11)
 
     def test_cohort_table_applies_complementary_suppression(self) -> None:
         document = load_asset("aggregate_cohort_table_template.json")
@@ -217,6 +320,39 @@ class PlanAndTraceabilityTests(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         allowed = decision_logic_traceability.ALLOWED_OUTPUT_KINDS
         self.assertTrue(all(row["output_kind"] in allowed for row in rows))
+
+    def test_node_ids_are_normalized_consistently(self) -> None:
+        document = load_asset("decision_logic_traceability_template.json")
+        document["nodes"][0]["id"] = " source_gate "
+        result, rows = decision_logic_traceability.validate_matrix(document)
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(rows[0]["node_id"], "source_gate")
+
+    def test_invalid_exports_never_write_artifact(self) -> None:
+        for script, asset, key, suffix in (
+            ("cohort_table_generator.py", "aggregate_cohort_table_template.json", "patient_care_use", ".md"),
+            ("decision_logic_traceability.py", "decision_logic_traceability_template.json", "patient_care_use", ".csv"),
+        ):
+            with self.subTest(script=script), tempfile.TemporaryDirectory() as directory:
+                document = load_asset(asset)
+                document["metadata"][key] = True
+                input_path = Path(directory) / "input.json"
+                output_path = Path(directory) / ("output" + suffix)
+                input_path.write_text(json.dumps(document))
+                result = subprocess.run(
+                    [sys.executable, "-B", str(SCRIPTS / script), str(input_path), "-o", str(output_path)],
+                    text=True, capture_output=True, check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertFalse(output_path.exists())
+
+    def test_output_symlink_is_rejected_even_when_target_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            link = Path(directory) / "output.json"
+            link.symlink_to(Path(directory) / "missing.json")
+            with self.assertRaises(_common.InputError):
+                _common.local_output_path(str(link), {".json"})
 
 
 class PrivacyChecklistTests(unittest.TestCase):

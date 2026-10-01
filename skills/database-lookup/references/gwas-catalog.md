@@ -15,7 +15,7 @@ No API key required.
 | Endpoint | Description |
 |----------|-------------|
 | `/studies/{accession}` | Single study (e.g. GCST001633) |
-| `/studies/search/findByPubmedId?pubmedId={id}` | Studies by PubMed ID |
+| `/studies/search/findByPublicationIdPubmedId?pubmedId={id}` | Studies by PubMed ID |
 | `/singleNucleotidePolymorphisms/{rsId}` | SNP details |
 | `/singleNucleotidePolymorphisms/{rsId}/associations` | Associations for a SNP |
 | `/singleNucleotidePolymorphisms/search/findByRsId?rsId={rsId}` | Search by rsID |
@@ -44,3 +44,5 @@ HAL+JSON. Results in `_embedded.studies[]` or `_embedded.associations[]`. Key fi
 
 ## Rate Limits
 No published limit. Bulk data via FTP at ftp.ebi.ac.uk/pub/databases/gwas/
+
+Follow HAL `_links.next.href` until absent and inspect `_links.search` for exact finder names/parameters. The official endpoint catalogue is https://www.ebi.ac.uk/gwas/rest/documents/api.html.

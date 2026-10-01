@@ -2,14 +2,21 @@
 
 Source: https://pi.dev/docs/latest/shell-aliases
 
-Pi runs bash in non-interactive mode (`bash -c`), which does not expand aliases by default.
+Reviewed against Pi 0.99.2 on 2026-09-30.
 
-To enable your shell aliases, set `shellCommandPrefix` in `~/.pi/agent/settings.json`:
+Pi normally runs a separate non-interactive `bash -c` for each built-in Bash or `!`/`!!` command. To use aliases, create a Bash-compatible `~/.bash_aliases`:
+
+```bash
+alias ll='ls -la'
+alias gs='git status --short'
+```
+
+Then configure `~/.pi/agent/settings.json`:
 
 ```json
 {
-  "shellCommandPrefix": "shopt -s expand_aliases\neval \"$(grep '^alias ' ~/.zshrc)\""
+  "shellCommandPrefix": "shopt -s expand_aliases\nsource ~/.bash_aliases"
 }
 ```
 
-The value is a JSON string: `\n` is an escaped newline inside the prefix and the inner double quotes are backslash-escaped. Adjust the path (`~/.zshrc`, `~/.bashrc`, …) to match your shell config. The prefix is prepended to every bash command Pi runs.
+Run `/reload`, then `!ll`. The prefix runs before every Bash command. Do not parse/evaluate arbitrary alias lines from `.zshrc` or source a zsh configuration into Bash. Configure `shellPath` when Bash is unavailable; `shopt` will fail under a `sh` fallback. Extensions replacing the shell own their setup.

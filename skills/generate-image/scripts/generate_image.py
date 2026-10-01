@@ -11,18 +11,21 @@ returned rather than an assumption.
 Reference images (image-to-image and editing) go in ``input_references`` as
 HTTP(S) URLs or base64 data URLs.
 
-Parameter support is per-model and an unsupported parameter is rejected rather
-than ignored, so every generation is preceded by a free metadata lookup that
-validates the request locally before anything is billed (``--no-preflight``
-skips it). Only the standard library is required.
+Parameter support differs by model and endpoint. Every generation is preceded
+by free model and endpoint metadata lookups that validate advertised support
+locally before anything is billed (``--no-preflight`` skips them). Only the
+standard library is required.
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import difflib
+import http.client
 import json
+import math
 import os
 import sys
 import time
@@ -52,7 +55,7 @@ EXTENSIONS = {
 SUFFIX_ALIASES = {
     ".jpg": {".jpg", ".jpeg"},
     ".jpeg": {".jpg", ".jpeg"},
-    ".svg": {".svg", ".svgz"},
+    ".svg": {".svg"},
 }
 
 # Local file extension -> MIME type, for encoding reference images.
@@ -82,12 +85,6 @@ RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
 # Ceiling for an image the response asks us to download rather than inlining.
 # A 4K PNG is a few tens of megabytes; anything past this is not an image we want.
 MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
-
-# Families outside this skill's documented set. They stay visible in
-# --list-models and --model-info, which mirror the live catalogue, but are not
-# offered as suggestions when a parameter is unsupported.
-UNSUGGESTED_PREFIXES = ("black-forest-labs/",)
-
 
 class ApiError(RuntimeError):
     """An error surfaced by the OpenRouter API or the transport beneath it."""
@@ -179,9 +176,9 @@ def request_bytes(
 ) -> bytes:
     """POST (or GET when payload is None), retrying transient failures.
 
-    Rate limits and 5xx responses are retried with exponential backoff, honouring
-    Retry-After when the server sends it. A 4xx other than 429 is final: the
-    request itself is wrong, so repeating it only wastes time.
+    Rate limits and selected 5xx responses retry with bounded backoff. Other
+    HTTP errors are surfaced for inspection. Ambiguous transport failures only
+    retry GET requests, never generation POSTs.
     """
     headers = {"Accept": accept}
     if api_key:
@@ -217,18 +214,22 @@ def request_bytes(
                 attempt += 1
                 continue
             raise ApiError(f"OpenRouter returned HTTP {exc.code}: {error_detail(exc.code, body)}") from exc
-        except urllib.error.URLError as exc:
-            if attempt < retries:
+        except (OSError, http.client.HTTPException) as exc:
+            reason = getattr(exc, "reason", str(exc))
+            # A dropped connection does not prove a POST was never processed.
+            # Do not automatically submit another potentially billed generation.
+            if payload is None and attempt < retries:
                 delay = retry_delay(None, attempt)
                 print(
-                    f"Could not reach OpenRouter ({exc.reason}); retrying in {delay:.0f}s "
+                    f"Could not reach OpenRouter ({reason}); retrying in {delay:.0f}s "
                     f"({attempt + 1}/{retries})",
                     file=sys.stderr,
                 )
                 time.sleep(delay)
                 attempt += 1
                 continue
-            raise ApiError(f"Could not reach OpenRouter: {exc.reason}") from exc
+            hint = " Generation outcome is unknown; check activity before resubmitting." if payload is not None else ""
+            raise ApiError(f"Could not reach OpenRouter: {reason}.{hint}") from exc
 
 
 def retry_delay(retry_after: str | None, attempt: int) -> float:
@@ -238,7 +239,7 @@ def retry_delay(retry_after: str | None, attempt: int) -> float:
             return max(1.0, min(60.0, float(retry_after)))
         except ValueError:
             pass
-    return float(2 ** attempt)
+    return float(2 ** min(attempt, 6)) if attempt < 6 else 60.0
 
 
 def error_detail(status: int, body: str) -> str:
@@ -256,10 +257,12 @@ def error_detail(status: int, body: str) -> str:
             "\nParameter support and allowed values are per-model. Inspect this model:\n"
             "  python generate_image.py --model-info MODEL"
         )
+    elif status == 402:
+        hint = "\nCheck credits, key spending limits, and any in-flight budget Retry-After header."
     elif status in (401, 403):
         hint = (
             "\nCheck the key and its credit balance: https://openrouter.ai/keys\n"
-            "A 403 can also be a content-policy refusal — rephrase the prompt."
+            "A 403 can also reflect permissions, guardrails, or content policy; inspect the error."
         )
     return f"{detail}{hint}"
 
@@ -269,15 +272,32 @@ def request_json(url: str, api_key: str | None, payload: dict | None, timeout: f
     """POST or GET and decode the JSON response."""
     raw = request_bytes(url, api_key, payload, timeout, retries)
     try:
-        return json.loads(raw.decode("utf-8"))
+        result = json.loads(raw.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ApiError(f"OpenRouter returned a non-JSON response: {exc}") from exc
+    if not isinstance(result, dict):
+        raise ApiError("OpenRouter returned a JSON response that is not an object.")
+    if result.get("error"):
+        raise ApiError(f"OpenRouter returned an error: {error_detail(0, json.dumps(result))}")
+    return result
 
 
 def fetch_catalogue(timeout: float, retries: int = 2) -> dict[str, dict]:
     """Return the image catalogue keyed by model id. Needs no API key."""
     result = request_json(MODELS_URL, None, None, timeout, retries)
-    return {m["id"]: m for m in result.get("data", []) if m.get("id")}
+    data = result.get("data")
+    if not isinstance(data, list) or any(not isinstance(m, dict) for m in data):
+        raise ApiError("Image model discovery returned no valid data array.")
+    return {m["id"]: m for m in data if m.get("id")}
+
+
+def fetch_endpoints(model_id: str, timeout: float, retries: int = 2) -> list[dict]:
+    """Public endpoint records contain definitive capabilities, unlike the union."""
+    result = request_json(f"{MODELS_URL}/{model_id}/endpoints", None, None, timeout, retries)
+    endpoints = result.get("endpoints")
+    if not isinstance(endpoints, list) or any(not isinstance(e, dict) for e in endpoints):
+        raise ApiError("Image endpoint discovery returned no endpoints array.")
+    return endpoints
 
 
 def describe_spec(spec: dict) -> str:
@@ -320,16 +340,15 @@ def models_supporting(catalogue: dict[str, dict], parameter: str, value: Any = N
         if value is not None and spec_problem(parameter, value, spec):
             continue
         matches.append(model_id)
-    suggestable = [m for m in matches if not m.startswith(UNSUGGESTED_PREFIXES)]
-    return sorted(suggestable or matches)
+    return sorted(matches)
 
 
-def preflight(payload: dict, catalogue: dict[str, dict]) -> None:
+def preflight(payload: dict, catalogue: dict[str, dict], endpoints: list[dict] | None = None) -> None:
     """Validate the request against the model's advertised capabilities.
 
-    Every problem found here would otherwise be an HTTP 400 after the round
-    trip, or -- worse -- a silently wrong request. Errors are collected so one
-    run reports all of them.
+    This is a conservative check of advertised metadata, not a guarantee of
+    provider behavior or account access. Errors are collected so one run reports
+    all parameter problems.
     """
     model_id = payload["model"]
     model = catalogue.get(model_id)
@@ -362,16 +381,30 @@ def preflight(payload: dict, catalogue: dict[str, dict]) -> None:
             problems.append(issue)
 
     references = payload.get("input_references") or []
-    if references:
-        spec = supported.get("input_references")
-        if spec is None:
+    spec = supported.get("input_references")
+    if spec is None:
+        if references:
             problems.append(f"{model_id} does not accept reference images")
+    elif isinstance(spec, dict):
+        minimum, maximum = spec.get("min", 0), spec.get("max")
+        if minimum is not None and len(references) < minimum:
+            problems.append(f"{model_id} requires at least {minimum} reference images")
+        if maximum is not None and len(references) > maximum:
+            problems.append(f"{len(references)} reference images given; {model_id} accepts at most {maximum}")
+
+    if payload.get("background") == "transparent" and payload.get("output_format") == "jpeg":
+        problems.append("transparent background requires PNG or WebP, not JPEG")
+
+    if not problems and endpoints is not None:
+        # A union may advertise A and B even when no single endpoint accepts both.
+        for endpoint in endpoints:
+            try:
+                preflight(payload, {model_id: {"supported_parameters": endpoint.get("supported_parameters", {})}})
+            except RequestRejected:
+                continue
+            break
         else:
-            maximum = spec.get("max", 0) if isinstance(spec, dict) else 0
-            if maximum and len(references) > maximum:
-                problems.append(
-                    f"{len(references)} reference images given; {model_id} accepts at most {maximum}"
-                )
+            problems.append("no advertised provider endpoint accepts this complete parameter combination")
 
     if problems:
         listed = "\n  - ".join(problems)
@@ -386,8 +419,8 @@ def preflight(payload: dict, catalogue: dict[str, dict]) -> None:
 def build_payload(args: argparse.Namespace) -> dict:
     """Assemble the request body, omitting every parameter the caller left unset.
 
-    Omission matters: models advertise different parameter sets, and sending one
-    a model does not support is rejected rather than ignored.
+    Omission matters: providers advertise different parameter sets, and an
+    unsupported field may be rejected or ignored.
     """
     payload: dict[str, Any] = {"model": args.model, "prompt": args.prompt}
 
@@ -430,7 +463,7 @@ def redacted_payload(payload: dict) -> dict:
 
 def acceptable_suffixes(media_type: str) -> set[str]:
     """Suffixes that correctly name `media_type`, including spelling variants."""
-    extension = EXTENSIONS.get(normalise_media_type(media_type), ".png")
+    extension = EXTENSIONS.get(normalise_media_type(media_type), ".bin")
     return SUFFIX_ALIASES.get(extension, {extension})
 
 
@@ -446,7 +479,7 @@ def output_paths(requested: str | None, media_type: str, count: int) -> list[Pat
     explicitly, in which case their choice is kept and a real mismatch -- not a
     mere spelling variant -- is reported.
     """
-    extension = EXTENSIONS.get(normalise_media_type(media_type), ".png")
+    extension = EXTENSIONS.get(normalise_media_type(media_type), ".bin")
 
     if requested is None:
         stem, suffix = Path("generated_image"), extension
@@ -469,9 +502,17 @@ def image_bytes(item: dict, timeout: float) -> bytes | None:
     """Decode one response entry, downloading it if it arrived as a URL."""
     payload = item.get("b64_json")
     if payload:
+        if not isinstance(payload, str):
+            raise ApiError("Image response b64_json must be a string.")
         if payload.startswith("data:") and "," in payload:
             payload = payload.split(",", 1)[1]
-        return base64.b64decode(payload)
+        try:
+            content = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ApiError("Image response contains invalid base64 data.") from exc
+        if not content:
+            raise ApiError("Image response contains empty image data.")
+        return content
 
     url = item.get("url")
     if not url:
@@ -490,7 +531,7 @@ def image_bytes(item: dict, timeout: float) -> bytes | None:
 def save_images(result: dict, requested_output: str | None, timeout: float = 60.0) -> list[Path]:
     """Decode data[] into files and return the paths written."""
     items = result.get("data")
-    if not items:
+    if not isinstance(items, list) or not items:
         raise ApiError(
             "Response contained no images.\n"
             f"Raw response: {json.dumps(result, indent=2)[:800]}"
@@ -498,6 +539,8 @@ def save_images(result: dict, requested_output: str | None, timeout: float = 60.
 
     decoded: list[tuple[dict, bytes]] = []
     for item in items:
+        if not isinstance(item, dict):
+            raise ApiError("Image response contains a non-object data entry.")
         content = image_bytes(item, timeout)
         if content is None:
             print(f"Skipping an entry with no image data: {list(item)}", file=sys.stderr)
@@ -509,11 +552,13 @@ def save_images(result: dict, requested_output: str | None, timeout: float = 60.
 
     # Numbering is assigned after skipping empty entries so the written files
     # are always _1.._n with no gaps.
-    first_media = decoded[0][0].get("media_type", "image/png")
-    paths = output_paths(requested_output, first_media, len(decoded))
     written: list[Path] = []
 
-    for (_, content), path in zip(decoded, paths):
+    for index, (item, content) in enumerate(decoded):
+        media_type = item.get("media_type") or "application/octet-stream"
+        path = output_paths(requested_output, media_type, len(decoded))[index]
+        if media_type == "application/octet-stream":
+            print("Note: response omitted media_type; verify the saved file's format.", file=sys.stderr)
         if str(path.parent) not in ("", "."):
             path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
@@ -544,23 +589,16 @@ def format_pricing(pricing: list[dict] | None) -> list[str]:
 
 
 def cost_lines(usage: dict) -> list[str]:
-    """Report what the request cost, including the BYOK case.
-
-    On a bring-your-own-key account OpenRouter reports ``usage.cost`` as 0
-    because the upstream provider bills directly; the real figure is in
-    ``cost_details.upstream_inference_cost``. Printing only ``cost`` there would
-    claim a paid generation was free.
-    """
+    """Report OpenRouter charges and upstream cost separately, without double-counting."""
     cost = usage.get("cost")
     upstream = (usage.get("cost_details") or {}).get("upstream_inference_cost")
 
     lines = []
-    if cost:
-        lines.append(f"Cost: ${format_cost(cost)}")
-    elif upstream:
-        lines.append(f"Cost: ${format_cost(upstream)} billed upstream (BYOK key)")
-    elif cost is not None:
-        lines.append("Cost: $0 reported")
+    if cost is not None:
+        lines.append(f"OpenRouter cost: ${format_cost(cost)} reported")
+    if upstream is not None:
+        label = " (BYOK)" if usage.get("is_byok") else ""
+        lines.append(f"Upstream inference cost{label}: ${format_cost(upstream)} reported")
 
     image_tokens = (usage.get("completion_tokens_details") or {}).get("image_tokens")
     if image_tokens:
@@ -575,9 +613,10 @@ def print_model(model: dict) -> None:
     refs = params.get("input_references") or {}
     print(model.get("id", "?"))
     per_request = f"up to {n_spec.get('max', 1)}" if n_spec else "1 (n not accepted)"
+    minimum_refs = refs.get("min", 0)
     print(
         f"    images/request: {per_request}"
-        f" | reference images: up to {refs.get('max', 0)}"
+        f" | reference images: {minimum_refs}-{refs.get('max', 0)}"
         f" | streaming: {'yes' if model.get('supports_streaming') else 'no'}"
     )
     for name in sorted(params):
@@ -615,9 +654,15 @@ def model_info(model_id: str, timeout: float) -> int:
         return 1
 
     print_model(catalogue[model_id])
-    result = request_json(f"{MODELS_URL}/{model_id}/endpoints", None, None, timeout)
-    for endpoint in result.get("endpoints", []):
+    endpoints = fetch_endpoints(model_id, timeout)
+    if not endpoints:
+        print("    No provider endpoints currently advertised.")
+    for endpoint in endpoints:
         print(f"    provider: {endpoint.get('provider_name', '?')}")
+        print(f"    options key: {endpoint.get('provider_slug')} | routing tag: {endpoint.get('provider_tag')}")
+        print(f"    endpoint streaming: {bool(endpoint.get('supports_streaming'))}")
+        for name, spec in sorted((endpoint.get("supported_parameters") or {}).items()):
+            print(f"    endpoint {name}: {describe_spec(spec)}")
         for line in format_pricing(endpoint.get("pricing")):
             print(line)
         passthrough = endpoint.get("allowed_passthrough_parameters") or []
@@ -666,8 +711,8 @@ Examples:
     parser.add_argument("--n", type=int, help="Number of images (model-dependent maximum)")
     parser.add_argument("--aspect-ratio", help="e.g. 1:1, 16:9, 9:16, 4:3 (enum differs per model)")
     parser.add_argument("--resolution", help="Tier: 512, 1K, 2K, 4K (support differs per model)")
-    parser.add_argument("--quality", choices=["auto", "low", "medium", "high"])
-    parser.add_argument("--output-format", choices=["png", "jpeg", "webp"])
+    parser.add_argument("--quality", help="Quality value; validated against live model capabilities")
+    parser.add_argument("--output-format", choices=["png", "jpeg", "webp", "svg"])
     parser.add_argument("--background", choices=["auto", "transparent", "opaque"])
     parser.add_argument("--output-compression", type=int, metavar="0-100",
                         help="Compression for webp/jpeg output")
@@ -689,6 +734,10 @@ Examples:
     args = parser.parse_args(argv)
 
     try:
+        if not math.isfinite(args.timeout) or args.timeout <= 0:
+            parser.error("--timeout must be a positive finite number")
+        if args.retries < 0:
+            parser.error("--retries must be nonnegative")
         if args.list_models is not None:
             return list_models(args.timeout, args.list_models)
 
@@ -700,20 +749,16 @@ Examples:
 
         if args.output_compression is not None and not 0 <= args.output_compression <= 100:
             parser.error("--output-compression must be between 0 and 100")
-        if args.n is not None and args.n < 1:
-            parser.error("--n must be at least 1")
+        if args.n is not None and not 1 <= args.n <= 10:
+            parser.error("--n must be between 1 and 10")
 
         payload = build_payload(args)
 
         if not args.no_preflight:
-            try:
-                catalogue = fetch_catalogue(args.timeout, args.retries)
-            except ApiError as exc:
-                # Fail open: an unreachable metadata endpoint should not block a
-                # request the API itself may well accept.
-                print(f"Skipping the capability check ({exc}).", file=sys.stderr)
-            else:
-                preflight(payload, catalogue)
+            catalogue = fetch_catalogue(args.timeout, args.retries)
+            preflight(payload, catalogue)
+            endpoints = fetch_endpoints(args.model, args.timeout, args.retries)
+            preflight(payload, catalogue, endpoints)
 
         if args.dry_run:
             print(f"POST {IMAGES_URL}")
@@ -727,10 +772,12 @@ Examples:
         print(f"{action} with {args.model}")
         print(f"Prompt: {args.prompt}")
         if args.input:
-            print(f"References: {', '.join(args.input)}")
+            print(f"References: {len(args.input)}")
 
         result = request_json(IMAGES_URL, api_key, payload, args.timeout, args.retries)
         written = save_images(result, args.output, args.timeout)
+        if args.n is not None and len(written) < args.n:
+            print(f"Note: requested up to {args.n} images; received {len(written)}.", file=sys.stderr)
 
         for path in written:
             print(f"Saved {path}")
@@ -742,6 +789,9 @@ Examples:
 
     except ApiError as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error reading or writing an image: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print("Interrupted.", file=sys.stderr)

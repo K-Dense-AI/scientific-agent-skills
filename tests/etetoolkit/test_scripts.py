@@ -26,6 +26,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -70,7 +71,7 @@ class ParserSpecTests(unittest.TestCase):
     """`--parser` accepts both ETE's numeric ids and its named aliases."""
 
     def test_a_numeric_parser_id_stays_an_integer(self) -> None:
-        # ETE looks parsers up by int; passing "0" as a string selects nothing.
+        # The CLI normalizes numeric IDs to integers and preserves named aliases.
         for text, expected in (("0", 0), ("1", 1), (" 5 ", 5), ("-1", -1)):
             with self.subTest(text=text):
                 self.assertEqual(tree_operations.parser_spec(text), expected)
@@ -150,6 +151,15 @@ class TreeLoadingTests(TreeFixtureCase):
             sorted(quick_visualize.load_tree(path, 1).leaf_names()),
             sorted(tree_operations.load_tree(path, 1).leaf_names()),
         )
+
+    def test_nonfinite_tree_numbers_are_rejected_before_analysis_or_rendering(self) -> None:
+        for module in (tree_operations, quick_visualize):
+            for value in ("nan", "inf", "-inf", "1e309"):
+                for newick, parser in ((f"(A:{value},B:1);", 1),
+                                       (f"((A:1,B:1){value}:1,C:1);", 0)):
+                    with self.subTest(module=module.__name__, newick=newick):
+                        with self.assertRaisesRegex(module.UserInputError, "nonfinite"):
+                            module.load_tree(self.newick(newick), parser)
 
 
 class NumericSummaryTests(unittest.TestCase):
@@ -581,6 +591,48 @@ class CommandLineTests(TreeFixtureCase):
             ["A", "B", "C", "D"],
         )
 
+    def test_numeric_zero_output_parser_is_honored_for_prune_and_reroot(self) -> None:
+        source = self.newick(BALANCED)
+        for command, extra in (("prune", ["--keep", "A", "B", "C"]),
+                               ("reroot", ["--outgroup", "A"])):
+            with self.subTest(command=command):
+                output = self.root / f"{command}.nw"
+                code, _, err = self.run_main([
+                    command, str(source), str(output), "--parser", "1",
+                    "--output-parser", "0", *extra,
+                ])
+                self.assertEqual(code, 0, err)
+                # Parser 0 output cannot contain the internal names AB/CD/root.
+                restored = tree_operations.load_tree(output, 0)
+                self.assertTrue(all(n.name is None for n in restored.traverse()
+                                    if not n.is_leaf))
+
+    def test_prune_handles_a_leaf_name_also_used_by_an_internal_node(self) -> None:
+        source = self.newick("((A:1,B:1)A:2,C:3)root;")
+        output = self.root / "pruned.nw"
+        code, _, err = self.run_main([
+            "prune", str(source), str(output), "--parser", "1", "--keep", "A", "C",
+        ])
+        self.assertEqual(code, 0, err)
+        restored = tree_operations.load_tree(output, 1)
+        self.assertEqual(sorted(restored.leaf_names()), ["A", "C"])
+        self.assertEqual(restored.get_distance(*list(restored.leaves())), 6)
+
+    def test_rf_with_no_eligible_splits_has_undefined_normalization(self) -> None:
+        source = self.newick("(A,B,C);")
+        code, out, err = self.run_main(["compare", str(source), str(source), "--unrooted"])
+        self.assertEqual(code, 0, err)
+        result = json.loads(out)
+        self.assertEqual(result["max_rf"], 0)
+        self.assertIsNone(result["normalized_rf"])
+
+    def test_rf_with_disjoint_tip_sets_is_rejected(self) -> None:
+        a = self.newick("((A,B),C);", "a.nw")
+        b = self.newick("((D,E),F);", "b.nw")
+        code, _, err = self.run_main(["compare", str(a), str(b)])
+        self.assertEqual(code, 2)
+        self.assertIn("at least two shared leaves", err)
+
 
 class BindAddressTests(unittest.TestCase):
     """SmartView serves an unauthenticated viewer, so the bind host is a gate."""
@@ -624,23 +676,30 @@ class SupportFractionTests(unittest.TestCase):
     def test_percentages_are_normalised_and_fractions_left_alone(self) -> None:
         # Bootstrap support is written both as 0-1 and as 0-100; colouring by
         # support has to mean the same thing either way.
-        self.assertEqual(quick_visualize.support_fraction(95), 0.95)
-        self.assertEqual(quick_visualize.support_fraction(0.95), 0.95)
-        self.assertEqual(quick_visualize.support_fraction(100), 1.0)
+        self.assertEqual(quick_visualize.support_fraction(95, "percent"), 0.95)
+        self.assertEqual(quick_visualize.support_fraction(0.95, "fraction"), 0.95)
+        self.assertEqual(quick_visualize.support_fraction(100, "percent"), 1.0)
 
-    def test_the_boundary_value_one_is_treated_as_a_fraction(self) -> None:
-        # `numeric > 1` -- a support of exactly 1 is full support, not 1%.
-        self.assertEqual(quick_visualize.support_fraction(1), 1.0)
+    def test_one_percent_is_not_full_support(self) -> None:
+        self.assertEqual(quick_visualize.support_fraction(1, "percent"), 0.01)
+        self.assertEqual(quick_visualize.support_fraction(1, "fraction"), 1.0)
 
     def test_zero_support_stays_zero_and_missing_support_stays_none(self) -> None:
-        self.assertEqual(quick_visualize.support_fraction(0), 0.0)
-        self.assertIsNone(quick_visualize.support_fraction(None))
+        self.assertEqual(quick_visualize.support_fraction(0, "percent"), 0.0)
+        self.assertIsNone(quick_visualize.support_fraction(None, "percent"))
+
+    def test_invalid_support_is_rejected(self) -> None:
+        for value, scale in ((-1, "percent"), (101, "percent"), (2, "fraction"),
+                             (float("nan"), "fraction"), (float("inf"), "percent")):
+            with self.subTest(value=value, scale=scale):
+                with self.assertRaises(quick_visualize.UserInputError):
+                    quick_visualize.support_fraction(value, scale)
 
 
 class SupportColorTests(TreeFixtureCase):
     def args(self, extra: list[str] | None = None) -> argparse.Namespace:
         return quick_visualize.build_parser().parse_args(
-            ["tree.nwk", *(extra or [])]
+            ["tree.nwk", "--support-scale", "percent", *(extra or [])]
         )
 
     def test_each_support_band_gets_its_own_colour(self) -> None:
@@ -693,6 +752,13 @@ class ValidateArgsTests(unittest.TestCase):
         # If the defaults failed their own validator the CLI would be unusable
         # with no arguments at all.
         self.assertIsNone(quick_visualize.validate_args(self.args()))
+
+    def test_support_coloring_requires_the_source_scale(self) -> None:
+        with self.assertRaisesRegex(quick_visualize.UserInputError, "support-scale"):
+            quick_visualize.validate_args(self.args(["--color-by-support"]))
+        quick_visualize.validate_args(self.args([
+            "--color-by-support", "--support-scale", "percent",
+        ]))
 
     def test_support_thresholds_must_be_ordered_and_within_zero_to_one(self) -> None:
         for extra in (
@@ -836,6 +902,24 @@ class RenderDestinationTests(TreeFixtureCase):
         with self.assertRaisesRegex(quick_visualize.UserInputError, r"ete4\[treeview\]"):
             quick_visualize.create_treeview_style(self.tree, self.args())
 
+    def test_missing_selenium_is_an_error_without_claiming_a_saved_file(self) -> None:
+        with patch.dict(sys.modules, {"selenium": None}):
+            with self.assertRaisesRegex(quick_visualize.UserInputError, "render-sm"):
+                quick_visualize.render_smartview(
+                    self.tree, None, self.root / "out.png", self.args(),
+                )
+        self.assertFalse((self.root / "out.png").exists())
+
+    def test_silent_renderer_failure_preserves_existing_output(self) -> None:
+        from types import SimpleNamespace
+        output = self.root / "out.png"
+        output.write_bytes(b"previous output")
+        fake_tree = SimpleNamespace(render_sm=lambda *args, **kwargs: None)
+        with patch.dict(sys.modules, {"selenium": SimpleNamespace(webdriver=object())}):
+            with self.assertRaisesRegex(quick_visualize.UserInputError, "did not create"):
+                quick_visualize.render_smartview(fake_tree, None, output, self.args())
+        self.assertEqual(output.read_bytes(), b"previous output")
+
 
 class SmartViewLayoutTests(TreeFixtureCase):
     """The CLI's display options have to reach the SmartView style dictionary."""
@@ -895,7 +979,7 @@ class SmartViewLayoutTests(TreeFixtureCase):
     def test_colour_by_support_repaints_internal_nodes_only(self) -> None:
         # Leaves have no bootstrap support, so they must keep the leaf colour
         # even when --color-by-support is on.
-        args = self.args(["--color-by-support"])
+        args = self.args(["--color-by-support", "--support-scale", "percent"])
         dots = self.dots(args, "((A:1,B:1)95:1,(C:1,D:1)50:1);")
         self.assertEqual(dots["A"]["fill"], args.leaf_color)
         self.assertEqual(dots[95.0]["fill"], args.high_support_color)

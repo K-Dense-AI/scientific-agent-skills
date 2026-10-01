@@ -191,6 +191,14 @@ class VariantFileTests(unittest.TestCase):
 
 
 class ScoreArithmeticTests(unittest.TestCase):
+    def test_quantile_threshold_rejects_nonfinite_and_out_of_range_inputs(self):
+        import argparse
+
+        self.assertEqual(common.unit_interval("0.99"), 0.99)
+        for text in ("nan", "inf", "-0.1", "1.1", "invalid"):
+            with self.subTest(text=text), self.assertRaises(argparse.ArgumentTypeError):
+                common.unit_interval(text)
+
     def test_phred_scale_matches_the_report(self):
         for cdf, phred in ((0.9, 10.0), (0.99, 20.0), (0.999, 30.0)):
             tail, value = common.cdf_to_tail_and_phred(cdf)
@@ -378,6 +386,66 @@ class ScorerSelectionTests(unittest.TestCase):
         self.assertEqual(len(rows), 19)
         self.assertIn("RNA_SEQ", {row["name"] for row in rows})
 
+    def test_model_quantile_filter_requires_calibration(self):
+        from alphagenome.models import variant_scorers
+
+        model = mock.Mock()
+        args = score_variants.build_parser().parse_args([
+            "--variant", "chr22:36201698:A>C", "--scorers", "RNA_SEQ", "--min-abs-quantile", "0.9",
+        ])
+        frame = pd.DataFrame({"raw_score": [-2.0, 0.1]})
+        with mock.patch.object(variant_scorers, "tidy_scores", return_value=frame):
+            with self.assertRaisesRegex(SystemExit, "no calibrated quantiles"):
+                score_variants.score(model, args)
+        frame["quantile_score"] = [-0.99, 0.1]
+        with mock.patch.object(variant_scorers, "tidy_scores", return_value=frame):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(score_variants.score(model, args), 0)
+        self.assertEqual([r["raw_score"] for r in rows_from_tsv(out.getvalue())], ["-2"])
+
+
+@unittest.skipUnless(HAVE_SDK, "alphagenome not installed")
+class AtlasSdkContractTests(unittest.TestCase):
+    def test_real_sdk_follows_page_tokens_and_decodes_float32_scores(self):
+        from alphagenome.atlas import atlas
+        from alphagenome.protos import atlas_service_pb2 as pb
+
+        requests = []
+
+        class Stub:
+            def ListVariantScoresMetadata(self, request, metadata):
+                return pb.ListVariantScoresMetadataResponse(variant_scorer_metadata=[{
+                    "variant_scorer": {"name": "AVI_SCORE", "is_signed": False},
+                    "metadata": [{"tracks": {"metadata": [{"name": "AVI_SCORE", "strand": "STRAND_UNSTRANDED"}]}}],
+                }])
+
+            def ListDenseVariantScores(self, request, metadata):
+                requests.append((request.interval.start, request.interval.end, request.page_token, metadata))
+                second_page = bool(request.page_token)
+                position = request.interval.start + 1 + int(second_page)
+                return pb.ListDenseVariantScoresResponse(
+                    variant_scores=[{
+                        "variant": genome.Variant("chr1", position, "A", "C").to_proto(),
+                        "scores": [{
+                            "variant_scorer": {"name": "AVI_SCORE", "is_signed": False},
+                            "shape": [1, 1], "scores": np.array([2.0], dtype=np.float32).tobytes(),
+                            "calibrated_scores": np.array([0.99], dtype=np.float32).tobytes(),
+                        }],
+                    }],
+                    next_page_token="page2" if not second_page and request.interval.end - request.interval.start > 1 else "",
+                )
+
+        client = atlas.AtlasClient(Stub(), metadata=[("x-goog-api-key", "test-only")])
+        scores = client.query_interval(genome.Interval("chr1", 100, 165), requested_scorers=["AVI_SCORE"],
+                                       max_workers=1, progress_bar=False)
+        self.assertEqual([(r[0], r[1], r[2]) for r in requests], [
+            (100, 132, ""), (100, 132, "page2"), (132, 164, ""), (132, 164, "page2"), (164, 165, ""),
+        ])
+        self.assertEqual(scores["AVI_SCORE"].shape, (5, 1))
+        np.testing.assert_allclose(scores["AVI_SCORE"].layers["quantiles"], 0.99)
+        self.assertIn(("x-goog-api-key", "test-only"), requests[0][3])
+
 
 # ---------------------------------------------------------------------------
 # atlas_query.py against a fake Atlas client
@@ -425,7 +493,7 @@ if HAVE_SDK:
                 index=["0", "1"],
             ),
             var=TRACKS.copy(),
-            layers={"quantiles": np.array([[0.55, 0.002, 0.7], [0.5, 0.8, 0.03]], dtype=np.float32)},
+            layers={"quantiles": np.array([[0.1, -0.996, 0.4], [0.0, 0.6, -0.94]], dtype=np.float32)},
         )
 
     class FakeAtlasClient:
@@ -503,7 +571,7 @@ class AtlasConversionTests(unittest.TestCase):
         self.assertEqual(strongest["gene_name"], "HBB")
         self.assertEqual(strongest["biosample_name"], "transverse colon")
         self.assertEqual(strongest["ontology_curie"], "UBERON:0001157")
-        self.assertAlmostEqual(strongest["quantile_score"], 0.002, places=5)
+        self.assertAlmostEqual(strongest["quantile_score"], -0.996, places=5)
         self.assertEqual(strongest["gene_strand"], "-")
         self.assertEqual(rows[0]["track_index"], 0)
 
@@ -620,7 +688,29 @@ class AtlasQueryCliTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
         rows = rows_from_tsv(out)
-        self.assertEqual({row["quantile_score"] for row in rows}, {"0.002", "0.03"})
+        self.assertEqual({row["quantile_score"] for row in rows}, {"-0.996", "-0.94"})
+
+    def test_scores_filter_rejects_small_unsigned_values_and_missing_calibration(self):
+        adata = _avi_adata([_variant("chr1:5:A>T"), _variant("chr1:6:A>T")], [0, 2], [0.001, 0.995])
+        with mock.patch.object(self.client, "query_interval", return_value={"AVI_SCORE": adata}):
+            code, out, _ = run_main(atlas_query, [
+                "scores", "--interval", "chr1:5-6", "--scorers", "AVI_SCORE", "--min-abs-quantile", "0.99",
+            ])
+            self.assertEqual(code, 0)
+            self.assertEqual([r["variant"] for r in rows_from_tsv(out)], ["chr1:6:A>T"])
+            del adata.layers["quantiles"]
+            with self.assertRaisesRegex(SystemExit, "no calibrated quantiles"):
+                run_main(atlas_query, ["scores", "--interval", "chr1:5-6", "--min-abs-quantile", "0.99"])
+
+    def test_returned_ref_mismatch_is_not_relabelled_as_requested_variant(self):
+        returned = _avi_adata([_variant("chr1:5:G>T")], [2.5], [0.99])
+        with mock.patch.object(self.client, "query_variant", return_value={"AVI_SCORE": returned}):
+            code, out, _ = run_main(atlas_query, ["avi", "--variant", "chr1:5:A>T"])
+        self.assertEqual(code, 0)
+        row = rows_from_tsv(out)[0]
+        self.assertEqual(row["variant"], "chr1:5:A>T")
+        self.assertIn("different variant", row["error"])
+        self.assertEqual(row["avi_raw"], "")
 
     def test_scorers_and_tracks_subcommands(self):
         code, out, _ = run_main(atlas_query, ["scorers"])

@@ -73,7 +73,7 @@ def local_output_path(
     allowed = {suffix.lower() for suffix in suffixes}
     if path.suffix.lower() not in allowed:
         raise ValidationError(f"output suffix must be one of: {sorted(allowed)}")
-    if path.exists():
+    if path.exists() or path.is_symlink():
         if path.is_symlink() or not path.is_file():
             raise ValidationError("existing output must be a regular non-symlink file")
         if not overwrite:
@@ -143,6 +143,8 @@ def load_json_object(raw_path: str) -> tuple[Path, dict[str, Any]]:
         )
     except UnicodeDecodeError as exc:
         raise ValidationError("JSON input must be UTF-8") from exc
+    except RecursionError as exc:
+        raise ValidationError("JSON nesting exceeds the parser limit") from exc
     except json.JSONDecodeError as exc:
         raise ValidationError(f"invalid JSON: {exc.msg}") from exc
     if not isinstance(value, dict):
@@ -172,7 +174,7 @@ def write_json_report(
 
 def require_data_class(value: Any) -> str:
     """Require an allowed, explicitly declared data class."""
-    if value not in ALLOWED_DATA_CLASSES:
+    if not isinstance(value, str) or value not in ALLOWED_DATA_CLASSES:
         raise ValidationError(
             f"data classification must be one of: {sorted(ALLOWED_DATA_CLASSES)}"
         )
@@ -234,6 +236,8 @@ def require_nonnegative_int(value: Any, field: str) -> int:
 def parse_iso_date(value: Any, field: str) -> date:
     """Parse an ISO calendar date without inferring missing precision."""
     text = require_string(value, field, max_length=10)
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
+        raise ValidationError(f"{field} must be YYYY-MM-DD")
     try:
         return date.fromisoformat(text)
     except ValueError as exc:

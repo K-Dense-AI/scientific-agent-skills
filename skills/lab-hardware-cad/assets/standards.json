@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "units": "mm",
-  "note": "Dimensional standards for lab-hardware interfaces. Every entry carries a source. Entries with verified=false were not confirmed against the primary document during authoring and must be checked before use.",
-  "last_reviewed": "2026-08-15",
+  "note": "Dimensions in mm unless a dimension carries unit. Verified means the stated nominal source was checked, not that a fabrication tolerance or material fit is guaranteed. Zero tolerance on basic/vendor nominal data is not a physical zero-tolerance specification. Unverified entries require a vendor drawing or measurement.",
+  "last_reviewed": "2026-10-01",
   "standards": {
     "slas-microplate-footprint": {
       "title": "Microplate footprint (base outline)",
@@ -11,30 +11,17 @@
       "url": "https://www.slas.org/SLAS/assets/File/public/standards/ANSI_SLAS_1-2004_FootprintDimensions.pdf",
       "verified": true,
       "dimensions": {
-        "footprint_length": {
-          "nominal": 127.76,
-          "tol_plus": 0.25,
-          "tol_minus": 0.25,
-          "note": "Measured within 12.7 mm of the outside corners. Relaxes to +/-0.5 mm at any point along the side."
-        },
-        "footprint_width": {
-          "nominal": 85.48,
-          "tol_plus": 0.25,
-          "tol_minus": 0.25,
-          "note": "Measured within 12.7 mm of the outside corners. Relaxes to +/-0.5 mm at any point along the side."
-        },
-        "corner_radius": {
-          "nominal": 3.18,
-          "tol_plus": 1.6,
-          "tol_minus": 1.6,
-          "note": "Outside radius of the four bottom-flange corners (convex). A receiving pocket's internal fillet must be no LARGER than the minimum (1.58) or it bulges into the plate corner and binds; a sharp pocket corner or a corner-relief cut always clears. Do not size the pocket fillet to the maximum radius."
-        }
+        "footprint_length": {"nominal": 127.76, "tol_plus": 0.5, "tol_minus": 0.5, "note": "Section 4.1.1.2: overall base footprint at any point along the side. Use this band for a continuous receiving pocket. Does not specify the plate wall, lid, or draft above the base."},
+        "footprint_width": {"nominal": 85.48, "tol_plus": 0.5, "tol_minus": 0.5, "note": "Section 4.1.1.2: overall base footprint at any point along the side. Use this band for a continuous receiving pocket. Does not specify the plate wall, lid, or draft above the base."},
+        "corner_radius": {"nominal": 3.18, "tol_plus": 1.6, "tol_minus": 1.6, "note": "Outside radius of the four bottom-flange corners (convex). A receiving pocket's internal fillet must be no LARGER than the minimum (1.58) or it bulges into the plate corner and binds; a sharp pocket corner or a corner-relief cut always clears. Do not size the pocket fillet to the maximum radius."},
+        "footprint_length_at_corners": {"nominal": 127.76, "tol_plus": 0.25, "tol_minus": 0.25, "note": "Section 4.1.1.1: only within 12.7 mm of outside corners; do not use for a continuous pocket."},
+        "footprint_width_at_corners": {"nominal": 85.48, "tol_plus": 0.25, "tol_minus": 0.25, "note": "Section 4.1.1.1: only within 12.7 mm of outside corners; do not use for a continuous pocket."}
       },
       "fit_checks": [
         {"measure": "bbox_x", "dimension": "footprint_length"},
         {"measure": "bbox_y", "dimension": "footprint_width"}
       ],
-      "design_note": "For a pocket that receives a plate, add clearance per side on top of the maximum material condition (127.76 + 0.25 = 128.01). Check the pocket, not the plate."
+      "design_note": "Continuous base pocket: size from 128.26 x 85.98 mm overall maximum envelope, then add process allowance and functional clearance. Near-corner locating pads may use the separate _at_corners dimensions. Upper plate body, draft and lid require the vendor drawing."
     },
     "slas-microplate-height": {
       "title": "Microplate height",
@@ -43,15 +30,11 @@
       "url": "https://www.slas.org/SLAS/assets/File/public/standards/ANSI_SLAS_2-2004_HeightDimensions.pdf",
       "verified": true,
       "dimensions": {
-        "plate_height": {
-          "nominal": 14.35,
-          "tol_plus": 0.25,
-          "tol_minus": 0.25,
-          "note": "Datum A (resting plane) to the maximum protrusion of the perimeter wells. Secondary sources also quote +/-0.76 mm; consult the document before relying on the tighter band. Lidded and deep-well plates are taller and out of scope of this dimension."
-        }
+        "plate_height": {"nominal": 14.35, "tol_plus": 0.25, "tol_minus": 0.25, "note": "Sections 4.1.1.1 and 4.2.1.1: resting plane to perimeter wells, not the overall bounding box. Deep-well and lidded plates require vendor dimensions."},
+        "overall_plate_height": {"nominal": 14.35, "tol_plus": 0.76, "tol_minus": 0.76, "note": "Sections 4.1.1.2 and 4.2.1.2: resting plane to maximum protrusion of the plate; maximum 15.11 mm."}
       },
       "fit_checks": [
-        {"measure": "bbox_z", "dimension": "plate_height"}
+        {"measure": "bbox_z", "dimension": "overall_plate_height"}
       ]
     },
     "slas-microplate-flange": {
@@ -62,11 +45,11 @@
       "verified": true,
       "dimensions": {
         "flange_height_short": {"nominal": 2.41, "tol_plus": 0.38, "tol_minus": 0.38},
-        "flange_height_medium": {"nominal": 6.10, "tol_plus": 0.38, "tol_minus": 0.38},
+        "flange_height_medium": {"nominal": 6.1, "tol_plus": 0.38, "tol_minus": 0.38},
         "flange_height_tall": {"nominal": 7.62, "tol_plus": 0.38, "tol_minus": 0.38}
       },
       "fit_checks": [],
-      "design_note": "Three flange heights are standardised. A gripper or carrier that assumes one will drop plates built to another. Ask which the user has."
+      "design_note": "Sections 4.1-4.3 define three uniform heights. Sections 4.4 and 4.5 also permit interrupted short flanges and dual heights. Obtain the actual flange class/profile before designing a gripper."
     },
     "slas-well-positions-96": {
       "title": "96-well plate well positions",
@@ -78,7 +61,7 @@
         "well_pitch": {"nominal": 9.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Centre-to-centre in both x and y."},
         "a1_offset_x": {"nominal": 14.38, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Left outside edge to the centre of column 1."},
         "a1_offset_y": {"nominal": 11.24, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Top outside edge to the centre of row A."},
-        "well_position_tolerance": {"nominal": 0.70, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Each well centre lies within a 0.70 mm diameter of nominal. This is a positional tolerance zone, not a +/- band."}
+        "well_position_tolerance": {"nominal": 0.7, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Each well centre lies within a 0.70 mm diameter of nominal. This is a positional tolerance zone, not a +/- band."}
       },
       "fit_checks": [],
       "design_note": "Grid layout: x = a1_offset_x + 9.0 * column_index, y = a1_offset_y + 9.0 * row_index, measured from the plate outline corner."
@@ -88,62 +71,64 @@
       "authority": "ANSI/SLAS",
       "document": "ANSI/SLAS 4-2004 (R2012) Well Positions",
       "url": "https://www.slas.org/SLAS/assets/File/public/standards/ANSI_SLAS_4-2004_WellPositions.pdf",
-      "verified": false,
+      "verified": true,
       "dimensions": {
         "well_pitch": {"nominal": 4.5, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Centre-to-centre in both x and y."},
-        "a1_offset_x": {"nominal": 12.13, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED. Derived as the 96-well offset minus half the 96-well pitch. Confirm against ANSI/SLAS 4-2004 before cutting metal."},
-        "a1_offset_y": {"nominal": 8.99, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED. Derived, as above. Confirm against the document."}
+        "a1_offset_x": {"nominal": 12.13, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Verified directly in ANSI/SLAS 4-2004, section 4.2. Datum is the near-corner edge zones, not a bowed side midpoint."},
+        "a1_offset_y": {"nominal": 8.99, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Verified directly in ANSI/SLAS 4-2004, section 4.2. Datum is the near-corner edge zones, not a bowed side midpoint."},
+        "well_position_tolerance": {"nominal": 0.7, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Diameter of true-position zone at RFS; not a bilateral +/- band."}
       },
       "fit_checks": [],
-      "design_note": "Only well_pitch is confirmed here. Read the standard for the A1 offsets before relying on them."
+      "design_note": "Nominal coordinates are basic dimensions; apply the radial half of well_position_tolerance plus registration and manufacturing error for a clearance gauge."
     },
     "slas-well-positions-1536": {
       "title": "1536-well plate well positions",
       "authority": "ANSI/SLAS",
       "document": "ANSI/SLAS 4-2004 (R2012) Well Positions",
       "url": "https://www.slas.org/SLAS/assets/File/public/standards/ANSI_SLAS_4-2004_WellPositions.pdf",
-      "verified": false,
+      "verified": true,
       "dimensions": {
         "well_pitch": {"nominal": 2.25, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Centre-to-centre in both x and y."},
-        "a1_offset_x": {"nominal": 11.005, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED. Derived from the 96-well offset. Confirm against ANSI/SLAS 4-2004."},
-        "a1_offset_y": {"nominal": 7.865, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED. Derived, as above. Confirm against the document."}
+        "a1_offset_x": {"nominal": 11.005, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Verified directly in ANSI/SLAS 4-2004, section 4.3. Datum is the near-corner edge zones, not a bowed side midpoint."},
+        "a1_offset_y": {"nominal": 7.865, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Verified directly in ANSI/SLAS 4-2004, section 4.3. Datum is the near-corner edge zones, not a bowed side midpoint."},
+        "well_position_tolerance": {"nominal": 0.5, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Diameter of true-position zone at RFS; not a bilateral +/- band."}
       },
       "fit_checks": [],
-      "design_note": "Only well_pitch is confirmed here."
+      "design_note": "Nominal coordinates are basic dimensions; apply the radial half of well_position_tolerance plus registration and manufacturing error for a clearance gauge."
     },
     "cuvette-standard-10mm": {
       "title": "Standard 10 mm path-length spectrophotometer cuvette",
       "authority": "De facto industry convention",
-      "document": "No single ANSI/ISO document fixes this; it is a near-universal convention across suppliers.",
-      "url": "https://spectrecology.com/blog/guide-to-cuvettes/",
-      "verified": true,
+      "document": "Hellma 2025 cuvette catalogue: common 10 mm path-length rectangular formats; not a universal dimensional standard.",
+      "url": "https://www.hellma.com/fileadmin/fos/Website/Broschueren_Flyer_Handhabung/Hellma_Analytics/Englisch/Hellma_Kuevettenkatalog_EN_2025_gross.pdf",
+      "verified": false,
       "dimensions": {
-        "external_width": {"nominal": 12.5, "tol_plus": 0.1, "tol_minus": 0.1, "note": "Tolerance is indicative; suppliers vary."},
-        "external_depth": {"nominal": 12.5, "tol_plus": 0.1, "tol_minus": 0.1},
-        "external_height": {"nominal": 45.0, "tol_plus": 0.5, "tol_minus": 0.5, "note": "Body height excluding any cap or stopper. Semi-micro and micro cuvettes share the external footprint but differ in height and internal geometry."},
-        "path_length": {"nominal": 10.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Internal optical path. 12.5 external minus 2 x 1.25 mm wall."},
-        "wall_thickness": {"nominal": 1.25, "tol_plus": 0.0, "tol_minus": 0.0}
+        "external_width": {"nominal": 12.5, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance: illustrative nominal only; require the selected catalogue number drawing or measurement. Zero here does not mean zero manufacturing tolerance."},
+        "external_depth": {"nominal": 12.5, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance: illustrative nominal only; require the selected catalogue number drawing or measurement. Zero here does not mean zero manufacturing tolerance."},
+        "external_height": {"nominal": 45.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance: illustrative nominal only; require the selected catalogue number drawing or measurement. Zero here does not mean zero manufacturing tolerance."},
+        "path_length": {"nominal": 10.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance: illustrative nominal only; require the selected catalogue number drawing or measurement. Zero here does not mean zero manufacturing tolerance."},
+        "wall_thickness": {"nominal": 1.25, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED illustrative optical-wall thickness, not all four walls. Internal width and base thickness differ by cuvette model."}
       },
       "fit_checks": [
         {"measure": "bbox_x", "dimension": "external_width"},
         {"measure": "bbox_y", "dimension": "external_depth"}
       ],
-      "design_note": "Because this is a convention rather than a standard, a holder should be designed with generous clearance or a compliant feature. Confirm against the user's actual cuvettes."
+      "design_note": "Nominal 45 x 12.5 x 12.5 mm rectangular formats exist, but no common tolerance is asserted. Fit output remains unverified; use the actual cuvette envelope including cap and optical-window height."
     },
     "optical-breadboard-metric": {
       "title": "Metric optical breadboard hole grid",
       "authority": "De facto industry convention",
-      "document": "Universal across Thorlabs, Newport, Edmund and others for metric tables.",
+      "document": "Thorlabs Imperial and Metric Threading: grid and thread conventions; hole and counterbore numbers below are planning examples.",
       "url": "https://www.thorlabs.com/imperial-and-metric-threading",
       "verified": true,
       "dimensions": {
         "grid_pitch": {"nominal": 25.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Metric grid. NOT interchangeable with the 25.4 mm imperial grid."},
         "thread": {"nominal": 6.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "M6 x 1.0 tapped holes."},
-        "clearance_hole_close": {"nominal": 6.4, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Close-fit clearance for an M6 cap screw."},
-        "clearance_hole_normal": {"nominal": 6.6, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Normal-fit clearance for M6. Prefer this on printed parts."},
-        "counterbore_dia": {"nominal": 11.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "For an M6 socket head cap screw head (nominal head dia 10 mm)."},
-        "screw_head_height": {"nominal": 6.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "M6 socket head cap screw head height (ISO 4762). A counterbore shallower than this leaves the head proud, not flush."},
-        "border": {"nominal": 12.5, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Typical edge-to-first-hole distance. A property of the TABLE, not of your part: your plate's edge margin is a free design choice, so do not declare this as an interface."}
+        "clearance_hole_close": {"nominal": 6.4, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. Close-fit clearance for an M6 cap screw.", "verified": false},
+        "clearance_hole_normal": {"nominal": 6.6, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. Normal-fit clearance for M6. Prefer this on printed parts.", "verified": false},
+        "counterbore_dia": {"nominal": 11.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. For an M6 socket head cap screw head (nominal head dia 10 mm).", "verified": false},
+        "screw_head_height": {"nominal": 6.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. M6 socket head cap screw head height (ISO 4762). A counterbore shallower than this leaves the head proud, not flush.", "verified": false},
+        "border": {"nominal": 12.5, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. Typical edge-to-first-hole distance. A property of the TABLE, not of your part: your plate's edge margin is a free design choice, so do not declare this as an interface.", "verified": false}
       },
       "fit_checks": [],
       "design_note": "Slot rather than hole one of any pair of mounting features to absorb grid and print tolerance."
@@ -151,16 +136,16 @@
     "optical-breadboard-imperial": {
       "title": "Imperial optical breadboard hole grid",
       "authority": "De facto industry convention",
-      "document": "Universal across Thorlabs, Newport, Edmund and others for imperial tables.",
+      "document": "Thorlabs Imperial and Metric Threading: grid and thread conventions; hole and counterbore numbers below are planning examples.",
       "url": "https://www.thorlabs.com/imperial-and-metric-threading",
       "verified": true,
       "dimensions": {
         "grid_pitch": {"nominal": 25.4, "tol_plus": 0.0, "tol_minus": 0.0, "note": "1 inch exactly. Over four holes this differs from the metric grid by 1.6 mm."},
         "thread_major_dia": {"nominal": 6.35, "tol_plus": 0.0, "tol_minus": 0.0, "note": "1/4-20 UNC: 0.25 inch major diameter, 20 threads per inch."},
-        "clearance_hole_normal": {"nominal": 6.8, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Normal-fit clearance for a 1/4-20 screw."},
-        "counterbore_dia": {"nominal": 11.2, "tol_plus": 0.0, "tol_minus": 0.0, "note": "For a 1/4-20 socket head cap screw head."},
-        "screw_head_height": {"nominal": 6.35, "tol_plus": 0.0, "tol_minus": 0.0, "note": "1/4-20 socket head cap screw head height (0.25 inch). A counterbore shallower than this leaves the head proud, not flush."},
-        "border": {"nominal": 12.7, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Typical 0.5 inch edge-to-first-hole distance. A property of the TABLE, not of your part: your plate's edge margin is a free design choice, so do not declare this as an interface."}
+        "clearance_hole_normal": {"nominal": 6.8, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. Normal-fit clearance for a 1/4-20 screw.", "verified": false},
+        "counterbore_dia": {"nominal": 11.2, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. For a 1/4-20 socket head cap screw head.", "verified": false},
+        "screw_head_height": {"nominal": 6.35, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. 1/4-20 socket head cap screw head height (0.25 inch). A counterbore shallower than this leaves the head proud, not flush.", "verified": false},
+        "border": {"nominal": 12.7, "tol_plus": 0.0, "tol_minus": 0.0, "note": "UNVERIFIED tolerance/fit. Planning example, not a tolerance specification. Confirm the actual fastener/table drawing and process. Typical 0.5 inch edge-to-first-hole distance. A property of the TABLE, not of your part: your plate's edge margin is a free design choice, so do not declare this as an interface.", "verified": false}
       },
       "fit_checks": [],
       "design_note": "Ask which table the user has. Assuming the wrong system is the most common optomechanical design error."
@@ -169,7 +154,7 @@
       "title": "30 mm cage system",
       "authority": "Thorlabs (de facto standard, second-sourced by others)",
       "document": "Thorlabs 30 mm cage system construction rods and cage plates",
-      "url": "https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_ID=2273",
+      "url": "https://www.thorlabs.com/standard-30-mm-cage-plates",
       "verified": true,
       "dimensions": {
         "rod_spacing": {"nominal": 30.0, "tol_plus": 0.0, "tol_minus": 0.0, "note": "Rod centre to rod centre, on a square pattern. 1.18 inch."},
@@ -177,17 +162,17 @@
         "plate_thickness_typical": {"nominal": 8.9, "tol_plus": 0.0, "tol_minus": 0.0, "note": "0.35 inch, the CP33 standard cage plate. Informational, not a mating dimension: custom plates may be any thickness, but matching it keeps optical path budgets simple."}
       },
       "fit_checks": [],
-      "design_note": "The 30 mm rod square is centred on the optical axis. A custom plate must place its aperture at the centroid of the four rod bores. Bore diameter is rod_diameter plus twice the free-sliding per-side clearance for YOUR process (fabrication-limits.md): about 6.2 CNC, 6.4 SLA, 6.8 FDM. 6.1 is a reamed-metal number and binds on printed parts. Four bores on a common square over-constrain each other, so do not go tighter than the fits table. Declare the bore against rod_diameter with intent envelope and the clearance you chose."
+      "design_note": "The 30 mm rod square is centred on the optical axis. A custom plate must place its aperture at the centroid of the four rod bores. Bore diameter is rod_diameter plus twice the free-sliding per-side clearance for YOUR process (fabrication-limits.md): about 6.2 CNC, 6.4 SLA, 6.8 FDM. A 6.1 mm nominal bore is not a reliable uncalibrated printed fit; validate the actual process and rod drawing. Four bores on a common square over-constrain each other, so do not go tighter than the fits table. Declare the bore against rod_diameter with intent envelope and the clearance you chose."
     },
     "sm1-lens-tube-thread": {
       "title": "SM1 lens tube thread",
       "authority": "Thorlabs (de facto standard)",
       "document": "Thorlabs SM1 series threading",
-      "url": "https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=4114",
+      "url": "https://www.thorlabs.com/imperial-and-metric-threading",
       "verified": true,
       "dimensions": {
         "thread_major_dia": {"nominal": 26.289, "tol_plus": 0.0, "tol_minus": 0.0, "note": "1.035 inch-40 thread. Holds 1 inch diameter optics."},
-        "threads_per_inch": {"nominal": 40.0, "tol_plus": 0.0, "tol_minus": 0.0},
+        "threads_per_inch": {"nominal": 40.0, "tol_plus": 0.0, "tol_minus": 0.0, "unit": "1/in"},
         "pitch": {"nominal": 0.635, "tol_plus": 0.0, "tol_minus": 0.0, "note": "25.4 / 40 mm."},
         "optic_dia": {"nominal": 25.4, "tol_plus": 0.0, "tol_minus": 0.0, "note": "1 inch optic."}
       },

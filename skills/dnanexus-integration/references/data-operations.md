@@ -150,6 +150,9 @@ dx-download-agent inspect "manifest.json.bz2"
 
 `inspect` revalidates downloaded parts against manifest checksums. If a part is
 missing or corrupt, rerun `download`.
+Run `inspect` before retrying files that were moved, removed, or changed after
+a completed download; a bare `download` trusts its completion database and
+does not discover these changes by itself.
 
 Before a large download:
 
@@ -170,6 +173,7 @@ from pathlib import Path
 import dxpy
 
 project_id = "project-xxxx"
+Path("downloads").mkdir(parents=True, exist_ok=True)
 
 remote = dxpy.upload_local_file(
     "sample.fastq.gz",
@@ -255,6 +259,9 @@ Critical semantics:
 - Use `"regexp"` only with a reviewed, bounded pattern.
 - Results are generators and dxpy handles API pagination.
 - Without `limit`, dxpy can traverse the full result set.
+- Keep explicit SDK `limit` at most 1000 in dxpy 0.415.0: it is forwarded as
+  the initial API page size. For larger bounded sets, apply `itertools.islice`
+  to the generator with `limit` omitted.
 - `describe` adds API work and may expose metadata; request only needed fields.
 - `archival_state` requires a file class plus project/folder scope.
 
@@ -285,6 +292,9 @@ the organization's approved metadata model.
 
 Metadata updates affect discovery and provenance. Review overwrite semantics
 before replacing a full property/detail mapping.
+`set_properties()` changes the supplied keys; passing `None` for a key removes
+that property. `set_details()` replaces the entire details value on an open
+object. Use a closed record for immutable scientific provenance.
 
 ## Records
 
@@ -365,6 +375,8 @@ Requirements and caveats:
 - Source object must be closed.
 - `VIEW` or higher is needed on the source.
 - `UPLOAD` or higher is needed on the destination.
+- Source and destination must be in the same region. Cloning preserves the
+  data object ID; do not treat it as a new globally unique object.
 - Restricted projects/TREs can forbid cloning.
 - Databases cannot be cloned.
 - Hidden linked objects may be cloned with their visible parent.

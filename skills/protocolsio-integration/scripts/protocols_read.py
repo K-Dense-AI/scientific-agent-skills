@@ -140,7 +140,9 @@ def build_parser() -> argparse.ArgumentParser:
         "export-pdf",
         help="Download the documented read-only PDF representation.",
     )
-    pdf_parser.add_argument("--id", required=True, help="Protocol ID, URI, or DOI.")
+    pdf_parser.add_argument(
+        "--id", required=True, help="Protocol ID or URI; resolve a DOI with get first."
+    )
     pdf_parser.add_argument(
         "--output",
         required=True,
@@ -282,6 +284,10 @@ def _plan(args: argparse.Namespace) -> dict[str, Any]:
         url = build_url(origin, f"/api/v4/protocols/{encoded}{suffix}", params)
     elif args.command == "export-pdf":
         identifier = encode_protocol_identifier(args.id)
+        if args.id.startswith(("10.17504/", "protocols.io.")):
+            raise SafetyError(
+                "PDF identifiers are documented as IDs or URIs; resolve the DOI with get first"
+            )
         params = {}
         if args.compact_view:
             params["compact_view"] = 1
@@ -416,6 +422,9 @@ def _execute_pdf(
         "authentication": "anonymous" if args.anonymous else "bearer",
         "attempt_count": result.attempts,
         "bytes_written": len(result.body),
+        "source_url": str(plan["url"]),
+        "partial_export": args.only is not None,
+        "pdf_filter": args.only,
         "output": str(output.relative_to(os.getcwd())),
         "redirects_followed": False,
         "remote_file_content_executed": False,

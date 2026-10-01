@@ -1,6 +1,11 @@
 # Creating Custom Environments for Stable Baselines3
 
-This guide provides comprehensive information for creating custom Gymnasium environments compatible with Stable Baselines3.
+Targets Gymnasium 1.3.0 and SB3 2.9.0. Partial classes/methods below are
+illustrative design fragments; the executable complete template is
+[custom_env_template.py](../scripts/custom_env_template.py). The template observes
+both agent and random goal, and the registered environment has a 100-step limit.
+A hidden random goal makes a different, partially observable problem; an API
+checker cannot detect that scientific error.
 
 ## Environment Structure
 
@@ -23,13 +28,13 @@ class CustomEnv(gym.Env):
     def reset(self, seed=None, options=None):
         """Reset environment to initial state"""
         super().reset(seed=seed)
-        observation = self.observation_space.sample()
+        observation = self.np_random.random(4).astype(np.float32)
         info = {}
         return observation, info
 
     def step(self, action):
         """Execute one timestep"""
-        observation = self.observation_space.sample()
+        observation = self.np_random.random(4).astype(np.float32)
         reward = 0.0
         terminated = False  # Episode ended naturally
         truncated = False   # Episode ended due to time limit
@@ -67,7 +72,7 @@ def __init__(self, grid_size=10, max_steps=100):
     # Define spaces
     self.action_space = spaces.Discrete(4)
     self.observation_space = spaces.Box(
-        low=0, high=grid_size-1, shape=(2,), dtype=np.float32
+        low=0, high=grid_size-1, shape=(4,), dtype=np.float32
     )
 ```
 
@@ -92,7 +97,7 @@ def reset(self, seed=None, options=None):
     self.current_step = 0
 
     observation = self._get_observation()
-    info = {"episode": "started"}
+    info = {"reset_complete": True}  # "episode" is reserved for Monitor summaries
 
     return observation, info
 ```
@@ -125,11 +130,11 @@ def step(self, action):
     if goal_reached:
         reward = 100.0
     else:
-        reward = -distance * 0.1
+        reward = float(-distance * 0.1)
 
     # Check termination conditions
-    terminated = goal_reached
-    truncated = self.current_step >= self.max_steps
+    terminated = bool(goal_reached)
+    truncated = bool(self.current_step >= self.max_steps)
 
     observation = self._get_observation()
     info = {"distance": distance, "steps": self.current_step}
@@ -168,11 +173,11 @@ self.observation_space = spaces.Box(
 )
 ```
 
-**Important for Images:**
-- Must be `dtype=np.uint8` in range [0, 255]
+**Important for default CNN image preprocessing:**
+- Standard images are `dtype=np.uint8` in range [0, 255]
 - Use **channel-first** format: (channels, height, width)
 - SB3 automatically normalizes by dividing by 255
-- Set `normalize_images=False` in policy_kwargs if pre-normalized
+- For pre-normalized float images, use CHW and `policy_kwargs={"normalize_images": False}`
 
 ### MultiDiscrete
 
@@ -183,7 +188,7 @@ For multiple discrete variables.
 self.action_space = spaces.MultiDiscrete([3, 4])
 ```
 
-**Important (SB3 2.8+ env checker):** If your `MultiDiscrete` space uses multi-dimensional arrays (not a flat vector), the env checker will warn you. Use a wrapper to flatten the space or reshape observations/actions to match SB3's expected 1D layout. See the [SB3 custom env guide](https://stable-baselines3.readthedocs.io/en/master/guide/custom_env.html) for the recommended wrapper pattern.
+**Important:** If your `MultiDiscrete` space uses multi-dimensional arrays (not a flat vector), the env checker will warn you. Use a wrapper to flatten the space or reshape observations/actions to match SB3's expected 1D layout. See the [SB3 custom env guide](https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/custom_env.html) for the recommended wrapper pattern.
 
 ### MultiBinary
 
@@ -214,7 +219,9 @@ model = PPO("MultiInputPolicy", env, verbose=1)
 
 ### Tuple
 
-For tuple observations (less common).
+Tuple observations are not supported by SB3 policies. Convert to a single-level
+Dict or flat Box before training; a VecEnv accepting Tuple is not proof that an
+algorithm accepts it. The declaration below describes the unsupported input.
 
 ```python
 self.observation_space = spaces.Tuple((
@@ -229,7 +236,7 @@ self.observation_space = spaces.Tuple((
 
 - **Observations:** Use `np.float32` for continuous values
 - **Images:** Use `np.uint8` in range [0, 255]
-- **Rewards:** Return Python float or `np.float32`
+- **Rewards:** Return a Python float (cast NumPy scalars explicitly)
 - **Terminated/Truncated:** Return Python bool
 
 ### Random Number Generation
@@ -248,6 +255,8 @@ def reset(self, seed=None, options=None):
 
 - **Terminated:** Natural ending (goal reached, agent died, etc.)
 - **Truncated:** Artificial ending (time limit, external interrupt)
+- Gymnasium permits both flags True. SB3 records `TimeLimit.truncated = truncated and not terminated`; bootstrap only through pure truncation using the final observation.
+- Include relevant task state in observations; an intrinsic finite horizon also requires remaining time for a Markov model. Use TimeLimit for an external rollout cutoff.
 
 ```python
 def step(self, action):
@@ -256,8 +265,8 @@ def step(self, action):
     goal_reached = self._check_goal()
     time_limit_exceeded = self.current_step >= self.max_steps
 
-    terminated = goal_reached  # Natural ending
-    truncated = time_limit_exceeded  # Time limit
+    terminated = bool(goal_reached)  # Natural ending
+    truncated = bool(time_limit_exceeded)  # Time limit
 
     return observation, reward, terminated, truncated, info
 ```
@@ -325,9 +334,14 @@ self.observation_space = spaces.Dict({
 
 def compute_reward(self, achieved_goal, desired_goal, info):
     """Required for HER environments"""
-    distance = np.linalg.norm(achieved_goal - desired_goal)
+    distance = np.linalg.norm(np.asarray(achieved_goal) - np.asarray(desired_goal), axis=-1)
     return -distance
 ```
+
+`compute_reward` must accept both one goal vector and a batch; `axis=-1`
+preserves the batch dimension. Its single-transition reward must match `step()`.
+Do not invent a `compute_reward` method on a non-goal environment: SB3 uses that
+method to detect goal environments.
 
 ## Environment Validation
 
@@ -429,7 +443,8 @@ class GridWorldEnv(gym.Env):
         super().__init__()
         self.size = size
         self.action_space = spaces.Discrete(4)  # up, down, left, right
-        self.observation_space = spaces.Box(0, size-1, shape=(2,), dtype=np.float32)
+        self.observation_space = spaces.Box(0, size-1, shape=(4,), dtype=np.float32)
+        # _get_obs() concatenates agent and goal coordinates.
 ```
 
 ### Continuous Control
@@ -479,10 +494,10 @@ def __init__(self):
     self._obs_buffer = np.zeros(self.observation_space.shape, dtype=np.float32)
 
 def _get_observation(self):
-    # Reuse buffer instead of allocating new array
+    # Reuse internal storage, but return an independent snapshot
     self._obs_buffer[0] = self.agent_x
     self._obs_buffer[1] = self.agent_y
-    return self._obs_buffer
+    return self._obs_buffer.copy()  # Prevent later steps mutating an earlier observation
 ```
 
 ### Vectorization
@@ -523,6 +538,6 @@ def step(self, action):
 
 ## Additional Resources
 
-- Template: See `scripts/custom_env_template.py`
+- Template: [custom_env_template.py](../scripts/custom_env_template.py)
 - Gymnasium Documentation: https://gymnasium.farama.org/
-- SB3 Custom Env Guide: https://stable-baselines3.readthedocs.io/en/master/guide/custom_env.html
+- SB3 Custom Env Guide: https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/custom_env.html

@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import zipfile
 from typing import Any
 
 from _common import (
     DEFAULT_SEED,
+    MAX_INPUT_BYTES,
+    MAX_ROWS,
     MAX_TIME_POINTS,
     CliError,
     bounded_int,
@@ -73,6 +76,14 @@ def load_prediction_archive(value: str) -> tuple[dict[str, Any], str]:
         raise CliError("NumPy is required") from exc
     path = checked_input_file(value, suffixes={".npz"})
     try:
+        with zipfile.ZipFile(path) as archive:
+            members = archive.infolist()
+            if len(members) > len(REQUIRED_ARRAYS) + 1 or sum(
+                member.file_size for member in members
+            ) > MAX_INPUT_BYTES:
+                raise CliError("prediction archive exceeds expanded array limits")
+            if len({member.filename for member in members}) != len(members):
+                raise CliError("prediction archive contains duplicate members")
         with np.load(path, allow_pickle=False) as archive:
             names = set(archive.files)
             missing = REQUIRED_ARRAYS - names
@@ -87,7 +98,7 @@ def load_prediction_archive(value: str) -> tuple[dict[str, Any], str]:
                     + ", ".join(sorted(unexpected))
                 )
             arrays = {name: archive[name] for name in archive.files}
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
         raise CliError(f"cannot load safe NPZ archive {path.name}: {exc}") from exc
     return arrays, path.name
 
@@ -137,6 +148,15 @@ def validate_time_grid(
         raise CliError(
             "training censoring survival must remain positive across the time grid"
         )
+    try:
+        censoring.predict_ipcw(y_test)
+    except ValueError as exc:
+        raise CliError(f"test event times lack positive censoring support: {exc}") from exc
+    test_event = y_test[y_test.dtype.names[0]]
+    if not (test_event & (test_time <= values[0])).any():
+        raise CliError("dynamic AUC needs an observed case by the first evaluation time")
+    if not (test_time > values[-1]).any():
+        raise CliError("dynamic AUC needs controls after the final evaluation time")
     return values
 
 
@@ -149,6 +169,10 @@ def validate_predictions(
         import numpy as np
     except ImportError as exc:
         raise CliError("NumPy is required") from exc
+    for name in ("train_event", "train_time", "test_event", "test_time"):
+        value = np.asarray(arrays[name])
+        if value.ndim != 1 or not 2 <= value.size <= MAX_ROWS:
+            raise CliError(f"{name} must have 2 through {MAX_ROWS} one-dimensional values")
     y_train = structured_survival(arrays["train_event"], arrays["train_time"])
     y_test = structured_survival(arrays["test_event"], arrays["test_time"])
     times = validate_time_grid(arrays["times"], y_train, y_test)
@@ -236,6 +260,8 @@ def evaluate(arrays: dict[str, Any]) -> dict[str, Any]:
             "Skipped: Brier metrics require survival probabilities, not risk scores."
         )
 
+    if not np.isfinite(auc).all() or not np.isfinite(mean_auc):
+        raise CliError("dynamic AUC is undefined for these cases, controls, or weights")
     return {
         "assumptions": {
             "censoring_distribution_fit_on_training_only": True,

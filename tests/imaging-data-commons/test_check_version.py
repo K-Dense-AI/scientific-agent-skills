@@ -11,21 +11,20 @@ Importing the module is side-effect free — `idc_index`, `json`, and `urllib` a
 imported inside the functions that need them — so this suite runs in the bare project
 environment, not only under `tests/run_all.py --isolated`.
 
-Kept in sync with the upstream copy at
+Adapted from the upstream copy at
 https://github.com/ImagingDataCommons/imaging-data-commons-skill/blob/main/tests/test_check_version.py
-which is written to be vendored: only the two paths below differ. Re-copy it when the
-skill is synced.
+with repository-local paths and regression coverage for safely quoted install commands.
 """
 
 import os
 import re
+import shlex
 import sys
+from pathlib import Path
 
 import pytest
 
-SKILL_ROOT = os.path.join(
-    os.path.dirname(__file__), "..", "..", "skills", "imaging-data-commons"
-)
+SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "imaging-data-commons"
 sys.path.insert(0, os.path.join(SKILL_ROOT, "scripts"))
 import check_version  # noqa: E402
 
@@ -61,7 +60,8 @@ class TestInstallCommands:
     def test_pip_form_targets_the_running_interpreter(self, monkeypatch):
         monkeypatch.setattr(check_version.shutil, "which", lambda _: None)
         commands = check_version.install_commands("idc-index==0.12.5")
-        assert commands == [f"{sys.executable} -m pip install 'idc-index==0.12.5'"]
+        assert shlex.split(commands[0]) == [sys.executable, "-m", "pip", "install", "idc-index==0.12.5"]
+        assert len(commands) == 1
 
     def test_uv_form_is_preferred_when_uv_is_available(self, monkeypatch):
         monkeypatch.setattr(check_version.shutil, "which", lambda name: f"/usr/bin/{name}")
@@ -69,15 +69,24 @@ class TestInstallCommands:
         assert len(commands) == 2
         # uv pip install without --python targets the *active* environment, which is not
         # necessarily the one that failed to import idc_index.
-        assert commands[0] == (
-            f"uv pip install --python {sys.executable} 'idc-index==0.12.5'"
-        )
+        assert shlex.split(commands[0]) == [
+            "uv", "pip", "install", "--python", sys.executable, "idc-index==0.12.5"
+        ]
         assert commands[1].startswith(f"{sys.executable} -m pip install")
 
     def test_upgrade_flag_applies_to_every_form(self, monkeypatch):
         monkeypatch.setattr(check_version.shutil, "which", lambda name: f"/usr/bin/{name}")
         commands = check_version.install_commands("idc-index", upgrade=True)
         assert all("--upgrade" in command for command in commands)
+
+    def test_shell_metacharacters_and_spaces_remain_literal_arguments(self, monkeypatch):
+        executable = "/tmp/Python Env/$(touch unexpected)/python"
+        monkeypatch.setattr(check_version.sys, "executable", executable)
+        monkeypatch.setattr(check_version.shutil, "which", lambda _: "/usr/bin/uv")
+        spec = "idc-index>=0.12.5; python_version >= '3.10'"
+        uv_command, pip_command = map(shlex.split, check_version.install_commands(spec))
+        assert uv_command == ["uv", "pip", "install", "--python", executable, spec]
+        assert pip_command == [executable, "-m", "pip", "install", spec]
 
     def test_no_command_bypasses_an_externally_managed_interpreter(self, monkeypatch):
         monkeypatch.setattr(check_version.shutil, "which", lambda name: f"/usr/bin/{name}")
@@ -92,6 +101,7 @@ class TestInstallCommands:
         assert check_version.MIN_VERSION in out
         assert sys.executable in out
         assert "virtual environment" in out
+        assert "--user" not in out
 
 
 class TestNeverInstalls:

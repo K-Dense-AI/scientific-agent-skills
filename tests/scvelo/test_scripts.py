@@ -1,404 +1,239 @@
-"""Tests for the scVelo RNA velocity workflow.
-
-`run_velocity_analysis` is one long pipeline, so the tests split it in two by
-what can go wrong:
-
-* The preprocessing and estimation steps run for real, on a synthetic AnnData of
-  60 cells x 40 genes built here rather than downloaded. That is what caught the
-  bug this suite now guards: scVelo 0.3 removed `n_top_genes` from
-  `filter_and_normalize()`, so the shipped call raised TypeError on the first
-  step of every run. Selecting 15 of 40 genes is checked by construction.
-* The step ordering is checked with recording stubs in place of `scv.tl.*`,
-  because which steps run is the script's own decision: the dynamical model must
-  recover dynamics *before* estimating velocity, latent time and the driver-gene
-  heatmap belong to that mode alone, and gene ranking is conditional on the
-  grouping column existing. The stubs also fix the confidence values, so the
-  printed summary statistics are checked against hand-computed numbers.
-
-`mode="deterministic"` drives the real run: with scvelo 0.3.4, `mode="stochastic"`
-fails inside the generalized least-squares solver on NumPy >= 2 and the dynamical
-model fails inside `pandas.unique` on pandas >= 3, both upstream. The plotting
-calls are stubbed for the same reason -- `scv.pl.scatter` on a numeric `.obs`
-column raises under pandas 3 -- and stubbing them lets the tests assert which
-figures the workflow asks for, which is the part the skill owns.
-
-`load_from_loom` is not covered: it needs a velocyto `.loom` file plus loompy,
-and its second branch needs leidenalg, none of which this environment carries.
-Neither the `--help` nor the demo contract applies -- the script parses no
-arguments, and its `__main__` block downloads the pancreas dataset.
-"""
-
-from __future__ import annotations
-
-import contextlib
-import io
-import sys
-import tempfile
-import unittest
+"""Native kinetic fixtures, file round trips and preprocessing failure shields."""
 from pathlib import Path
-from unittest import mock
+import os
+import subprocess
+import sys
 
 import pytest
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "scvelo"
-SCRIPTS = SKILL_ROOT / "scripts"
-sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
-matplotlib = pytest.importorskip("matplotlib", reason="scvelo workflow plots")
-matplotlib.use("Agg")  # never open a window, even if a real plot slips through
+np = pytest.importorskip("numpy")
+scv = pytest.importorskip("scvelo")
+sc = pytest.importorskip("scanpy")
+ad = pytest.importorskip("anndata")
+pytest.importorskip("loompy")
+import loompy
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from scipy import sparse
+import rna_velocity_workflow as workflow
+import skill_contract
 
-np = pytest.importorskip("numpy", reason="scvelo workflow needs numpy")
-pytest.importorskip("scvelo", reason="scvelo skill needs scvelo")
-pytest.importorskip("scanpy", reason="scvelo workflow needs scanpy")
-
-import anndata as ad  # noqa: E402
-import scvelo as scv  # noqa: E402
-
-import rna_velocity_workflow as workflow  # noqa: E402
-
-N_OBS = 60
-N_VARS = 40
-#: Cells with a velocity confidence above this are counted in the summary.
-HIGH_CONFIDENCE = 0.7
+CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 
 
-def synthetic(n_obs: int = N_OBS, n_vars: int = N_VARS, seed: int = 0):
-    """A minimal AnnData shaped like velocyto output: counts in both layers.
-
-    Counts are drawn high enough (Poisson 8 spliced, 4 unspliced) that no gene
-    is dropped by the workflow's `min_shared_counts=20` filter, so the gene
-    count after preprocessing is decided by `n_top_genes` alone.
-    """
+def kinetic_counts(seed=1):
+    """Simulated induction/repression kinetics followed by Poisson sampling."""
+    data = scv.datasets.simulation(n_obs=100, n_vars=16, noise_level=0.2, random_seed=seed)
     rng = np.random.default_rng(seed)
-    spliced = rng.poisson(8, size=(n_obs, n_vars)).astype("float32")
-    unspliced = rng.poisson(4, size=(n_obs, n_vars)).astype("float32")
-
-    adata = ad.AnnData(spliced.copy())
-    adata.layers["spliced"] = spliced
-    adata.layers["unspliced"] = unspliced
-    adata.obs_names = [f"cell{index}" for index in range(n_obs)]
-    adata.var_names = [f"Gene{index}" for index in range(n_vars)]
-    half = n_obs // 2
-    adata.obs["clusters"] = (["alpha"] * half + ["beta"] * (n_obs - half))
-    adata.obs["clusters"] = adata.obs["clusters"].astype("category")
-    adata.obsm["X_umap"] = rng.normal(size=(n_obs, 2))
-    return adata
+    for key in ("spliced", "unspliced"):
+        data.layers[key] = sparse.csr_matrix(rng.poisson(10 * data.layers[key]).astype(np.float32))
+    data.X = data.layers["spliced"].copy()
+    data = data[np.asarray(data.X.sum(axis=1)).ravel() > 0].copy()
+    data.obs_names = [f"cell{i}" for i in range(data.n_obs)]
+    data.var_names = [f"gene{i}" for i in range(data.n_vars)]
+    data.obs["clusters"] = np.where(data.obs["true_t"] < data.obs["true_t"].median(), "early", "late")
+    data.obs["clusters"] = data.obs["clusters"].astype("category")
+    return data
 
 
-class FigureRecorder:
-    """Replacement for the `scv.pl` functions: records instead of rendering."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, dict]] = []
-
-    def stub(self, name: str):
-        def record(adata=None, *args, **kwargs):
-            self.calls.append((name, kwargs))
-
-        return record
-
-    def install(self, test: unittest.TestCase) -> None:
-        for name in (
-            "velocity_embedding_stream",
-            "velocity_embedding",
-            "scatter",
-            "heatmap",
-        ):
-            patcher = mock.patch.object(scv.pl, name, self.stub(name))
-            patcher.start()
-            test.addCleanup(patcher.stop)
-
-    @property
-    def names(self) -> list[str]:
-        return [name for name, _ in self.calls]
-
-    @property
-    def saved(self) -> list[str]:
-        return [kwargs["save"] for _, kwargs in self.calls if "save" in kwargs]
-
-    def kwargs_for(self, name: str) -> dict:
-        for recorded, kwargs in self.calls:
-            if recorded == name:
-                return kwargs
-        raise AssertionError(f"{name} was never called")
+@pytest.fixture(scope="module", params=["deterministic", "dynamical"])
+def native_run(request, tmp_path_factory):
+    data = kinetic_counts()
+    original = data.copy()
+    # Prove old processed X/PCA/neighbors are not silently used for the new gene set.
+    data.X = np.full(data.shape, -3, dtype=np.float32)
+    data.uns["log1p"] = {"base": None}
+    data.obsm["X_pca"] = np.full((data.n_obs, 2), np.nan)
+    directory = tmp_path_factory.mktemp(request.param)
+    result = workflow.run_velocity_analysis(
+        data, groupby="clusters", n_top_genes=12, n_neighbors=12,
+        n_pcs=5, mode=request.param, recover_max_iter=5, output_dir=directory,
+    )
+    return request.param, result, original, directory
 
 
-class LayerRequirementTests(unittest.TestCase):
-    """Velocity is impossible without both layers, so the guard fires early."""
-
-    def setUp(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self._temporary.cleanup)
-        self.output = str(Path(self._temporary.name) / "out")
-
-    def run_on(self, adata):
-        with contextlib.redirect_stdout(io.StringIO()):
-            workflow.run_velocity_analysis(adata, output_dir=self.output)
-
-    def test_a_missing_spliced_layer_is_refused_before_any_work(self) -> None:
-        adata = synthetic()
-        del adata.layers["spliced"]
-        with self.assertRaisesRegex(AssertionError, "spliced"):
-            self.run_on(adata)
-
-    def test_a_missing_unspliced_layer_is_refused(self) -> None:
-        adata = synthetic()
-        del adata.layers["unspliced"]
-        with self.assertRaisesRegex(AssertionError, "unspliced"):
-            self.run_on(adata)
-
-    def test_the_message_names_the_tool_that_produces_the_layers(self) -> None:
-        adata = synthetic()
-        del adata.layers["spliced"]
-        with self.assertRaisesRegex(AssertionError, "velocyto"):
-            self.run_on(adata)
+def test_native_results_and_provenance(native_run):
+    mode, result, original, directory = native_run
+    assert result.n_obs == original.n_obs
+    assert 3 <= result.n_vars <= 12
+    assert np.isfinite(result.obsm["X_pca"]).all()
+    assert result.uns["neighbors"]["params"]["n_neighbors"] == 12
+    for key in ("spliced", "unspliced"):
+        expected = original[:, result.var_names].layers[key].toarray()
+        np.testing.assert_array_equal(result.layers[f"{key}_counts"].toarray(), expected)
+        assert np.isfinite(result.layers[key].data).all()
+    mask = result.var["velocity_genes"].to_numpy()
+    assert mask.sum() >= 2
+    assert np.isfinite(result.layers["velocity"][:, mask]).all()
+    assert result.uns["velocity_graph"].shape == (result.n_obs, result.n_obs)
+    assert result.uns["velocity_graph"].nnz > 0
+    assert result.uns["velocity_workflow"]["mode"] == mode
+    assert "rank_velocity_genes" in result.uns
 
 
-class VelocityRunTests(unittest.TestCase):
-    """One real run of the pipeline, inspected from several angles."""
-
-    N_TOP_GENES = 15
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._temporary = tempfile.TemporaryDirectory()
-        cls.addClassCleanup(cls._temporary.cleanup)
-        # A nested path the workflow has to create itself.
-        cls.output = Path(cls._temporary.name) / "results" / "velocity"
-
-        cls.figures = FigureRecorder()
-        cls._patchers = [
-            mock.patch.object(scv.pl, name, cls.figures.stub(name))
-            for name in (
-                "velocity_embedding_stream",
-                "velocity_embedding",
-                "scatter",
-                "heatmap",
-            )
-        ]
-        for patcher in cls._patchers:
-            patcher.start()
-        cls.addClassCleanup(
-            lambda: [patcher.stop() for patcher in cls._patchers]
-        )
-
-        stream = io.StringIO()
-        with contextlib.redirect_stdout(stream):
-            cls.input = synthetic()
-            cls.adata = workflow.run_velocity_analysis(
-                cls.input,
-                groupby="clusters",
-                n_top_genes=cls.N_TOP_GENES,
-                n_neighbors=15,
-                mode="deterministic",
-                output_dir=str(cls.output),
-            )
-        cls.printed = stream.getvalue()
-
-    def test_the_input_object_is_annotated_in_place(self) -> None:
-        self.assertIs(self.adata, self.input)
-
-    def test_the_gene_set_is_narrowed_to_the_requested_top_genes(self) -> None:
-        # 40 genes in, 15 requested: the count is decided by the HVG step, which
-        # is exactly what the scVelo 0.3 preprocessing change moved to Scanpy.
-        self.assertEqual(self.adata.n_vars, self.N_TOP_GENES)
-        self.assertEqual(self.adata.n_obs, N_OBS)
-
-    def test_the_moments_and_velocity_layers_are_added(self) -> None:
-        for layer in ("Ms", "Mu", "velocity"):
-            with self.subTest(layer=layer):
-                self.assertIn(layer, self.adata.layers)
-
-    def test_at_least_one_gene_has_a_usable_velocity(self) -> None:
-        # Genes scVelo rejects are left as NaN; an all-NaN layer would mean the
-        # run produced nothing to plot or rank.
-        velocity = np.asarray(self.adata.layers["velocity"])
-        self.assertTrue(np.isfinite(velocity).any())
-
-    def test_the_downstream_per_cell_annotations_are_present(self) -> None:
-        for column in ("velocity_confidence", "velocity_pseudotime", "velocity_length"):
-            with self.subTest(column=column):
-                self.assertIn(column, self.adata.obs)
-
-    def test_the_confidences_stay_inside_their_definition(self) -> None:
-        # velocity_confidence is a cosine correlation, so it cannot leave [-1, 1].
-        confidence = self.adata.obs["velocity_confidence"].to_numpy()
-        self.assertGreaterEqual(np.nanmin(confidence), -1.0)
-        self.assertLessEqual(np.nanmax(confidence), 1.0)
-
-    def test_driver_genes_are_ranked_because_the_grouping_column_exists(self) -> None:
-        self.assertIn("rank_velocity_genes", self.adata.uns)
-
-    def test_a_non_dynamical_run_skips_the_dynamical_only_results(self) -> None:
-        self.assertNotIn("latent_time", self.adata.obs)
-        self.assertNotIn("fit_likelihood", self.adata.var)
-
-    def test_the_annotated_object_round_trips_through_the_saved_h5ad(self) -> None:
-        saved = self.output / "adata_velocity.h5ad"
-        self.assertTrue(saved.is_file())
-        reloaded = ad.read_h5ad(saved)
-        self.assertEqual(reloaded.shape, self.adata.shape)
-        self.assertIn("velocity", reloaded.layers)
-        self.assertIn("velocity_pseudotime", reloaded.obs)
-
-    def test_the_four_always_on_figures_are_requested(self) -> None:
-        # Stream plot, arrow plot, pseudotime, and the speed/coherence pair.
-        self.assertEqual(
-            self.figures.names,
-            [
-                "velocity_embedding_stream",
-                "velocity_embedding",
-                "scatter",
-                "scatter",
-            ],
-        )
-
-    def test_the_embedding_figures_use_the_umap_basis_and_the_grouping(self) -> None:
-        stream = self.figures.kwargs_for("velocity_embedding_stream")
-        self.assertEqual(stream["basis"], "umap")
-        self.assertEqual(stream["color"], "clusters")
-
-    def test_every_figure_is_written_inside_the_output_directory(self) -> None:
-        self.assertEqual(len(self.figures.saved), 4)
-        for path in self.figures.saved:
-            with self.subTest(path=path):
-                self.assertTrue(path.startswith(str(self.output)))
-
-    def test_the_summary_reports_the_cell_and_gene_counts_it_finished_with(self) -> None:
-        self.assertIn(f"Cells: {N_OBS}", self.printed)
-        self.assertIn(f"Velocity genes: {self.N_TOP_GENES}", self.printed)
-        self.assertIn("Velocity model: deterministic", self.printed)
+def test_relative_times_fits_and_transition_matrix(native_run):
+    mode, result, _, _ = native_run
+    for key in ["velocity_pseudotime"] + (["latent_time"] if mode == "dynamical" else []):
+        values = result.obs[key].to_numpy()
+        assert np.isfinite(values).all()
+        assert values.min() >= -1e-6
+        assert values.max() <= 1 + 1e-6
+        # Automatic root inference can yield a degenerate deterministic ordering;
+        # the workflow must record it rather than present it as informative time.
+        assert result.uns["velocity_workflow"]["diagnostics"][f"{key}_constant"] == bool(np.ptp(values) == 0)
+        if key == "latent_time":
+            assert np.ptp(values) > 0
+    coherence = result.obs["velocity_confidence"].to_numpy()
+    assert np.isfinite(coherence).all()
+    assert coherence.min() >= 0
+    assert coherence.max() <= 1 + 1e-6
+    transition = scv.utils.get_transition_matrix(result)
+    assert (transition.data >= 0).all()
+    np.testing.assert_allclose(np.asarray(transition.sum(axis=1)).ravel(), 1, atol=1e-5)
+    if mode == "dynamical":
+        assert np.isfinite(result.var["fit_likelihood"]).any()
+        assert result.layers["fit_t"].shape == result.shape
+    else:
+        assert "latent_time" not in result.obs
 
 
-class StepOrderTests(unittest.TestCase):
-    """Which scVelo steps run, in what order, is the script's own logic."""
-
-    def setUp(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self._temporary.cleanup)
-        self.output = Path(self._temporary.name) / "out"
-
-        self.figures = FigureRecorder()
-        self.figures.install(self)
-        self.steps: list[str] = []
-
-        def record(name, effect=None):
-            def stub(adata, *args, **kwargs):
-                self.steps.append(name)
-                if effect is not None:
-                    effect(adata)
-
-            return stub
-
-        def add_velocity(adata):
-            adata.layers["velocity"] = np.zeros(adata.shape, dtype="float32")
-
-        def add_confidence(adata):
-            # Half the cells at 0.9 and half at 0.5: mean 0.700, and exactly
-            # half above the 0.7 high-confidence cut used by the summary.
-            half = adata.n_obs // 2
-            adata.obs["velocity_confidence"] = [0.9] * half + [0.5] * (
-                adata.n_obs - half
-            )
-            adata.obs["velocity_length"] = np.ones(adata.n_obs)
-
-        def add_fits(adata):
-            adata.var["fit_likelihood"] = np.linspace(0.05, 0.95, adata.n_vars)
-
-        def add_pseudotime(adata):
-            adata.obs["velocity_pseudotime"] = np.linspace(0, 1, adata.n_obs)
-
-        def add_latent_time(adata):
-            adata.obs["latent_time"] = np.linspace(0, 1, adata.n_obs)
-
-        for name, effect in (
-            ("recover_dynamics", add_fits),
-            ("velocity", add_velocity),
-            ("velocity_graph", None),
-            ("velocity_confidence", add_confidence),
-            ("velocity_pseudotime", add_pseudotime),
-            ("latent_time", add_latent_time),
-            ("rank_velocity_genes", None),
-        ):
-            patcher = mock.patch.object(scv.tl, name, record(name, effect))
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def analyse(self, **kwargs) -> str:
-        stream = io.StringIO()
-        with contextlib.redirect_stdout(stream):
-            workflow.run_velocity_analysis(
-                synthetic(),
-                n_top_genes=15,
-                n_neighbors=15,
-                output_dir=str(self.output),
-                **kwargs,
-            )
-        return stream.getvalue()
-
-    def test_the_dynamical_model_recovers_dynamics_before_estimating(self) -> None:
-        # Reversed, `velocity(mode="dynamical")` has no fitted parameters to use.
-        self.analyse(groupby="clusters", mode="dynamical")
-        self.assertLess(
-            self.steps.index("recover_dynamics"), self.steps.index("velocity")
-        )
-
-    def test_the_dynamical_model_adds_latent_time_and_the_driver_heatmap(self) -> None:
-        self.analyse(groupby="clusters", mode="dynamical")
-        self.assertIn("latent_time", self.steps)
-        self.assertIn("heatmap", self.figures.names)
-        self.assertTrue(
-            any("latent_time" in path for path in self.figures.saved),
-            "the latent-time figure was not requested",
-        )
-
-    def test_a_stochastic_run_skips_the_dynamical_only_steps(self) -> None:
-        self.analyse(groupby="clusters", mode="stochastic")
-        # Fitting dynamics is the expensive part; the fast mode must not pay it.
-        self.assertNotIn("recover_dynamics", self.steps)
-        self.assertNotIn("latent_time", self.steps)
-        self.assertNotIn("heatmap", self.figures.names)
-
-    def test_gene_ranking_needs_the_grouping_column(self) -> None:
-        self.analyse(groupby="clusters", mode="stochastic")
-        self.assertIn("rank_velocity_genes", self.steps)
-
-    def test_an_absent_grouping_column_skips_ranking_instead_of_failing(self) -> None:
-        self.analyse(groupby="cell_type_not_present", mode="stochastic")
-        self.assertNotIn("rank_velocity_genes", self.steps)
-
-    def test_the_summary_statistics_are_computed_over_the_confidences(self) -> None:
-        printed = self.analyse(groupby="clusters", mode="stochastic")
-        # 30 cells at 0.9 and 30 at 0.5: mean 0.700, half above 0.7.
-        self.assertIn("Mean velocity confidence: 0.700", printed)
-        self.assertIn(
-            f"High-confidence cells (>{HIGH_CONFIDENCE}): {N_OBS // 2} (50.0%)",
-            printed,
-        )
-
-    def test_the_output_directory_is_created_before_anything_is_written(self) -> None:
-        self.assertFalse(self.output.exists())
-        self.analyse(groupby="clusters", mode="stochastic")
-        self.assertTrue((self.output / "adata_velocity.h5ad").is_file())
+def test_native_pngs_and_h5ad_round_trip(native_run):
+    mode, result, _, directory = native_run
+    names = {"velocity_stream.png", "velocity_arrows.png", "pseudotime.png", "velocity_quality.png"}
+    if mode == "dynamical":
+        names |= {"latent_time.png", "dynamical_gene_heatmap.png"}
+    assert {p.name for p in directory.glob("*.png")} == names
+    for name in names:
+        pixels = plt.imread(directory / name)
+        assert pixels.shape[0] > 100 and pixels.shape[1] > 100
+        assert np.ptp(pixels) > 0.5
+    loaded = ad.read_h5ad(directory / "adata_velocity.h5ad")
+    np.testing.assert_allclose(loaded.layers["velocity"], result.layers["velocity"])
+    assert loaded.uns["velocity_workflow"]["packages"]["scvelo"] == scv.__version__
+    assert not plt.get_fignums()
 
 
-class ModeValidationTests(unittest.TestCase):
-    def test_an_unknown_mode_is_rejected_by_scvelo(self) -> None:
-        # The script forwards `mode` verbatim, so a typo must surface as an
-        # error naming the allowed estimators rather than as silent nonsense.
-        adata = synthetic()
-        with tempfile.TemporaryDirectory() as directory:
-            with contextlib.redirect_stdout(io.StringIO()):
-                with self.assertRaisesRegex(ValueError, "deterministic"):
-                    workflow.run_velocity_analysis(
-                        adata,
-                        groupby="clusters",
-                        n_top_genes=15,
-                        n_neighbors=15,
-                        mode="stochastik",
-                        output_dir=directory,
-                    )
+@pytest.mark.parametrize("layer", ["spliced", "unspliced"])
+def test_missing_layer_rejected_without_output(layer, tmp_path):
+    data = kinetic_counts()
+    del data.layers[layer]
+    with pytest.raises(ValueError, match=layer):
+        workflow.run_velocity_analysis(data, output_dir=tmp_path / "absent")
+    assert not (tmp_path / "absent").exists()
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -1])
+def test_invalid_counts_rejected(bad):
+    data = kinetic_counts()
+    data.layers["unspliced"][0, 0] = bad
+    with pytest.raises(ValueError, match="finite nonnegative"):
+        workflow.validate_layers(data)
+
+
+def test_duplicate_identifiers_rejected():
+    data = kinetic_counts()
+    data.obs_names = ["duplicate"] * data.n_obs
+    with pytest.raises(ValueError, match="unique"):
+        workflow.validate_layers(data)
+
+
+def test_missing_group_is_explicit_before_mutation(tmp_path):
+    data = kinetic_counts()
+    original = data.X.copy()
+    with pytest.raises(ValueError, match="Grouping column"):
+        workflow.run_velocity_analysis(data, groupby="absent", output_dir=tmp_path)
+    np.testing.assert_array_equal(data.X.toarray(), original.toarray())
+
+
+def test_processed_layers_cannot_be_normalized_twice(native_run, tmp_path):
+    _, result, _, _ = native_run
+    with pytest.raises(ValueError, match="fresh raw layers"):
+        workflow.run_velocity_analysis(result, groupby="clusters", output_dir=tmp_path)
+
+
+def test_stochastic_numpy2_rejected_before_mutation(tmp_path):
+    if int(np.__version__.split(".")[0]) < 2:
+        pytest.skip("This guard applies to NumPy 2")
+    data = kinetic_counts()
+    with pytest.raises(RuntimeError, match="stochastic GLS"):
+        workflow.run_velocity_analysis(data, mode="stochastic", output_dir=tmp_path)
+    assert "spliced_counts" not in data.layers
+
+
+def test_all_zero_counts_rejected():
+    data = kinetic_counts()
+    data.layers["unspliced"] = sparse.csr_matrix(data.shape)
+    with pytest.raises(ValueError, match="no positive"):
+        workflow.validate_layers(data)
+
+
+def test_absent_groups_and_no_plot_run(tmp_path):
+    data = kinetic_counts()
+    workflow.run_velocity_analysis(data, groupby=None, mode="deterministic", n_top_genes=12,
+                                    n_neighbors=12, output_dir=tmp_path, make_plots=False)
+    assert "rank_velocity_genes" not in data.uns
+    assert not list(tmp_path.glob("*.png"))
+    assert "velocity_umap" not in data.obsm
+    assert (tmp_path / "adata_velocity.h5ad").exists()
+
+
+def make_loom(path, data):
+    # Native writer avoids AnnData 0.13 write_loom's unrelated layers[None] issue.
+    loompy.create(str(path), {"": data.X.T, "spliced": data.layers["spliced"].T,
+                             "unspliced": data.layers["unspliced"].T},
+                  {"Gene": data.var_names.to_numpy()}, {"CellID": data.obs_names.to_numpy()})
+
+
+def test_native_loom_read_and_exact_reordered_alignment(tmp_path):
+    original = kinetic_counts()
+    loom = tmp_path / "counts.loom"
+    make_loom(loom, original)
+    loaded = workflow.load_from_loom(loom)
+    np.testing.assert_array_equal(loaded.layers["spliced"].toarray(), original.layers["spliced"].toarray())
+    processed = original[::-1, ::-1].copy()
+    processed.X = np.ones(processed.shape)
+    processed_path = tmp_path / "processed.h5ad"
+    processed.write_h5ad(processed_path)
+    merged = workflow.load_from_loom(loom, processed_path)
+    assert merged.obs_names.tolist() == processed.obs_names.tolist()
+    np.testing.assert_array_equal(merged.layers["unspliced"].toarray(), processed.layers["unspliced"].toarray())
+    np.testing.assert_array_equal(merged.X, processed.X)
+
+
+def test_mismatched_loom_ids_do_not_silently_intersect(tmp_path):
+    data = kinetic_counts()
+    loom = tmp_path / "counts.loom"
+    make_loom(loom, data)
+    data.obs_names = ["wrong-" + value for value in data.obs_names]
+    processed = tmp_path / "wrong.h5ad"
+    data.write_h5ad(processed)
+    with pytest.raises(ValueError, match="do not all match"):
+        workflow.load_from_loom(loom, processed)
+
+
+@pytest.mark.parametrize("file_format", ["h5ad", "loom"])
+def test_cli_analyzes_local_counts_without_downloads(file_format, tmp_path):
+    data = kinetic_counts()
+    input_path = tmp_path / f"input.{file_format}"
+    if file_format == "loom":
+        make_loom(input_path, data)
+    else:
+        # Exercise dense matrices as well as the sparse native fixture.
+        for key in ("spliced", "unspliced"):
+            data.layers[key] = data.layers[key].toarray()
+        data.write_h5ad(input_path)
+    output = tmp_path / "cli-output"
+    completed = subprocess.run(
+        [sys.executable, str(SKILL_ROOT / "scripts" / "rna_velocity_workflow.py"),
+         str(input_path), "--mode", "deterministic", "--no-plots",
+         "--n-top-genes", "12", "--n-neighbors", "12", "--output-dir", str(output)],
+        capture_output=True, text=True, timeout=90,
+        env={**os.environ, "MPLBACKEND": "Agg", "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    saved = ad.read_h5ad(output / "adata_velocity.h5ad")
+    assert saved.uns["velocity_workflow"]["mode"] == "deterministic"

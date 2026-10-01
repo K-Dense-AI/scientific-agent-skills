@@ -1,163 +1,89 @@
 # Open Notebook Architecture
 
-## System Overview
+Reviewed 2026-09-30 using
+[application wiring](https://github.com/lfnovo/open-notebook/blob/v1.14.0/api/main.py),
+[storage paths](https://github.com/lfnovo/open-notebook/blob/v1.14.0/open_notebook/config.py),
+and [source installation](https://github.com/lfnovo/open-notebook/blob/v1.14.0/docs/1-INSTALLATION/from-source.md).
+These are source-level findings, not live deployment verification.
 
-Open Notebook is built as a modern Python web application with a clear separation between frontend and backend, using Docker for deployment.
+## Runtime components
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Docker Compose                    │
-│                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │   Next.js    │  │   FastAPI    │  │ SurrealDB │  │
-│  │   Frontend   │──│   Backend    │──│           │  │
-│  │  (port 8502) │  │  (port 5055) │  │ (port 8K) │  │
-│  └──────────────┘  └──────────────┘  └───────────┘  │
-│                          │                          │
-│                    ┌─────┴─────┐                    │
-│                    │ LangChain │                    │
-│                    │ Esperanto │                    │
-│                    └─────┬─────┘                    │
-│                          │                          │
-│              ┌───────────┼───────────┐              │
-│              │           │           │              │
-│          ┌───┴───┐   ┌───┴───┐   ┌───┴───┐          │
-│          │OpenAI │   │Claude │   │Ollama │  ...     │
-│          └───────┘   └───────┘   └───────┘          │
-└─────────────────────────────────────────────────────┘
-```
+- **Next.js/React frontend:** Docker exposes port 8502; source development uses 3000.
+- **FastAPI backend:** default port 5055, business routes below `/api`, live schemas
+  at `/openapi.json`. Pydantic models validate known fields, but extra request fields
+  may be silently ignored. Use the deployed schema when relying on a filter.
+- **SurrealDB v2:** notebook/source/note/model/credential records, graph relations,
+  full-text/vector retrieval, background command records, and schema migrations.
+  The upstream Compose file persists its RocksDB data under `/mydata`.
+- **Background worker:** `surreal-commands-worker` processes extraction, embeddings,
+  and podcast work. It is a separate process even when bundled in the app container.
+  API health alone cannot demonstrate processing readiness.
+- **LangChain/LangGraph:** AI chains and conversation state. Chat checkpoint state
+  also uses SQLite under the application data directory, not just SurrealDB.
+- **Esperanto and processing libraries:** connect to independently configured
+  language, embedding, transcription, speech, and extraction providers.
 
-## Core Components
+## Ingestion and evidence
 
-### FastAPI Backend
+1. A request specifies link/upload/text content and notebook associations.
+2. The backend validates content type and path/URL policy, creates a source, and
+   either runs processing synchronously or submits a background command.
+3. Extraction produces text; optional transformations produce insights; requested
+   embeddings enable vector retrieval.
+4. Poll status and retrieve the source to inspect text, errors, and embedding
+   coverage. A successful queue submission does not show completion.
 
-The REST API is built with FastAPI and organized into routers:
+PDF extraction, OCR, tables, and transcripts can lose important scientific detail.
+Compare extracted measurements, units, and section boundaries with the original
+before using an AI summary as evidence. Preserve source IDs and selected context
+with analysis outputs; generated notes are derivative material, not independent data.
 
-- **20 route modules** covering notebooks, sources, notes, chat, search, podcasts, transformations, models, credentials, embeddings, settings, and more
-- Async/await throughout for non-blocking I/O
-- Pydantic models for request/response validation
-- Custom exception handlers mapping domain errors to HTTP status codes
-- CORS middleware for cross-origin access
-- Optional password authentication middleware
+## Chat versus Ask
 
-### SurrealDB
+Notebook chat first builds a context object from explicit source/note selections,
+then submits that object with a message to `/api/chat/execute`. The endpoint returns
+JSON message history. An empty context configuration has special meaning: it
+includes all notebook items in short form. Explicit ID selections and verification
+of returned content prevent accidental reliance on missing/full-text-free context.
+The context builder can skip individual unavailable records without failing.
 
-SurrealDB serves as the primary data store, providing both document and relational capabilities:
+Ask searches the knowledge base with an embedding model and uses strategy, answer,
+and final-answer language models. It can return JSON or an SSE stream depending on
+the route. The release v1.14.0 Search/Ask API is global. Current main adds notebook
+scoping; a field silently ignored by an older server cannot enforce that boundary.
 
-- **Document storage** for notebooks, sources, notes, transformations, and models
-- **Relational references** for notebook-source associations
-- **Full-text search** across indexed content
-- **RocksDB** backend for persistent storage on disk
-- Schema migrations run automatically on application startup
+## Podcasts and persistence
 
-### LangChain Integration
+Podcast jobs combine an episode profile, one multi-speaker profile, supplied
+content, language models for scripts, and speech models for audio. They create an
+episode and audio under `/app/data/podcasts` in the container. A retry of a failed
+episode deletes its record/audio and starts a new job. Inspect the returned job
+result for the new episode ID.
 
-AI features are powered by LangChain with the Esperanto multi-provider library:
+Back up SurrealDB **and** `/app/data`, which contains uploads, podcasts, SQLite
+checkpoints, and caches. Stored provider keys use the server's
+`OPEN_NOTEBOOK_ENCRYPTION_KEY`; changing or losing it can make credentials unreadable.
+This is not encryption of every stored document.
 
-- **LangGraph** manages conversational state for chat sessions
-- **Embedding models** power vector search across content
-- **LLM chains** drive transformations, note generation, and podcast scripting
-- **Prompt templates** stored in the `prompts/` directory
+## Data boundaries
 
-### Esperanto Multi-Provider Library
+Self-hosted storage and local AI inference are separate choices. Cloud models,
+embedding providers, transcription, speech, or external extraction services can
+receive research content. Source ingestion can also fetch public URLs from the
+server. Use only intended source URLs and inspect the selected provider for each
+stage. The password middleware is instance-wide bearer-password protection; it
+does not create per-notebook user permissions.
 
-Esperanto provides a unified interface to 16+ AI providers:
+## Source navigation
 
-- Abstracts provider-specific API differences
-- Supports LLM, embedding, speech-to-text, and text-to-speech capabilities
-- Handles credential management and model discovery
-- Enables runtime provider switching without code changes
-
-### Next.js Frontend
-
-The user interface is a React application built with Next.js:
-
-- Responsive design for desktop and tablet use
-- Real-time updates for chat and processing status
-- File upload with progress tracking
-- Audio player for podcast episodes
-
-## Data Flow
-
-### Source Ingestion
-
-```
-Upload/URL → Source Record Created → Processing Queue
-                                         │
-                              ┌──────────┼──────────┐
-                              ▼          ▼          ▼
-                          Text       Embedding   Metadata
-                        Extraction   Generation  Extraction
-                              │          │          │
-                              └──────────┼──────────┘
-                                         ▼
-                                  Source Updated
-                                  (searchable)
-```
-
-### Chat Execution
-
-```
-User Message → Build Context (sources + notes)
-                    │
-                    ▼
-              LangGraph State Machine
-                    │
-                    ├─ Retrieve relevant context
-                    ├─ Format prompt with citations
-                    └─ Stream LLM response
-                         │
-                         ▼
-                   Response with
-                   source citations
-```
-
-### Podcast Generation
-
-```
-Notebook Content → Episode Profile → Script Generation (LLM)
-                                          │
-                                          ▼
-                                    Speaker Assignment
-                                          │
-                                          ▼
-                                    Text-to-Speech
-                                    (per segment)
-                                          │
-                                          ▼
-                                    Audio Assembly
-                                          │
-                                          ▼
-                                    Episode Record
-                                    + Audio File
-```
-
-## Key Design Decisions
-
-1. **Multi-provider by default**: Not locked to any single AI provider, enabling cost optimization and capability matching
-2. **Async processing**: Long-running operations (source ingestion, podcast generation) run asynchronously with status polling
-3. **Self-hosted data**: All data stays on the user's infrastructure with encrypted credential storage
-4. **REST-first API**: Every UI action is backed by an API endpoint for automation
-5. **Docker-native**: Designed for containerized deployment with persistent volumes
-
-## File Structure
-
-```
-open-notebook/
-├── api/               # FastAPI REST API
-│   ├── main.py        # App setup, middleware, routers
-│   ├── routers/       # Route handlers (20 modules)
-│   ├── models.py      # Pydantic request/response models
-│   └── auth.py        # Authentication middleware
-├── open_notebook/     # Core library
-│   ├── ai/            # AI integration (LangChain, Esperanto)
-│   ├── database/      # SurrealDB operations
-│   ├── domain/        # Domain models and business logic
-│   ├── graphs/        # LangGraph chat and processing graphs
-│   ├── podcasts/      # Podcast generation pipeline
-│   └── utils/         # Shared utilities
-├── frontend/          # Next.js React application
-├── prompts/           # AI prompt templates
-├── tests/             # Test suite
-└── docker-compose.yml # Deployment configuration
-```
+| Upstream location | Responsibility |
+| --- | --- |
+| `api/main.py`, `api/auth.py` | Router mounting, middleware, password checks |
+| `api/models.py`, `api/routers/` | Request/response schemas and endpoints |
+| `api/podcast_service.py` | Podcast submission and job-result contract |
+| `open_notebook/domain/` | Notebook/source/note records and relationships |
+| `open_notebook/graphs/` | Chat, Ask, transformation and processing flows |
+| `open_notebook/utils/context_builder.py` | Source/note context selection |
+| `commands/` | Background jobs |
+| `frontend/` | Next.js client |
+| `docker-compose.yml` | Services and persistent mounts |

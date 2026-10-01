@@ -45,14 +45,14 @@ class RunPacsomaticUnitTests(unittest.TestCase):
     def test_build_generated_params_content_genome(self):
         args = SimpleNamespace(outdir="/tmp/out", fasta="", genome="GRCh38")
         text = self.mod.build_generated_params_content(args, "/tmp/out/samplesheet.csv")
-        self.assertIn("input: /tmp/out/samplesheet.csv", text)
-        self.assertIn("outdir: /tmp/out", text)
-        self.assertIn("genome: GRCh38", text)
+        self.assertIn('input: "/tmp/out/samplesheet.csv"', text)
+        self.assertIn('outdir: "/tmp/out"', text)
+        self.assertIn('genome: "GRCh38"', text)
 
     def test_build_generated_params_content_fasta(self):
         args = SimpleNamespace(outdir="/tmp/out", fasta="/ref/genome.fa", genome="")
         text = self.mod.build_generated_params_content(args, "/tmp/out/samplesheet.csv")
-        self.assertIn("fasta: /ref/genome.fa", text)
+        self.assertIn('fasta: "/ref/genome.fa"', text)
 
     def test_build_samplesheet_status_values(self):
         args = SimpleNamespace(

@@ -127,7 +127,7 @@ GET /sequence/id/{id}?content-type=application/json
 |--------------|--------|-------------|
 | `id`          | string | Ensembl stable ID (gene, transcript, or protein). |
 | `type`        | string | `genomic`, `cdna`, `cds`, `protein`. Default varies by object type. |
-| `format`      | string | `json` or `fasta`. |
+| `format`      | string | `fasta`; select JSON with the content-type/Accept header. |
 | `expand_3prime` | int  | Expand 3' end by N bases. |
 | `expand_5prime` | int  | Expand 5' end by N bases. |
 | `mask`        | string | `soft` (lowercase repeats) or `hard` (N-mask repeats). |
@@ -277,8 +277,9 @@ Content-Type: application/json
 ```
 
 Add `CADD=1` as a query parameter on GET or in the POST body when you
-need live CADD v1.7. That value matches a direct CADD lookup; MyVariant's
-cached `cadd.phred` for this variant was 35 the same day (`myvariant.md`).
+need CADD annotations. Record the available CADD model/release and assembly.
+Scores from other aggregators can differ by model, release or build; compare
+like-for-like values (`myvariant.md`).
 
 ---
 
@@ -392,7 +393,7 @@ https://rest.ensembl.org/xrefs/symbol/homo_sapiens/TP53?content-type=application
 ### 10. Comparative genomics -- Homology
 
 ```
-GET /homology/id/{id}?content-type=application/json
+GET /homology/id/{species}/{id}?content-type=application/json
 ```
 
 | Parameter     | Type   | Description |
@@ -405,7 +406,7 @@ GET /homology/id/{id}?content-type=application/json
 
 **Example -- get mouse orthologs of human TP53:**
 ```
-https://rest.ensembl.org/homology/id/ENSG00000141510?type=orthologues&target_species=mus_musculus&content-type=application/json
+https://rest.ensembl.org/homology/id/homo_sapiens/ENSG00000141510?type=orthologues&target_species=mus_musculus&content-type=application/json
 ```
 
 **Response:**
@@ -452,16 +453,11 @@ https://rest.ensembl.org/homology/symbol/homo_sapiens/TP53?type=orthologues&targ
 
 ### 11. Regulatory features
 
-```
-GET /regulatory/species/{species}/id/{id}?content-type=application/json
-```
-
-**Example:**
-```
-https://rest.ensembl.org/regulatory/species/homo_sapiens/id/ENSR00000000163?content-type=application/json
-```
-
----
+The current REST catalogue no longer lists the older `/regulatory/species/.../id/...`
+lookup. Use the current Ensembl regulatory data/download documentation and
+release-specific feature identifiers; do not assume an ENSR identifier from an
+older release resolves through the live API. The overlap endpoint's supported
+feature types are release-dependent.
 
 ### 12. Species information
 
@@ -530,7 +526,7 @@ https://rest.ensembl.org/ld/homo_sapiens/pairwise/rs699/rs4762?population_name=1
 ## Rate Limits
 
 - **15 requests per second** for general users (no API key).
-- If you register for an API key (optional), higher limits may be available.
+- Use the returned rate-limit headers; there is no documented public API-key registration workflow for a higher quota.
 - Requests exceeding the limit receive HTTP 429 with a `Retry-After` header.
 - Batch endpoints (POST) count as a single request -- use them to reduce call count.
 - Max 1000 IDs per batch POST for `/lookup/id`.

@@ -1,10 +1,10 @@
 # QuTiP 5.3 Visualization
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0` with its pinned graphics extra.
+Research and API verification date: **2026-10-01**. Examples target
+`qutip==5.3.1` with its pinned graphics extra.
 
 ```bash
-uv pip install "qutip[graphics]==5.3.0"
+uv pip install "qutip[graphics]==5.3.1"
 ```
 
 Plots are diagnostics and communication artifacts, not substitutes for
@@ -114,7 +114,7 @@ Use the returned figure and axis rather than relying on global plotting state.
 Current signature:
 
 ```text
-qfunc(state, xvec, yvec, g=sqrt(2), precompute_memory=1024)
+qfunc(state, xvec, yvec, g=sqrt(2), precompute_memory=1024, cutoff=170)
 ```
 
 ```python
@@ -127,6 +127,10 @@ fig, ax = plt.subplots()
 mesh = ax.pcolormesh(xvec, yvec, Q, shading="auto", cmap="viridis")
 fig.colorbar(mesh, ax=ax)
 ```
+
+`qfunc` and `QFunc` gained `cutoff=170` in 5.3.1 to stabilize
+large coherent amplitudes. This is an algorithmic threshold, not the Hilbert
+cutoff `N`; independently converge the physical state truncation.
 
 The Q function is nonnegative in exact arithmetic, but plotting still needs
 truncation, extent, and grid checks.
@@ -265,7 +269,7 @@ fig.tight_layout()
 Multi-trajectory means need uncertainty bands:
 
 ```python
-mean = np.asarray(result.expect[0])
+mean = np.asarray(result.average_expect[0])
 standard_error = np.asarray(result.std_expect[0]) / np.sqrt(result.num_trajectories)
 ax.plot(result.times, mean)
 ax.fill_between(
@@ -325,10 +329,10 @@ Use an explicit local output path, avoid overwriting without user intent, and
 save the numeric data/configuration next to the figure. A raster image alone is
 not a reproducible result.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [Visualization and animation API](https://qutip.readthedocs.io/en/stable/apidoc/visualization.html)
 - [Wigner and Q-function API](https://qutip.readthedocs.io/en/stable/apidoc/visualization.html#pseudoprobability-functions)
 - [Bloch sphere guide](https://qutip.readthedocs.io/en/stable/guide/guide-bloch.html)
-- [QuTiP 5.3.0 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [Official QuTiP version-5 tutorials](https://github.com/qutip/qutip-tutorials/tree/main/tutorials-v5)

@@ -1,16 +1,23 @@
 # Broader Impacts: Strategies and Best Practices
 
+Reviewed 2026-10-01. All sample partnerships, results, numbers and budgets are
+hypothetical teaching examples, not commitments or current program availability.
+Replace them with verified applicant plans. Follow [current NSF priorities](https://www.nsf.gov/updates-on-priorities)
+and the solicitation for participation rules; do not copy preferential-selection
+rules or demographic quotas from historical proposals. The separate Broader Impacts
+heading remains required in the Project Description even when activities are integrated.
+
 ## Overview
 
-**Broader Impacts** are one of two review criteria for NSF proposals, carrying equal weight with Intellectual Merit. Despite this, broader impacts are often treated as an afterthought—a critical mistake that costs otherwise strong proposals their funding.
+**Broader Impacts** are one of two review criteria for NSF proposals, receiving full consideration alongside Intellectual Merit, without a fixed numerical weighting. Despite this, broader impacts are often treated as an afterthought—a critical mistake that costs otherwise strong proposals their funding.
 
 **NSF Definition**: "The potential to benefit society and contribute to the achievement of specific, desired societal outcomes"
 
 **Key Principle**: Broader impacts must be **specific, measurable, and integrated** with your research plan—not vague aspirations tacked onto the end.
 
-## The Five Pillars of Broader Impacts
+## Illustrative broader-impact activity types
 
-NSF evaluates broader impacts across five main areas. **You don't need to address all five**, but you should address at least one substantively with concrete activities, timelines, and assessment plans.
+These five groupings are drafting aids, not a mandatory NSF taxonomy. Choose a credible benefit, through the research itself or associated activities, and explain resources, timelines and assessment. See [NSF broader-impact guidance](https://www.nsf.gov/funding/learn/broader-impacts).
 
 ### 1. Advance Discovery While Promoting Teaching, Training, and Learning
 
@@ -52,9 +59,9 @@ NSF evaluates broader impacts across five main areas. **You don't need to addres
 
 *Example*: "We will host annual 3-day workshops for 25 community college faculty, providing training in genome editing techniques. Participants will receive hands-on experience with CRISPR methods developed in this project, complete teaching modules for their courses, and ongoing support through a virtual learning community."
 
-### 2. Broaden Participation of Underrepresented Groups
+### 2. Expand Access to Research and Education
 
-**What This Means**: Increase participation of groups underrepresented in STEM, including women, racial/ethnic minorities, persons with disabilities, and those from economically disadvantaged backgrounds.
+**What This Means**: Identify barriers to participation and provide accessible opportunities consistent with the current solicitation. Broad outreach and institutional partnerships do not justify excluding otherwise eligible participants by protected characteristics.
 
 **Effective Strategies**:
 
@@ -68,11 +75,11 @@ NSF evaluates broader impacts across five main areas. **You don't need to addres
 
 **Recruitment and Retention**:
 - Targeted recruitment at conferences (SACNAS, ABRCMS, NSBE, SWE)
-- Scholarship programs for underrepresented students
+- Financial support under published, opportunity-compliant eligibility criteria
 - Bridge programs for community college transfers
 - Retention support (mentoring, peer networks, professional development)
 
-*Example*: "We will recruit 50% of summer undergraduate researchers from groups underrepresented in computer science through partnerships with SACNAS and the National Society of Black Engineers. Participants will receive mentoring from graduate students with similar backgrounds, attend professional development workshops, and join our diversity-in-computing learning community that provides year-round support and networking."
+*Example*: "We will advertise summer research opportunities through a broad network of institutions and professional societies, with transparent selection criteria open to all eligible applicants. Participants will receive mentoring from graduate students with similar backgrounds, attend professional development workshops, and join our diversity-in-computing learning community that provides year-round support and networking."
 
 **Culturally Relevant Engagement**:
 - Research addressing community-identified needs
@@ -241,7 +248,7 @@ NSF evaluates broader impacts across five main areas. **You don't need to addres
 "This research will train the next generation of scientists."
 
 **Specific** ✅:
-"This project will support 3 PhD students, 2 postdocs, and 12 undergraduate researchers over 5 years. Undergraduates will be recruited through our partnership with the Louis Stokes Alliance for Minority Participation, with a goal of 50% participation from underrepresented groups. Students will receive training in advanced microscopy, data analysis, and scientific communication, and will present their research at the annual Emerging Researchers National Conference."
+"This project will support 3 PhD students, 2 postdocs, and 12 undergraduate researchers over 5 years. Undergraduates will be recruited through our partnership with the Louis Stokes Alliance for Minority Participation, with transparent recruitment and selection procedures consistent with the current opportunity. Students will receive training in advanced microscopy, data analysis, and scientific communication, and will present their research at the annual Emerging Researchers National Conference."
 
 ### Include Timelines and Milestones
 
@@ -279,13 +286,13 @@ Years 3-5: National dissemination through CourseSource, workshops at 2 professio
 ### Demonstrate Institutional Commitment
 
 **Show that broader impacts will continue beyond grant period**:
-- Institutional cost-sharing or support
+- Available institutional resources, described without voluntary committed cost sharing
 - Integration into ongoing programs
 - Sustainability plan
 - Letters of commitment from partners
 
 **Example**:
-"The university has committed $50,000 annually in cost-share to sustain the high school outreach program beyond the grant period. The program will be integrated into our Center for STEM Education, ensuring administrative support, space, and continuity. Our partner school districts have committed teacher time and classroom access (see letters of commitment in supplementary documents)."
+"The proposed outreach activities will use the university’s established STEM education facilities and the access arrangements documented in the permitted collaboration letters. The proposal budget covers the stated activities." Do not quantify voluntary committed cost sharing or add endorsement letters where NSF prohibits them.
 
 ### Align with Research Plan
 
@@ -309,7 +316,7 @@ Research on quantum computing + Develop quantum computing curriculum modules + S
 ❌ "Results will be broadly disseminated through publications and conferences."
 ❌ "We will engage in outreach activities."
 
-These are baseline expectations, not broader impacts.
+These statements need enough detail to show the intended benefit and feasibility; training and dissemination can contribute to broader impacts.
 
 ### Mistake 2: No Plan or Timeline
 
@@ -321,7 +328,7 @@ These are baseline expectations, not broader impacts.
 
 ❌ "We will run a summer camp for underrepresented students."
 
-✅ "We will run a 4-week summer camp for 30 students (60% from underrepresented groups). We will assess impact through pre/post content knowledge tests, science identity surveys, and tracking of STEM course enrollment. We expect 80% of participants to enroll in advanced science courses the following year."
+✅ "We will run a 4-week summer camp for 30 eligible students selected using published criteria. We will assess impact through pre/post content knowledge tests, science identity surveys, and tracking of STEM course enrollment. We expect 80% of participants to enroll in advanced science courses the following year."
 
 ### Mistake 4: Unrealistic Scope
 
@@ -353,7 +360,7 @@ If proposing extensive broader impacts activities but have no history of such wo
 
 **Typical Budget Items**:
 - **Personnel**: Program coordinator, graduate students, undergraduate assistants
-- **Participant support**: Stipends, travel, housing for students/teachers
+- **Participant support**: Eligible participant stipends, travel and housing; employees and students performing the research are not participants merely because they receive support
 - **Materials and supplies**: Educational materials, outreach equipment, workshop supplies
 - **Travel**: Conference presentations of broader impacts work, site visits to partners
 - **Subawards**: Payments to partnering institutions or organizations
@@ -365,17 +372,17 @@ If proposing extensive broader impacts activities but have no history of such wo
 - Materials and supplies for workshops: $5,000/year
 - Travel for recruitment and partner meetings: $3,000/year
 - External evaluator: $8,000/year
-- **Total: $81,000/year (16% of $500K budget)**
+- **Direct-cost subtotal: $81,000/year (16.2% of a $500K direct-cost budget)**; add applicable fringe/F&A, and classify student roles before choosing budget categories
 
 ## Resources for Broader Impacts
 
 ### NSF Resources
-- **NSF Broader Impacts Website**: https://www.nsf.gov/od/oia/special/broaderimpacts/
-- **BI Examples Repository**: https://www.cmu.edu/uro/resources for undergraduate research/best practices/broader-impacts.html
+- **NSF Broader Impacts Website**: https://www.nsf.gov/funding/learn/broader-impacts
+- **Applicable requirements**: https://www.nsf.gov/policies/pappg
 - **Broader Impacts Toolkit**: Many universities provide institutional resources
 
 ### Assessment Tools
-- **STEM-OP (STEM Outreach Program)**: Survey instruments for outreach assessment
+- **Assessment instruments**: Select validated instruments suited to the population and intended outcome; check permissions and current documentation
 - **STELAR Network**: Resources for informal STEM education
 - **Evaluation frameworks**: Logic models, theory of change
 
@@ -389,4 +396,3 @@ If proposing extensive broader impacts activities but have no history of such wo
 ---
 
 **Key Takeaway**: Effective broader impacts are specific, measurable, assessed, integrated with the research plan, and demonstrate institutional commitment. They should be planned with the same rigor as the research itself, with dedicated resources, timelines, milestones, and evaluation strategies. Generic statements about "training students" or "disseminating results" are insufficient—NSF expects concrete plans that demonstrably benefit society.
-

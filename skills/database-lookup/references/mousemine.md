@@ -16,14 +16,15 @@ No auth for most queries. Free account token needed for saved lists.
 | `/template/results?name={template}&op1=LOOKUP&value1={value}&format=json` | Run pre-built template query |
 | `/query/results` (POST) | Run custom PathQuery (XML) |
 | `/model` | Retrieve data model |
+| `/templates?format=json` | Discover currently available templates and editable constraints |
 
 ## Example Calls
 ```
 # Keyword search for Brca1
 https://www.mousemine.org/mousemine/service/search?q=Brca1&format=json
 
-# Template: Gene → GO terms
-https://www.mousemine.org/mousemine/service/template/results?name=Gene_GO&op1=LOOKUP&value1=Pax6&format=json
+# Discover templates before constructing template/results parameters
+https://www.mousemine.org/mousemine/service/templates?format=json
 ```
 
 ## Custom Query (POST)
@@ -38,3 +39,5 @@ JSON: `{"results": [...], "statusCode": 200}`. Also supports XML, TSV, CSV via `
 
 ## Rate Limits
 No published limits. Be reasonable.
+
+The live template catalogue includes `MFeature_GO` (editable `SequenceFeature` lookup); `Gene_GO` is not present. Supply the template's actual constraint paths/operators and preserve the fixed organism/data-source constraints.

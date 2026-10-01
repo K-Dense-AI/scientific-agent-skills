@@ -1,107 +1,100 @@
 # Using scientific datasets from the catalog
 
-Hugging Science dataset entries always link to a Hugging Face Hub dataset (`huggingface.co/datasets/<org>/<name>`). You load them with the standard `datasets` library. The interesting part is what makes scientific datasets *different* from typical NLP/vision datasets — that's what this file is about.
+A dataset entry points to a Hub repository, which may contain CSV/Parquet,
+FASTA, HDF5, Zarr, or an author's custom layout. `load_dataset` does not make all
+of these formats interchangeable. Inspect the card and file manifest before any
+large download. Record repository commit, selected files, config and split.
 
-## Install
+## Install and authenticate
 
-Use `uv` for all installs:
-
-```bash
-uv pip install datasets huggingface_hub      # in an active venv
-# or, project-style:
-uv add datasets huggingface_hub
-# one-off:
-uv run --with datasets python my_script.py
-```
-
-For private/gated datasets, authenticate via `HF_TOKEN`. **Prefer loading from `.env`:**
+Use an active virtual environment or separate project; the combined tested stack
+is in [using-models.md](using-models.md). Datasets 5.0.1 requires Hub below 2.0.
 
 ```bash
-# .env (in project root, gitignored)
-HF_TOKEN=hf_...
+uv pip install 'datasets==5.0.1' 'huggingface-hub<2' python-dotenv
 ```
+
+Load `.env` before Hub-dependent imports if the project uses `HF_TOKEN`; keep
+`.env` gitignored. Public metadata/data often needs no token. Gated access still
+requires the repository's terms/access approval; setting a token does not grant it.
+
+## Discover metadata before rows
 
 ```python
 from dotenv import load_dotenv
-load_dotenv()                # picks up HF_TOKEN before any HF call
-from datasets import load_dataset
-ds = load_dataset("opig/OAS")
+load_dotenv()
+from datasets import get_dataset_config_names, get_dataset_split_names
+from huggingface_hub import HfApi
+
+repo = "opig/OAS"
+revision = HfApi().dataset_info(repo).sha
+configs = get_dataset_config_names(repo, revision=revision)
+print(configs)
+print(get_dataset_split_names(repo, config_name="paired", revision=revision))
 ```
 
-If `python-dotenv` isn't installed: `uv add python-dotenv` (or `uv pip install python-dotenv`).
+The OAS card currently declares `default` and `paired` configs. Its `paired`
+config points to `paired/*.csv`; species is `meta_Species`, not `species`.
+The generic code `ex.get("species") == "human"` silently discards every row.
 
-A surprising number of biomedical datasets are gated (clinical PHI proxies, antibody repertoires from named patients). Check the dataset card before assuming open access.
-
-## Default loading pattern
-
-```python
-from datasets import load_dataset
-
-ds = load_dataset("arcinstitute/opengenome2")
-print(ds)            # see splits and columns
-print(ds["train"][0]) # peek at one row
-```
-
-## Use streaming for large datasets — by default
-
-Many scientific corpora are 10 GB to many TB. `load_dataset(..., streaming=True)` returns an `IterableDataset` that pulls shards on demand instead of materializing the whole thing on disk:
+Illustrative remote streaming (card/source verified; no large OAS shard fetched):
 
 ```python
-ds = load_dataset("arcinstitute/opengenome2", split="train", streaming=True)
-for example in ds.take(10):
-    ...
-```
+from datasets import Dataset, load_dataset
 
-Rule of thumb: if the dataset card mentions billions of tokens, millions of images, or "TB", default to streaming and only switch to full download when the user explicitly wants offline reproducibility.
-
-## Inspect schema before assuming columns
-
-Generic datasets have predictable columns (`text`, `label`, `image`). Scientific datasets often don't. Before writing preprocessing code, look at one example:
-
-```python
-sample = next(iter(load_dataset("opig/OAS", split="train", streaming=True)))
+ds = load_dataset(repo, name="paired", revision=revision, split="train", streaming=True)
+sample = next(iter(ds))
 print(sample.keys())
+if "meta_Species" not in sample:
+    raise ValueError("OAS schema changed; inspect the selected configuration")
+human_only = ds.filter(lambda ex: ex["meta_Species"] == "human")
+subset = Dataset.from_list(list(human_only.take(100)))
+if not len(subset):
+    raise ValueError("No matching records in the selected data")
 ```
 
-Common surprises:
-- **Genomics**: columns can be `sequence`, `species`, `taxonomy`, `accession` rather than `text`.
-- **Materials**: rows may contain serialized `pymatgen` `Structure` objects or CIF strings — not numeric tensors.
-- **Imaging**: medical/astronomy images can be FITS, DICOM, or NIfTI rather than PNG/JPEG. The `image` column may be raw bytes that need a domain-specific decoder.
-- **Time series / signals**: EEG, audio, weather often have variable-length arrays under a column like `signal` or `array`; the dtype matters (`float16` vs `float32`) for memory.
+`streaming=True` with `split` returns an `IterableDataset`; without `split` it
+returns a split mapping. `filter` is lazy and does not imply server-side filtering:
+reading 100 matches may scan many rows. Only call `Dataset.from_list` on a bounded
+subset. Local synthetic CSV tests exercise this loading/filtering/materialization
+pattern. They do not establish remote shard performance or scientific suitability.
 
-## Splits and subsets
+## OpenGenome2 is not a safe default full download
 
-- Many scientific datasets ship multiple **configs** (e.g., `load_dataset("Merck/TEDDY", "single_cell")`). If `load_dataset` errors with "Please pick a config", read the dataset card or run `get_dataset_config_names("...")`.
-- Some have non-standard split names (`pretrain`, `held_out_species`, `test_chr1`). Don't assume `train/validation/test`.
+[OpenGenome2](https://huggingface.co/datasets/arcinstitute/opengenome2) contains
+8.8 trillion base pairs, with raw FASTA and preprocessed JSONL that can include
+special tokens and phylogenetic tags. Its manifest includes multipart compressed
+FASTA files such as `.fasta.gz.aa`. Its JSONL directory also includes complete `.jsonl.gz` shards; select those explicitly when using the JSON loader. The multipart FASTA files are pieces of a compressed
+stream, not individually decodable shards. Do not pass a broad wildcard over all
+parts to `load_dataset` or assume `streaming=True` reassembles them.
 
-## Filtering and subsetting
+Choose a documented, complete file or explicitly reconstruct the selected ordered
+parts after budgeting disk/network. Use the JSON loader for complete JSONL,
+sequence tools for FASTA, and verify the actual JSON field names before tokenizing.
+No whole-repository `load_dataset("arcinstitute/opengenome2")` shortcut is
+validated here. Keep assembly/accession provenance for downstream contamination checks.
 
-For very large datasets, prefer `filter` on a streaming iterator over downloading and slicing:
+## Schema and split checks
 
-```python
-ds = load_dataset("opig/OAS", split="train", streaming=True)
-human_only = ds.filter(lambda ex: ex.get("species") == "human")
-```
+- DNA/protein alphabets, ambiguity codes and special tokens must match the model.
+  Evo2 uses its native tokenizer; do not assume an `AutoTokenizer` exists.
+- `Merck/TEDDY` is a **model/code repository**, not a dataset config named
+  `single_cell`. Follow its documented AnnData preprocessing.
+- Materials rows may serialize structures/CIFs; scientific imaging may use FITS,
+  DICOM or NIfTI. The Hub `mmu_legacysurvey_dr10_south_21` release is HATS/Parquet
+  with image-array fields; it is not a directory of FITS images.
+- Inspect shapes, dtypes, units, coordinate systems and missingness before batching.
+  A generic image decoder is not a scientific format validator.
+- Names such as `train` may describe storage layout only. Preserve donor, patient,
+  species, scaffold, chromosome or time groups as the scientific evaluation needs;
+  prevent near-duplicate and pretraining overlap from inflating reported performance.
+- Current Datasets does not execute dataset loading scripts. Adding
+  `trust_remote_code=True` cannot revive a legacy scripted loader; use maintained
+  standard files or the author's separately reviewed reader.
+- Pin licenses, preprocessing and tokenizer revisions alongside the data. Scientific
+  catalog inclusion does not establish consent, clinical suitability or commercial rights.
 
-To convert a streaming subset into an in-memory dataset for training:
-
-```python
-from datasets import Dataset
-subset = Dataset.from_list(list(human_only.take(10_000)))
-```
-
-## Train/eval handoff to `transformers`
-
-Once shaped correctly, scientific datasets feed `Trainer`/`SFTTrainer` like any other. The bridge is usually a tokenizer or feature extractor that's specific to the domain:
-
-- DNA: tokenizer from the matching DNA model (e.g., `AutoTokenizer.from_pretrained("arcinstitute/evo2_7b", trust_remote_code=True)`).
-- Proteins: `AutoTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")`.
-- SMILES: usually a character-level or BPE tokenizer; check the model card.
-
-A shared organization is not evidence of tokenizer or preprocessing compatibility. Verify the model card's vocabulary, alphabet, special tokens, normalization, and input-length contract against the selected dataset, and pin the model, tokenizer, and dataset revisions separately.
-
-## Caveats specific to scientific data
-
-- **License**: Some datasets are CC-BY-NC (research only). Check before any commercial deployment suggestion.
-- **Versioning**: Major scientific datasets revise their splits over time. Pin a `revision=` if reproducibility matters.
-- **Preprocessing must match training**: For foundation models, the catalog's blog posts often document the *exact* preprocessing used in pretraining (tokenizer config, normalization). When fine-tuning, replicate it — small mismatches (e.g., reverse complement augmentation for DNA) can wreck downstream performance.
+Sources: [loading](https://huggingface.co/docs/datasets/loading),
+[streaming](https://huggingface.co/docs/datasets/stream),
+[OAS card](https://huggingface.co/datasets/opig/OAS),
+[Datasets 5.0.1 loader](https://github.com/huggingface/datasets/blob/5.0.1/src/datasets/load.py).

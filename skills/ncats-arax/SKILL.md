@@ -5,7 +5,8 @@ allowed-tools: Read Bash
 license: MIT
 compatibility: Requires Python 3.10+ and outbound HTTPS access to arax.transltr.io. The client uses only the Python standard library and needs no API key. Queries and caller metadata may be publicly visible; never submit sensitive or patient-specific content.
 metadata:
-  version: "1.1"
+  version: "1.2"
+  last-reviewed: "2026-09-30"
   skill-author: neuroepithelial
 ---
 
@@ -51,20 +52,21 @@ Check the production OpenAPI without making a biomedical query:
 python skills/ncats-arax/scripts/arax_client.py preflight
 ```
 
-The client verifies that the service identifies itself as ARAX, exposes `/query`, and reports a
-supported TRAPI version. A nonproduction endpoint or untested TRAPI series requires an explicit
-override; neither override changes the fixed query shapes or operations.
+The client verifies that the service identifies itself as ARAX, exposes `POST /query` and
+`GET /entity`, and reports a supported TRAPI version. It reads `info.x-trapi.version`, falling back
+to the title for older OpenAPI documents. A nonproduction endpoint or untested TRAPI series
+requires an explicit override; neither override changes the fixed query shapes or operations.
 
 ## Normalize an entity
 
 Normalization is review-only and never triggers a graph query:
 
 ```bash
-python skills/ncats-arax/scripts/arax_client.py normalize "primary myelofibrosis" \
-  --expected-category biolink:Disease \
+python skills/ncats-arax/scripts/arax_client.py normalize "ivacaftor" \
+  --expected-category biolink:SmallMolecule \
   --max-synonyms 10 \
   --acknowledge-public-query \
-  --output-dir outputs/normalize-myelofibrosis
+  --output-dir outputs/normalize-ivacaftor
 ```
 
 Review the canonical identifier, name, category, and synonym preview before using a CURIE. Report
@@ -133,7 +135,9 @@ python skills/ncats-arax/scripts/arax_client.py one-hop \
 ```
 
 Federation defaults to the hard maximum of 50 results. Provider errors may coexist with useful
-results; such a run exits 7 after retaining its artifacts and is marked partial.
+results; such a run exits 7 after retaining its artifacts and is marked partial. The same applies
+to a failed provider in lookup mode. An explicit non-success ARAX response status exits 6 with
+the raw response retained; it must not be reported as a successful zero-result query.
 
 ## Inspect saved provenance
 
@@ -174,8 +178,15 @@ this skill.
 
 ## Official references
 
+Reviewed on 2026-09-30 against production ARAX 1.5.4 / TRAPI 1.5.0 (the URL still contains `v1.4`).
+Live public smoke tests passed for preflight, normalization, qualified one-hop and endpoint-pinned
+two-hop lookups, and RTX-KG2/MolePro federation. Results and provider availability can change.
+The official introductory guide contains older response examples; use the deployed schema and
+current ARAX source for field and operation contracts. No Python SDK is used by this client.
+
 - [ARAX documentation](https://ncatstranslator.github.io/TranslatorTechnicalDocumentation/architecture/ara/arax/)
 - [ARAX production OpenAPI](https://arax.transltr.io/api/arax/v1.4/openapi.json)
 - [ARAXi operation documentation](https://github.com/RTXteam/RTX/blob/master/code/ARAX/Documentation/DSL_Documentation.md)
+- [ARAX query execution and scoreless resultification](https://github.com/RTXteam/RTX/blob/master/code/ARAX/ARAXQuery/ARAX_query.py)
 - [Translator Reasoner API](https://github.com/NCATSTranslator/ReasonerAPI)
 - [Biolink Model](https://biolink.github.io/biolink-model/)

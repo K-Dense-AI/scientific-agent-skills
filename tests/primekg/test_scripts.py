@@ -18,8 +18,6 @@ from unittest import mock
 
 import pytest
 
-import skill_contract
-
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "primekg"
 SCRIPTS = SKILL_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -32,8 +30,8 @@ EDGES = """\
 x_id,x_type,x_name,x_source,relation,display_relation,y_id,y_type,y_name,y_source
 7157,gene/protein,TP53,NCBI,protein_protein,interacts with,672,gene/protein,BRCA1,NCBI
 D001,disease,Breast Cancer,MONDO,disease_protein,associated with,672,gene/protein,BRCA1,NCBI
-CHEMBL1,drug,Olaparib,DrugBank,drug_protein,targets,672,gene/protein,BRCA1,NCBI
-D001,disease,Breast Cancer,MONDO,disease_phenotype,presents,HP001,phenotype,Breast Mass,HPO
+DBTEST1,drug,Olaparib,DrugBank,drug_protein,targets,672,gene/protein,BRCA1,NCBI
+D001,disease,Breast Cancer,MONDO,disease_phenotype_positive,phenotype present,HP001,effect/phenotype,Breast Mass,HPO
 D001,disease,Breast Cancer,MONDO,disease_disease,related to,D002,disease,Ovarian Cancer,MONDO
 D002,disease,Ovarian Cancer,MONDO,disease_protein,associated with,7157,gene/protein,TP53,NCBI
 """
@@ -55,7 +53,9 @@ class PrimeKgTestCase(unittest.TestCase):
 class DataPathTests(unittest.TestCase):
     def test_the_default_path_is_relative_and_env_overridable(self) -> None:
         # A hardcoded absolute path would name one machine and work on no other.
-        self.assertFalse(Path(query_primekg.DATA_PATH).is_absolute())
+        with mock.patch.dict("os.environ", {}, clear=True):
+            import importlib
+            self.assertFalse(Path(importlib.reload(query_primekg).DATA_PATH).is_absolute())
 
         with mock.patch.dict("os.environ", {"PRIMEKG_DATA": "/somewhere/kg.csv"}):
             import importlib
@@ -78,9 +78,7 @@ class SearchTests(PrimeKgTestCase):
         # TP53 appears as x in one row and as y in another; one record either way.
         results = query_primekg.search_nodes("TP53")
         self.assertEqual(len(results), 1)
-        # PrimeKG mixes numeric gene ids with string disease ids in one column,
-        # so pandas reads it as object dtype and ids come back as strings --
-        # which is why get_neighbors coerces with str() before comparing.
+        # IDs are always read as strings, including numeric-only chunks/files.
         self.assertEqual(str(results[0]["id"]), "7157")
         self.assertEqual(results[0]["type"], "gene/protein")
 
@@ -95,7 +93,7 @@ class SearchTests(PrimeKgTestCase):
         unfiltered = {row["name"] for row in query_primekg.search_nodes("Breast")}
         self.assertEqual(unfiltered, {"Breast Cancer", "Breast Mass"})
 
-        filtered = query_primekg.search_nodes("Breast", node_type="phenotype")
+        filtered = query_primekg.search_nodes("Breast", node_type="effect/phenotype")
         self.assertEqual([row["name"] for row in filtered], ["Breast Mass"])
 
     def test_no_match_returns_an_empty_list(self) -> None:
@@ -144,12 +142,16 @@ class PathTests(PrimeKgTestCase):
         )
 
     def test_unconnected_nodes_yield_no_path(self) -> None:
-        self.assertEqual(query_primekg.find_paths("CHEMBL1", "HP001"), [])
+        self.assertEqual(query_primekg.find_paths("DBTEST1", "HP001"), [])
 
-    def test_two_hop_search_is_documented_as_unimplemented(self) -> None:
-        # The depth-2 branch is a stub; assert the current contract rather than
-        # a capability the script does not have.
-        self.assertEqual(query_primekg.find_paths("CHEMBL1", "D001", max_depth=2), [])
+    def test_two_hop_search_connects_drug_protein_disease(self) -> None:
+        paths = query_primekg.find_paths("DBTEST1", "D001", max_depth=2)
+        self.assertEqual(len(paths), 1)
+        self.assertEqual([edge["relation"] for edge in paths[0]],
+                         ["drug_protein", "disease_protein"])
+        self.assertEqual(paths[0][1]["traversal_from"]["id"], "672")
+        self.assertEqual(paths[0][1]["traversal_to"]["id"], "D001")
+        self.assertEqual(query_primekg.find_paths("DBTEST1", "D001", max_depth=1), [])
 
 
 class DiseaseContextTests(PrimeKgTestCase):
@@ -182,6 +184,125 @@ class DiseaseContextTests(PrimeKgTestCase):
         self.assertEqual(
             query_primekg.get_disease_context("TP53"), {"error": "Disease not found"}
         )
+
+
+class IntegrityTests(PrimeKgTestCase):
+    def append(self, row):
+        with self.data.open("a") as handle:
+            handle.write(row + "\n")
+
+    def test_literal_search_handles_regex_characters(self):
+        self.assertEqual(query_primekg.search_nodes("["), [])
+        self.assertEqual(query_primekg.search_nodes(".*"), [])
+
+    def test_reverse_rows_are_one_adjacency_with_both_original_rows(self):
+        self.append("672,gene/protein,BRCA1,NCBI,drug_protein,targets,DBTEST1,drug,Olaparib,DrugBank")
+        result = query_primekg.get_neighbors("672", "drug_protein")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]["edge_rows"]), 2)
+        self.assertEqual({row["x_type"] for row in result[0]["edge_rows"]}, {"drug", "gene/protein"})
+        paths = query_primekg.find_paths("DBTEST1", "D001")
+        self.assertEqual(len(paths), 1)
+        self.assertEqual(len(paths[0][0]["edge_rows"]), 2)
+
+    def test_namespace_collision_is_rejected_and_can_be_disambiguated(self):
+        self.append("672,disease,Another disease,MONDO,disease_protein,associated with,7157,gene/protein,TP53,NCBI")
+        with self.assertRaisesRegex(ValueError, "Ambiguous node ID"):
+            query_primekg.get_neighbors("672")
+        result = query_primekg.get_neighbors("672", node_type="disease", node_source="MONDO")
+        self.assertEqual([n["neighbor_name"] for n in result], ["TP53"])
+        paths = query_primekg.find_paths("672", "7157", start_node_type="disease",
+                                        start_node_source="MONDO", max_depth=1)
+        self.assertEqual(len(paths), 1)
+
+    def test_intermediate_id_collision_does_not_create_a_false_path(self):
+        self.append("672,disease,Another disease,MONDO,disease_phenotype_positive,phenotype present,HP002,effect/phenotype,Other phenotype,HPO")
+        self.assertEqual(query_primekg.find_paths("DBTEST1", "HP002"), [])
+
+    def test_ambiguous_disease_name_is_not_silently_selected(self):
+        result = query_primekg.get_disease_context("Cancer")
+        self.assertEqual(result["error"], "Ambiguous disease name")
+        self.assertEqual(len(result["candidates"]), 2)
+
+    def test_exact_name_wins_over_a_longer_substring_match(self):
+        self.append("D003,disease,Breast Cancer subtype,MONDO,disease_protein,associated with,7157,gene/protein,TP53,NCBI")
+        self.assertEqual(query_primekg.get_disease_context("breast cancer")["disease_info"]["id"], "D001")
+
+    def test_indications_and_contraindications_remain_distinct(self):
+        for relation in ("indication", "contraindication", "off-label use"):
+            self.append(f"DBTEST1,drug,Olaparib,DrugBank,{relation},{relation},D001,disease,Breast Cancer,MONDO")
+        result = query_primekg.get_disease_context("Breast Cancer")
+        self.assertEqual(len(result["associated_drugs"]), 3)
+        self.assertEqual([len(v) for v in result["drug_relations"].values()], [1, 1, 1])
+
+    def test_negative_phenotypes_keep_their_relation(self):
+        self.append("D001,disease,Breast Cancer,MONDO,disease_phenotype_negative,phenotype absent,HP002,effect/phenotype,Other phenotype,HPO")
+        result = query_primekg.get_disease_context("Breast Cancer")
+        self.assertEqual({n["relation"] for n in result["phenotypes"]},
+                         {"disease_phenotype_positive", "disease_phenotype_negative"})
+
+    def test_string_ids_and_literal_na_are_preserved(self):
+        self.data.write_text(EDGES.splitlines()[0] + "\n" +
+                             "0001,gene/protein,NA,NCBI,protein_protein,ppi,2,gene/protein,Second,NCBI\n")
+        result = query_primekg.search_nodes("NA")
+        self.assertEqual(result[0]["id"], "0001")
+        self.assertEqual(query_primekg.get_neighbors("0001")[0]["neighbor_id"], "2")
+        self.assertEqual(query_primekg.get_neighbors("1"), [])
+
+    def test_missing_schema_and_empty_values_are_rejected(self):
+        self.data.write_text("id,name\n1,Example\n")
+        with self.assertRaisesRegex(ValueError, "missing columns"):
+            query_primekg.search_nodes("Example")
+        self.data.write_text(EDGES.replace("7157,gene/protein", ",gene/protein", 1))
+        with self.assertRaisesRegex(ValueError, "empty value"):
+            query_primekg.search_nodes("TP53")
+
+    def test_indexes_and_extra_provenance_are_preserved(self):
+        self.data.write_text("x_index,y_index,evidence_id," + EDGES.splitlines()[0] + "\n" +
+                             "11,22,synthetic-study," + EDGES.splitlines()[1] + "\n")
+        node = query_primekg.search_nodes("TP53")[0]
+        self.assertEqual(node["index"], "11")
+        result = query_primekg.get_neighbors("7157")[0]
+        self.assertEqual(result["neighbor_index"], "22")
+        self.assertEqual(result["edge_rows"][0]["evidence_id"], "synthetic-study")
+
+    def test_conflicting_indexes_fail_instead_of_merging_nodes(self):
+        self.data.write_text("x_index,y_index," + EDGES.splitlines()[0] + "\n" +
+                             "11,22," + EDGES.splitlines()[1] + "\n" +
+                             "33,22," + EDGES.splitlines()[1] + "\n")
+        with self.assertRaisesRegex(ValueError, "multiple release indexes"):
+            query_primekg.get_neighbors("7157")
+
+    def test_duplicate_release_index_does_not_merge_distinct_ids(self):
+        self.data.write_text("x_index,y_index," + EDGES.splitlines()[0] + "\n" +
+                             "11,11," + EDGES.splitlines()[1] + "\n")
+        with self.assertRaisesRegex(ValueError, "multiple node identities"):
+            query_primekg.get_neighbors("7157")
+
+    def test_a_single_index_column_is_not_a_supported_schema(self):
+        self.data.write_text("x_index," + EDGES.splitlines()[0] + "\n" +
+                             "11," + EDGES.splitlines()[1] + "\n")
+        with self.assertRaisesRegex(ValueError, "both x_index and y_index"):
+            query_primekg.search_nodes("TP53")
+
+    def test_depth_and_path_limit_are_explicit(self):
+        for depth in (0, 3, -1, True):
+            with self.assertRaises(ValueError):
+                query_primekg.find_paths("D001", "672", max_depth=depth)
+        self.append("D001,disease,Breast Cancer,MONDO,indication,indication,672,gene/protein,BRCA1,NCBI")
+        with self.assertRaisesRegex(ValueError, "exceeds max_paths"):
+            query_primekg.find_paths("D001", "672", max_paths=1)
+
+    def test_self_paths_and_unknown_endpoints_are_empty(self):
+        self.assertEqual(query_primekg.find_paths("672", "672"), [])
+        self.assertEqual(query_primekg.find_paths("672", "unknown"), [])
+
+    def test_search_limit_can_be_removed_and_invalid_limits_fail(self):
+        self.assertEqual(len(query_primekg.search_nodes("Cancer", limit=1)), 1)
+        self.assertEqual(len(query_primekg.search_nodes("Cancer", limit=None)), 2)
+        for limit in (0, -1, True):
+            with self.assertRaises(ValueError):
+                query_primekg.search_nodes("Cancer", limit=limit)
 
 
 if __name__ == "__main__":

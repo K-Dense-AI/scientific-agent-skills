@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/terminal-setup
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi uses the [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) for reliable modifier detection. Most modern terminals support it; some need configuration.
 
 ## Works Out of the Box
@@ -80,7 +82,7 @@ Add to `settings.json` (Ctrl+Shift+, then Open JSON file) so the modified Enter 
 }
 ```
 
-Windows Terminal binds `Alt+Enter` to fullscreen by default, which blocks follow-up queueing; remapping it to `sendInput` forwards the real chord. Fully close and reopen Windows Terminal if the old fullscreen behavior persists.
+Windows/WSL now use Ctrl+Q for follow-up by default. Windows Terminal binds `Alt+Enter` to fullscreen; the optional remap above is useful only when you also bind Pi follow-up to Alt+Enter. Fully close and reopen Windows Terminal if the old fullscreen behavior persists.
 
 ## Limited Terminals
 

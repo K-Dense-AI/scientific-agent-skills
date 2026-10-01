@@ -2,11 +2,11 @@
 name: qutip
 description: Simulate and audit closed and open quantum-system models with QuTiP 5, including deterministic, trajectory, steady-state, spectral, and phase-space workflows. Use for local quantum-dynamics work where physical assumptions, dimensions, and numerical convergence must be explicit.
 license: MIT
-compatibility: Requires Python 3.11+, uv, and qutip==5.3.0 for executable simulations. Bundled planners and all script help run with the Python standard library; plotting requires the pinned graphics extra. No network service or credentials are used.
+compatibility: Requires Python 3.11+, uv, and qutip==5.3.1 for executable simulations. Bundled planners and all script help run with the Python standard library; plotting requires the graphics extra. No network service or credentials are used.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-10-01"
 ---
 
 # QuTiP 5
@@ -19,7 +19,7 @@ Floquet, HEOM, and permutational-invariance methods. It is not a hardware
 execution SDK. Circuit and control functionality moved to separate QuTiP family
 packages.
 
-This skill targets **QuTiP 5.3.0**, released 2026-05-22. QuTiP 5.3 requires
+This skill targets **QuTiP 5.3.1**, released 2026-08-04. QuTiP 5.3 requires
 Python 3.11 or newer. Its required distributions are NumPy (`>=1.23.2`), SciPy
 (`>=1.9.2`, excluding `1.16.0` and `1.17.0`), and `packaging`.
 
@@ -29,13 +29,13 @@ Create a dedicated environment and pin every direct distribution:
 
 ```bash
 uv venv --python 3.11
-uv pip install "qutip==5.3.0"
+uv pip install "qutip==5.3.1"
 ```
 
 For plots:
 
 ```bash
-uv pip install "qutip[graphics]==5.3.0"
+uv pip install "qutip[graphics]==5.3.1"
 ```
 
 Optional QuTiP family packages are independently versioned:
@@ -60,13 +60,20 @@ uv pip install "qutip-jax==0.1.1"
 Use a project lockfile or a hash-generating `uv pip compile` workflow when
 transitive dependency identity must also be frozen.
 
+Core tests cover small native CPU systems with known solutions. Optional JAX
+checks cover CPU conversion/evolution and differentiation only; GPU/MPI,
+large HEOM hierarchies, and experimentally realistic physics are unvalidated.
+Snippets with placeholders such as `H`, `rho0`, or `c_ops` are illustrative
+fragments to adapt after defining a consistent model.
+
 ## Non-negotiable model contract
 
 Before solving, record:
 
 1. **Units and convention.** QuTiP equations normally set \(\hbar=1\).
    Hamiltonian entries are angular frequencies and rates have reciprocal-time
-   units. Convert cyclic frequency with \(2\pi f\); never mix Hz and rad/s.
+   units. A decay rate specified as `1/T1` needs no `2*pi` factor. Convert
+   cyclic frequency with \(2\pi f\); never mix Hz and rad/s.
 2. **Subsystem order.** `tensor(A, B, C)` fixes subsystem indices `0, 1, 2`.
    Preserve that order in every state, operator, collapse channel, and partial
    trace. `obj.ptrace([0, 2])` keeps those subsystems; it does not trace them.
@@ -123,8 +130,8 @@ Do not select a more specialized solver merely because it exists.
 
 ## Deterministic open-system example
 
-QuTiP 5.3 uses ordinary option dictionaries. Solver controls, `e_ops`, and
-`args` are keyword-only; the old mutable options object is gone.
+QuTiP 5.3 uses ordinary option dictionaries. `e_ops`, `args`, and
+`options` are keyword-only; the old mutable options object is gone.
 
 ```python
 import numpy as np
@@ -146,6 +153,7 @@ result = mesolve(
         "atol": 1e-10,
         "rtol": 1e-8,
         "store_final_state": True,
+        "normalize_output": False,
         "progress_bar": "",
     },
 )
@@ -260,8 +268,9 @@ boundaries.
 
 ## Safe local CLIs
 
-All bundled tools are local-only, emit strict JSON, reject non-finite JSON and
-unknown keys, and never load pickle files or executable model code. Simulation
+All bundled tools are local-only, emit strict JSON, reject non-finite JSON,
+and never load pickle files or executable model code. The model-input validator
+also rejects unknown keys; result audits check their documented report fields. Simulation
 imports are lazy, so every `--help` works without QuTiP installed.
 
 | Script | Purpose |
@@ -310,10 +319,10 @@ python skills/qutip/scripts/result_audit.py two-level.json
 
 ## Dated official sources
 
-Verified **2026-07-23**:
+Verified **2026-10-01**:
 
-- [QuTiP 5.3.0 PyPI metadata](https://pypi.org/project/qutip/)
-- [QuTiP 5.3.0 release](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 PyPI metadata](https://pypi.org/project/qutip/)
+- [QuTiP 5.3.1 release](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5.3 changelog](https://qutip.readthedocs.io/en/stable/changelog.html)
 - [QuTiP 5.3 API](https://qutip.readthedocs.io/en/stable/apidoc/apidoc.html)
 - [QuTiP version-5 tutorials](https://github.com/qutip/qutip-tutorials/tree/main/tutorials-v5)

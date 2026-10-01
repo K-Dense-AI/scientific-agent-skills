@@ -75,7 +75,9 @@ print(processor.processing_steps)
 Important current behavior:
 
 - `SpectrumProcessor` is **not callable**.
-- Use `processor.process_spectrum(spectrum)` for one spectrum.
+- Use `processor.process_spectrum(spectrum.clone())` to preserve one input.
+  Without a processing report, `process_spectrum` passes `clone=False` to
+  filters and can mutate its argument; it does not clone on entry.
 - Use `processor.process_spectra(spectra)` for a list.
 - `process_spectra()` returns `(processed_spectra, processing_report)`.
 - With `create_report=False`, the processor clones each input once and disables
@@ -118,7 +120,9 @@ those steps explicitly.
 - `select_by_mz(spectrum_in, mz_from=0.0, mz_to=1000.0, clone=True)` — crop the
   fragment m/z interval.
 
-Normalize before using relative-intensity thresholds.
+`select_by_relative_intensity` divides by the current maximum internally; prior
+normalization is optional, and retained intensities keep their original scale.
+Cropping away a base peak before this filter can change the retained peaks.
 
 ### Reduce and clean peaks
 
@@ -134,7 +138,8 @@ Normalize before using relative-intensity thresholds.
   offset_to_precursor=-1.6, clone=True)` — remove peaks above a cutoff relative
   to precursor m/z.
 - `remove_peaks_outside_top_k(spectrum_in, k=6, mz_window=50, clone=True)` —
-  retain peaks that lie near one of the `k` most intense local peaks.
+  retain peaks within `mz_window` Da of one of the globally `k` most intense
+  peaks; this is not a per-window top-k filter.
 - `remove_profiled_spectra(spectrum_in, mz_window=0.5, clone=True)` — reject
   spectra likely to contain profile-mode rather than centroided data.
 
@@ -178,7 +183,9 @@ latter is a percentage rather than a 0-1 fraction.
 `require_precursor_mz(maximum_mz=...)`.
 
 Modified-cosine and neutral-loss scoring require a valid `precursor_mz`.
-Parent-mass matching additionally requires a valid `parent_mass`.
+Parent-mass matching additionally requires a valid `parent_mass`. Check that
+masses are finite and positive: `require_precursor_mz` uses inclusive bounds
+and does not itself reject NaN or infinity. The bundled CLI adds that check.
 
 ## Compound Names, Formulae, and Structures
 
@@ -204,9 +211,15 @@ Parent-mass matching additionally requires a valid `parent_mass`.
 - `repair_not_matching_annotation(spectrum_in, clone=True)`
 - `require_valid_annotation(spectrum)`
 
-`derive_annotation_from_compound_name()` can query PubChem. It introduces
-network dependence, name ambiguity, and external-service variability; cache or
-export the resulting annotations and retain provenance.
+`derive_annotation_from_compound_name(spectrum_in,
+annotated_compound_names_file=None, mass_tolerance=0.1, clone=True)` uses
+PubChemPy name search when no valid SMILES/InChI exists. It requires a plausible
+compound name and `parent_mass`, selecting an annotation by neutral mass
+agreement. The tolerance is an absolute mass difference, not ppm. It can read
+and append its optional CSV cache and can retry network failures for a long
+time. Run deliberately, retain original annotations, and preserve the cache
+with provenance. Name/mass agreement does not resolve isomers or validate the
+query identity. No credential is required for the public PubChem service.
 
 ### Structure/mass repair
 

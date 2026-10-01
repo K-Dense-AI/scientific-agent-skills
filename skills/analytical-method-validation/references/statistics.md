@@ -20,7 +20,8 @@ anything.
 
 ### Lack-of-fit F test
 
-The correct test of a linear calibration model, and it requires replicates at some levels.
+A model-misfit diagnostic requiring replicates at some levels. Statistical significance is
+not a practical linearity acceptance criterion: compare deviations with pre-stated allowable error.
 
 Partition the residual sum of squares into **pure error** (scatter among replicates at the same
 level, which no model can explain) and **lack of fit** (systematic deviation of level means from the
@@ -32,7 +33,7 @@ F = MS_lack-of-fit / MS_pure-error,   df = (k - 2, n - k)
 
 for `k` distinct levels and `n` total points. A significant F says the straight line fails to
 describe the data beyond what replicate scatter explains. Without replicates the partition is
-impossible and no linearity test exists — which is a good reason to replicate at least one level, and
+impossible and this pure-error F test is unavailable — which is a good reason to replicate at least one level, and
 a reason `check_response.py` says so explicitly when it cannot run the test.
 
 ### Residual pattern: runs test
@@ -40,17 +41,22 @@ a reason `check_response.py` says so explicitly when it cannot run the test.
 Curvature makes residual signs cluster: all negative at the ends and positive in the middle, or the
 reverse. The Wald–Wolfowitz runs test counts sign changes and compares against the number expected
 if signs were random. Too few runs is evidence of systematic misfit. It complements the F test and
-works when replicates are absent, though it needs at least eight points with both signs present.
+is reported here after sorting by concentration, even if acquisition order differs. The normal
+approximation used here needs at least eight nonzero residuals of both signs; it is a diagnostic,
+not an exact regression lack-of-fit test. Inspect acquisition-order residuals separately for drift.
 
 ### Heteroscedasticity and weighting
 
 Chromatographic response variance usually scales with concentration. Unweighted least squares
 minimises absolute squared residuals, so the high-concentration points — which have the largest
-absolute residuals — dominate the fit. The result is a curve that is accurate at the top of the range
-and biased at the bottom, which is exactly where an impurity reporting threshold or an LLOQ sits.
+absolute residuals — dominate the fit. Unequal variance by itself does not bias OLS coefficients under a correct mean model, but may
+reduce efficiency and undermine standard errors and low-range precision.
 
 `check_response.py` compares residual variance in the top and bottom thirds of the range. A ratio
-above roughly 10× with an unweighted fit is flagged; `1/x` or `1/x²` weighting is the usual remedy.
+above roughly 10× with an unweighted fit is a heuristic flag, not a guideline criterion. Select
+`1/x` or `1/x²` only if justified by the variance pattern. The weighted F partition uses the same
+weights for residual and pure-error sums, assuming independent normal errors and inverse-variance
+weights constant within each concentration level.
 State the weighting in the protocol before validation — switching to weighting after seeing the data
 to make the low end pass is not a statistical decision.
 
@@ -67,8 +73,8 @@ required it for decades; it belongs in small-molecule QC validation too.
 
 Pooling results from 80%, 100% and 120% levels into one standard deviation makes the range itself
 appear as imprecision. The number produced is meaningless and always too large.
-`check_accuracy_precision.py` estimates precision within each level, and separately provides a
-level-independent view by converting to percent of nominal first.
+`check_accuracy_precision.py` estimates precision within each level. Percent normalization does not justify pooling: concentration-
+dependent recovery bias would still inflate imprecision. CV uses the observed mean as denominator.
 
 ### Repeatability and intermediate precision are different quantities
 
@@ -116,7 +122,10 @@ the effective degrees of freedom come from the Satterthwaite approximation.
 
 Report mean percent recovery, or the difference from the accepted true value, **with a confidence
 interval** — Q2(R2) 3.3.1.4 is explicit, and a bare mean is not sufficient. The interval is
-`mean ± t_{1-α/2, n-1} · s/√n` at each level.
+`mean ± t_{1-α/2, n-1} · s/√n` at each level for independent observations. With multiple
+groups, the helper applies this formula to equally weighted group means, so n is the number of
+independent groups, not injections. Unbalanced group sizes change the estimand to the average
+group mean; use a design-specific mixed model if another weighting or variance structure is required.
 
 The stricter reading, available as `--require-ci-within-limit`, asks that the whole interval sit
 inside the acceptance limit rather than just the point estimate. Q2(R2) says the observed interval
@@ -134,9 +143,11 @@ supply the individual results as supporting information.
 ## Detection and quantitation limits
 
 The `3.3σ/S` and `10σ/S` formulae are estimates whose value depends entirely on which σ you choose.
-On the same calibration data, σ from the residual SD of the regression, from the SD of the
-y-intercept, and from the SD of blank responses commonly give limits spanning a factor of two or
-more. None is wrong; they answer slightly different questions.
+On the same calibration data, σ from the residual SD of the regression, from the SD of intercepts across independent low-range calibration lines, and from the SD of blank responses commonly give limits spanning a factor of two or
+more. Each requires appropriate data. The standard error of one fitted intercept is not the
+across-curve SD named in Q2(R2). The helper requires `--intercepts` to estimate this latter SD and
+rejects weighted fits because their residual scale is not a response SD. It requires explicit
+accuracy/CV limits for confirmation; 20% is not a Q2 default.
 
 Consequences for practice:
 
@@ -144,27 +155,32 @@ Consequences for practice:
 - Confirm an estimated limit with real determinations at or near it. `3.2.3.4` allows skipping the
   estimate entirely and validating the QL directly by accuracy and precision, which is cleaner.
 - For impurity procedures, the QL must be at or below the reporting threshold.
-- Signal-to-noise scaling assumes noise is constant with concentration. It usually is not; confirm at
+- Signal-to-noise scaling assumes constant noise and proportional net signal; confirm those assumptions at
   the resulting level.
 - CLSI's limit of blank / limit of detection / limit of quantitation are defined differently again,
   with their own protocols. Do not translate between the schemes casually.
 
 ## Method comparison and transfer
 
-### Ordinary least squares is the wrong regression here
+### Account for measurement error in both procedures
 
 OLS assumes the x values are known without error. In a method comparison both procedures have
-measurement error, and ignoring the error in x biases the slope toward zero — a regression-dilution
+measurement error, and appreciable independent error in x can attenuate the slope — a regression-dilution
 effect that manufactures apparent proportional bias where none exists.
 
 **Deming regression** accounts for error in both variables given `λ`, the ratio of error variances.
 With `λ = 1` (equal precision) it reduces to orthogonal regression. Standard errors here come from a
-jackknife, which avoids distributional assumptions about the slope.
+jackknife, with a t approximation; independence and a suitable linear error model still matter. Here
+`lambda = var(test error)/var(reference error)`, estimated as `(SD_test/SD_reference)^2`.
+Other software may define the reciprocal. The basic model assumes constant error variances;
+use a suitable weighted errors-in-variables model when precision varies over concentration.
 
 **Passing–Bablok** is non-parametric: the slope is a shifted median of all pairwise slopes, with a
-rank-based confidence interval. It assumes no distribution, tolerates outliers, and is the usual
-choice in clinical method comparison. Its confidence intervals are wider, honestly reflecting what
-the data support.
+rank-based confidence interval. It avoids a specified normal error distribution but still assumes a linear relationship,
+independent sample pairs and compatible error distributions. It is not assumption-free, and its
+interval is not guaranteed wider than Deming. The bundled implementation is limited to distinct
+reference values and positively associated quantitative data; unsupported degenerate/rank cases
+are reported as unavailable. Repeated measurements need a model retaining sample clustering.
 
 Report both. Agreement between them is reassuring; disagreement points to outliers or to a
 distributional problem worth understanding before concluding anything.
@@ -194,8 +210,8 @@ Operationally: the `(1-2α)` confidence interval on the difference must lie enti
 
 A worked contrast from `compare_methods.py`: a transfer with a consistent +1.46% bias gives a paired
 t-test p-value below 0.0001 — a highly significant difference — while TOST establishes equivalence at
-a ±2% margin. Both are correct. The difference is real and it is small enough not to matter. Only
-TOST answers the question the transfer actually asks.
+a ±2% margin. Both are correct. The difference is real and it is small enough not to matter. This TOST addresses mean bias only. It does not establish that individual measurements agree
+closely enough, nor replace limits-of-agreement or clinical decision-point criteria.
 
 The margin must be pre-stated, from the specification or the analytical target profile. A margin
 chosen after seeing the data is not an acceptance criterion, and this is the single most common way

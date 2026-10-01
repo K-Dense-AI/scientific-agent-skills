@@ -1,636 +1,144 @@
-# Logging - Comprehensive Guide
+# Metrics and logger integrations
 
-## Overview
+Reviewed for Lightning 2.6.6. CSV logging is exercised locally; external logger
+integrations below are documentation/source-verified illustrations, not tested
+hosted-service sessions. No tracking server is required for the bundled scripts.
 
-PyTorch Lightning supports multiple logging integrations for experiment tracking and visualization. By default, Lightning uses TensorBoard, but you can easily switch to or combine multiple loggers.
-
-## Supported Loggers
-
-### TensorBoardLogger (Default)
-
-Logs to local or remote file system in TensorBoard format.
-
-**Installation:**
-```bash
-uv pip install tensorboard
-```
-
-**Usage:**
-```python
-from lightning.pytorch import loggers as pl_loggers
-
-tb_logger = pl_loggers.TensorBoardLogger(
-    save_dir="logs/",
-    name="my_model",
-    version="version_1",
-    default_hp_metric=False
-)
-
-trainer = L.Trainer(logger=tb_logger)
-```
-
-**View logs:**
-```bash
-tensorboard --logdir logs/
-```
-
-### WandbLogger
-
-Weights & Biases integration for cloud-based experiment tracking.
-
-**Installation:**
-```bash
-uv pip install wandb
-```
-
-**Usage:**
-```python
-from lightning.pytorch import loggers as pl_loggers
-
-wandb_logger = pl_loggers.WandbLogger(
-    project="my-project",
-    name="experiment-1",
-    save_dir="logs/",
-    log_model=True  # Log model checkpoints to W&B
-)
-
-trainer = L.Trainer(logger=wandb_logger)
-```
-
-**Features:**
-- Cloud-based experiment tracking
-- Model versioning
-- Artifact management
-- Collaborative features
-- Hyperparameter sweeps
-
-### MLFlowLogger
-
-MLflow tracking integration.
-
-**Installation:**
-```bash
-uv pip install mlflow
-```
-
-**Usage:**
-```python
-from lightning.pytorch import loggers as pl_loggers
-
-mlflow_logger = pl_loggers.MLFlowLogger(
-    experiment_name="my_experiment",
-    tracking_uri="http://localhost:5000",
-    run_name="run_1"
-)
-
-trainer = L.Trainer(logger=mlflow_logger)
-```
-
-### CometLogger
-
-Comet.ml experiment tracking.
-
-**Installation:**
-```bash
-uv pip install comet-ml
-```
-
-**Usage:**
-```python
-from lightning.pytorch import loggers as pl_loggers
-
-comet_logger = pl_loggers.CometLogger(
-    api_key="YOUR_API_KEY",
-    project_name="my-project",
-    experiment_name="experiment-1"
-)
-
-trainer = L.Trainer(logger=comet_logger)
-```
-
-### NeptuneLogger (removed in 2.6.4+)
-
-`NeptuneLogger` was removed in lightning 2.6.4 ([release notes](https://github.com/Lightning-AI/pytorch-lightning/releases/tag/2.6.4)). Use WandbLogger, MLFlowLogger, or TensorBoardLogger instead.
-
-### CSVLogger
-
-Log to local file system in YAML and CSV format.
-
-**Usage:**
-```python
-from lightning.pytorch import loggers as pl_loggers
-
-csv_logger = pl_loggers.CSVLogger(
-    save_dir="logs/",
-    name="my_model",
-    version="1"
-)
-
-trainer = L.Trainer(logger=csv_logger)
-```
-
-**Output files:**
-- `metrics.csv` - All logged metrics
-- `hparams.yaml` - Hyperparameters
-
-## Logging Metrics
-
-### Basic Logging
-
-Use `self.log()` within your LightningModule:
+## Local first
 
 ```python
-class MyModel(L.LightningModule):
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.model(x)
-        loss = F.cross_entropy(y_hat, y)
-
-        # Log metric
-        self.log("train_loss", loss)
-
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.model(x)
-        loss = F.cross_entropy(y_hat, y)
-        acc = (y_hat.argmax(dim=1) == y).float().mean()
-
-        # Log multiple metrics
-        self.log("val_loss", loss)
-        self.log("val_acc", acc)
+from lightning.pytorch.loggers import CSVLogger
+logger = CSVLogger("logs", name="experiment", version="run-001")
+trainer = L.Trainer(logger=logger, log_every_n_steps=1)
 ```
 
-### Logging Parameters
+CSVLogger writes `metrics.csv` and, when hyperparameters are logged,
+`hparams.yaml`. `logger=True` selects TensorBoard only when `tensorboard` or
+`tensorboardX` is installed; otherwise it selects CSV. `logger=False` disables
+backend logging, while metrics can still be available for callbacks.
 
-#### `on_step` (bool)
-Log at current step. Default: True in training_step, False otherwise.
+TensorBoard needs the optional `tensorboard` package:
 
 ```python
-self.log("loss", loss, on_step=True)
+from lightning.pytorch.loggers import TensorBoardLogger
+logger = TensorBoardLogger("logs", name="experiment", default_hp_metric=False)
+# View with: tensorboard --logdir logs
 ```
 
-#### `on_epoch` (bool)
-Accumulate and log at epoch end. Default: False in training_step, True otherwise.
+Its `.experiment` is a SummaryWriter with methods such as `add_image`,
+`add_histogram`, `add_graph`, `add_figure`, `add_text`, and `add_audio`. These are
+TensorBoard-specific, not common methods on every logger. Run direct experiment
+calls only on global rank zero, check the logger type, detach tensors and close
+figures. Gate expensive media logging and avoid exposing private samples.
+
+## Metric semantics
+
+For a batch mean loss/accuracy, use an explicit sample count:
 
 ```python
-self.log("loss", loss, on_epoch=True)
+self.log("val/loss", loss, on_step=False, on_epoch=True,
+         batch_size=y.size(0), sync_dist=True, prog_bar=True)
 ```
 
-#### `prog_bar` (bool)
-Display in progress bar. Default: False.
+Epoch tensor means are weighted by `batch_size`. With masks/tokens, decide
+whether the target is a mean per example or per valid token; use its actual
+normalizing count rather than blindly taking the tensor's first dimension.
+`sync_dist=False` is the default. All ranks must participate in synchronized
+calls; rank-dependent conditionals can hang. `rank_zero_only=True` tells
+Lightning that the caller logs only on rank zero; it is not a decorator that
+prevents other ranks executing code, and such a metric must not drive a
+synchronized callback monitor.
+
+`on_step`/`on_epoch` defaults depend on the hook: training_step defaults to
+step-only, validation/test steps to epoch-only. Not every hook permits logging.
+Set flags explicitly when the reduction matters. Both true creates `_step` and
+`_epoch` names; monitor the correct one. `reduce_fx` supports mean/sum/min/max;
+it does not make a nonlinear batch metric globally correct.
+
+For AUROC, F1, precision/recall and other nonlinear metrics, maintain a
+TorchMetrics instance per stage/loader and log the **object**:
 
 ```python
-self.log("train_loss", loss, prog_bar=True)
+# in __init__
+from torchmetrics.classification import MulticlassAccuracy
+self.val_accuracy = MulticlassAccuracy(num_classes=10, average="micro")
+
+# in validation_step
+self.val_accuracy.update(logits, y)
+self.log("val/accuracy", self.val_accuracy, on_step=False, on_epoch=True)
 ```
 
-#### `logger` (bool)
-Send to logger backends. Default: True.
+TorchMetrics manages distributed state synchronization and Lightning resets
+logged metric objects between epochs. Logging a scalar returned from a metric
+call instead loses that lifecycle contract. Do not share one instance between
+train and validation. For scientific test metrics, DDP sampler padding still
+biases sample coverage even if the metric reduction is correct.
+
+## Optional tracking services
+
+Install only the selected backend. Use provider credentials through its existing
+configuration/environment, not embedded in code or saved hyperparameters.
+SDKs choose network endpoints/authentication and handle their request bodies;
+Lightning logger wrappers do not define independent REST endpoints or pagination.
+Confirm the actual target account/project/server before enabling online logging.
+
+| Logger | Current contract and data destination |
+| --- | --- |
+| `WandbLogger` | Requires `wandb`; `offline=False`, `log_model=False` by default. Online runs send metrics/hyperparameters to the configured W&B backend. `log_model=True` logs checkpoints at finalization (and during training when saving all); `"all"` logs each saved checkpoint. |
+| `MLFlowLogger` | Requires `mlflow` (the slim client can suffice for remote tracking). Explicit `tracking_uri` overrides `MLFLOW_TRACKING_URI`; without a URI the wrapper falls back to `file:./mlruns`. `log_model=False` is default. The current MLflow SDK's default backend alone does not change that wrapper fallback. |
+| `CometLogger` | Requires `comet-ml`; current Lightning arguments are `project`, `online`, and `name` via kwargs. Old `project_name`, `offline`, `experiment_name`, and `save_dir` are deprecated by the wrapper. The constructor can create an experiment immediately. |
+
+Offline W&B illustration (no model artifacts):
 
 ```python
-self.log("internal_metric", value, logger=False)  # Don't log to external logger
+from lightning.pytorch.loggers import WandbLogger
+logger = WandbLogger(project="my-project", save_dir="logs",
+                     offline=True, log_model=False)
 ```
 
-#### `reduce_fx` (str or callable)
-Reduction function: "mean", "sum", "max", "min". Default: "mean".
+Do not reuse an already active online W&B run when expecting offline isolation.
+Lightning rejects `offline=True` combined with model uploading. Offline files
+may later be uploaded only when that is intended. Avoid automatic `.watch` or
+media/artifact uploads without a concrete experiment need.
+
+MLflow server illustration (requires a configured server and authorization):
 
 ```python
-self.log("batch_size", batch.size(0), reduce_fx="sum")
+from lightning.pytorch.loggers import MLFlowLogger
+logger = MLFlowLogger(experiment_name="my-experiment", run_name="run-001",
+                      tracking_uri="http://127.0.0.1:5000", log_model=False)
+logger.log_metrics({"val_loss": 0.5}, step=1)
 ```
 
-#### `sync_dist` (bool)
-Synchronize metric across devices in distributed training. Default: False.
-
-```python
-self.log("loss", loss, sync_dist=True)
-```
-
-#### `rank_zero_only` (bool)
-Only log from rank 0 process. Default: False.
-
-```python
-self.log("debug_metric", value, rank_zero_only=True)
-```
-
-### Complete Example
-
-```python
-def training_step(self, batch, batch_idx):
-    loss = self.compute_loss(batch)
-
-    # Log per-step and per-epoch, display in progress bar
-    self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-
-    return loss
-
-def validation_step(self, batch, batch_idx):
-    loss = self.compute_loss(batch)
-    acc = self.compute_accuracy(batch)
-
-    # Log epoch-level metrics
-    self.log("val_loss", loss, on_epoch=True)
-    self.log("val_acc", acc, on_epoch=True, prog_bar=True)
-```
-
-### Logging Multiple Metrics
-
-Use `log_dict()` to log multiple metrics at once:
-
-```python
-def training_step(self, batch, batch_idx):
-    loss, acc, f1 = self.compute_metrics(batch)
-
-    metrics = {
-        "train_loss": loss,
-        "train_acc": acc,
-        "train_f1": f1
-    }
-
-    self.log_dict(metrics, on_step=True, on_epoch=True)
-
-    return loss
-```
-
-## Logging Hyperparameters
-
-### Automatic Hyperparameter Logging
-
-Use `save_hyperparameters()` in your model:
-
-```python
-class MyModel(L.LightningModule):
-    def __init__(self, learning_rate, hidden_dim, dropout):
-        super().__init__()
-        # Automatically save and log hyperparameters
-        self.save_hyperparameters()
-```
-
-### Manual Hyperparameter Logging
-
-```python
-# In LightningModule
-class MyModel(L.LightningModule):
-    def __init__(self, learning_rate):
-        super().__init__()
-        self.save_hyperparameters()
-
-# Or manually with logger
-trainer.logger.log_hyperparams({
-    "learning_rate": 0.001,
-    "batch_size": 32
-})
-```
-
-## Logging Frequency
-
-By default, Lightning logs every 50 training steps. Adjust with `log_every_n_steps`:
-
-```python
-trainer = L.Trainer(log_every_n_steps=10)
-```
-
-## Multiple Loggers
-
-Use multiple loggers simultaneously:
-
-```python
-from lightning.pytorch import loggers as pl_loggers
-
-tb_logger = pl_loggers.TensorBoardLogger("logs/")
-wandb_logger = pl_loggers.WandbLogger(project="my-project")
-csv_logger = pl_loggers.CSVLogger("logs/")
-
-trainer = L.Trainer(logger=[tb_logger, wandb_logger, csv_logger])
-```
-
-## Advanced Logging
-
-### Logging Images
-
-```python
-import torchvision
-
-def validation_step(self, batch, batch_idx):
-    x, y = batch
-    y_hat = self.model(x)
-
-    # Log first batch of images once per epoch
-    if batch_idx == 0:
-        # Create image grid
-        grid = torchvision.utils.make_grid(x[:8])
-
-        # Log to TensorBoard
-        self.logger.experiment.add_image("val_images", grid, self.current_epoch)
-
-        # Log to Wandb
-        if isinstance(self.logger, pl_loggers.WandbLogger):
-            import wandb
-            self.logger.experiment.log({
-                "val_images": [wandb.Image(img) for img in x[:8]]
-            })
-```
-
-### Logging Histograms
-
-```python
-def on_train_epoch_end(self):
-    # Log parameter histograms
-    for name, param in self.named_parameters():
-        self.logger.experiment.add_histogram(name, param, self.current_epoch)
-
-        if param.grad is not None:
-            self.logger.experiment.add_histogram(
-                f"{name}_grad", param.grad, self.current_epoch
-            )
-```
-
-### Logging Model Graph
-
-```python
-def on_train_start(self):
-    # Log model architecture
-    sample_input = torch.randn(1, 3, 224, 224).to(self.device)
-    self.logger.experiment.add_graph(self.model, sample_input)
-```
-
-### Logging Custom Plots
-
-```python
-import matplotlib.pyplot as plt
-
-def on_validation_epoch_end(self):
-    # Create custom plot
-    fig, ax = plt.subplots()
-    ax.plot(self.validation_losses)
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Loss")
-
-    # Log to TensorBoard
-    self.logger.experiment.add_figure("loss_curve", fig, self.current_epoch)
-
-    plt.close(fig)
-```
-
-### Logging Text
-
-```python
-def validation_step(self, batch, batch_idx):
-    # Generate predictions
-    predictions = self.generate_text(batch)
-
-    # Log to TensorBoard
-    self.logger.experiment.add_text(
-        "predictions",
-        f"Batch {batch_idx}: {predictions}",
-        self.current_epoch
-    )
-```
-
-### Logging Audio
-
-```python
-def validation_step(self, batch, batch_idx):
-    audio = self.generate_audio(batch)
-
-    # Log to TensorBoard (audio is tensor of shape [1, samples])
-    self.logger.experiment.add_audio(
-        "generated_audio",
-        audio,
-        self.current_epoch,
-        sample_rate=22050
-    )
-```
-
-## Accessing Logger in LightningModule
-
-```python
-class MyModel(L.LightningModule):
-    def training_step(self, batch, batch_idx):
-        # Access logger experiment object
-        logger = self.logger.experiment
-
-        # For TensorBoard
-        if isinstance(self.logger, pl_loggers.TensorBoardLogger):
-            logger.add_scalar("custom_metric", value, self.global_step)
-
-        # For Wandb
-        if isinstance(self.logger, pl_loggers.WandbLogger):
-            logger.log({"custom_metric": value})
-
-        # For MLflow
-        if isinstance(self.logger, pl_loggers.MLFlowLogger):
-            logger.log_metric("custom_metric", value)
-```
-
-## Custom Logger
-
-Create a custom logger by inheriting from `Logger`:
-
-```python
-from lightning.pytorch.loggers import Logger
-from lightning.pytorch.utilities import rank_zero_only
-
-class MyCustomLogger(Logger):
-    def __init__(self, save_dir):
-        super().__init__()
-        self.save_dir = save_dir
-        self._name = "my_logger"
-        self._version = "0.1"
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def version(self):
-        return self._version
-
-    @rank_zero_only
-    def log_metrics(self, metrics, step):
-        # Log metrics to your backend
-        print(f"Step {step}: {metrics}")
-
-    @rank_zero_only
-    def log_hyperparams(self, params):
-        # Log hyperparameters
-        print(f"Hyperparameters: {params}")
-
-    @rank_zero_only
-    def save(self):
-        # Save logger state
-        pass
-
-    @rank_zero_only
-    def finalize(self, status):
-        # Cleanup when training ends
-        pass
-
-# Usage
-custom_logger = MyCustomLogger(save_dir="logs/")
-trainer = L.Trainer(logger=custom_logger)
-```
-
-## Best Practices
-
-### 1. Log Both Step and Epoch Metrics
-
-```python
-# Good: Track both granular and aggregate metrics
-self.log("train_loss", loss, on_step=True, on_epoch=True)
-```
-
-### 2. Use Progress Bar for Key Metrics
-
-```python
-# Show important metrics in progress bar
-self.log("val_acc", acc, prog_bar=True)
-```
-
-### 3. Synchronize Metrics in Distributed Training
-
-```python
-# Ensure correct aggregation across GPUs
-self.log("val_loss", loss, sync_dist=True)
-```
-
-### 4. Log Learning Rate
-
-```python
-from lightning.pytorch.callbacks import LearningRateMonitor
-
-trainer = L.Trainer(callbacks=[LearningRateMonitor(logging_interval="step")])
-```
-
-### 5. Log Gradient Norms
-
-```python
-def on_after_backward(self):
-    # Monitor gradient flow
-    grad_norm = torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=float('inf'))
-    self.log("grad_norm", grad_norm)
-```
-
-### 6. Use Descriptive Metric Names
-
-```python
-# Good: Clear naming convention
-self.log("train/loss", loss)
-self.log("train/accuracy", acc)
-self.log("val/loss", val_loss)
-self.log("val/accuracy", val_acc)
-```
-
-### 7. Log Hyperparameters
-
-```python
-# Always save hyperparameters for reproducibility
-class MyModel(L.LightningModule):
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.save_hyperparameters()
-```
-
-### 8. Don't Log Too Frequently
-
-```python
-# Avoid logging every step for expensive operations
-if batch_idx % 100 == 0:
-    self.log_images(batch)
-```
-
-## Common Patterns
-
-### Structured Logging
-
-```python
-def training_step(self, batch, batch_idx):
-    loss, metrics = self.compute_loss_and_metrics(batch)
-
-    # Organize logs with prefixes
-    self.log("train/loss", loss)
-    self.log_dict({f"train/{k}": v for k, v in metrics.items()})
-
-    return loss
-
-def validation_step(self, batch, batch_idx):
-    loss, metrics = self.compute_loss_and_metrics(batch)
-
-    self.log("val/loss", loss)
-    self.log_dict({f"val/{k}": v for k, v in metrics.items()})
-```
-
-### Conditional Logging
-
-```python
-def training_step(self, batch, batch_idx):
-    loss = self.compute_loss(batch)
-
-    # Log expensive metrics less frequently
-    if self.global_step % 100 == 0:
-        expensive_metric = self.compute_expensive_metric(batch)
-        self.log("expensive_metric", expensive_metric)
-
-    self.log("train_loss", loss)
-    return loss
-```
-
-### Multi-Task Logging
-
-```python
-def training_step(self, batch, batch_idx):
-    x, y_task1, y_task2 = batch
-
-    loss_task1 = self.compute_task1_loss(x, y_task1)
-    loss_task2 = self.compute_task2_loss(x, y_task2)
-    total_loss = loss_task1 + loss_task2
-
-    # Log per-task metrics
-    self.log_dict({
-        "train/loss_task1": loss_task1,
-        "train/loss_task2": loss_task2,
-        "train/loss_total": total_loss
-    })
-
-    return total_loss
-```
-
-## Troubleshooting
-
-### Metric Not Found Error
-
-If you get "metric not found" errors with schedulers:
-
-```python
-# Make sure metric is logged with logger=True
-self.log("val_loss", loss, logger=True)
-
-# And configure scheduler to monitor it
-def configure_optimizers(self):
-    optimizer = torch.optim.Adam(self.parameters())
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
-    return {
-        "optimizer": optimizer,
-        "lr_scheduler": {
-            "scheduler": scheduler,
-            "monitor": "val_loss"  # Must match logged metric name
-        }
-    }
-```
-
-### Metrics Not Syncing in Distributed Training
-
-```python
-# Enable sync_dist for proper aggregation
-self.log("val_acc", acc, sync_dist=True)
-```
-
-### Logger Not Saving
-
-```python
-# Ensure logger has write permissions
-trainer = L.Trainer(
-    logger=pl_loggers.TensorBoardLogger("logs/"),
-    default_root_dir="outputs/"  # Ensure directory exists and is writable
-)
-```
+The example URI is a local server the user must run, not a public service.
+`logger.experiment` is an `MlflowClient`; direct `log_metric` needs
+`run_id=logger.run_id, key=..., value=...`. Prefer the wrapper's `log_metrics`
+for rank handling and consistent step semantics.
+
+For Comet, verify the installed wrapper/SDK pair before relying on offline
+persistence: Lightning 2.6.6 sets `ExperimentConfig(disabled=True)` when
+`online=False`, although the Comet SDK's `start(online=False)` normally creates
+an offline experiment. The SDK now favors `project_name`, while Lightning's
+wrapper still favors `project` and forwards it. Use CSV for a guaranteed local
+smoke run; do not treat an untested Comet constructor as a no-side-effect probe.
+Online Comet needs configured authentication (e.g. `COMET_API_KEY`) and explicit
+user intent to send the logged data.
+
+Neptune's service permanently shut down March 5, 2026, and Lightning removed
+NeptuneLogger in 2.6.4. Do not suggest restoring it by pinning an old client.
+
+For multiple backends, pass `logger=[...]`; direct media calls must iterate
+`self.loggers` and dispatch by type. A custom Logger must implement `name`,
+`version`, `log_metrics`, and `log_hyperparams`; if overriding `save_dir`, use a
+property backed by `_save_dir` (the base property has no setter). Decorate backend
+writes with `rank_zero_only`. Implement `save`/`finalize` when flushing is needed.
+
+Sources: [tensor aggregation](https://github.com/Lightning-AI/pytorch-lightning/blob/2.6.6/src/lightning/pytorch/trainer/connectors/logger_connector/result.py),
+[W&B wrapper](https://github.com/Lightning-AI/pytorch-lightning/blob/2.6.6/src/lightning/pytorch/loggers/wandb.py),
+[W&B 0.30 initialization](https://github.com/wandb/wandb/blob/v0.30.0/wandb/sdk/wandb_init.py),
+[MLflow wrapper](https://github.com/Lightning-AI/pytorch-lightning/blob/2.6.6/src/lightning/pytorch/loggers/mlflow.py),
+[MLflow 3.16.1 client](https://github.com/mlflow/mlflow/blob/v3.16.1/mlflow/tracking/client.py),
+[Comet wrapper](https://github.com/Lightning-AI/pytorch-lightning/blob/2.6.6/src/lightning/pytorch/loggers/comet.py),
+[Comet start API](https://www.comet.com/docs/v2/api-and-sdk/python-sdk/reference/start/),
+[TorchMetrics integration](https://lightning.ai/docs/torchmetrics/stable/pages/lightning.html),
+[Neptune shutdown](https://docs.neptune.ai/).

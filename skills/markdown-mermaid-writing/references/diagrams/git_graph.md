@@ -72,3 +72,8 @@ gitGraph
     checkout main
     merge feature/your-feature id: "merge feature" tag: "v1.0"
 ```
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/gitgraph.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

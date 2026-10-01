@@ -1,10 +1,14 @@
 # Dask Schedulers
 
+Reviewed with Dask/distributed 2026.8.0. File paths, deployment settings, and undefined application functions are illustrative; executed local checks and current official sources are in [review.md](review.md).
+
 ## Overview
 
 Dask provides multiple task schedulers, each suited to different workloads. The scheduler determines how tasks are executed: sequentially, in parallel threads, in parallel processes, or distributed across a cluster.
 
 ## Scheduler Types
+
+In scripts, guard process scheduler execution and local process-cluster creation with `if __name__ == "__main__":`. Array/DataFrame defaults below apply when no active distributed client or explicit configuration overrides them. Close both client and any separately created cluster when finished.
 
 ### Single-Machine Schedulers
 
@@ -98,8 +102,8 @@ result = computation.compute(scheduler='processes')
 **Characteristics**:
 - No parallelism
 - Easy debugging
-- No overhead
-- Deterministic execution
+- Low scheduler overhead
+- Serial execution; random functions and side effects still need reproducibility controls
 
 **Example**:
 ```python
@@ -146,11 +150,11 @@ from dask.distributed import Client
 import dask.dataframe as dd
 
 # Create local cluster
-client = Client()  # Automatically uses all cores
+client = Client(n_workers=2, threads_per_worker=2)  # Explicit resource budget
 
 # Use distributed scheduler
 ddf = dd.read_csv('data.csv')
-result = ddf.groupby('category').mean().compute()
+result = ddf.groupby('category')['value'].mean().compute()
 
 # View dashboard
 print(client.dashboard_link)
@@ -208,21 +212,27 @@ client = Client(cluster)
 result = computation.compute()
 
 client.close()
+cluster.close()  # Release the jobs owned by this cluster
 ```
 
 **Example with Dask on Kubernetes**:
 ```python
-from dask_kubernetes import KubeCluster
+from dask_kubernetes.operator import KubeCluster
 from dask.distributed import Client
 
-cluster = KubeCluster()
+# Illustrative: requires installed Dask Operator/CRDs and authorized kubeconfig.
+# Use an image with matching dask/distributed and workload dependencies.
+cluster = KubeCluster(name='research-dask', image=validated_worker_image)
 cluster.scale(20)  # 20 workers
 
 client = Client(cluster)
 result = computation.compute()
 
 client.close()
+cluster.close()
 ```
+
+Both deployment recipes require site-specific configuration and were not deployed in this review.
 
 ## Scheduler Configuration
 
@@ -291,19 +301,19 @@ client.close()
 ### Performance Considerations
 
 **Threads**:
-- Overhead: ~10 µs per task
+- Low overhead; measure with representative tasks
 - Best for: Numeric operations
 - Memory: Shared
 - GIL: Affected by GIL
 
 **Processes**:
-- Overhead: ~10 ms per task
+- Includes process startup and serialization costs
 - Best for: Python operations
 - Memory: Copied between processes
 - GIL: Not affected
 
 **Synchronous**:
-- Overhead: ~1 µs per task
+- Low overhead; no concurrent execution
 - Best for: Debugging
 - Memory: No parallelism
 - GIL: Not relevant
@@ -384,7 +394,7 @@ import dask.dataframe as dd
 
 # Use threads for DataFrame operations
 ddf = dd.read_parquet('data.parquet')
-result1 = ddf.mean().compute(scheduler='threads')
+result1 = ddf['value'].mean().compute(scheduler='threads')
 
 # Use processes for Python code
 import dask.bag as db
@@ -433,14 +443,12 @@ print(client.dashboard_link)
 ### Performance Profiling
 
 ```python
-# Profile computation
-from dask.distributed import Client
+# Full report captures only the work inside the context. Requires Bokeh.
+from dask.distributed import performance_report
 
-client = Client()
-result = computation.compute()
-
-# Get performance report
-client.profile(filename='profile.html')
+with performance_report(filename='performance.html'):
+    result = computation.compute()
+# client.profile(filename='profile.html') gives statistical stack profiling only.
 ```
 
 ### Resource Monitoring
@@ -452,8 +460,11 @@ client.scheduler_info()
 # Get current tasks
 client.who_has()
 
-# Memory usage
-client.run(lambda: psutil.virtual_memory().percent)
+# Host RAM percentage (not each worker's managed-memory usage)
+def host_memory_percent():
+    import psutil
+    return psutil.virtual_memory().percent
+client.run(host_memory_percent)
 ```
 
 ## Advanced Configuration
@@ -466,8 +477,8 @@ import dask
 
 # Use custom thread pool
 with ThreadPoolExecutor(max_workers=4) as executor:
-    dask.config.set(pool=executor)
-    result = computation.compute(scheduler='threads')
+    with dask.config.set(pool=executor):
+        result = computation.compute(scheduler='threads')
 ```
 
 ### Adaptive Scaling (Distributed)
@@ -495,7 +506,7 @@ class CustomPlugin(WorkerPlugin):
         worker.custom_resource = initialize_resource()
 
 client = Client()
-client.register_worker_plugin(CustomPlugin())
+client.register_plugin(CustomPlugin(), name='custom-resource')
 ```
 
 ## Troubleshooting

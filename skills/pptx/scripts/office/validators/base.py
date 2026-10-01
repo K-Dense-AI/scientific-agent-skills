@@ -10,7 +10,7 @@ from functools import lru_cache
 
 import lxml.etree
 
-from helpers import safe_extract
+from helpers import opc_target, rels_source_part, safe_extract
 
 
 @lru_cache(maxsize=None)
@@ -126,6 +126,13 @@ class BaseSchemaValidator:
 
     def repair_whitespace_preservation(self) -> int:
         repairs = 0
+        text_elements = {
+            "http://schemas.openxmlformats.org/wordprocessingml/2006/main": {
+                "t", "delText", "instrText", "delInstrText"
+            },
+            "http://schemas.openxmlformats.org/officeDocument/2006/math": {"t"},
+            "http://schemas.openxmlformats.org/spreadsheetml/2006/main": {"t"},
+        }
 
         for xml_file in self.xml_files:
             try:
@@ -134,8 +141,10 @@ class BaseSchemaValidator:
                 pending = []  
 
                 for elem in dom.getElementsByTagName("*"):
-                    local_name = elem.tagName.rsplit(":", 1)[-1]
-                    if local_name in ("t", "delText", "instrText", "delInstrText"):
+                    # DrawingML a:t is a plain xsd:string; adding xml:space
+                    # there makes a valid slide invalid. Match qualified names,
+                    # while retaining Word, math and spreadsheet text support.
+                    if elem.localName in text_elements.get(elem.namespaceURI, ()):
                         text = "".join(
                             child.data
                             for child in elem.childNodes
@@ -143,8 +152,8 @@ class BaseSchemaValidator:
                         )
                         ws = (" ", "\t", "\n", "\r")
                         if text and (text.startswith(ws) or text.endswith(ws)):
-                            if elem.getAttribute("xml:space") != "preserve":
-                                elem.setAttribute("xml:space", "preserve")
+                            if elem.getAttributeNS(self.XML_NAMESPACE, "space") != "preserve":
+                                elem.setAttributeNS(self.XML_NAMESPACE, "xml:space", "preserve")
                                 text_preview = repr(text[:30]) + "..." if len(text) > 30 else repr(text)
                                 pending.append(f"  Repaired: {xml_file.name}: Added xml:space='preserve' to {elem.tagName}: {text_preview}")
 
@@ -346,29 +355,21 @@ class BaseSchemaValidator:
                     ".//ns:Relationship",
                     namespaces={"ns": self.PACKAGE_RELATIONSHIPS_NAMESPACE},
                 ):
-                    target = rel.get("Target")
-                    if rel.get("TargetMode") == "External":
-                        continue
-                    if target and not target.startswith(
-                        ("http", "mailto:")
-                    ):  
-                        if target.startswith("/"):
-                            target_path = self.unpacked_dir / target.lstrip("/")
-                        elif rels_file.name == ".rels":
-                            target_path = self.unpacked_dir / target
+                    target = rel.get("Target", "")
+                    try:
+                        part = opc_target(target, rels_source_part(rels_file, self.unpacked_dir), rel.get("TargetMode", ""))
+                        if part is None:
+                            continue
+                        target_path = (self.unpacked_dir / part).resolve()
+                        if not target_path.is_relative_to(self.unpacked_dir):
+                            raise ValueError("relationship target escapes the package")
+                        if target_path.is_file():
+                            referenced_files.add(target_path)
+                            all_referenced_files.add(target_path)
                         else:
-                            base_dir = rels_dir.parent
-                            target_path = base_dir / target
-
-                        try:
-                            target_path = target_path.resolve()
-                            if target_path.exists() and target_path.is_file():
-                                referenced_files.add(target_path)
-                                all_referenced_files.add(target_path)
-                            else:
-                                broken_refs.append((target, rel.sourceline))
-                        except (OSError, ValueError):
                             broken_refs.append((target, rel.sourceline))
+                    except (OSError, ValueError):
+                        broken_refs.append((target, rel.sourceline))
 
                 if broken_refs:
                     rel_path = rels_file.relative_to(self.unpacked_dir)

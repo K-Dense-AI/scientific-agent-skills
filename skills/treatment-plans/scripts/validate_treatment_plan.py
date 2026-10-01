@@ -30,7 +30,7 @@ def validate_target(raw_path: str) -> dict:
                 issues.append(
                     Issue(
                         issue.code,
-                        f"{document_type}:{issue.path}",
+                        f"{document_type if document_type in TEMPLATE_FILES else 'unknown_document_type'}:{issue.path}",
                         issue.level,
                     )
                 )

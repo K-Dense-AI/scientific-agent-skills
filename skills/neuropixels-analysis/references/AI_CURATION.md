@@ -1,11 +1,13 @@
 # AI-Assisted Curation Reference
 
 Use vision-language models to analyze spike-sorting visualizations for borderline units,
-complementing quantitative quality metrics.
+complementing quantitative quality metrics. Reviewed 2026-10-01; HTTP payloads
+are documentation-verified only. No paid API calls or scientific classification
+validation were performed. Visual suggestions must not auto-accept units.
 
 ```
 Traditional:  Metrics → Threshold → Labels
-AI-Enhanced:  Metrics → Render plots → Vision model → Confidence → Labels
+AI-Assisted:  Metrics → Render plots → Vision suggestion → Human review → Labels
 ```
 
 > **Credential safety:** never hardcode API keys in analysis scripts — they end up in
@@ -64,7 +66,8 @@ PROMPT = (
     "mua (multi-unit), or noise. Reply with the label and a one-sentence justification."
 )
 
-def analyze_unit_visually(analyzer, unit_id, model="claude-opus-4-5"):
+def analyze_unit_visually(analyzer, unit_id, model=None):
+    model = model or os.environ["ANTHROPIC_VISION_MODEL"]
     img_b64 = render_unit_image(analyzer, unit_id)
     msg = client.messages.create(
         model=model,
@@ -78,7 +81,7 @@ def analyze_unit_visually(analyzer, unit_id, model="claude-opus-4-5"):
             ],
         }],
     )
-    return msg.content[0].text
+    return "\n".join(block.text for block in msg.content if block.type == "text")
 
 print(analyze_unit_visually(analyzer, unit_id=0))
 ```
@@ -91,7 +94,8 @@ from openai import OpenAI
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
-def analyze_unit_visually_openai(analyzer, unit_id, model="gpt-4o"):
+def analyze_unit_visually_openai(analyzer, unit_id, model=None):
+    model = model or os.environ["OPENAI_VISION_MODEL"]
     img_b64 = render_unit_image(analyzer, unit_id)
     resp = client.responses.create(
         model=model,
@@ -121,21 +125,12 @@ for uid in uncertain:
     ai_labels[uid] = analyze_unit_visually(analyzer, uid)
 ```
 
-## Hybrid curation: metrics + AI
+## Keep advisory responses separate
 
-```python
-def hybrid_curation(analyzer, metrics):
-    labels = {}
-    for unit_id in metrics.index:
-        row = metrics.loc[unit_id]
-        if row["snr"] > 10 and row["isi_violations_ratio"] < 0.001:
-            labels[unit_id] = "good"          # clearly good from metrics
-        elif row["snr"] < 1.5:
-            labels[unit_id] = "noise"         # clearly noise from metrics
-        else:
-            labels[unit_id] = analyze_unit_visually(analyzer, unit_id)  # ask the model
-    return labels
-```
+Store unit ID, image hash, model ID, prompt, returned text and reviewer decision.
+Do not use arbitrary model prose as a curation label or interpret its stated
+confidence as a calibrated isolation probability. AI cannot establish ground truth
+from a summary image; inspect omitted channels, epochs and neighboring units.
 
 ## What each panel tells you
 
@@ -158,7 +153,14 @@ def hybrid_curation(analyzer, metrics):
 
 ## References
 
-- [Anthropic Vision API](https://docs.anthropic.com/en/docs/build-with-claude/vision)
-- [OpenAI Vision/Images](https://platform.openai.com/docs/guides/images-vision)
+- [Anthropic Vision API](https://platform.claude.com/docs/en/build-with-claude/vision)
+- [OpenAI Vision/Images](https://developers.openai.com/api/docs/guides/images-vision)
 - [SpikeInterface model-based curation](https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html)
 - [SpikeAgent](https://github.com/SpikeAgent/SpikeAgent) — AI-powered spike-sorting assistant
+
+Anthropic uses authenticated `POST /v1/messages` with image source `{type: base64,
+media_type: image/png, data: ...}` plus text content; the SDK handles its API key
+and version header. OpenAI uses bearer-authenticated `POST /v1/responses` with
+`input_image.image_url` containing a PNG data URL; read `output_text`. These are
+single-response calls without pagination. Select a provider-supported vision model
+explicitly through the environment; model access and limits depend on the account.

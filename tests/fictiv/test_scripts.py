@@ -138,8 +138,18 @@ class StepInspectionTests(unittest.TestCase):
         self.assertEqual(r["info"]["approx_bbox_mm"], [2100.0, 40.0, 15.0])
         self.assertTrue(any("exceeds Fictiv's published cnc envelope" in w for w in r["warnings"]))
 
+    def test_unknown_units_are_not_reported_as_millimetres(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "unknown.step"
+            path.write_text((FIXTURES / "block_mm.step").read_text().replace(
+                "SI_UNIT(.MILLI.,.METRE.)", "SI_UNIT($,.UNRECOGNIZED.)"))
+            r = check_cad_file.check(str(path), "cnc")
+        self.assertEqual(r["info"]["length_unit"], "unknown")
+        self.assertEqual(r["info"]["approx_bbox_units"], [60.0, 40.0, 15.0])
+        self.assertNotIn("approx_bbox_mm", r["info"])
+
     def test_envelope_check_is_orientation_independent(self):
-        # 900 x 700 x 100 mm fits the 914 x 610 x 914 mm FDM envelope once the
+        # 900 x 700 x 100 mm fits the 914 x 609 x 914 mm FDM envelope once the
         # part is laid flat; comparing sorted part dims to unsorted envelope
         # axes used to flag it.
         with tempfile.TemporaryDirectory() as tmp:
@@ -214,12 +224,25 @@ class ExtensionTests(unittest.TestCase):
             ("part.iges", "IGES"),
             ("part.f3d", "Fusion 360"),
             ("part.dxf", "DXF"),
+            ("part.psm", "Solid Edge sheet metal"),
+            ("part.pwd", "Solid Edge weldment"),
             ("top.sldasm", "assembly files"),
             ("part.xyz", "unrecognized extension"),
         ):
             with self.subTest(name=name):
                 r = check_cad_file.check(self.touch(name), "cnc")
                 self.assertTrue(any(fragment in b for b in r["blocking"]), r["blocking"])
+
+    def test_mesh_formats_in_uploader_do_not_bypass_process_restriction(self):
+        for ext in ("acs", "wrl"):
+            path = self.touch(f"part.{ext}")
+            self.assertTrue(check_cad_file.check(path, "cnc")["blocking"])
+            self.assertEqual(check_cad_file.check(path, "3dp")["blocking"], [])
+
+    def test_upload_only_formats_require_support_verification(self):
+        for ext in ("3mf", "gts", "ifczip", "xmt"):
+            result = check_cad_file.check(self.touch(f"part.{ext}"), "cnc")
+            self.assertTrue(any("support is unverified" in b for b in result["blocking"]))
 
     def test_pdf_alone_warns_but_does_not_block(self):
         r = check_cad_file.check(self.touch("drawing.pdf"), "cnc")

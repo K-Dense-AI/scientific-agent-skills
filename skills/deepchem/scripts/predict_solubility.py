@@ -14,9 +14,10 @@ import argparse
 import deepchem as dc
 import numpy as np
 import sys
+from _common import load_csv, validate_splits, evaluate_splits
 
 
-def train_solubility_model(data_path=None, smiles_col='smiles', target_col='measured log solubility in mols per litre'):
+def train_solubility_model(data_path=None, smiles_col='smiles', target_col='measured log solubility in mols per litre', n_epochs=50):
     """
     Train a solubility prediction model.
 
@@ -36,19 +37,16 @@ def train_solubility_model(data_path=None, smiles_col='smiles', target_col='meas
     if data_path is None:
         print("\nUsing Delaney (ESOL) benchmark dataset...")
         tasks, datasets, transformers = dc.molnet.load_delaney(
-            featurizer='ECFP',
+            featurizer=dc.feat.CircularFingerprint(radius=2, size=2048),
             splitter='scaffold'
         )
         train, valid, test = datasets
     else:
         print(f"\nLoading custom data from {data_path}...")
         featurizer = dc.feat.CircularFingerprint(radius=2, size=2048)
-        loader = dc.data.CSVLoader(
-            tasks=[target_col],
-            feature_field=smiles_col,
-            featurizer=featurizer
-        )
-        dataset = loader.create_dataset(data_path)
+        dataset = load_csv(data_path, [target_col], smiles_col, featurizer)
+        if not np.all(dataset.w > 0):
+            raise ValueError('Solubility training requires a measured target for every row')
 
         # Split data
         print("Splitting data with scaffold splitter...")
@@ -61,7 +59,7 @@ def train_solubility_model(data_path=None, smiles_col='smiles', target_col='meas
         )
 
         # Normalize data
-        print("Normalizing features and targets...")
+        print("Normalizing targets using training statistics...")
         transformers = [
             dc.trans.NormalizationTransformer(
                 transform_y=True,
@@ -80,20 +78,23 @@ def train_solubility_model(data_path=None, smiles_col='smiles', target_col='meas
     print(f"  Validation: {len(valid)} molecules")
     print(f"  Test:       {len(test)} molecules")
 
+    validate_splits((train, valid, test), "regression", len(tasks))
+
     # Create model
     print("\nCreating multitask regressor...")
     model = dc.models.MultitaskRegressor(
         n_tasks=len(tasks),
         n_features=2048,  # ECFP fingerprint size
-        layer_sizes=[1000, 500],
+        layer_sizes=[128, 64],
         dropouts=0.25,
         learning_rate=0.001,
+        device="cpu",
         batch_size=50
     )
 
     # Train model
     print("\nTraining model...")
-    model.fit(train, nb_epoch=50)
+    model.fit(train, nb_epoch=n_epochs)
     print("Training complete!")
 
     # Evaluate model
@@ -101,17 +102,7 @@ def train_solubility_model(data_path=None, smiles_col='smiles', target_col='meas
     print("Model Evaluation")
     print("=" * 60)
 
-    metrics = [
-        dc.metrics.Metric(dc.metrics.r2_score, name='R²'),
-        dc.metrics.Metric(dc.metrics.mean_absolute_error, name='MAE'),
-        dc.metrics.Metric(dc.metrics.root_mean_squared_error, name='RMSE'),
-    ]
-
-    for dataset_name, dataset in [('Train', train), ('Valid', valid), ('Test', test)]:
-        print(f"\n{dataset_name} Set:")
-        scores = model.evaluate(dataset, metrics)
-        for metric_name, score in scores.items():
-            print(f"  {metric_name}: {score:.4f}")
+    evaluate_splits(model, (train, valid, test), "regression", transformers)
 
     return model, test, transformers
 
@@ -136,20 +127,23 @@ def predict_new_molecules(model, smiles_list, transformers=None):
     featurizer = dc.feat.CircularFingerprint(radius=2, size=2048)
     features = featurizer.featurize(smiles_list)
 
+    if any(np.asarray(feature).shape != (2048,) for feature in features):
+        raise ValueError('Cannot predict invalid or unsupported SMILES')
+
     # Create dataset
     new_dataset = dc.data.NumpyDataset(X=features)
 
     # Both training paths normalize with transform_y=True, so the model learned
     # in z-scored target space. Hand the transformers to predict() so it
-    # untransforms the output back to log(mol/L) -- transforming the dataset
+    # untransforms the output back to target units -- transforming the dataset
     # instead would do nothing (these transformers touch y, not X, and a
     # prediction dataset has no y) and leave the printed numbers z-scored.
-    predictions = model.predict(new_dataset, transformers=transformers or [])
+    predictions = np.asarray(model.predict(new_dataset, transformers=transformers or [])).reshape(len(smiles_list), 1)
 
     # Display results
     print("\nPredictions:")
     for smiles, pred in zip(smiles_list, predictions):
-        print(f"  {smiles:30s} -> {pred[0]:.3f} log(mol/L)")
+        print(f"  {smiles:30s} -> {pred[0]:.3f} target units")
 
     return predictions
 
@@ -183,14 +177,18 @@ def main():
         help='SMILES strings to predict after training'
     )
 
+    parser.add_argument('--epochs', type=int, default=50)
     args = parser.parse_args()
+    if args.epochs < 1:
+        parser.error('--epochs must be positive')
 
     # Train model
     try:
         model, test_set, transformers = train_solubility_model(
             data_path=args.data,
             smiles_col=args.smiles_col,
-            target_col=args.target_col
+            target_col=args.target_col,
+            n_epochs=args.epochs
         )
     except Exception as e:
         print(f"\nError during training: {e}", file=sys.stderr)

@@ -1,5 +1,11 @@
 # Scanpy Plotting Guide
 
+Reviewed for Scanpy 1.12.4 / AnnData 0.13.4 on 2026-10-01. These snippets are
+illustrative and require the named genes, groups and prior results to exist.
+Use the tested CLI workflow for a runnable starting point. Counts, normalized
+expression and `.raw` have distinct roles; see [upstream-review.md](upstream-review.md).
+
+
 Comprehensive guide for creating publication-quality visualizations with scanpy.
 
 ## General Plotting Principles
@@ -104,7 +110,7 @@ sc.pl.umap(adata, color='leiden', add_outline=True,
            legend_fontoutline=2, frameon=False,
            save='_clusters.pdf')
 
-# Show cluster proportions
+# Overlay single-cell graph edges (does not measure cluster proportions)
 sc.pl.umap(adata, color='leiden', size=50, edges=True,
            edges_width=0.1, save='_clusters_edges.pdf')
 ```
@@ -194,7 +200,7 @@ sc.pl.paga(adata, color='leiden', save='_paga.pdf')
 sc.pl.paga(adata, color=['leiden', 'dpt_pseudotime'],
            save='_paga_pseudotime.pdf')
 
-# PAGA overlaid on UMAP
+# Single-cell neighbor edges on UMAP (not the PAGA graph)
 sc.pl.umap(adata, color='leiden', save='_umap_with_paga.pdf',
            edges=True, edges_color='gray')
 ```
@@ -208,7 +214,7 @@ sc.pl.umap(adata, color='dpt_pseudotime', save='_umap_dpt.pdf')
 # Gene expression along pseudotime
 sc.pl.dpt_timeseries(adata, save='_dpt_timeseries.pdf')
 
-# Heatmap ordered by pseudotime
+# Heatmap grouped by cluster (not ordered by pseudotime)
 sc.pl.heatmap(adata, var_names=genes, groupby='leiden',
               use_raw=False, show_gene_labels=True,
               save='_pseudotime_heatmap.pdf')
@@ -268,7 +274,7 @@ plt.show()
 
 ```python
 # Set publication-quality defaults
-sc.settings.set_figure_params(dpi=300, frameon=False, figsize=(5, 5),
+sc.set_figure_params(dpi=300, frameon=False, figsize=(5, 5),
                                facecolor='white')
 
 # Vector graphics output
@@ -325,10 +331,15 @@ fig.savefig('figures/my_umap.pdf', dpi=300, bbox_inches='tight')
 
 ### Batch Export
 
+Disable autosave here: repeated calls otherwise overwrite the same filename.
+
 ```python
+sc.settings.autosave = False
 genes = ['CD3D', 'CD14', 'MS4A1']
 for gene in genes:
-    sc.pl.umap(adata, color=gene)  # Each saved via autosave
+    fig = sc.pl.umap(adata, color=gene, show=False, return_fig=True)
+    fig.savefig(f'figures/umap_{gene}.pdf', bbox_inches='tight')
+    plt.close(fig)
 ```
 
 ## Common Customization Parameters
@@ -346,7 +357,7 @@ for gene in genes:
 - `palette`: Color palette (e.g., 'Set1', 'viridis')
 - `cmap`: Colormap for continuous variables
 - `vmin`, `vmax`: Color scale limits
-- `use_raw`: Use raw counts for gene expression
+- `use_raw`: Read the expression values stored in .raw (not necessarily counts)
 
 ### Saving Parameters
 - `show`: Whether to display plot

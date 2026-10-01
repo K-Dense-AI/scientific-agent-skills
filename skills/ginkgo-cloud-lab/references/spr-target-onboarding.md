@@ -1,15 +1,22 @@
 # SPR Target Onboarding
 
 **URL:** https://cloud.ginkgo.bio/protocols/spr-target-onboarding
+**Service terms:** https://cloud.ginkgo.bio/terms/spr-target-onboarding
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Beta
 **Price:** $1,399/target
 **Turnaround:** up to 4 weeks
 
-> **Launch offer:** Your onboarding cost credits in full toward your first binding assay run against this target.
+> **Launch offer:** Terms restrict the credit to successful qualification and the first binding run against the same target lot; it expires 12 months after qualification. Confirm availability and the accepted order's terms.
 
 ## Overview
 
 Qualifies a target on the Cloud Lab SPR (surface plasmon resonance) catalog for kinetic profiling against your binder candidates. Ginkgo procures the target and reference binder, selects capture chemistry, validates immobilization and surface activity on the Nicoya Alto, scouts regeneration conditions, and releases a qualified method to the catalog. Once onboarded, the target can be used in downstream kinetics/binding assay runs.
+
+Onboarding does not screen the customer's binder library. Confirm the target's live
+qualification status and availability of the separate binding service; a queued or
+in-progress target is not qualified. The current launch scope uses commercial
+target/reference-binder standards and starts downstream screening with minibinders.
 
 ## Input
 
@@ -19,6 +26,8 @@ Qualifies a target on the Cloud Lab SPR (surface plasmon resonance) catalog for 
 - Reference binder catalog number (vendor + SKU)
 - Target metadata (MW, oligomeric state, sensitivities)
 - Buffer preferences, if any
+- Usable capture handle or amine-coupling requirement; reference-binder affinity if known
+- Use approved vendors/SKUs or request vendor qualification; customer-supplied target/binder material is outside the launch scope
 
 ## Output
 

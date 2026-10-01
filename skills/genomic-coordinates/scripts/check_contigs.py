@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Identify the assembly behind a file, and check that two files can be joined.
 
-The two ways a genomics pipeline produces confident nonsense are a chr-prefix
-mismatch (the join returns nothing, or worse, returns only the contigs that
-happen to agree) and an assembly mismatch (the join succeeds and every
-coordinate means something else). Both are visible in the contig list.
+Contig-name and declared-length conflicts can reveal incompatible inputs.
+Matching lengths cannot establish sequence identity or rule out masking.
 
     python3 check_contigs.py --identify ref.fa.fai
     python3 check_contigs.py variants.vcf annotation.gtf ref.fa.fai
     python3 check_contigs.py peaks.bed --genome hg38.chrom.sizes
 
-Exit codes: 0 compatible, 1 incompatible or unidentifiable, 2 usage error.
+Exit codes: 0 no detected conflict (possibly unknown), 1 conflict, 2 usage error.
 """
 
 from __future__ import annotations
@@ -26,13 +24,13 @@ from _common import canonical_contig, emit, naming_style  # noqa: E402
 
 # Primary-chromosome lengths, read from the UCSC bigZips chrom.sizes for each
 # assembly (hg19, hg38, hs1) and cross-checked against the NCBI assembly report
-# for GRCh37.p13. Verified 2026-07-26.
+# for GRCh37.p13. UCSC tables rechecked 2026-10-01.
 #
 # GRCh37 and hg19 are the same assembly for every contig here except chrM: UCSC
 # kept the older NC_001807 mitochondrion (16,571 bp) while GRCh37 adopted the
 # rCRS (16,569 bp). That two-base difference is the only signal in the primary
 # chromosomes that tells the two apart, and it is why an hg19 BAM and a GRCh37
-# VCF can disagree about every mitochondrial variant.
+# VCF can disagree about mitochondrial variants.
 BUILDS: dict[str, dict[str, int]] = {
     "GRCh37/hg19": {
         "1": 249250621, "2": 243199373, "3": 198022430, "4": 191154276,
@@ -112,11 +110,25 @@ def read_vcf(path: Path) -> tuple[dict[str, int], str]:
             elif not line.startswith("#") and line.strip():
                 fields = line.split("\t")
                 if len(fields) >= 2 and fields[1].isdigit():
-                    pos = int(fields[1])
+                    pos = int(fields[1]) + (len(fields[3]) - 1 if len(fields) >= 4 else 0)
                     seen[fields[0]] = max(seen.get(fields[0], 0), pos)
     if header:
         return header, "vcf header"
-    return seen, "vcf records (max POS, not contig length)"
+    return seen, "vcf records (max REF end, not contig length)"
+
+
+def read_vcf_record_extents(path: Path) -> dict[str, int]:
+    """Check records even when a header exists; header lengths are not observations."""
+    seen: dict[str, int] = {}
+    with path.open() as handle:
+        for line in handle:
+            if line.startswith("#") or not line.strip():
+                continue
+            fields = line.rstrip().split("\t")
+            if len(fields) >= 4 and fields[1].isdigit():
+                far = int(fields[1]) + len(fields[3]) - 1
+                seen[fields[0]] = max(seen.get(fields[0], 0), far)
+    return seen
 
 
 def read_sam_header(path: Path) -> tuple[dict[str, int], str]:
@@ -138,6 +150,8 @@ def read_intervals(path: Path, start_col: int, end_col: int) -> tuple[dict[str, 
     sizes: dict[str, int] = {}
     with path.open() as handle:
         for line in handle:
+            if line.rstrip() == "##FASTA":
+                break
             if not line.strip() or line.startswith(("#", "track", "browser")):
                 continue
             fields = line.rstrip("\n").split("\t")
@@ -185,6 +199,10 @@ def identify(sizes: dict[str, int], exact: bool) -> tuple[str, str]:
     only whether anything overflows a candidate assembly.
     """
     folded = {canonical_contig(n): length for n, length in sizes.items()}
+    if len(folded) != len(sizes):
+        return "CONFLICT", "multiple contig names collapse to the same comparison alias"
+    if exact:
+        folded = {name: length for name, length in folded.items() if length > 0}
     mito = folded.get("M")
 
     scores = []
@@ -219,7 +237,7 @@ def identify(sizes: dict[str, int], exact: bool) -> tuple[str, str]:
         return "unknown", (
             f"closest is {build} at {agree}/{total} chromosomes -- not a match"
         )
-    detail = f"{agree}/{total} primary chromosome lengths match"
+    detail = f"{agree}/{total} primary chromosome lengths match (length evidence only, not sequence identity)"
     if build == "GRCh37/hg19" and mito is not None:
         detail += f"; chrM is {mito} bp, i.e. {MITO.get(mito, 'a non-standard mitochondrion')}"
         build = "hg19" if mito == 16571 else "GRCh37" if mito == 16569 else build
@@ -228,6 +246,7 @@ def identify(sizes: dict[str, int], exact: bool) -> tuple[str, str]:
     if agree != total:
         wrong = [c for c in BUILDS[scores[0][3]] if c in folded and folded[c] != BUILDS[scores[0][3]][c]]
         detail += f"; disagrees on {', '.join(sorted(wrong))}"
+        return "CONFLICT", f"closest is {build}; {detail}"
     return build, detail
 
 
@@ -237,22 +256,13 @@ def identify(sizes: dict[str, int], exact: bool) -> tuple[str, str]:
 
 
 def compare(loaded: list[tuple[Path, dict[str, int], str, bool]]) -> list[str]:
-    """Report every reason a join between these files would go wrong.
+    """Report detectable name, length, and observed-bound conflicts.
 
     Each entry carries ``exact``: True when its numbers are declared contig
     lengths, False when they are only the largest coordinate observed. Two exact
     files must agree exactly; an inexact one can only ever be caught overflowing.
     """
     problems: list[str] = []
-    styles = {path.name: naming_style(list(sizes)) for path, sizes, _, _ in loaded}
-    distinct = {s for s in styles.values() if s != "empty"}
-    if len(distinct) > 1:
-        detail = ", ".join(f"{name}={style}" for name, style in styles.items())
-        problems.append(
-            f"contig naming differs between files ({detail}). A join on the raw "
-            "name returns zero rows for every contig; rename one side first"
-        )
-
     for i in range(len(loaded)):
         for j in range(i + 1, len(loaded)):
             path_a, sizes_a, _, exact_a = loaded[i]
@@ -260,6 +270,11 @@ def compare(loaded: list[tuple[Path, dict[str, int], str, bool]]) -> list[str]:
             fold_a = {canonical_contig(n): v for n, v in sizes_a.items()}
             fold_b = {canonical_contig(n): v for n, v in sizes_b.items()}
             shared = set(fold_a) & set(fold_b)
+            aliases_a = {canonical_contig(n): n for n in sizes_a}
+            aliases_b = {canonical_contig(n): n for n in sizes_b}
+            renamed = sorted(c for c in shared if aliases_a[c] != aliases_b[c])
+            if renamed:
+                problems.append(f"contig naming differs: {path_a.name} and {path_b.name} use different exact names for {', '.join(renamed[:5])}; verify sequence identity before renaming")
             if not shared:
                 problems.append(
                     f"{path_a.name} and {path_b.name} share no contigs at all, "
@@ -301,14 +316,15 @@ def compare(loaded: list[tuple[Path, dict[str, int], str, bool]]) -> list[str]:
                             "wrong assembly, or an off-by-one from a 1-based source"
                         )
 
-            only_a = sorted(set(fold_a) - set(fold_b))
-            if exact_a and exact_b and only_a and len(only_a) <= len(fold_a) / 2:
-                problems.append(
-                    f"{len(only_a)} contigs in {path_a.name} are absent from "
-                    f"{path_b.name} ({', '.join(only_a[:5])}"
-                    f"{'...' if len(only_a) > 5 else ''}); records on them are "
-                    "dropped silently by most tools"
-                )
+            for source, observed, source_exact, target, declared, target_exact in (
+                (path_a, fold_a, exact_a, path_b, fold_b, exact_b),
+                (path_b, fold_b, exact_b, path_a, fold_a, exact_a),
+            ):
+                missing = sorted(set(observed) - set(declared))
+                # Reference supersets are normal. Observed record contigs must
+                # exist in a supplied reference/header, in either file order.
+                if target_exact and not source_exact and missing:
+                    problems.append(f"{source.name} has contigs absent from {target.name}: {', '.join(missing[:5])}")
     return problems
 
 
@@ -350,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
         sizes, kind = load(path)
         exact = kind in {"sizes", "fasta", "vcf header", "sam header"}
         loaded.append((path, sizes, kind, exact))
+        if kind == "vcf header":
+            loaded.append((path, read_vcf_record_extents(path), "vcf record extents", False))
         assembly, detail = identify(sizes, exact)
         rows.append(
             {

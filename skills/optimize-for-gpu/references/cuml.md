@@ -1,11 +1,14 @@
 # cuML Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 cuML is NVIDIA's GPU-accelerated machine learning library within the RAPIDS ecosystem. It
 provides scikit-learn-compatible APIs for classification, regression, clustering, dimensionality
 reduction, preprocessing, and model selection. Performance depends on algorithm, shape, dtype,
 fallback behavior, and transfer cost; benchmark the complete pipeline on representative data.
 
-> **Full documentation:** https://docs.rapids.ai/api/cuml/stable/
+> **Full documentation:** https://docs.nvidia.com/cuml/26.08/
 
 ## Table of Contents
 
@@ -35,14 +38,14 @@ Use `uv add` in standalone examples; follow the user's existing project package 
 is already configured.
 
 ```bash
-uv add "cuml-cu12==26.6.*"    # For CUDA 12.x
-uv add "cuml-cu13==26.6.*"    # For CUDA 13.x
+uv add "cuml-cu12==26.8.*"    # For CUDA 12.x
+uv add "cuml-cu13==26.8.*"    # For CUDA 13.x
 ```
 
 cuML wheels are published directly to PyPI (since RAPIDS 25.10) — the `--extra-index-url=https://pypi.nvidia.com` extra index is no longer required.
 
 **Platform:** Linux and WSL2 only (no native macOS or Windows).
-**Requires:** Python >= 3.11, scikit-learn >= 1.5, NVIDIA GPU with CUDA 12.x or 13.x support.
+**Requires:** Python >= 3.11, scikit-learn >= 1.6, NVIDIA GPU with CUDA 12.x or 13.x support.
 
 Verify:
 ```python
@@ -107,7 +110,7 @@ CUML_ACCEL_ENABLED=1 python script.py
 - Uses managed memory by default — host RAM augments GPU VRAM.
 - Models pickled under cuml.accel load as standard sklearn objects in non-GPU environments.
 - Accelerates 30+ algorithms across sklearn, umap-learn, and hdbscan. Recent releases (26.04-26.06) expanded coverage to preprocessing estimators (StandardScaler, MinMaxScaler, MaxAbsScaler, PolynomialFeatures, LabelEncoder) and SpectralClustering.
-- Compatible with scikit-learn versions 1.5-1.8 (some estimators require >= 1.8, which enables GPU acceleration via scikit-learn's experimental array-api support).
+- 26.08 requires scikit-learn >=1.6; specific accelerated preprocessors require >=1.8. Check the [26.08 compatibility page](https://docs.nvidia.com/cuml/26.08/cuml-accel/compatibility/) for method and parameter restrictions.
 
 ### Known Fallback Triggers (Runs on CPU Instead)
 
@@ -120,13 +123,13 @@ CUML_ACCEL_ENABLED=1 python script.py
 
 ### Numerical Precision
 
-GPU results are numerically equivalent but may differ at floating-point precision level due to parallel reduction order. Compare model quality via scores (accuracy, R2, etc.), not raw coefficient values.
+GPU estimators can use different algorithms, solvers, tree-split approximations, defaults, and random streams. Differences can exceed roundoff. Compare held-out quality, prediction agreement, class/feature order and calibration; use sign/subspace-aware checks for decompositions. A matching seed does not imply matching models.
 
 ---
 
 ## Direct cuML API
 
-Replace sklearn imports with cuml imports. The API is identical — fit/predict/transform.
+The API follows fit/predict/transform conventions, but signatures, defaults and supported inputs differ. Consult the chosen estimator before replacing imports.
 
 ```python
 from cuml.cluster import DBSCAN
@@ -373,11 +376,13 @@ for train_idx, test_idx in kf.split(X):
 
 ### Hyperparameter Tuning
 
-For GPU-efficient hyperparameter search, use dask-ml's GridSearchCV/RandomizedSearchCV rather than sklearn's — sklearn's version causes excessive CPU-GPU data transfers per fold.
+For an existing sklearn workflow, use `cuml.accel` with sklearn search first and inspect fallback. Bound concurrency per GPU to avoid memory oversubscription. Dask-ML is an optional distributed design, not a guarantee of fewer transfers.
 
 ```python
-from dask_ml.model_selection import RandomizedSearchCV
-from cuml.ensemble import RandomForestClassifier
+import cuml
+cuml.accel.install()  # Before sklearn imports, in a fresh process
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.ensemble import RandomForestClassifier
 
 param_distributions = {
     'max_depth': [8, 12, 16, 20],
@@ -391,6 +396,7 @@ search = RandomizedSearchCV(
     n_iter=25,
     cv=5,
     random_state=42,
+    n_jobs=1,  # One GPU: start with bounded concurrency
 )
 search.fit(X_train, y_train)
 print(f"Best score: {search.best_score_:.4f}")
@@ -411,6 +417,11 @@ X, y = make_regression(n_samples=100_000, n_features=50, noise=0.1)
 
 ## Forest Inference Library
 
+`cuml.fil.ForestInference` remains a deprecated compatibility API in 26.08. New forest
+inference work should evaluate [nvForest](https://docs.nvidia.com/nvforest/latest/)
+and its [migration guide](https://docs.nvidia.com/nvforest/latest/fil_migration/).
+Do not infer its removal from a moving cuML `latest` page while using 26.08.
+
 FIL provides GPU inference for supported tree-based models trained in other frameworks. Its value
 depends on model structure and inference batch size, so compare warm and end-to-end latency with
 the deployment baseline.
@@ -418,7 +429,7 @@ the deployment baseline.
 ```python
 from cuml.fil import ForestInference
 
-# Load from XGBoost, LightGBM, or sklearn saved models
+# Load an XGBoost model file; use load_from_sklearn for a fitted sklearn estimator
 fil_model = ForestInference.load("xgboost_model.ubj", is_classifier=True)
 
 # Optional: optimize for specific batch size
@@ -533,7 +544,7 @@ cuml.accel uses managed memory by default (host RAM augments GPU VRAM). Disable 
 
 ### Best Practices
 
-- Use float32 instead of float64 when precision allows — halves memory, doubles throughput.
+- float32 halves array storage relative to float64; throughput gains depend on hardware and algorithm.
 - Keep data on GPU throughout the pipeline — avoid NumPy/pandas round-trips.
 - For datasets larger than GPU memory: use Dask multi-GPU or chunk processing.
 - Pre-allocate RMM pools to avoid fragmentation.
@@ -571,7 +582,7 @@ storage differently for each estimator.
 6. **Use RMM pools when allocation overhead or fragmentation is visible in profiling.** Pools
 amortize allocator costs but reserve device memory and should be sized deliberately.
 
-7. **Use dask-ml for hyperparameter tuning,** not sklearn's GridSearchCV — it avoids excessive CPU-GPU transfers.
+7. **Bound search concurrency per GPU** and measure transfer/fallback behavior. The search scheduler alone does not ensure device residency.
 
 8. **Evaluate FIL for supported tree-model inference.** Benchmark the target model and production
 batch sizes against the existing serving path.
@@ -580,11 +591,11 @@ batch sizes against the existing serving path.
 
 ## Interoperability
 
-- **cuDF:** Zero-copy input. cuDF DataFrames accepted directly by all estimators.
+- **cuDF:** Accepted by many estimators; assembling dense matrices or changing dtype can copy.
 - **CuPy:** Zero-copy via `__cuda_array_interface__`. Most efficient intermediate format.
 - **NumPy/pandas:** Accepted as input (auto-transferred to GPU). Output type configurable.
 - **PyTorch:** Tensors accepted via array interface.
-- **sklearn:** API-compatible. Models interconvertible. cuml.accel for transparent acceleration.
+- **sklearn:** Similar estimator interfaces. Interconversion is estimator-specific; use cuml.accel for supported transparent acceleration.
 - **XGBoost/LightGBM:** FIL provides GPU inference for externally-trained tree models.
 - **Dask:** Native distributed support via `cuml.dask` module.
 
@@ -619,7 +630,7 @@ score = model.score(X_test, y_test)
 print(f"Accuracy: {score:.4f}")
 ```
 
-All of this runs entirely on GPU — from Parquet read to model evaluation — with zero CPU-GPU transfers.
+The main tabular and estimator stages use GPU data. I/O, setup, scalar scoring/printing, internal conversions, and unsupported operations can still involve the CPU or transfers.
 
 ---
 
@@ -627,7 +638,7 @@ All of this runs entirely on GPU — from Parquet read to model evaluation — w
 
 1. **Platform:** Linux and WSL2 only. No native macOS or Windows.
 
-2. **Sparse data:** Most cuML algorithms do not support sparse matrices (Lasso and ElasticNet gained sparse input support in 26.06). Under cuml.accel, sparse inputs fall back to CPU.
+2. **Sparse data:** Coverage is estimator-specific; do not densify a large sparse matrix blindly or assume all sparse inputs fall back. Check the pinned compatibility page.
 
 3. **String data:** Must be pre-encoded to numeric. No native string column support in estimators.
 
@@ -635,13 +646,13 @@ All of this runs entirely on GPU — from Parquet read to model evaluation — w
 
 5. **Warm starts:** Not supported for most algorithms.
 
-6. **Some sklearn parameters ignored:** `n_jobs` (GPU handles parallelism), `positive=True`, specific solver choices.
+6. **Unsupported parameters:** May trigger fallback or raise; never silently drop a constraint such as `positive=True` merely to obtain GPU execution.
 
-7. **Numerical precision:** Results equivalent in quality but may differ at floating-point level. Compare scores, not raw coefficients.
+7. **Model equivalence:** Different algorithms can change fitted models substantially. Validate scientific conclusions and held-out quality; do not promise equivalent quality.
 
 8. **Memory:** Limited by GPU VRAM (typically 8-80 GB). Use managed memory or Dask for larger datasets.
 
-9. **Missing fitted attributes:** Some sklearn attributes not computed under cuml.accel (e.g., HDBSCAN `exemplars_`, LinearRegression `rank_`).
+9. **Missing fitted attributes:** Some proxy attributes remain unavailable; inspect the estimator-specific compatibility list before using diagnostics.
 
 ---
 

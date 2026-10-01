@@ -1,6 +1,6 @@
 # Security, privacy, and approval gates
 
-Reviewed 2026-07-23. Recheck provider and model-specific terms immediately
+Reviewed 2026-10-01. Recheck provider and model-specific terms immediately
 before a real run.
 
 ## Threat model
@@ -42,6 +42,10 @@ The pinned hosted wrappers use SDK defaults:
 - OpenAI: `OPENAI_API_KEY`;
 - Anthropic: `ANTHROPIC_API_KEY`.
 
+The SDKs additionally honor `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL`; review
+the effective endpoint without logging credentials. A declared local policy
+destination does not constrain those SDK settings.
+
 Rules:
 
 - config contains only the exact name, never a value;
@@ -60,14 +64,14 @@ OpenAI's [enterprise privacy page](https://openai.com/enterprise-privacy/)
 states that API business data is not used for model training by default, API
 inputs/outputs may be retained up to 30 days for service and abuse monitoring,
 and ZDR is requestable only for eligible endpoints and qualifying use cases.
-Exceptions and feature-specific storage are documented in its linked data
-guide.
+The endpoint-specific [data controls guide](https://developers.openai.com/api/docs/guides/your-data)
+documents exceptions and feature-specific storage.
 
 Anthropic's [commercial retention
-page](https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-personal-data)
+page](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)
 states that API inputs/outputs are automatically deleted within 30 days.
 Anthropic's [API retention
-documentation](https://docs.anthropic.com/en/docs/build-with-claude/zero-data-retention)
+documentation](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention)
 describes eligible ZDR arrangements, feature exceptions, legal/misuse
 retention, and model-specific rules. Its 2026 covered-model policy requires
 30-day retention for designated models even where other requests could use

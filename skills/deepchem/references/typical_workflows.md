@@ -1,109 +1,62 @@
-# Typical Workflows
+# Script recipes
 
-Three end-to-end workflows: quick benchmark evaluation, prediction on custom data, and
-transfer learning on a small dataset.
+Run from the skill root after installing the selected model's dependencies.
+These external-data training commands are illustrative; the review records the
+actual offline synthetic tests and dependency limits.
 
-## Typical Workflows
+## Solubility
 
-### Workflow A: Quick Benchmark Evaluation
-
-For evaluating a model on standard benchmarks:
-
-```python
-import deepchem as dc
-
-# 1. Load benchmark
-tasks, datasets, _ = dc.molnet.load_bbbp(
-    featurizer='GraphConv',
-    splitter='scaffold'
-)
-train, valid, test = datasets
-
-# 2. Train model
-model = dc.models.GCNModel(n_tasks=len(tasks), mode='classification')
-model.fit(train, nb_epoch=50)
-
-# 3. Evaluate
-metric = dc.metrics.Metric(dc.metrics.roc_auc_score)
-test_score = model.evaluate(test, [metric])
-print(f"Test ROC-AUC: {test_score}")
+```bash
+python scripts/predict_solubility.py --epochs 50
+python scripts/predict_solubility.py --data measured.csv \
+  --smiles-col smiles --target-col logS --epochs 50 --predict CCO c1ccccc1
 ```
 
-### Workflow B: Custom Data Prediction
+The benchmark path loads ESOL; the custom path requires complete finite continuous
+targets. Both use 2048-bit circular fingerprints and a Torch multitask regressor,
+train-only target normalization, and original-unit metrics/predictions. Custom
+units are whatever the input column encodes; the script does not convert them.
 
-For training on custom molecular datasets:
+## Graph network
 
-```python
-import deepchem as dc
-
-# 1. Load and featurize data
-featurizer = dc.feat.CircularFingerprint(radius=2, size=2048)
-loader = dc.data.CSVLoader(
-    tasks=['activity'],
-    feature_field='smiles',
-    featurizer=featurizer
-)
-dataset = loader.create_dataset('my_molecules.csv')
-
-# 2. Split data (use ScaffoldSplitter for molecules!)
-splitter = dc.splits.ScaffoldSplitter()
-train, valid, test = splitter.train_valid_test_split(dataset)
-
-# 3. Normalize (optional but recommended)
-transformers = [dc.trans.NormalizationTransformer(
-    transform_y=True, dataset=train
-)]
-for transformer in transformers:
-    train = transformer.transform(train)
-    valid = transformer.transform(valid)
-    test = transformer.transform(test)
-
-# 4. Train model
-model = dc.models.MultitaskRegressor(
-    n_tasks=1,
-    n_features=2048,
-    layer_sizes=[1000, 500],
-    dropouts=0.25
-)
-model.fit(train, nb_epoch=50)
-
-# 5. Evaluate
-metric = dc.metrics.Metric(dc.metrics.r2_score)
-test_score = model.evaluate(test, [metric])
+```bash
+python scripts/graph_neural_network.py --model dmpnn --dataset bbbp --epochs 20
+python scripts/graph_neural_network.py --model attentivefp --data molecules.csv \
+  --targets activity --task-type regression --epochs 50
 ```
 
-### Workflow C: Transfer Learning on Small Dataset
+DMPNN needs torch-geometric in stable 2.8.0. The other four graph choices need a
+compatible DGL and DGL-LifeSci stack. The same model-specific featurizer is used for
+benchmark and custom input. Classification requires binary observed labels; empty
+splits fail early and class-deficient holdout tasks get undefined AUC, not a made-up
+value. Regression benchmark transforms are inverted for evaluation.
 
-For leveraging pretrained models:
+## Pretrained encoder
 
-```python
-import deepchem as dc
-
-# 1. Load data (pretrained models often need raw SMILES)
-loader = dc.data.CSVLoader(
-    tasks=['activity'],
-    feature_field='smiles',
-    featurizer=dc.feat.DummyFeaturizer()  # Model handles featurization
-)
-dataset = loader.create_dataset('small_dataset.csv')
-
-# 2. Split data
-splitter = dc.splits.ScaffoldSplitter()
-train, test = splitter.train_test_split(dataset)
-
-# 3. Load pretrained model
-model = dc.models.HuggingFaceModel(
-    model='seyonec/ChemBERTa-zinc-base-v1',
-    task='classification',
-    n_tasks=1,
-    learning_rate=2e-5
-)
-
-# 4. Fine-tune
-model.fit(train, nb_epoch=10)
-
-# 5. Evaluate
-predictions = model.predict(test)
+```bash
+python scripts/transfer_learning.py --model chemberta --dataset bbbp --epochs 10
+python scripts/transfer_learning.py --model chemberta --data measured.csv \
+  --target logS --task-type regression --model-id ./local-chemberta --local-files-only
 ```
 
-See `references/workflows.md` for 8 detailed workflow examples covering molecular generation, materials science, protein analysis, and more.
+HF training supports one fully observed, unweighted task. Tox21 is rejected for
+this route because the bundled stable HF wrapper does not implement masked
+multitask loss. Strings, tokenizer and sequence-classification model objects are
+kept separate. Classification logits are converted with softmax before scoring.
+Pin the Hub revision for reproducibility; a new task head needs supervised training.
+
+For MoLFormer, use `--model molformer --trust-remote-code --revision <reviewed-commit>`
+with the current IBM repository. Its current card targets Transformers 5;
+`compat-v4` is the documented branch for Transformers 4: resolve it to the reviewed
+40-character commit SHA before passing it to this script. Moving branch names do
+not pin code. Review/pin both code and weights; the script does not enable repository
+code implicitly.
+
+For GROVER, provide `--model grover --checkpoint encoder.pt --grover-config architecture.json`.
+The JSON must match the checkpoint encoder, for example `{"hidden_size":128,
+"num_attn_heads":4,"depth":1}` only when those were its training settings.
+The checkpoint must contain DeepChem's `embedding` state dictionary; the script
+loads it strictly with `weights_only=True` and initializes a fresh task head.
+Original external GROVER checkpoints require a separately verified conversion;
+they are not assumed to match DeepChem's layout. Fixed 151/165 graph feature widths
+and 2048 additional fingerprint features must match the intended pipeline.

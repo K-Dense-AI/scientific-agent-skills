@@ -1,231 +1,120 @@
-# TimesFM API Reference
+# TimesFM 2.5 API in package 3.0.2
 
-## Model Classes
+Reviewed 2026-10-01 against the released wheel and identical official source at
+[commit e51928e](https://github.com/google-research/timesfm/tree/e51928e27119cb17bebc005be2696b75e0a9e688/src/timesfm).
+This profile is separate from the `timesfm3` namespace.
 
-### `timesfm.TimesFM_2p5_200M_torch`
-
-The primary model class for TimesFM 2.5 (200M parameters, PyTorch backend).
-
-#### `from_pretrained()`
+## Loader
 
 ```python
 model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
-    "google/timesfm-2.5-200m-pytorch",
-    cache_dir=None,         # Optional: custom cache directory
-    force_download=True,    # Re-download even if cached
+    "google/timesfm-2.5-200m-pytorch",  # or a local safetensors directory
+    revision="1d952420fba87f3c6dee4f240de0f1a0fbc790e3",
+    cache_dir=None,
+    force_download=False,
+    local_files_only=False,
+    torch_compile=False,
 )
 ```
 
-| Parameter | Type | Default | Description |
-| --------- | ---- | ------- | ----------- |
-| `model_id` | str | `"google/timesfm-2.5-200m-pytorch"` | Hugging Face model ID |
-| `revision` | str \| None | None | Specific model revision |
-| `cache_dir` | str \| Path \| None | None | Custom cache directory |
-| `force_download` | bool | True | Force re-download of weights |
+The public method is inherited from `PyTorchModelHubMixin`; `revision`, `cache_dir`,
+`force_download`, `local_files_only` and `token` are Hub arguments. Never print tokens.
+The checkpoint uses `model.safetensors`; the old claim that it requires
+`torch_model.ckpt` came from using the incompatible v1 loader. Loader default
+`torch_compile=True` is distinct from the mandatory `model.compile(ForecastConfig)`.
+The wrapper has no documented device parameter: the inner module chooses CUDA:0
+if available, otherwise CPU. Public weights need no account token for normal
+public downloads. Hub failures, permissions and local cache misses still propagate.
 
-**Returns**: Initialized `TimesFM_2p5_200M_torch` instance (not yet compiled).
+## Compile and forecast
 
-#### `compile()`
+`compile(forecast_config, **kwargs)` constructs a decode callable. Context is
+rounded up to a multiple of 32; horizon to a multiple of 128. Use positive explicit
+values, ideally already rounded: zero is not a sentinel for the model maximum.
+Rounded context + horizon cannot exceed 16,384. The continuous quantile head
+rejects rounded horizons over 1,024. Invalid configurations can raise `ValueError`.
 
-Compiles the model with the given forecast configuration. **Must be called before `forecast()`.**
+`forecast(horizon: int, inputs: list[np.ndarray])` needs compilation first. With
+`return_backcast=False`, output is `(point, q)`, shapes `(B,H)` and `(B,H,10)`.
+Point equals `q[...,5]`; `q[...,0]` is the separately trained mean output, not a
+decile. With `return_backcast=True`, outputs prepend a backcast of length
+`max_context - 32` (including padded context positions). Slice the last H for
+future-only results; a backcast is not a held-out accuracy measurement.
 
-```python
-model.compile(
-    timesfm.ForecastConfig(
-        max_context=1024,
-        max_horizon=256,
-        normalize_inputs=True,
-        per_core_batch_size=32,
-        use_continuous_quantile_head=True,
-        force_flip_invariance=True,
-        infer_is_positive=True,
-        fix_quantile_crossing=True,
-    )
-)
-```
+The implementation copies each array, strips leading NaNs and uses `np.interp`
+for other NaNs (including last-value extension at the trailing edge). All-NaN
+and empty inputs are not a reliable scientific input contract: validate and
+reject them yourself. Internal gaps must retain positions, and interpolation
+must never span a train/test cutoff. The batching implementation appends padding
+series to the supplied list; pass `list(histories)` if retaining it for reuse.
 
-**Raises**: Nothing (but `forecast()` will raise `RuntimeError` if not compiled).
+## XReg
 
-#### `forecast()`
+Native CPU regression requires JAX and scikit-learn, even with the torch backend.
+On CPU/macOS use `uv pip install jax scikit-learn`; upstream `timesfm[xreg]`
+requests CUDA JAX. Current JAX 0.11.2 requires Python >=3.12.
 
-Run inference on one or more time series.
-
-```python
-point_forecast, quantile_forecast = model.forecast(
-    horizon=24,
-    inputs=[array1, array2, ...],
-)
-```
-
-| Parameter | Type | Description |
-| --------- | ---- | ----------- |
-| `horizon` | int | Number of future steps to forecast |
-| `inputs` | list[np.ndarray] | List of 1-D numpy arrays (each is a time series) |
-
-**Returns**: `tuple[np.ndarray, np.ndarray]`
-
-- `point_forecast`: shape `(batch_size, horizon)` — median (0.5 quantile)
-- `quantile_forecast`: shape `(batch_size, horizon, 10)` — [mean, q10, q20, ..., q90]
-
-**Raises**: `RuntimeError` if model is not compiled.
-
-**Key behaviors**:
-
-- Leading NaN values are stripped automatically
-- Internal NaN values are linearly interpolated
-- Series longer than `max_context` are truncated (last `max_context` points used)
-- Series shorter than `max_context` are padded
-
-#### `forecast_with_covariates()`
-
-Run inference with exogenous variables (requires `timesfm[xreg]`).
+Illustrative checkpoint example (shape/return behavior tested without weights):
 
 ```python
-point, quantiles = model.forecast_with_covariates(
-    inputs=inputs,
-    dynamic_numerical_covariates={"temp": [temp_array1, temp_array2]},
-    dynamic_categorical_covariates={"dow": [dow_array1, dow_array2]},
-    static_categorical_covariates={"region": ["east", "west"]},
+import numpy as np
+import timesfm
+
+# model is the loaded 2.5 wrapper, histories is an ordered list of target arrays.
+H = 12
+model.compile(timesfm.ForecastConfig(
+    max_context=512, max_horizon=128, per_core_batch_size=1,
+    normalize_inputs=True, use_continuous_quantile_head=True,
+    infer_is_positive=False, fix_quantile_crossing=True, return_backcast=True,
+))
+# Prices and holiday schedules must be known at this forecast origin.
+# Each dynamic array i has len(histories[i]) + H entries.
+point_list, quantile_list = model.forecast_with_covariates(
+    inputs=list(histories),
+    dynamic_numerical_covariates={"price": price_arrays},
+    dynamic_categorical_covariates={"holiday": holiday_arrays},
+    static_numerical_covariates={"floor_area": store_areas},
+    static_categorical_covariates={"region": region_labels},
     xreg_mode="xreg + timesfm",
+    normalize_xreg_target_per_input=True,
+    ridge=1.0, max_rows_per_col=0, force_on_cpu=True,
 )
+assert len(point_list) == len(histories)
+assert quantile_list[0].shape == (H, 10)
 ```
 
-| Parameter | Type | Description |
-| --------- | ---- | ----------- |
-| `inputs` | list[np.ndarray] | Target time series |
-| `dynamic_numerical_covariates` | dict[str, list[np.ndarray]] | Time-varying numeric features |
-| `dynamic_categorical_covariates` | dict[str, list[np.ndarray]] | Time-varying categorical features |
-| `static_categorical_covariates` | dict[str, list[str]] | Fixed categorical features per series |
-| `xreg_mode` | str | `"xreg + timesfm"` or `"timesfm + xreg"` |
+| Argument | Contract |
+| --- | --- |
+| `inputs` | One finite target context per series; keep its exact origin/length |
+| `dynamic_numerical_covariates` | Name -> list of numeric context+future arrays |
+| `dynamic_categorical_covariates` | Name -> list of context+future categories; int or string |
+| `static_numerical_covariates` | Name -> one numeric value per series |
+| `static_categorical_covariates` | Name -> one category per series |
+| `xreg_mode` | `"xreg + timesfm"` (default) or `"timesfm + xreg"` |
+| `normalize_xreg_target_per_input` | Default True; target scaling per series |
+| `ridge` | Default 0.0; positive values regularize the pooled regression |
+| `max_rows_per_col` | Default 0; positive value may subsample regression rows |
+| `force_on_cpu` | Default False; controls regression device, not TimesFM device |
 
-**Note**: Dynamic covariates must have length `context + horizon` for each series.
+Both modes require `return_backcast=True`. `xreg + timesfm` fits regression
+on target contexts then TimesFM on residuals. `timesfm + xreg` obtains backcasts
+then fits their residuals; require context >32 and avoid contexts longer than
+the compiled context in that mode so residual lengths remain aligned.
+Horizon is inferred from the first dynamic covariate's length minus context;
+all features must agree. With only static covariates it uses the **compiled,
+patch-rounded** max_horizon, so do not assume the unrounded requested value.
 
----
+The 3.0.2 implementation returns `(list[point array], list[quantile array])`,
+**not** `(combined forecast, regression forecast)` despite its stale docstring.
+Validate shapes, finiteness and ordered deciles after the regression shift.
+Future realized weather/prices are leakage unless those values were known at
+origin. Covariate scenarios condition the prediction; their own uncertainty and
+regression estimation uncertainty are not automatically covered by model bands.
 
-## `timesfm.ForecastConfig`
+## Other checkpoints
 
-Immutable dataclass controlling all forecast behavior.
-
-```python
-@dataclasses.dataclass(frozen=True)
-class ForecastConfig:
-    max_context: int = 0
-    max_horizon: int = 0
-    normalize_inputs: bool = False
-    per_core_batch_size: int = 1
-    use_continuous_quantile_head: bool = False
-    force_flip_invariance: bool = True
-    infer_is_positive: bool = True
-    fix_quantile_crossing: bool = False
-    return_backcast: bool = False
-    quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    decode_index: int = 5
-```
-
-### Parameter Details
-
-#### `max_context` (int, default=0)
-
-Maximum number of historical time points to use as context.
-
-- **0**: Use the model's maximum supported context (16,384 for v2.5)
-- **N**: Truncate series to last N points
-- **Best practice**: Set to the length of your longest series, or 512–2048 for speed
-
-#### `max_horizon` (int, default=0)
-
-Maximum forecast horizon.
-
-- **0**: Use the model's maximum
-- **N**: Forecasts up to N steps (can still call `forecast(horizon=M)` where M ≤ N)
-- **Best practice**: Set to your expected maximum forecast length
-
-#### `normalize_inputs` (bool, default=False)
-
-Whether to z-normalize each series before feeding to the model.
-
-- **True** (RECOMMENDED): Normalizes each series to zero mean, unit variance
-- **False**: Raw values are passed directly
-- **When False is OK**: Only if your series are already normalized or very close to scale 1.0
-
-#### `per_core_batch_size` (int, default=1)
-
-Number of series processed per device in each batch.
-
-- Increase for throughput, decrease if OOM
-- See `references/system_requirements.md` for recommended values by hardware
-
-#### `use_continuous_quantile_head` (bool, default=False)
-
-Use the 30M-parameter continuous quantile head for better interval calibration.
-
-- **True** (RECOMMENDED): More accurate prediction intervals, especially for longer horizons
-- **False**: Uses fixed quantile buckets (faster but less accurate intervals)
-
-#### `force_flip_invariance` (bool, default=True)
-
-Ensures the model satisfies `f(-x) = -f(x)`.
-
-- **True** (RECOMMENDED): Mathematical consistency — forecasts are invariant to sign flip
-- **False**: Slightly faster but may produce asymmetric forecasts
-
-#### `infer_is_positive` (bool, default=True)
-
-Automatically detect if all input values are positive and clamp forecasts ≥ 0.
-
-- **True**: Safe for sales, demand, counts, prices, volumes
-- **False**: Required for temperature, returns, PnL, any series that can be negative
-
-#### `fix_quantile_crossing` (bool, default=False)
-
-Post-process quantiles to ensure monotonicity (q10 ≤ q20 ≤ ... ≤ q90).
-
-- **True** (RECOMMENDED): Guarantees well-ordered quantiles
-- **False**: Slightly faster but quantiles may occasionally cross
-
-#### `return_backcast` (bool, default=False)
-
-Return the model's reconstruction of the input (backcast) in addition to forecast.
-
-- **True**: Used for covariate workflows and diagnostics
-- **False**: Only return forecast
-
----
-
-## Available Model Checkpoints
-
-| Model ID | Version | Params | Backend | Context |
-| -------- | ------- | ------ | ------- | ------- |
-| `google/timesfm-2.5-200m-pytorch` | 2.5 | 200M | PyTorch | 16,384 |
-| `google/timesfm-2.5-200m-flax` | 2.5 | 200M | JAX/Flax | 16,384 |
-| `google/timesfm-2.5-200m-transformers` | 2.5 | 200M | Transformers | 16,384 |
-| `google/timesfm-2.0-500m-pytorch` | 2.0 | 500M | PyTorch | 2,048 |
-| `google/timesfm-2.0-500m-jax` | 2.0 | 500M | JAX | 2,048 |
-| `google/timesfm-1.0-200m-pytorch` | 1.0 | 200M | PyTorch | 2,048 |
-| `google/timesfm-1.0-200m` | 1.0 | 200M | JAX | 2,048 |
-
----
-
-## Output Shape Reference
-
-| Output | Shape | Description |
-| ------ | ----- | ----------- |
-| `point_forecast` | `(B, H)` | Median forecast for B series, H steps |
-| `quantile_forecast` | `(B, H, 10)` | Full quantile distribution |
-| `quantile_forecast[:,:,0]` | `(B, H)` | Mean |
-| `quantile_forecast[:,:,1]` | `(B, H)` | 10th percentile |
-| `quantile_forecast[:,:,5]` | `(B, H)` | 50th percentile (= point_forecast) |
-| `quantile_forecast[:,:,9]` | `(B, H)` | 90th percentile |
-
-Where `B` = batch size (number of input series), `H` = forecast horizon.
-
----
-
-## Error Handling
-
-| Error | Cause | Fix |
-| ----- | ----- | --- |
-| `RuntimeError: Model is not compiled` | Called `forecast()` before `compile()` | Call `model.compile(ForecastConfig(...))` first |
-| `torch.cuda.OutOfMemoryError` | Batch too large for GPU | Reduce `per_core_batch_size` |
-| `ValueError: inputs must be list` | Passed array instead of list | Wrap in list: `[array]` |
-| `HfHubHTTPError` | Download failed | Check internet, set `HF_HOME` to writable dir |
+The supported Flax class is `timesfm.TimesFM_2p5_200M_flax` with
+`google/timesfm-2.5-200m-flax`. This refresh did not execute Flax/TPU/CUDA.
+Legacy 1.0/2.0 use package 1.3.0 and a different `TimesFmHparams` API; they are
+not drop-in checkpoint IDs for these helpers. Transformers and MLX adapters
+also have separate configurations and outputs; do not transplant indices blindly.

@@ -98,7 +98,7 @@ The `sm_index` table provides two ways to identify tissue type:
 
 | Column | Use Case |
 |--------|----------|
-| `primaryAnatomicStructureModifier_CodeMeaning` | Structured tissue type from DICOM specimen metadata (e.g., `Neoplasm, Primary`, `Normal`, `Tumor`, `Neoplasm, Metastatic`). Works across all collections with SM data. |
+| `primaryAnatomicStructureModifier_CodeMeaning` | Structured tissue type from DICOM specimen metadata (e.g., `Neoplasm, Primary`, `Normal`, `Tumor`, `Neoplasm, Metastatic`). Availability depends on the collection; missing values do not establish normal tissue. |
 | `ContainerIdentifier` | Slide/container identifier. For TCGA collections, contains the [TCGA barcode](https://docs.gdc.cancer.gov/Encyclopedia/pages/TCGA_Barcode/) where the [sample type code](https://gdc.cancer.gov/resources-tcga-users/tcga-code-tables/sample-type-codes) (positions 14-15) encodes tissue origin: `01`-`09` = tumor, `10`-`19` = normal. |
 
 ### Using structured tissue type metadata
@@ -263,8 +263,9 @@ client.sql_query("""
 ### Find analysis results for a specific slide
 
 ```python
-# Find all derived data (annotations, segmentations) for TCGA-BRCA slides
+# Find ANN groups for TCGA-BRCA slides
 client.fetch_index("ann_index")
+client.fetch_index("ann_group_index")
 client.sql_query("""
     SELECT
         i.analysis_result_id,
@@ -281,7 +282,7 @@ client.sql_query("""
 """)
 ```
 
-Annotation objects can also contain per-annotation **measurements** (e.g., nucleus area, eccentricity) stored within the DICOM file. These are not in the index tables — extract them after download using [highdicom](https://github.com/ImagingDataCommons/highdicom) (`ann.get_annotation_groups()`, `group.get_measurements()`). See the [microscopy_dicom_ann_intro](https://github.com/ImagingDataCommons/IDC-Tutorials/blob/master/notebooks/pathomics/microscopy_dicom_ann_intro.ipynb) tutorial for a worked example including spatial analysis and cellularity computation.
+Annotation objects can also contain per-annotation **measurements** (e.g., nucleus area, eccentricity) stored within the DICOM file. These are not in the index tables — extract them after download using [highdicom](https://github.com/ImagingDataCommons/highdicom) (`ann.get_annotation_groups()`, `group.get_measurements()`; see the [official ANN guide](https://highdicom.readthedocs.io/en/latest/ann.html)). See the [microscopy_dicom_ann_intro](https://github.com/ImagingDataCommons/IDC-Tutorials/blob/master/notebooks/pathomics/microscopy_dicom_ann_intro.ipynb) tutorial for a worked example including spatial analysis and cellularity computation.
 
 ## Filter by AnnotationGroupLabel
 
@@ -393,11 +394,11 @@ The following tools work with DICOM format for digital pathology workflows:
 - [highdicom](https://github.com/ImagingDataCommons/highdicom) - High-level DICOM abstractions for Python. Create and read DICOM Segmentations (SEG), Structured Reports (SR), and parametric maps for pathology and radiology. Developed by IDC.
 - [wsidicom](https://github.com/imi-bigpicture/wsidicom) - Python package for reading DICOM WSI datasets. Parses metadata into easy-to-use dataclasses for whole slide image analysis.
 - [TIA-Toolbox](https://github.com/TissueImageAnalytics/tiatoolbox) - End-to-end computational pathology library with DICOM support via `DICOMWSIReader`. Provides tile extraction, feature extraction, and pretrained deep learning models.
-- [EZ-WSI-DICOMweb](https://github.com/GoogleCloudPlatform/EZ-WSI-DICOMweb) - Extract image patches from DICOM whole slide images via DICOMweb. Designed for AI/ML workflows with cloud DICOM stores.
+- [EZ-WSI-DICOMweb](https://github.com/GoogleCloudPlatform/EZ-WSI-DICOMweb) - Extract image patches from DICOM whole slide images via DICOMweb. Designed for AI/ML workflows with Google Healthcare DICOM stores; the IDC tutorial requires the authenticated Google-maintained endpoint for this library.
 
 **Viewers:**
 - [Slim](https://github.com/ImagingDataCommons/slim) - Web-based DICOM slide microscopy viewer and annotation tool. Supports brightfield and multiplexed immunofluorescence imaging via DICOMweb. Developed by IDC.
-- [QuPath](https://qupath.github.io/) - Cross-platform open source software for whole slide image analysis. Supports DICOM WSI via Bio-Formats and OpenSlide (v0.4.0+).
+- [QuPath](https://qupath.github.io/) - Cross-platform open source software for whole slide image analysis. DICOM WSI support depends on the installed image-server backend; verify the exact QuPath/OpenSlide build before promising compatibility.
 
 **Conversion:**
 - [dicom_wsi](https://github.com/Steven-N-Hart/dicom_wsi) - Python implementation for converting proprietary WSI formats to DICOM-compliant files.

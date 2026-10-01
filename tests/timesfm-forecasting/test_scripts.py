@@ -1,28 +1,4 @@
-"""Tests for the TimesFM preflight checker and CSV forecasting driver.
-
-Neither script is exercised against real model weights -- the point of
-`check_system.py` is to run *before* a 200M-parameter download, and
-`forecast_csv.py` only reaches the network in `load_model()`, which nothing here
-calls. What the tests cover instead:
-
-* Thresholds. Every RAM, disk, and Python verdict is produced with the host
-  stubbed, so the boundaries are checked against the profile tables rather than
-  against whatever this machine happens to have: exactly the minimum warns,
-  below it fails, exactly the recommendation passes. A missing package must warn
-  and not fail, or the checker would refuse to run on a machine it is being used
-  to prepare.
-* The batch-size ladder. It must be monotonic in VRAM and RAM -- a swapped tier
-  would recommend a larger batch for a smaller GPU -- and a value it cannot
-  parse must fall back rather than raise.
-* The contract between the two scripts: `forecast_csv` reads
-  `recommended_batch_size` out of `SystemReport.to_dict()` and refuses to
-  continue when the report fails, so both keys and both paths are asserted.
-* Quantile indexing. TimesFM's continuous quantile head returns ten columns --
-  the mean followed by the nine deciles -- so the 10th, 50th and 90th
-  percentiles live at indices 1, 5 and 9. Off-by-one here mislabels a
-  prediction interval, which no shape check would catch, so the test feeds an
-  array whose values encode their own index.
-"""
+"""Behavioral tests for preflight and strict CSV/quantile contracts; no weights."""
 
 from __future__ import annotations
 
@@ -73,11 +49,12 @@ def report_with_gpu(value: str, status: str = "pass") -> check_system.SystemRepo
 
 class ModelProfileTests(unittest.TestCase):
     def test_the_three_documented_checkpoints_are_offered(self) -> None:
-        self.assertEqual(set(check_system.MODEL_PROFILES), {"v2.5", "v2.0", "v1.0"})
+        self.assertEqual(set(check_system.MODEL_PROFILES), {"v3.0", "v2.5", "v2.0", "v1.0"})
 
     def test_each_profile_points_at_its_published_hugging_face_repo(self) -> None:
         # A wrong repo id is a 404 at download time, long after the check passed.
         expected = {
+            "v3.0": "google/timesfm-3.0-pytorch",
             "v2.5": "google/timesfm-2.5-200m-pytorch",
             "v2.0": "google/timesfm-2.0-500m-pytorch",
             "v1.0": "google/timesfm-1.0-200m-pytorch",
@@ -107,9 +84,9 @@ class ModelProfileTests(unittest.TestCase):
 class RamCheckTests(unittest.TestCase):
     PROFILE = check_system.MODEL_PROFILES["v2.0"]  # min 8 GB, recommended 16 GB
 
-    def check(self, total: float, available: float = 4.0):
+    def check(self, total: float, available: float | None = None):
         with mock.patch.object(check_system, "_get_total_ram_gb", return_value=total), \
-             mock.patch.object(check_system, "_get_available_ram_gb", return_value=available):
+             mock.patch.object(check_system, "_get_available_ram_gb", return_value=total if available is None else available):
             return check_system.check_ram(self.PROFILE)
 
     def test_below_the_minimum_fails_and_explains_the_consequence(self) -> None:
@@ -137,7 +114,7 @@ class RamCheckTests(unittest.TestCase):
     def test_the_smaller_model_passes_where_the_larger_one_fails(self) -> None:
         # 4 GB: below v2.0's 8 GB minimum, but at v2.5's recommendation.
         with mock.patch.object(check_system, "_get_total_ram_gb", return_value=4.0), \
-             mock.patch.object(check_system, "_get_available_ram_gb", return_value=2.0):
+             mock.patch.object(check_system, "_get_available_ram_gb", return_value=4.0):
             self.assertEqual(
                 check_system.check_ram(check_system.MODEL_PROFILES["v2.5"]).status,
                 "pass",
@@ -169,14 +146,14 @@ class DiskCheckTests(unittest.TestCase):
                  mock.patch("shutil.disk_usage", return_value=usage(50.0)) as measured:
                 result = check_system.check_disk(self.PROFILE)
         self.assertIn(cache, result.value)
-        self.assertEqual(measured.call_args.args[0], cache)
+        self.assertEqual(Path(measured.call_args.args[0]), Path(cache).resolve())
 
     def test_an_absent_cache_directory_falls_back_to_the_home_volume(self) -> None:
         missing = str(Path(tempfile.gettempdir()) / "timesfm-cache-does-not-exist")
         with mock.patch.dict(os.environ, {"HF_HOME": missing}), \
              mock.patch("shutil.disk_usage", return_value=usage(50.0)) as measured:
             check_system.check_disk(self.PROFILE)
-        self.assertEqual(measured.call_args.args[0], str(Path.home()))
+        self.assertEqual(measured.call_args.args[0], str(Path(missing).parent.resolve()))
 
 
 class PythonCheckTests(unittest.TestCase):
@@ -250,7 +227,7 @@ class GpuCheckTests(unittest.TestCase):
         # MPS uses unified memory, so there is no separate VRAM to report.
         with mock.patch.dict(sys.modules, {"torch": self.torch_module(cuda=False, mps=True)}):
             result = check_system.check_gpu()
-        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.status, "warn")
         self.assertIn("MPS", result.value)
         self.assertNotIn("VRAM", result.value)
 
@@ -268,62 +245,10 @@ class GpuCheckTests(unittest.TestCase):
 
 
 class BatchSizeTests(unittest.TestCase):
-    def gpu_batch(self, vram_gb: float) -> int:
-        return check_system.recommend_batch_size(
-            report_with_gpu(f"NVIDIA A100 | VRAM: {vram_gb} GB")
-        )
-
-    def cpu_batch(self, ram_gb: float) -> int:
-        report = report_with_gpu("None (CPU only)", status="warn")
-        with mock.patch.object(check_system, "_get_total_ram_gb", return_value=ram_gb):
-            return check_system.recommend_batch_size(report)
-
-    def mps_batch(self, ram_gb: float) -> int:
-        report = report_with_gpu("Apple Silicon MPS")
-        with mock.patch.object(check_system, "_get_total_ram_gb", return_value=ram_gb):
-            return check_system.recommend_batch_size(report)
-
-    def test_the_vram_tiers_are_the_documented_ladder(self) -> None:
-        for vram, expected in ((40.0, 256), (24.0, 256), (16.0, 128), (8.0, 64),
-                               (4.0, 32), (2.0, 16)):
-            with self.subTest(vram=vram):
-                self.assertEqual(self.gpu_batch(vram), expected)
-
-    def test_each_tier_boundary_is_inclusive_from_below(self) -> None:
-        # 23.9 GB must not be treated as a 24 GB card.
-        self.assertEqual(self.gpu_batch(23.9), 128)
-        self.assertEqual(self.gpu_batch(15.9), 64)
-        self.assertEqual(self.gpu_batch(7.9), 32)
-        self.assertEqual(self.gpu_batch(3.9), 16)
-
-    def test_the_recommendation_never_decreases_as_vram_grows(self) -> None:
-        # A non-monotonic ladder would hand a smaller card the larger batch.
-        sizes = [self.gpu_batch(vram) for vram in (1, 4, 8, 16, 24, 80)]
-        self.assertEqual(sizes, sorted(sizes))
-
-    def test_an_unparseable_vram_figure_falls_back_to_a_safe_batch(self) -> None:
-        report = report_with_gpu("Mystery GPU | VRAM: lots GB")
-        self.assertEqual(check_system.recommend_batch_size(report), 32)
-
-    def test_cpu_only_hosts_are_sized_by_system_memory(self) -> None:
-        self.assertEqual(self.cpu_batch(64.0), 64)
-        self.assertEqual(self.cpu_batch(16.0), 32)
-        self.assertEqual(self.cpu_batch(8.0), 8)
-        self.assertEqual(self.cpu_batch(4.0), 4)
-
-    def test_cpu_recommendations_never_decrease_as_memory_grows(self) -> None:
-        sizes = [self.cpu_batch(ram) for ram in (2, 8, 16, 32, 128)]
-        self.assertEqual(sizes, sorted(sizes))
-
-    def test_unified_memory_hosts_are_sized_by_system_memory(self) -> None:
-        self.assertEqual(self.mps_batch(64.0), 64)
-        self.assertEqual(self.mps_batch(16.0), 32)
-        self.assertEqual(self.mps_batch(8.0), 16)
-
-    def test_every_recommendation_is_a_usable_batch_size(self) -> None:
-        for vram in (0.5, 4.0, 80.0):
-            with self.subTest(vram=vram):
-                self.assertGreaterEqual(self.gpu_batch(vram), 1)
+    def test_preflight_does_not_promise_unmeasured_batch_capacity(self):
+        for memory in (0.5, 8, 24, 80):
+            report = report_with_gpu(f"CUDA | VRAM: {memory} GB")
+            self.assertEqual(check_system.recommend_batch_size(report), 1)
 
 
 class ReportTests(unittest.TestCase):
@@ -344,7 +269,7 @@ class ReportTests(unittest.TestCase):
         report = self.run_checks(modules={"torch": GpuCheckTests.torch_module(cuda=False)})
         self.assertTrue(report.passed)
         self.assertEqual(report.mode, "cpu")
-        self.assertIn("ready", report.verdict)
+        self.assertIn("thresholds passed", report.verdict)
         self.assertIn(str(report.recommended_batch_size), report.verdict_detail)
 
     def test_reports_print_on_cp1252_for_success_warning_and_failure(self) -> None:
@@ -361,7 +286,7 @@ class ReportTests(unittest.TestCase):
                     output = raw.getvalue().decode("cp1252")
                     self.assertIn("VERDICT", output)
                     self.assertIn("WARN", output)
-                    self.assertIn("ready" if report.passed else "does NOT meet", output)
+                    self.assertIn("thresholds passed" if report.passed else "does NOT meet", output)
 
     def test_a_cuda_host_is_reported_in_gpu_mode(self) -> None:
         report = self.run_checks(modules={"torch": GpuCheckTests.torch_module(cuda=True)})
@@ -371,7 +296,7 @@ class ReportTests(unittest.TestCase):
         report = self.run_checks(
             modules={"torch": GpuCheckTests.torch_module(cuda=False, mps=True)}
         )
-        self.assertEqual(report.mode, "mps")
+        self.assertEqual(report.mode, "cpu")
 
     def test_too_little_memory_fails_the_whole_report(self) -> None:
         report = self.run_checks(
@@ -524,7 +449,7 @@ class CsvLoadingTests(unittest.TestCase):
             "2024-01-01,10,100,north\n"
             "2024-01-02,11,110,north\n"
         )
-        frame, columns, date_column, _ = self.load(path, "date")
+        frame, columns, date_column, _ = self.load(path, "date", None, "D")
         self.assertEqual(columns, ["sales", "revenue"])
         self.assertEqual(date_column, "date")
         # The date column must be parsed, not left as text, or no frequency can
@@ -541,25 +466,20 @@ class CsvLoadingTests(unittest.TestCase):
         _, columns, _, _ = self.load(path, None, ["revenue"])
         self.assertEqual(columns, ["revenue"])
 
-    def test_a_column_that_does_not_exist_is_dropped_with_a_warning(self) -> None:
+    def test_a_missing_requested_column_fails(self):
         path = self.write("sales\n10\n11\n")
-        _, columns, _, printed = self.load(path, None, ["sales", "profit"])
-        self.assertEqual(columns, ["sales"])
-        self.assertIn("profit", printed)
+        with self.assertRaises(ValueError):
+            self.load(path, None, ["sales", "profit"])
 
-    def test_a_missing_date_column_is_reported_and_forgotten(self) -> None:
+    def test_a_missing_date_column_fails(self):
         path = self.write("day,sales\n2024-01-01,10\n")
-        _, _, date_column, printed = self.load(path, "date")
-        self.assertIsNone(date_column)
-        self.assertIn("not found", printed)
+        with self.assertRaises(ValueError):
+            self.load(path, "date")
 
-    def test_a_csv_with_nothing_numeric_stops_the_run(self) -> None:
+    def test_a_csv_with_nothing_numeric_fails(self):
         path = self.write("region\nnorth\nsouth\n")
-        with contextlib.redirect_stdout(io.StringIO()) as printed:
-            with self.assertRaises(SystemExit) as raised:
-                forecast_csv.load_csv(path)
-        self.assertEqual(raised.exception.code, 1)
-        self.assertIn("No numeric columns", printed.getvalue())
+        with self.assertRaises(ValueError):
+            self.load(path)
 
     def test_naming_no_columns_at_all_falls_back_to_autodetection(self) -> None:
         path = self.write("sales,revenue\n10,100\n")
@@ -579,7 +499,7 @@ class ForecastAssemblyTests(unittest.TestCase):
 
         def forecast(self, horizon, inputs):
             self.inputs = [np.asarray(series) for series in inputs]
-            point = np.zeros((len(inputs), horizon), dtype="float32")
+            point = np.full((len(inputs), horizon), 5.0, dtype="float32")
             # quantiles[series, step, q] == q, so any index mix-up is visible.
             quantiles = np.tile(np.arange(10, dtype="float32"), (len(inputs), horizon, 1))
             return point, quantiles
@@ -595,7 +515,7 @@ class ForecastAssemblyTests(unittest.TestCase):
         )
         with contextlib.redirect_stdout(io.StringIO()):
             self.results = forecast_csv.forecast_series(
-                self.model, self.frame, ["sales", "revenue"], self.HORIZON
+                self.model, self.frame, ["sales", "revenue"], self.HORIZON, missing="interpolate"
             )
 
     def test_each_series_is_forecast_and_keyed_by_its_column(self) -> None:
@@ -620,11 +540,12 @@ class ForecastAssemblyTests(unittest.TestCase):
             with self.subTest(pair=(lower, upper)):
                 self.assertLess(band[lower][0], band[upper][0])
 
-    def test_gaps_are_dropped_before_the_series_reaches_the_model(self) -> None:
-        # A NaN passed through would poison the whole context window.
+    def test_internal_gaps_are_interpolated_without_compressing_time(self) -> None:
+        # Explicit internal interpolation preserves time positions.
         sales, revenue = self.model.inputs
         self.assertEqual(len(sales), 5)
-        self.assertEqual(len(revenue), 4)
+        self.assertEqual(len(revenue), 5)
+        self.assertEqual(revenue[1], 20)
         self.assertFalse(np.isnan(revenue).any())
         self.assertEqual(revenue.dtype, np.float32)
 
@@ -685,8 +606,8 @@ class OutputWritingTests(unittest.TestCase):
         frame = pd.DataFrame(
             {"date": pd.to_datetime(["2024-01-01", "2024-01-03", "2024-01-08"])}
         )
-        written = self.write_csv(frame, "date")
-        self.assertNotIn("date", written.columns)
+        with self.assertRaises(ValueError):
+            self.write_csv(frame, "date")
 
     def test_every_band_column_survives_the_round_trip(self) -> None:
         written = self.write_csv(pd.DataFrame({"sales": [1.0]}), None)

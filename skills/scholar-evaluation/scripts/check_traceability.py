@@ -9,7 +9,7 @@ from typing import Any
 
 import _common
 
-SOURCE_TYPES = {
+SOURCE_TYPES = (
     "section",
     "table",
     "figure",
@@ -18,9 +18,9 @@ SOURCE_TYPES = {
     "protocol",
     "registration",
     "other_local_record",
-}
-ACCESS_STATUSES = {"available", "restricted_authorized", "unavailable"}
-VERIFICATION_STATUSES = {"verified", "unverified"}
+)
+ACCESS_STATUSES = ("available", "restricted_authorized", "unavailable")
+VERIFICATION_STATUSES = ("verified", "unverified")
 
 
 def validate_manifest(
@@ -155,7 +155,7 @@ def check_traceability(rubric: dict, evaluation: dict, manifest: dict) -> dict:
             evidence = evidence_by_id.get(evidence_id)
             if evidence is None:
                 issues.append(_common.Issue("EVIDENCE_REFERENCE_UNRESOLVED", path))
-            elif criterion_id not in evidence.get("criterion_ids", []):
+            elif not isinstance(evidence.get("criterion_ids"), list) or criterion_id not in evidence["criterion_ids"]:
                 issues.append(_common.Issue("EVIDENCE_CRITERION_MISMATCH", path))
     for evidence_id in sorted(set(evidence_by_id) - used_ids):
         issues.append(

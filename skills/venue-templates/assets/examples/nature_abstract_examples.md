@@ -1,213 +1,64 @@
-# Nature/Science Abstract Examples
+# Nature / Science Summary Drafting Examples
 
-Examples of well-crafted abstracts for high-impact multidisciplinary journals. These demonstrate the flowing paragraph style with broad accessibility expected at Nature, Science, and related venues.
+**Reviewed: 2026-10-01.** These are illustrative, unexecuted writing scaffolds.
+Bracketed content must be replaced by findings from the author's actual study.
+They are not quotations, published abstracts, or evidence for a scientific claim.
 
----
+Nature Articles use a referenced summary paragraph, ideally no more than 200
+words, with few nonessential numbers or abbreviations. Science and other journals
+have different article-type rules; verify them before adapting the text.
 
-## Example 1: Molecular Biology / Cell Biology
+Source: https://www.nature.com/nature/for-authors/formatting-guide
 
-**Topic**: CRISPR gene editing discovery
+## Example 1: Biological mechanism
 
-```
-The ability to precisely edit DNA sequences in living cells has transformed 
-biological research and holds promise for treating genetic diseases. However, 
-current genome editing tools can introduce unwanted mutations at off-target 
-sites, limiting their clinical potential. Here we describe prime editing, a 
-versatile and precise genome editing method that directly writes new genetic 
-information into a specified DNA site using a reverse transcriptase fused to a 
-CRISPR nickase. Prime editing can make all 12 types of point mutations, as 
-well as small insertions and deletions, with minimal off-target editing and 
-without requiring double-strand breaks or donor DNA templates. In human cells, 
-we used prime editing to correct the primary genetic causes of sickle cell 
-disease and Tay-Sachs disease, and to install protective mutations that 
-reduce risk of prion disease. Prime editing expands the scope and capabilities 
-of genome editing and may address approximately 89% of known human genetic 
-disease variants.
+```text
+[Biological process] is important for [specific function], but the role of
+[component] remains unresolved [verified background citation]. Here we show
+that [actual principal finding] in [tested system]. We combined [approach]
+with [appropriate independent evidence] to distinguish [tested explanations].
+The results support [bounded interpretation], while [alternative or limitation]
+remains unresolved. These findings clarify [specific advance] and motivate
+[proposed next test, clearly distinguished from an established application].
 ```
 
-**Why this works**:
-- Opens with broad significance (genetic disease treatment)
-- States the problem clearly (off-target mutations)
-- Describes the approach accessibly ("writes new genetic information")
-- Includes specific results (all 12 point mutations, specific diseases)
-- Ends with quantified impact (89% of variants)
+Use an accessible question and enough model-system context to avoid implying a
+human or whole-organism result from a cell assay. Do not add named genes, disease
+benefits, or percentages merely to make the summary sound concrete.
 
----
+## Example 2: Materials research
 
-## Example 2: Neuroscience
-
-**Topic**: Memory consolidation mechanism
-
-```
-Sleep is essential for memory consolidation, yet how the sleeping brain 
-transforms labile memories into stable long-term representations remains 
-poorly understood. We used multi-site electrophysiology in freely behaving 
-mice to record the activity of thousands of neurons across hippocampus and 
-cortex during learning and subsequent sleep. We discovered that specific 
-neurons that encode a newly learned memory reactivate in precisely timed 
-sequences during slow-wave sleep, with hippocampal reactivation preceding 
-cortical reactivation by 10-15 milliseconds. Optogenetic disruption of this 
-temporal coordination impaired memory retention by 78%, whereas artificial 
-enhancement of the temporal relationship strengthened memories beyond normal 
-levels. These results reveal that the temporal ordering of hippocampal-cortical 
-replay is not merely correlative but causally necessary for memory 
-consolidation. Our findings suggest new therapeutic approaches for memory 
-disorders based on optimizing the temporal dynamics of sleep.
+```text
+[Material property] limits [application or scientific question]. Existing
+measurements leave uncertainty about [specific mechanism] [verified citation].
+Here we report [measured property] under [temperature, pressure, composition,
+and measurement conditions]. [Independent measurement or control] supports
+[interpretation] within [stated uncertainty and scope]. The findings establish
+[what the evidence actually establishes], without yet demonstrating [untested
+performance, operating regime, or application].
 ```
 
-**Why this works**:
-- Connects to well-known phenomenon (sleep and memory)
-- States what was unknown
-- Describes approach (multi-site recordings)
-- Key finding with specific number (10-15 ms)
-- Causal evidence (disruption and enhancement experiments)
-- Broader implications (therapeutic approaches)
+Report pressure and temperature accurately. Zero resistance alone does not
+establish bulk superconductivity, and gigapascal pressure is not ambient pressure.
+Check a real example's correction/retraction status before using it as evidence.
 
----
+## Example 3: Environmental observation
 
-## Example 3: Climate Science
-
-**Topic**: Carbon cycle feedback
-
-```
-Arctic permafrost contains approximately 1,500 billion tonnes of organic 
-carbon—twice the amount currently in the atmosphere. As the Arctic warms, 
-this carbon may be released to the atmosphere, accelerating global warming 
-through a positive feedback loop. However, the magnitude and timing of this 
-feedback remain highly uncertain because microbial decomposition rates in 
-thawing permafrost are poorly constrained. Here we present a 15-year 
-field experiment across 25 sites spanning the Arctic, tracking carbon 
-fluxes in warming permafrost under natural conditions. We find that 
-microbial respiration increases exponentially with temperature until soils 
-reach 3°C, then plateaus due to substrate limitation—a threshold effect 
-not captured by current Earth system models. Our results suggest that 
-permafrost carbon feedback will be 30-50% lower than current projections 
-during this century, providing more time to limit warming, but will 
-accelerate dramatically if deep permafrost begins to thaw.
+```text
+[Environmental process] affects [system], but its response to [driver] is
+uncertain [verified citation]. We measured [quantity] across [actual sites and
+period]. [Analysis] identified [estimated relationship and uncertainty], with
+[coverage or confounding limitation]. These observations constrain [model or
+hypothesis] under [conditions]. Extrapolation to [future scenario] requires
+[remaining assumption or validation].
 ```
 
-**Why this works**:
-- Opens with striking number (1,500 billion tonnes)
-- Clear problem statement (feedback uncertainty)
-- Specific methodology (15 years, 25 sites)
-- Novel finding (threshold at 3°C)
-- Implications both reassuring and cautionary
+Separate measured observations from model projections. Do not invent a multi-year
+experiment or an optimistic climate implication to complete the narrative.
 
----
+## Adapting to another journal
 
-## Example 4: Physics / Materials Science
-
-**Topic**: Room-temperature superconductivity
-
-```
-Superconductivity—the flow of electricity without resistance—has been 
-confined to extremely low temperatures since its discovery over a century 
-ago, limiting practical applications. The recent demonstration of 
-superconductivity in hydrogen-rich materials at high pressure has raised 
-hopes for higher transition temperatures, but achieving room-temperature 
-superconductivity at ambient pressure has remained elusive. Here we report 
-superconductivity at 21°C (294 K) in a nitrogen-doped lutetium hydride 
-(Lu-N-H) compound at pressures of approximately 1 GPa—nearly ambient 
-conditions. Electrical resistance drops to zero below the transition 
-temperature with a sharp transition width of 2 K, and we observe the Meissner 
-effect confirming bulk superconductivity. Density functional theory 
-calculations suggest that nitrogen incorporation stabilizes the high-symmetry 
-structure that enables strong electron-phonon coupling. These results 
-establish a pathway toward practical room-temperature superconductors.
-```
-
-**Why this works**:
-- Opens with accessible explanation of significance
-- Historical context (century-old limitation)
-- Precise results (21°C, 1 GPa, 2 K transition width)
-- Multiple lines of evidence (resistance + Meissner effect)
-- Theoretical explanation briefly included
-- Forward-looking conclusion
-
----
-
-## Example 5: Evolution / Ecology
-
-**Topic**: Rapid evolution in response to climate
-
-```
-Climate change is driving rapid shifts in the geographic distributions of 
-species, but whether organisms can adapt quickly enough to keep pace with 
-warming remains a critical question for biodiversity conservation. Here we 
-document real-time evolution in wild populations of a widespread forest tree, 
-Scots pine, along a 1,000 km latitudinal gradient in Scandinavia. By combining 
-whole-genome sequencing with phenotypic measurements across 25 common gardens, 
-we detect signatures of selection at 47 loci associated with cold tolerance, 
-phenology, and drought resistance over just 50 years—approximately 
-five tree generations. Alleles conferring warmer-adapted phenotypes have 
-increased in frequency by 4-12% across northern populations, matching 
-predictions from models of climate-driven selection. However, migration of 
-warm-adapted genotypes from the south appears limited by geographic barriers. 
-These results demonstrate that trees can evolve rapidly in response to 
-climate change but suggest that assisted gene flow may be necessary to 
-prevent local maladaptation.
-```
-
-**Why this works**:
-- Opens with pressing question (climate adaptation)
-- Specific system (Scots pine) and scale (1,000 km)
-- Methods described briefly (genomics + common gardens)
-- Quantitative results (47 loci, 4-12% frequency shift, 5 generations)
-- Mechanism identified (limited migration)
-- Conservation implications stated
-
----
-
-## Common Elements Across Examples
-
-### Structure (Implicit)
-1. **Hook**: Why this matters broadly (1-2 sentences)
-2. **Gap**: What was unknown or problematic (1 sentence)
-3. **Approach**: What was done (1 sentence)
-4. **Findings**: Key results with numbers (2-3 sentences)
-5. **Significance**: Why this matters going forward (1 sentence)
-
-### Style Features
-- **Active voice**: "We discovered," "We find," "We report"
-- **Specific numbers**: Exact values, not vague quantities
-- **Accessible language**: Minimal jargon, explained when needed
-- **Compelling opening**: Broad hook before technical details
-- **Strong close**: Implications or future directions
-
-### Word Count
-- Nature: 150-200 words (examples above: 185-210 words)
-- Science: ≤125 words (would need tightening)
-
----
-
-## What to Avoid
-
-❌ **Too technical opening**:
-> "The CRISPR-Cas9 system with guide RNA targeting PAM sequences..."
-
-✅ **Better opening**:
-> "The ability to precisely edit DNA in living cells..."
-
----
-
-❌ **Vague results**:
-> "Our method significantly outperformed existing approaches..."
-
-✅ **Better results**:
-> "Our method reduced off-target editing by 78% compared to standard Cas9..."
-
----
-
-❌ **Weak significance statement**:
-> "These findings may have implications for the field..."
-
-✅ **Better significance**:
-> "These findings suggest new therapeutic approaches for memory disorders..."
-
----
-
-## See Also
-
-- `nature_science_style.md` - Comprehensive Nature/Science writing guide
-- `venue_writing_styles.md` - Style comparison across venues
-
+Check required headings, word count, citation policy, and numerical detail at the
+target venue. Count the final text; these placeholder examples do not demonstrate
+that a completed abstract meets its limit. See `nature_science_style.md` under
+`references/` for the source-grounded writing guidance.

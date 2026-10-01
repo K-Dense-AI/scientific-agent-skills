@@ -1,5 +1,10 @@
 # Modal Container Images
 
+Reviewed against SDK 1.6.0 and official [Images](https://modal.com/docs/guide/images)
+and [existing Images](https://modal.com/docs/guide/existing-images) guides.
+Image definitions were checked locally; builds and workload dependency compatibility
+were not executed. Package versions below are illustrative pins, not a tested ML stack.
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -19,7 +24,9 @@
 
 Every Modal function runs inside a container built from an `Image`. By default, Modal uses a Debian Linux image with the same Python minor version as your local interpreter.
 
-Images are built lazily — Modal only builds/pulls the image when a function using it is first invoked. Layers are cached for fast rebuilds.
+Defining an Image is lazy and performs no remote build. Modal resolves/builds it when
+running or deploying the App (before inputs execute), or when creating a Sandbox.
+Layers are cached for fast rebuilds.
 
 ## Base Images
 
@@ -31,7 +38,7 @@ image = modal.Image.debian_slim()
 image = modal.Image.debian_slim(python_version="3.11")
 
 # From Docker Hub
-image = modal.Image.from_registry("nvidia/cuda:12.4.0-devel-ubuntu22.04")
+image = modal.Image.from_registry("nvidia/cuda:12.4.0-devel-ubuntu22.04", add_python="3.11")
 
 # From a Dockerfile
 image = modal.Image.from_dockerfile("./Dockerfile")
@@ -60,7 +67,7 @@ Pin versions for reproducibility. uv resolves dependencies faster than pip.
 ### pip (Fallback)
 
 ```python
-image = modal.Image.debian_slim().pip_install(
+image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "numpy==1.26.0",
     "pandas==2.1.0",
 )
@@ -71,6 +78,9 @@ image = modal.Image.debian_slim().pip_install(
 ```python
 image = modal.Image.debian_slim().pip_install_from_requirements("requirements.txt")
 ```
+
+For a uv-managed project, `modal.Image.debian_slim().uv_sync(".")` reads its
+`pyproject.toml` and `uv.lock` (`frozen=True` by default). Keep the lockfile in sync.
 
 ### Private Packages
 
@@ -84,6 +94,8 @@ image = (
     )
 )
 ```
+
+For GitHub, the named Secret must contain `GITHUB_TOKEN`; do not embed tokens in URLs.
 
 ## System Packages
 
@@ -104,11 +116,7 @@ Run arbitrary commands during image build:
 ```python
 image = (
     modal.Image.debian_slim()
-    .run_commands(
-        "wget https://example.com/data.tar.gz",
-        "tar -xzf data.tar.gz -C /opt/data",
-        "rm data.tar.gz",
-    )
+    .run_commands("mkdir -p /opt/data")
 )
 ```
 
@@ -120,7 +128,7 @@ Some build steps require GPU access (e.g., compiling CUDA kernels):
 image = (
     modal.Image.debian_slim()
     .uv_pip_install("torch")
-    .run_commands("python -c 'import torch; torch.cuda.is_available()'", gpu="A100")
+    .run_commands("python -c 'import torch; assert torch.cuda.is_available()'", gpu="A100")
 )
 ```
 
@@ -131,7 +139,7 @@ Execute Python functions as build steps — useful for downloading model weights
 ```python
 def download_model():
     from huggingface_hub import snapshot_download
-    snapshot_download("meta-llama/Llama-3-8B", local_dir="/models/llama3")
+    snapshot_download("openai-community/gpt2", local_dir="/models/gpt2")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -141,6 +149,8 @@ image = (
 ```
 
 The resulting filesystem (including downloaded files) is snapshotted into the image.
+For gated models, accept the model license and pass an `HF_TOKEN` Secret explicitly.
+Pin the model revision for reproducible production builds.
 
 ## Adding Local Files
 
@@ -184,7 +194,6 @@ image = modal.Image.debian_slim().add_local_file(
 image = (
     modal.Image.debian_slim()
     .env({
-        "TRANSFORMERS_CACHE": "/cache",
         "TOKENIZERS_PARALLELISM": "false",
         "HF_HOME": "/cache/huggingface",
     })
@@ -214,8 +223,7 @@ For packages requiring coordinated system and Python package installs:
 ```python
 image = (
     modal.Image.micromamba(python_version="3.11")
-    .micromamba_install("cudatoolkit=11.8", "cudnn=8.6", channels=["conda-forge"])
-    .uv_pip_install("torch")
+    .micromamba_install("numpy", "scipy", channels=["conda-forge"])
 )
 ```
 
@@ -264,3 +272,4 @@ with image.imports():
 ```
 
 This prevents `ImportError` locally while making the imports available in the container.
+It does not install dependencies or make an unavailable module usable during local execution.

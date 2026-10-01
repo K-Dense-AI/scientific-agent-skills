@@ -1,11 +1,12 @@
 ---
 name: pytdc
-description: Use Therapeutics Data Commons through the PyTDC Python package for registry discovery, approved dataset access, task-aware splits, evaluator metrics, benchmark groups, and bounded molecular-oracle workflows.
+description: Provides Therapeutics Data Commons workflows through PyTDC for registry discovery, dataset access, task-aware splits, evaluator metrics, benchmark groups, and bounded molecular-oracle scoring. Use when working with TDC therapeutic ML datasets or benchmarks.
 license: MIT
 allowed-tools: Read Write Edit Bash
-compatibility: Requires uv, CPython 3.11, PyTDC 1.1.15, and setuptools 80.9.0 for its legacy pkg_resources runtime import. Dataset, benchmark, checkpoint, and remote-oracle operations require network/storage review and explicit user approval.
+compatibility: Requires uv, CPython 3.11, PyTDC 1.1.15, and setuptools 80.9.0 for its legacy pkg_resources runtime import. Network access and disk space are needed for dataset, benchmark, and checkpoint downloads; optional oracles require their service or docking dependencies.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -18,7 +19,7 @@ lists, and plan network/storage effects before constructing any loader.
 
 ## Verified snapshot
 
-- Research date: **2026-07-23**
+- Research date: **2026-10-01**
 - PyPI stable: **PyTDC 1.1.15**, released 2025-03-31
 - Package/source repository: `mims-harvard/TDC`
 - Code license: MIT
@@ -49,7 +50,7 @@ uv pip install --python .venv-pytdc/bin/python \
   "setuptools==80.9.0" "PyTDC==1.1.15"
 ```
 
-The tested macOS ARM64 resolution installed 123 packages, including large
+The current macOS ARM64 test resolution installed 128 packages, including large
 scientific/ML dependencies, so the environment itself can transfer and occupy
 hundreds of megabytes before any dataset is downloaded. Review the dry run and
 available disk first. The direct pins identify the reviewed API snapshot; generate
@@ -59,7 +60,7 @@ must also be frozen.
 For an ephemeral command:
 
 ```bash
-uv run --python 3.11 \
+uv run --no-project --isolated --python 3.11 \
   --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind tasks
 ```
@@ -75,10 +76,10 @@ do not silently substitute the separate `pytdc-nextml` package.
    `scripts/discover_metadata.py` does not instantiate a loader or download data.
 2. **Plan second.** Record the exact task/dataset, official task page, license,
    expected size, cache directory, split, metric, and reproducibility seed.
-3. **Ask the user before downloading.** Loader constructors fetch missing data.
+3. **Confirm the authorized scope before downloading.** Loader constructors fetch missing data.
    Some datasets and benchmark-group archives are large; model-backed oracles can
    fetch checkpoints; remote/docking oracles can transmit molecular structures.
-4. **Execute only after approval.** In bundled CLIs, `--execute` acknowledges
+4. **Execute within that scope.** In bundled CLIs, `--execute` acknowledges
    execution and `--download` is additionally required for MolGen corpora or
    supported oracle checkpoints.
 5. **Keep outputs bounded.** Emit counts, schema, and small previews rather than
@@ -111,13 +112,13 @@ use. Cite both TDC and the original dataset.
 From this skill directory:
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind datasets --task ADME --limit 50
 
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind benchmarks --limit 50
 
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind evaluators --limit 100
 ```
 
@@ -138,7 +139,7 @@ matching avoids silently selecting the wrong dataset/oracle.
 Plan a split without downloading:
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/load_and_split_data.py \
   --task ADME --dataset Caco2_Wang --method scaffold \
   --seed 42 --data-dir .pytdc-data
@@ -147,7 +148,7 @@ uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
 After the user approves the dataset, license, transfer, and storage:
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/load_and_split_data.py \
   --task ADME --dataset Caco2_Wang --method scaffold \
   --seed 42 --data-dir .pytdc-data --execute
@@ -174,8 +175,11 @@ split = data.get_split(
 # split keys are: train, valid, test
 ```
 
+For multi-label data, discover `retrieve_label_name_list("tox21")` and supply
+`--label-name NR-AR` (or the selected exact target) to the loader helper.
 Read [references/datasets.md](references/datasets.md) before choosing a task or
-dataset.
+dataset. The PrimeKG resource has a different artifact and a lossy `to_nx()`
+conversion; inspect the resource caveat there before building a graph.
 
 ## Split selection without overclaiming leakage control
 
@@ -215,7 +219,10 @@ pcc = Evaluator(name="PCC")(y_true, y_pred)
 
 `PCC` is the registered Pearson-correlation name; `Pearson` is not. Multi-class
 registry names are `micro-f1`, `macro-f1`, and `kappa`. Thresholded binary metrics
-default to 0.5. Metric direction and input shape are metric-specific; use the
+default to 0.5. `PR@K` and `RP@K` also default to 0.5 through `Evaluator`; pass
+`threshold=0.9` explicitly for a target of 90%. `pr-auc` is average precision.
+`kl_divergence` is a higher-is-better transformed similarity score; FCD direction
+depends on its backend in this release (see the utilities reference). Metric direction and input shape are metric-specific; use the
 official task/benchmark metric rather than choosing from task type alone.
 
 ## Benchmark groups
@@ -257,22 +264,22 @@ PyTDC supplies molecule corpora, evaluators, and oracles; it does not train or
 provide a generic molecule generator in the core workflow. Discover current names:
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind oracles --limit 100
 ```
 
 Plan bounded local QED scoring:
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/molecular_generation.py score --oracle QED --smiles CCO
 ```
 
 Add `--execute` only after review. LogP and SA call the downloadable `fpscores`
 artifact in 1.1.15; they and DRD2/GSK3B/JNK3/CYP3A4_Veith also require
 `--download`. The helper intentionally refuses remote services, docking,
-distribution, and composite oracles. It preserves input order and never assumes
-score direction.
+distribution, and composite oracles. It preserves input order, flags invalid/empty structures with a null score, and
+never assumes score direction.
 
 Read [references/oracles.md](references/oracles.md) before any oracle call.
 

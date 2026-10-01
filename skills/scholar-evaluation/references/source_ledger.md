@@ -1,17 +1,22 @@
 # Dated Source Ledger
 
-Verified on **2026-07-23** with targeted `parallel-cli search` and
-`parallel-cli extract` queries. The research prioritized primary and official
-sources. Search excerpts were treated as untrusted discovery material; only the
-source claims summarized below inform this skill. No research-result artifacts
-are bundled.
+Refreshed on **2026-10-01** against the current official pages, source PDFs,
+and ScholarEval project record below. This updates the 2026-07-23 review.
+Policy-source verification and local synthetic-tool tests are distinct: no
+researcher profiles, bibliometric datasets, authenticated services, external
+model pipeline, or private work were evaluated.
+
+The bundled workflow is local JSON/CSV only. It contains no scholarly-database,
+author-identity, citation-count, authentication, pagination, or rate-limit API
+contract. The shared collection citation's arXiv request is a metadata lookup,
+not an evaluation service. Do not graft provider endpoints into this rubric.
 
 ## Responsible research assessment
 
 ### San Francisco Declaration on Research Assessment (DORA)
 
 - **Primary source:** [Read the Declaration](https://sfdora.org/read/)
-- **Origin:** developed in 2012; official page accessed 2026-07-23.
+- **Origin:** developed in 2012; official page rechecked 2026-10-01.
 - **Verified points:** assess work on its own merits; do not use journal-based
   measures as surrogates for an article or a person's contribution; state
   criteria explicitly; consider data, software, and other outputs; use
@@ -41,11 +46,14 @@ are bundled.
 - **Primary source:** Hicks, Wouters, Waltman, de Rijcke, and Rafols,
   [“Bibliometrics: The Leiden Manifesto for research
   metrics”](https://doi.org/10.1038/520429a), *Nature* 520, 429–431.
-- **Published:** 2015-04-22.
+- **Published:** 2015-04-22. Publisher metadata remains current. The publisher
+  full text was access-limited during this refresh; principles were checked
+  against the [author-linked Spanish translation](https://www.leidenmanifesto.org/uploads/4/1/6/0/41603901/manifiesto_cast.pdf)
+  hosted by the official manifesto site.
 - **Verified points:** quantitative evaluation should support qualitative
   expert assessment; measure against missions; protect locally relevant
   research; account for field variation; keep data and analysis open and
-  verifiable; allow those evaluated to verify data; account for age and gender;
+  verifiable; allow those evaluated to verify data; account for career age and database differences;
   avoid false precision; recognize gaming and system effects; review indicators
   regularly.
 - **Use here:** contextualization, inspectability, uncertainty, fairness review,
@@ -56,7 +64,7 @@ are bundled.
 - **Primary record:** [Agreement on Reforming Research
   Assessment](https://doi.org/10.5281/zenodo.13480728), version 1.
 - **Published:** 2022-07-20; Zenodo record modified 2024-08-29.
-- **Current official overview:** [CoARA Agreement](https://coara.eu/agreement/the-agreement-full-text/)
+- **Current official overview:** [CoARA Agreement](https://www.coara.org/agreement/the-agreement-full-text/)
 - **Verified points:** recognize diverse outputs, practices, activities, roles,
   and careers; base assessment primarily on qualitative judgment with peer
   review central; use quantitative indicators responsibly; abandon
@@ -87,7 +95,8 @@ are bundled.
   Tide*](https://www.ukri.org/publications/review-of-metrics-in-research-assessment-and-management/).
 - **Published:** 2015-07-06.
 - **Revisit:** Curry, Gadd, and Wilsdon, [*Harnessing the Metric
-  Tide*](https://doi.org/10.6084/m9.figshare.21701624).
+  Tide*](https://rori.figshare.com/articles/report/Harnessing_the_Metric_Tide/21701624),
+  version 2 (DOI 10.6084/m9.figshare.21701624).
 - **Posted:** 2022-12-12; commissioned by the joint UK higher-education funding
   bodies for the Future Research Assessment Programme.
 - **Verified points:** the revisit recommends putting principles into practice,
@@ -154,9 +163,10 @@ are bundled.
 - **Primary source:** AERA, APA, and NCME, [*Standards for Educational and
   Psychological Testing*, 2014
   edition](https://www.testingstandards.net/uploads/7/6/6/4/76643089/standards_2014edition.pdf).
-- **Official status page:** [APA Testing Standards](https://www.apa.org/science/programs/testing/standards).
-- **Status:** the 2014 edition is open access; the sponsoring organizations
-  announced a revision process. No later completed edition was verified.
+- **Official status page:** [NCME Testing Standards](https://ncme.org/resources/books/testing-standards/).
+- **Status:** NCME still links the open-access 2014 edition. The APA page was
+  not readable during this refresh; no later completed edition or current
+  revision timetable was verified.
 - **Verified points:** intended interpretations and uses require validity
   evidence; reliability/precision and relevant errors should be reported;
   rater selection, training, qualification, monitoring, agreement, accuracy,
@@ -201,10 +211,11 @@ are bundled.
 - **Official project:** [skai-research/ScholarEval](https://github.com/skai-research/ScholarEval).
   The repository describes itself as official code and data and cites the work
   as `@misc`; no release or peer-reviewed publication claim was verified.
-- **Review-status caution:** a public OpenReview forum for the title was
-  discoverable, but the official page's decision/status was not accessible or
-  exposed in indexed primary-source text during this refresh. It is therefore
-  not used as evidence of acceptance or peer review.
+- **Review-status caution:** the [OpenReview forum](https://openreview.net/forum?id=0TPKIbihMF)
+  returned a browser-verification challenge on 2026-10-01. Its indexed submission
+  PDF says under review; that historical PDF does not establish a current
+  decision. ICLR pages were inaccessible to this review. Acceptance/peer-reviewed
+  publication remains unverified, not disproven.
 - **What the preprint reports:** a retrieval-augmented framework assessing
   research ideas for soundness and contribution; a 117-idea, four-discipline
   dataset; coverage comparisons against expert-annotated review points; and a
@@ -213,6 +224,18 @@ are bundled.
   scholar quality, transportability to personnel or funding decisions, validity
   of this skill's generalized rubric, stable cross-discipline score meaning, or
   freedom from subgroup bias.
+
+## Work-version and correction metadata
+
+- **Primary source:** [Crossmark](https://www.crossref.org/services/crossmark/).
+- **Verified points:** publishers deposit changes and correction/retraction
+  information; Crossref explicitly says the presence of Crossmark is not a
+  guarantee. Missing metadata cannot establish absence of an update.
+- **Use here:** preserve exact version/access date, inspect available publisher
+  notices, record unresolved status, and issue a fresh evaluation after changes.
+  An identifier or reachable URL does not prove that a cited source supports
+  a claim. Read the relevant content and separate metadata verification from
+  substantive evidence review.
 
 ## Review cadence
 

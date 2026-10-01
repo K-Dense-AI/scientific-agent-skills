@@ -1,12 +1,12 @@
 ---
 name: pydicom
-description: Use pydicom to read, inspect, write, transform, and safely preflight local DICOM datasets and pixel data. Applies to DICOM metadata, transfer syntaxes, compression plugins, frames, private elements, JSON, and bounded de-identification review.
+description: Reads, inspects, writes, transforms, and preflights local DICOM datasets and pixel data. Applies to DICOM metadata, transfer syntaxes, compression plugins, frames, private elements, JSON, and bounded de-identification review.
 license: MIT
-compatibility: Python 3.10+ with pydicom 3.0.2; optional pinned NumPy, Pillow, and pixel plugins. Helper CLIs are local-only and require authorized data.
+compatibility: Python 3.12+ for the tested pixel stack; pydicom 3.0.2 alone needs Python 3.10+; optional pinned NumPy, Pillow, and pixel plugins. Helper CLIs are local-only and require authorized data.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-10-01"
 ---
 
 # pydicom
@@ -14,7 +14,9 @@ metadata:
 Use pydicom for DICOM dataset I/O and pixel processing. Version 3.0.2 is the
 current stable release reviewed here. It fixes CVE-2026-32711, a crafted
 DICOMDIR path-traversal issue. pydicom 3.0.2 declares Python `>=3.10`; its
-bundled DICOM dictionary is 2024c, while the live DICOM Standard may be newer.
+bundled DICOM dictionary is 2024c; the current DICOM Standard reviewed here is
+2026d. No PACS, DIMSE, DICOMweb endpoint, or authenticated service is exercised
+by this local-file skill.
 
 ## Mandatory safety boundary
 
@@ -39,8 +41,8 @@ bundled DICOM dictionary is 2024c, while the live DICOM Standard may be newer.
 
 ## Installation
 
-Create or activate an isolated environment, then install the exact reviewed
-release:
+Create or activate an isolated environment, then install the reviewed release
+(the pixel-stack pins below require Python 3.12+ because of NumPy):
 
 ```bash
 uv pip install "pydicom==3.0.2"
@@ -49,19 +51,19 @@ uv pip install "pydicom==3.0.2"
 Uncompressed pixel arrays and image rendering:
 
 ```bash
-uv pip install "pydicom==3.0.2" "numpy==2.5.1" "Pillow==12.3.0"
+uv pip install "pydicom==3.0.2" "numpy==2.5.3" "Pillow==12.3.0"
 ```
 
 Install only the transfer-syntax plugins required by the deployment:
 
 ```bash
 # JPEG/JPEG-LS, JPEG 2000/HTJ2K, and faster RLE through pylibjpeg
-uv pip install "numpy==2.5.1" "pylibjpeg==2.1.0" \
-  "pylibjpeg-libjpeg==2.4.0" "pylibjpeg-openjpeg==2.5.0" \
+uv pip install "numpy==2.5.3" "pylibjpeg==2.1.0" \
+  "pylibjpeg-libjpeg==2.4.0" "pylibjpeg-openjpeg==2.6.0" \
   "pylibjpeg-rle==2.2.0"
 
 # JPEG-LS encoder/decoder
-uv pip install "numpy==2.5.1" "pyjpegls==1.5.1"
+uv pip install "numpy==2.5.3" "pyjpegls==1.5.1"
 
 # Alternative decoder with platform-specific wheels
 uv pip install "python-gdcm==3.2.6"
@@ -214,7 +216,8 @@ Shape semantics:
 - color single frame: `(rows, columns, samples)`
 - color multi-frame: `(frames, rows, columns, samples)`
 
-`raw=False` converts YCbCr pixel data to RGB when possible; `raw=True` retains
+`raw=False` converts `YBR_FULL`/`YBR_FULL_422` to RGB; codec-specific
+JPEG 2000 processing may also produce RGB. It is not a universal YBR converter; `raw=True` retains
 the decoded color space after mandatory minimal processing. Use
 `iter_pixels(path, indices=[...])` for bounded multi-frame iteration.
 
@@ -228,7 +231,8 @@ display_values = apply_voi_lut(modality_values, ds, index=0)
 ```
 
 Modality LUT/rescale and VOI/windowing change display/value semantics.
-MONOCHROME1 may require presentation inversion. Palette Color requires
+Apply a declared Presentation LUT after VOI; avoid double inversion. Without
+one, MONOCHROME1 requires reversed display polarity. Palette Color requires
 `apply_color_lut()`. Presentation states and ICC behavior may require a
 validated viewer. Never use per-frame min/max normalization for quantitative
 analysis.
@@ -240,6 +244,10 @@ may carry frame-specific parameters; top-level tags alone can be insufficient.
 Confirm the output units and relevant real-world-value mapping before describing
 decoded values as quantitative measurements. Do not assume a decoded array is
 already in Hounsfield units or that every frame uses the same transform.
+The bundled renderer rejects functional-group objects, Real World Value Mapping,
+unsupported photometric interpretations, and incomplete rescale pairs instead
+of silently using top-level-only transforms. Its min/max PNG/TIFF is a preview,
+not calibrated output, a spatially calibrated export, or a presentation-state viewer.
 
 ## Compression, decompression, and encapsulation
 
@@ -310,12 +318,16 @@ it cannot establish successful de-identification.
 
 ## Helper CLIs
 
-All `--help` paths are dependency-free. The tools perform no network access and
+Run helper commands from `skills/pydicom/` (or use the full script path);
+`--root` must contain all inputs/outputs and output parent directories must
+already exist. All `--help` paths are dependency-free. The tools perform no network access and
 emit no DICOM values beyond narrow technical allowlists.
 
-Bundled content consists of the two linked references, the documented helper
-scripts, and synthetic tests. The pydicom runtime dependency is installed from
-the pinned PyPI release.
+Bundled content consists of the two linked references and documented helper
+scripts; synthetic tests live in the repository-level `tests/pydicom/` suite.
+The pydicom runtime dependency is installed from the pinned PyPI release.
+Path-based snippets are illustrative until supplied with authorized local files;
+CLI tests use only generated synthetic data.
 
 ```bash
 # Redacted aggregate metadata
@@ -368,7 +380,17 @@ identifiers.
   `JPEGLosslessSV1` is `.70`.
 - `Dataset.is_little_endian` and `is_implicit_VR` are deprecated for v4.
 
-## Sources (verified 2026-07-23)
+## Verification scope
+
+Synthetic local fixtures exercise native decoding, signed pixels, rescale/VOI,
+presentation polarity, JSON, writer/UID consistency, encapsulation, and lossless
+RLE/JPEG-LS/JPEG 2000 round-trips. The transfer-syntax reference records the
+reproduced GDCM signed JPEG-LS decompression limitation. Plugin availability is separate from
+codestream validation; JPEG/HTJ2K, lossy encoding and clinical image fidelity
+are not established by these checks. Memory limits are metadata estimates,
+not process-level bounds on native codecs or deflated dataset inflation.
+
+## Sources (verified 2026-10-01)
 
 - [pydicom 3.0.2 on PyPI](https://pypi.org/project/pydicom/) — released
   2026-03-19; Python `>=3.10`.

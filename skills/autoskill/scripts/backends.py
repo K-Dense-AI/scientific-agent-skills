@@ -7,7 +7,7 @@ import httpx
 
 
 def _is_loopback(host):
-    if host in ("localhost", ""):
+    if host == "localhost":
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
@@ -26,9 +26,12 @@ def check_remote_endpoint(endpoint, label):
     parsed = urlparse(endpoint)
     host = parsed.hostname or ""
 
-    if parsed.scheme not in ("http", "https"):
+    if (parsed.scheme not in ("http", "https") or not host
+            or parsed.username is not None or parsed.password is not None
+            or parsed.query or parsed.fragment):
         raise ValueError(
-            f"{label} endpoint must be an http:// or https:// URL, got {endpoint!r}"
+            f"{label} endpoint must be an http:// or https:// base URL with a host, "
+            "without credentials, query, or fragment"
         )
 
     if parsed.scheme == "http" and not _is_loopback(host):
@@ -69,26 +72,46 @@ class ClaudeBackend:
         )
         response.raise_for_status()
         payload = response.json()
-        return payload["content"][0]["text"]
+        reason = payload.get("stop_reason")
+        if reason not in ("end_turn", "stop_sequence"):
+            raise RuntimeError(f"Claude synthesis did not finish normally: {reason}")
+        text = "".join(block["text"] for block in payload.get("content", [])
+                       if block.get("type") == "text" and isinstance(block.get("text"), str))
+        if not text.strip():
+            raise RuntimeError("Claude synthesis returned no text content")
+        return text
 
 
 class LocalBackend:
-    def __init__(self, endpoint, model, client=None):
+    def __init__(self, endpoint, model, client=None, api_key=None):
         self.endpoint = endpoint
         self.model = model
+        self.api_key = api_key
         self.client = client or httpx.Client(base_url=endpoint, timeout=120.0)
 
     def __call__(self, prompt):
         response = self.client.post(
             "/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
             json={
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
             },
         )
         response.raise_for_status()
         payload = response.json()
-        return payload["choices"][0]["message"]["content"]
+        choices = payload.get("choices", [])
+        if not choices:
+            raise RuntimeError("Local synthesis returned no choices")
+        choice = choices[0]
+        reason = choice.get("finish_reason")
+        if reason != "stop":
+            raise RuntimeError(f"Local synthesis did not finish normally: {reason}")
+        text = choice.get("message", {}).get("content")
+        if not isinstance(text, str) or not text.strip():
+            raise RuntimeError("Local synthesis returned no text content")
+        return text
 
 
 def make_backend(config):
@@ -111,6 +134,7 @@ def make_backend(config):
 
     if kind == "local":
         l = config.get("local", {})
-        return LocalBackend(endpoint=check_remote_endpoint(l["endpoint"], "local"), model=l["model"])
+        return LocalBackend(endpoint=check_remote_endpoint(l["endpoint"], "local"), model=l["model"],
+                            api_key=os.environ.get("LM_API_TOKEN"))
 
     raise ValueError(f"unknown backend: {kind!r}")

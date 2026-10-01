@@ -1,6 +1,6 @@
 # Upstream Sources
 
-This skill snapshot was verified on **2026-07-23**. Opentrons publishes robot
+This skill snapshot was verified on **2026-10-01**. Opentrons publishes robot
 software, the desktop/touchscreen Apps, the Python package, and Protocol API
 levels on related but distinct release cycles. Recheck time-sensitive facts
 before generating a production protocol.
@@ -8,19 +8,33 @@ before generating a production protocol.
 ## Verified Baseline
 
 - Stable PyPI package:
-  [`opentrons==9.1.1`](https://pypi.org/project/opentrons/), released
-  2026-07-13, requiring Python 3.10 or newer. This package targets the current
-  Flex release line and implements Protocol API 2.29.
+  [`opentrons==10.0.0`](https://pypi.org/project/opentrons/), released
+  2026-09-30, requiring Python 3.10 or newer. Local tests used Python 3.12
+  because the package requires NumPy below 2. This package targets Flex.
 - Local OT-2 API 2.28 compatibility simulation uses `opentrons==9.0.0`, the
-  last shared PyPI release that accepts OT-2 protocols at that API level.
+  tested shared-line PyPI release that accepts OT-2 protocols at that API level.
 - Current robot-software support documented by Opentrons:
-  - Flex: API 2.15–2.29.
+  - Flex: API 2.15–2.30; API 2.30 maps to robot software 10.0.0.
   - OT-2: API 2.0–2.28.
 - API 2.29 and newer use separate Flex and OT-2 software/App release lines.
 
-`opentrons==9.1.1` rejects OT-2 simulation and directs users to the separate
+`opentrons==10.0.0` rejects OT-2 simulation and directs users to the separate
 OT-2 App. The target robot's maximum API value and analysis result in the
 appropriate App are authoritative for whether a specific protocol can run.
+
+The released 10.0.0 Python library reports `MAX_SUPPORTED_VERSION=2.31`, while
+the official robot support table stops at 2.30. This skill uses the documented
+robot ceiling and retains API 2.29 for its bundled Flex templates. API 2.30's
+start-only meniscus fix is separately simulation-tested. Do not treat a local
+constant or successful simulation as evidence of support on a physical robot.
+
+All six bundled templates were simulated: five with 10.0.0, and OT-2 with
+9.0.0. Tests also exercise runtime-parameter boundaries, low-volume modes,
+meniscus behavior, Heater-Shaker tasks, and tip reuse semantics. Reference code
+fragments require the surrounding deck and liquid setup; unless covered by
+these tests, they are illustrative and were checked against official docs and
+released method signatures rather than executed as complete protocols. No
+robot, App, sensor, or physical assay validation was performed.
 
 ## Core Protocol API Documentation
 
@@ -46,6 +60,8 @@ appropriate App are authoritative for whether a specific protocol can run.
   presence detection.
 - [Pipette Characteristics](https://docs.opentrons.com/python-api/pipettes/characteristics/)
   — channels, movement, and flow behavior.
+- [Volume Modes](https://docs.opentrons.com/python-api/pipettes/volume-modes/)
+  — the mode change required for Flex 50 µL pipettes below 5 µL.
 - [Partial Tip Pickup](https://docs.opentrons.com/python-api/pipettes/partial-tip-pickup/)
   — nozzle layouts, target-well rules, adapters, deck reach, and collision
   warnings.
@@ -94,6 +110,8 @@ appropriate App are authoritative for whether a specific protocol can run.
   — blocking and concurrent temperature control.
 - [Thermocycler API](https://docs.opentrons.com/python-api/modules/thermocycler/)
   — lid, block, profiles, ramp rate, and concurrent operations.
+- [Thermocycler lid seals](https://docs.opentrons.com/thermocycler/lid-seals/)
+  — disposable lid versus reusable module-lid seal compatibility.
 - [Concurrent Module Actions](https://docs.opentrons.com/python-api/modules/concurrent/)
   — API 2.27+ background tasks and waiting.
 
@@ -122,6 +140,9 @@ appropriate App are authoritative for whether a specific protocol can run.
   — user-facing robot software and API changes.
 - [GitHub releases](https://github.com/Opentrons/opentrons/releases)
   — tagged robot software artifacts.
+- [10.0.0 release](https://github.com/Opentrons/opentrons/releases/tag/v10.0.0)
+  and [tagged API constants](https://github.com/Opentrons/opentrons/blob/v10.0.0/api/src/opentrons/protocols/api_support/definitions.py)
+  — released source and the local-versus-robot API ceiling discrepancy.
 - [Opentrons monorepo](https://github.com/Opentrons/opentrons)
   — source for the Protocol API, robot stack, App, shared data, and docs.
 

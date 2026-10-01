@@ -2,7 +2,7 @@
 
 medRxiv is a preprint server for health sciences. The API is identical to bioRxiv's API -- same endpoints, same response format -- just use `medrxiv` as the server parameter.
 
-**Important:** Like bioRxiv, there is **no keyword search**. Use Semantic Scholar, OpenAlex, or PubMed for keyword searches of medRxiv content.
+**Important:** Like bioRxiv, there is **no keyword search**. Use Europe PMC (`SRC:"PPR" AND PUBLISHER:"medRxiv"`), Semantic Scholar, or OpenAlex for keyword searches of medRxiv content. PubMed coverage of preprints is selective.
 
 ## Base URL
 
@@ -123,4 +123,10 @@ No documented rate limits. No authentication required.
 
 ## Categories
 
+These are website slugs; use spaces (URL-encoded) or underscores in API category values, e.g. `cardiovascular_medicine`.
+
 `addiction-medicine`, `allergy-and-immunology`, `anesthesia`, `cardiovascular-medicine`, `dentistry-and-oral-medicine`, `dermatology`, `emergency-medicine`, `endocrinology`, `epidemiology`, `forensic-medicine`, `gastroenterology`, `genetic-and-genomic-medicine`, `geriatric-medicine`, `health-economics`, `health-informatics`, `health-policy`, `health-systems-and-quality-improvement`, `hematology`, `hiv-aids`, `infectious-diseases`, `intensive-care-and-critical-care-medicine`, `medical-education`, `medical-ethics`, `nephrology`, `neurology`, `nursing`, `nutrition`, `obstetrics-and-gynecology`, `occupational-and-environmental-health`, `oncology`, `ophthalmology`, `orthopedics`, `otolaryngology`, `pain-medicine`, `palliative-medicine`, `pathology`, `pediatrics`, `pharmacology-and-therapeutics`, `primary-care-research`, `psychiatry-and-clinical-psychology`, `public-and-global-health`, `radiology-and-imaging`, `rehabilitation-medicine-and-physical-therapy`, `respiratory-medicine`, `rheumatology`, `sexual-and-reproductive-health`, `sports-medicine`, `surgery`, `toxicology`, `transplantation`, `urology`
+
+## Official sources reviewed 2026-09-30
+
+- https://api.biorxiv.org/

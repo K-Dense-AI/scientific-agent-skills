@@ -134,6 +134,20 @@ def test_design_and_checker_agree_under_nondefault_tm_and_salt_models(tmp_path):
     assert thermo["provenance"]["libprimer3_version"] == primer3.thermoanalysis.get_libprimer3_version()
 
 
+def test_multiple_targets_are_alternatives_not_a_joint_coverage_requirement(tmp_path):
+    # No <=180 bp product can cover both targets separated by 260 bases.
+    targets = [[90, 10], [350, 10]]
+    config = {"sequence_args": {"SEQUENCE_TARGET": targets},
+              "global_args": {"PRIMER_PRODUCT_SIZE_RANGE": [[90, 180]]}}
+    result, report = design(tmp_path, config)
+    assert result.returncode == 0, result.stderr
+    assert report["pairs"]
+    for pair in report["pairs"]:
+        flanked = [pair["forward_interval"][1] <= start and
+                   pair["reverse_interval"][0] >= start + size for start, size in targets]
+        assert sum(flanked) == 1
+
+
 def test_masked_variant_is_excluded_from_both_binding_intervals(tmp_path):
     config = json.loads((SKILL_ROOT / "assets" / "qpcr-config.json").read_text())
     result, original = design(tmp_path, config, name="initial")
@@ -294,6 +308,38 @@ def test_tail_is_excluded_from_tm_but_included_in_structures(tmp_path, ordinary_
     assert_structure_matches(forward["core_self_three_prime"], primer3.calc_end_stability(tailed["forward"], tailed["forward"]))
     assert forward["full_hairpin"]["tm_c"] != pytest.approx(forward["core_hairpin"]["tm_c"])
     assert_structure_matches(report["interactions"][0]["heterodimer"], primer3.calc_heterodimer(full, tailed["reverse"]))
+
+
+def test_temperature_changes_free_energy_not_core_tm(tmp_path, ordinary_pair):
+    results = []
+    for temperature in (20, 55):
+        result, report = assess(tmp_path, [ordinary_pair], extra=["--temp-c", str(temperature)],
+                                name=f"temperature-{temperature}")
+        assert result.returncode == 0, result.stderr
+        structure = report["interactions"][0]["heterodimer"]
+        assert structure["structure_found"]
+        # Independent dimensional/thermodynamic consistency, including kcal conversion.
+        assert structure["delta_g_kcal_per_mol"] == pytest.approx(
+            structure["delta_h_kcal_per_mol"] -
+            (temperature + 273.15) * structure["delta_s_cal_per_mol_k"] / 1000
+        )
+        results.append(report)
+    assert results[0]["oligos"][0]["annealing_tm_c"] == pytest.approx(
+        results[1]["oligos"][0]["annealing_tm_c"])
+    assert results[0]["interactions"][0]["heterodimer"]["delta_g_kcal_per_mol"] != pytest.approx(
+        results[1]["interactions"][0]["heterodimer"]["delta_g_kcal_per_mol"])
+
+
+@pytest.mark.parametrize("extra", [
+    ["--mv-conc", "0", "--dv-conc", "0", "--dntp-conc", "0"],
+    ["--mv-conc", "0", "--dv-conc", "1.5", "--dntp-conc", "1.5"],
+    ["--dna-conc", "1e300"],
+])
+def test_finite_but_physically_invalid_native_tm_is_not_accepted(tmp_path, ordinary_pair, extra):
+    result, report = assess(tmp_path, [ordinary_pair], extra=extra)
+    assert result.returncode == 2 and report is None
+    assert "invalid core Tm" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_multiplex_computes_all_distinct_oligo_pairs(tmp_path, ordinary_pair):

@@ -45,7 +45,7 @@ def _safe_output_path(raw: str) -> Path:
     if not raw or len(raw) > 255:
         raise ResourceToolError("output must be a short JSON filename")
     candidate = Path(raw)
-    if candidate.is_absolute() or len(candidate.parts) != 1:
+    if candidate.is_absolute() or candidate.drive or len(candidate.parts) != 1:
         raise ResourceToolError(
             "output must be a filename in the current directory, not a path"
         )
@@ -66,11 +66,18 @@ def emit_json(value: Any, output: str | None = None, *, force: bool = False) -> 
         if destination.is_symlink():
             raise ResourceToolError("refusing to write through a symbolic link")
         flags = os.O_WRONLY | os.O_CREAT
-        flags |= os.O_TRUNC if force else os.O_EXCL
+        if not force:
+            flags |= os.O_EXCL
+        flags |= getattr(os, "O_NONBLOCK", 0)
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         descriptor = os.open(destination, flags, 0o600)
         try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ResourceToolError("output must be a regular file without hard links")
+            if force:
+                os.ftruncate(descriptor, 0)
             if hasattr(os, "fchmod"):
                 os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
@@ -97,14 +104,13 @@ def read_json_file(raw: str) -> dict[str, Any]:
     try:
         if path.is_symlink():
             raise ResourceToolError("refusing to read a symbolic link")
-        info = path.stat()
-        if not stat.S_ISREG(info.st_mode):
-            raise ResourceToolError("snapshot input must be a regular file")
-        if info.st_size > MAX_SNAPSHOT_BYTES:
-            raise ResourceToolError(
-                f"snapshot input exceeds {MAX_SNAPSHOT_BYTES} bytes"
-            )
-        with path.open("rb") as stream:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        with os.fdopen(os.open(path, flags), "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise ResourceToolError("snapshot input must be a regular file")
+            if info.st_size > MAX_SNAPSHOT_BYTES:
+                raise ResourceToolError(f"snapshot input exceeds {MAX_SNAPSHOT_BYTES} bytes")
             payload = stream.read(MAX_SNAPSHOT_BYTES + 1)
         if len(payload) > MAX_SNAPSHOT_BYTES:
             raise ResourceToolError(
@@ -118,7 +124,7 @@ def read_json_file(raw: str) -> dict[str, Any]:
         ) from exc
     try:
         parsed = json.loads(payload)
-    except (RecursionError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (RecursionError, UnicodeDecodeError, ValueError) as exc:
         raise ResourceToolError("snapshot is not valid UTF-8 JSON") from exc
     if not isinstance(parsed, dict):
         raise ResourceToolError("snapshot JSON root must be an object")
@@ -148,7 +154,10 @@ def bounded_number(
     """Return a finite bounded number without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
     if not math.isfinite(number) or not minimum <= number <= maximum:
         return None
     return number

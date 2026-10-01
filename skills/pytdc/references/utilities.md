@@ -1,7 +1,7 @@
 # Splits, evaluators, and benchmark groups
 
 This reference describes behavior verified in the **PyTDC 1.1.15** source
-distribution on 2026-07-23. The official website documents user-facing intent;
+distribution on 2026-10-01. The official website documents user-facing intent;
 source inspection resolves exact method spellings and edge cases.
 
 ## Split API overview
@@ -214,7 +214,8 @@ Always pass exact registry names. Fuzzy matching exists, but aliases such as
 | `avg-roc-auc` | per-instance sequences of binary truth/scores | higher |
 | `pr@k`, `rp@k` | binary truth/scores and target recall/precision | higher |
 | `validity`, `uniqueness`, `novelty`, `diversity` | SMILES collections (some also need a reference set) | higher by their documented definitions |
-| `fcd_distance`, `kl_divergence` | generated and reference SMILES | lower as distances/divergence |
+| `kl_divergence` | generated and reference SMILES | higher; mean of `exp(-KL)` terms |
+| `fcd_distance` | generated and reference SMILES | backend-dependent; see below |
 | `rmsd`, `kabsch_rmsd` | paired coordinate arrays | lower |
 
 This table describes evaluator semantics, not every benchmark's leaderboard
@@ -234,8 +235,29 @@ spearman = Evaluator("Spearman")(y_true, y_pred)
 
 Thresholded `accuracy`, `precision`, `recall`, and `f1` default to 0.5 and convert
 scores with `score > threshold`; a score exactly equal to the threshold becomes
-class 0. `PR@K` and `RP@K` default their target threshold to 0.9. Spearman returns
+class 0. `PR@K` and `RP@K` default to **0.5 through Evaluator**, overriding the
+underlying functions' 0.9 default. Pass `threshold=0.9` explicitly when desired. Spearman returns
 only the correlation coefficient from SciPy's result.
+
+`pr-auc` calls scikit-learn `average_precision_score`, not trapezoidal PR-curve
+integration. `avg-roc-auc` averages over axis 0 (one AUC per row/sequence), so
+transpose task matrices only when that matches the intended unit of averaging.
+`range_logAUC` defaults to FPR range `(0.001, 0.1)`; the public wrapper does not
+forward `FPR_range`. Likewise `Evaluator("kabsch_rmsd")` performs rotation without
+centroid translation and ignores a `translate` keyword; center paired coordinates
+first or call `tdc.evaluator.kabsch_rmsd(P, Q, translate=True)` directly.
+
+`kl_divergence` averages ten `exp(-KL)` terms over molecular descriptors and
+internal similarity. Higher means closer distributions; it is not raw KL.
+Unpatched 1.1.15 also imports removed `scipy.histogram`: KL fails on the tested
+modern SciPy stack. A test-only alias to `numpy.histogram` reproduced the intended
+transform, but is not an upstream fix or a supported unpatched workflow. Its KDE
+can fail for tiny, constant, or singular samples.
+`fcd_distance` tries TensorFlow/FCD first, returning `exp(-0.2 * raw_FCD)` (higher
+is closer), then falls back to PyTorch/fcd_torch, returning raw FCD (lower is
+closer). Record the selected backend and transformation; do not compare these
+values directly or infer direction from the registry name. Optional FCD models
+were source-verified only, not downloaded/executed in this refresh.
 
 Validate lengths, shapes, label encoding, missing values, score calibration, and
 class presence before calling. ROC-AUC is undefined when only one class is present.
@@ -289,7 +311,10 @@ train, valid = group.get_train_valid_split(
 There is no general `get_test()` method in 1.1.15. `group.get()` returns
 `train_val`, `test`, and normalized `name`. `get_train_valid_split` reads the
 downloaded train/validation file and applies group metadata. The held-out test set
-is fixed.
+is fixed. The base splitter uses `[0.875, 0.125, 0.0]` of train_val for ordinary
+train/valid splits; the `group` path instead holds out 0.2 within `Year`. With zero
+test fraction, the random path's fixed validation seed makes its split identical
+across the requested seeds. Vary model training seeds independently.
 
 ### One-run evaluation
 
@@ -317,6 +342,12 @@ prediction_runs = [
 summary = group.evaluate_many(prediction_runs)
 # {normalized_name: [mean, population_standard_deviation]}
 ```
+
+Single-run scores are rounded to three decimals before `evaluate_many` computes
+population standard deviation (`ddof=0`), then rounds the aggregate to three
+decimals. Retain raw per-run metric values separately when more precision matters.
+`evaluate(testing=False)` references an undefined `true` variable in 1.1.15; use
+an explicit `Evaluator` on validation labels instead.
 
 The input is a list of per-run dictionaries, not `{seed: predictions}` and not a
 benchmark object indexed by seed. Non-docking groups require at least five runs.
@@ -358,7 +389,9 @@ Multi-run input:
 }
 ```
 
-The CLI bounds input size/run count/value count, rejects non-finite numbers, and
-requires `--execute` before group construction. It intentionally excludes
+The CLI bounds input size/run count/value count, rejects non-finite numbers,
+duplicate normalized names, unequal benchmark sets or per-benchmark run lengths,
+and verifies test-row counts before scoring. It requires `--execute` before group
+construction. It intentionally excludes
 `docking_group` because that path can invoke docking, receptor downloads, molecular
 filters, and optional external services.

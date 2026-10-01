@@ -1,6 +1,6 @@
-# Python API (`gtars==0.9.2`)
+# Python API (`gtars==0.10.0`)
 
-Research and runtime verification date: **2026-07-23**. The PyPI package requires
+Research and runtime verification date: **2026-10-01**. The PyPI package requires
 Python 3.10+ and contains a native PyO3 extension.
 
 ## Import surface
@@ -15,13 +15,13 @@ from gtars.tokenizers import Tokenizer, tokenize_fragment_file
 from gtars.refget import RefgetStore, digest_fasta, digest_sequence
 ```
 
-`gtars.__version__` is `0.9.2`. `Region`, `RegionSet`, `Tokenizer`, and
-`RefgetStore` are not documented as top-level classes. Python 0.9.2 does not
+`gtars.__version__` is `0.10.0`. `Region`, `RegionSet`, `Tokenizer`, and
+`RefgetStore` are not documented as top-level classes. Python 0.10.0 does not
 export Python `uniwig`, `igd`, `scoring`, `fragsplit`, or `bbcache` submodules.
 
 ## Verified signatures
 
-The installed 0.9.2 wheel reported:
+The installed 0.10.0 wheel reported:
 
 ```text
 Region(chr, start, end, rest)
@@ -130,7 +130,7 @@ file_digest = regions.file_digest
 header = regions.header
 strands = regions.strands
 
-regions.sort()           # in-place; returns None
+regions.sort()           # in-place; returns None; see strand caveat below
 regions.to_bed("out.bed")
 regions.to_bed_gz("out.bed.gz")
 regions.to_bigbed("out.bb", "assembly.chrom.sizes")
@@ -140,6 +140,10 @@ regions.to_bigbed("out.bb", "assembly.chrom.sizes")
 - `file_digest` includes retained trailing columns. Neither value substitutes for
   an independently recorded SHA-256 provenance hash.
 - `path` raises `ValueError` for a set created from regions/vectors.
+- `sort()` reorders regions but does not reorder the separate `strands` vector
+  in 0.10.0. Sort `(region, strand)` pairs before construction, or maintain the
+  association externally; otherwise strand-dependent annotations can be silently
+  reassigned. File loading already sets this vector to `"*"`.
 - Writers overwrite/create the specified output; check output policy first.
 - `to_bigbed` needs chromosome sizes matching every contig and bound.
 
@@ -198,8 +202,12 @@ closest = a.closest(b)
 ```
 
 `coverage` is `covered base pairs in a / merged base pairs in a`, in `[0,1]`.
+Overlaps internal to either input are reduced for these set metrics.
 It is not signal coverage and does not produce WIG/bigWig. `pintersect` depends
-on index position after constructors may have sorted the inputs.
+on index position after constructors may have sorted the inputs. It silently
+truncates to the shorter input and emits zero-width intervals for nonoverlapping
+or different-contig pairs. Require equal lengths and explicit row pairing first;
+filter or label misses before applying the strict nonempty-BED contract.
 
 Overlap query methods are directional:
 
@@ -260,7 +268,7 @@ Do not use a broad catch to continue past corrupted rows.
 
 ## APIs that are not present
 
-The 0.9.2 Python surface does not provide:
+The 0.10.0 Python surface does not provide:
 
 - `gtars.RegionSet` or `RegionSet.from_bed`;
 - `total_coverage`, `filter_by_size`, `filter_by_chromosome`, `intersect`,
@@ -270,11 +278,11 @@ The 0.9.2 Python surface does not provide:
 - global `set_option`, `option_context`, or `set_log_level`;
 - a Python `uniwig` coverage object.
 
-## Official sources (accessed 2026-07-23)
+## Official sources (accessed 2026-10-01)
 
-- [PyPI gtars 0.9.2](https://pypi.org/project/gtars/)
-- [Python 0.9.2 model stubs](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/py_src/gtars/models/__init__.pyi)
-- [Python 0.9.2 Region binding](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/src/models/region.rs)
-- [Python 0.9.2 RegionSet binding](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/src/models/region_set.rs)
-- [Python 0.9.2 genomic-distribution stubs](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/py_src/gtars/genomic_distributions/__init__.pyi)
+- [PyPI gtars 0.10.0](https://pypi.org/project/gtars/)
+- [Python 0.10.0 model stubs](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/py_src/gtars/models/__init__.pyi)
+- [Python 0.10.0 Region binding](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/src/models/region.rs)
+- [Python 0.10.0 RegionSet binding](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/src/models/region_set.rs)
+- [Python 0.10.0 genomic-distribution stubs](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/py_src/gtars/genomic_distributions/__init__.pyi)
 - [Gtars model guide](https://docs.bedbase.org/gtars/regionSet/)

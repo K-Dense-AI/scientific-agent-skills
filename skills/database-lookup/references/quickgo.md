@@ -22,9 +22,10 @@ No auth required.
 - `goId` — GO term (e.g. GO:0003723)
 - `taxonId` — NCBI taxonomy (e.g. 9606 for human)
 - `geneProductId` — UniProt accession
-- `evidence` — evidence code (e.g. ECO:0000269)
+- `evidenceCode` — ECO evidence code (e.g. ECO:0000269)
 - `aspect` — biological_process, molecular_function, cellular_component
-- `limit`, `page` — pagination
+- `limit`, `page` — pagination; page is one-based, and annotation search limits each page to 200
+- Include `Accept: application/json`; preserve evidence, qualifiers/negation and annotation provenance.
 
 ## Example Calls
 ```

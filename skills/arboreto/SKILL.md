@@ -1,275 +1,189 @@
 ---
 name: arboreto
-description: Infer gene regulatory networks (GRNs) from gene expression data using scalable algorithms (GRNBoost2, GENIE3). Use when analyzing transcriptomics data (bulk RNA-seq, single-cell RNA-seq) to identify transcription factor-target gene relationships and regulatory interactions. Supports distributed computation for large-scale datasets.
+description: Infers candidate gene regulatory networks from bulk or single-cell expression data using AertsLab Arboreto GRNBoost2 and GENIE3. Use for transcription factor-target association ranking, compatible Dask execution, sparse expression inputs, and network stability checks.
 license: BSD-3-Clause license
+compatibility: Requires the isolated Python 3.11 compatibility stack below, including Arboreto, Dask/distributed, NumPy, pandas, scikit-learn and SciPy. Network access is needed for installation, not local inference. No credentials required.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-09-30"
 ---
 
 # Arboreto
 
-## Overview
+## When to use
 
-Arboreto is a Python library from [Aerts Lab](https://github.com/aertslab/arboreto) for inferring gene regulatory networks (GRNs) from gene expression data. It parallelizes tree-based ensemble regression (GRNBoost2, GENIE3) with [Dask](https://distributed.dask.org/) across local cores or remote clusters.
+Use Arboreto to rank candidate regulator-target associations from expression
+measurements. GRNBoost2 fits stochastic gradient boosting regressions; GENIE3
+fits random forests. Each target is predicted from candidate regulators, excluding
+itself. These are observational predictive associations, not proof of direct
+binding, activation/repression, or causal regulation.
 
-**Core capability**: Identify which transcription factors (TFs) regulate which target genes based on expression patterns across observations (cells, samples, conditions).
+The latest PyPI release checked is **0.1.6** (2021-02-09). Read the Docs still
+labels its documentation 0.1.5; the current GitHub source contains fixes that are
+**not in the PyPI wheel**. Do not assume a successful unpinned installation can
+run inference. See [compatibility and distribution details](references/distributed_computing.md).
 
-**Upstream**: PyPI **0.1.6** (2021-02-09, latest). Docs: [arboreto.readthedocs.io](https://arboreto.readthedocs.io/en/latest/). Primary downstream consumer: [pySCENIC](https://github.com/aertslab/pySCENIC).
+## Installation and compatibility
 
-## Quick Start
+The following exact stack passed dense and CSC-sparse GRNBoost2, dense GENIE3,
+custom GBM/RF, and wrapper smoke tests on macOS arm64 with Python 3.11.11:
 
-Install arboreto:
 ```bash
-uv pip install arboreto
+uv venv --python 3.11 .venv-arboreto
+uv pip install --python .venv-arboreto/bin/python \
+  'arboreto==0.1.6' 'dask[complete]==2024.7.1' 'distributed==2024.7.1' \
+  'numpy==1.26.4' 'pandas==2.2.3' 'scikit-learn==1.5.2' 'scipy==1.13.1'
 ```
 
-Basic GRN inference:
+This is a bounded compatibility recipe, not a claim that current releases of all
+dependencies work. PyPI Arboreto builds an empty metadata graph that the newer
+Dask dataframe implementation rejects. For this pinned Dask version, select its
+legacy dataframe backend **before importing Arboreto or `dask.dataframe`**:
+
 ```python
-import pandas as pd
-from arboreto.algo import grnboost2
-
-if __name__ == '__main__':
-    # Load expression data (genes as columns)
-    expression_matrix = pd.read_csv('expression_data.tsv', sep='\t')
-
-    # Infer regulatory network
-    network = grnboost2(expression_data=expression_matrix)
-
-    # Save results (TF, target, importance)
-    network.to_csv('network.tsv', sep='\t', index=False, header=False)
-```
-
-**Critical**: Always use `if __name__ == '__main__':` guard because Dask spawns new processes.
-
-## Core Capabilities
-
-### 1. Basic GRN Inference
-
-For standard GRN inference workflows including:
-- Input data preparation (Pandas DataFrame or NumPy array)
-- Running inference with GRNBoost2 or GENIE3
-- Filtering by transcription factors
-- Output format and interpretation
-
-**See**: `references/basic_inference.md`
-
-**Use the ready-to-run script**: `scripts/basic_grn_inference.py` for standard inference tasks:
-```bash
-python scripts/basic_grn_inference.py expression_data.tsv output_network.tsv --tf-file tfs.txt --seed 777 --limit 5000
-```
-
-### 2. Algorithm Selection
-
-Arboreto provides two algorithms:
-
-**GRNBoost2 (Recommended)**:
-- Fast gradient boosting-based inference
-- Optimized for large datasets (10k+ observations)
-- Default choice for most analyses
-
-**GENIE3**:
-- Random Forest-based inference
-- Original multiple regression approach
-- Use for comparison or validation
-
-Quick comparison:
-```python
+import dask
+dask.config.set({"dataframe.query-planning": False})
 from arboreto.algo import grnboost2, genie3
-
-# Fast, recommended
-network_grnboost = grnboost2(expression_data=matrix)
-
-# Classic algorithm
-network_genie3 = genie3(expression_data=matrix)
 ```
 
-**For detailed algorithm comparison, parameters, and selection guidance**: `references/algorithms.md`
+The bundled wrapper does this for Dask 2024.7.1. Restart an existing notebook
+kernel if it has already imported the newer dataframe backend. Sparse targets
+also use `.A` inside Arboreto 0.1.6; this attribute was removed in SciPy 1.14.
+Keep the tested SciPy pin for sparse inference. No monkeypatch to site-packages
+is required by this recipe.
 
-### 3. Distributed Computing
+## Workflow
 
-Scale inference from local multi-core to cluster environments:
+1. Select biologically comparable cells/samples; document normalization, filtering,
+   batch handling, organism, identifier namespace, and expression layer.
+2. Prepare **rows = observations, columns = genes**. Exclude sample IDs from
+   expression values. Require unique gene names, numeric finite values, and a TF
+   list with a nonempty overlap. All-zero/constant genes provide no useful targets.
+3. Choose GRNBoost2 for an efficient starting analysis, GENIE3 for method comparison,
+   or `diy` for explicit regressor settings. See [algorithms](references/algorithms.md).
+4. Run a small subset first in the pinned environment, then scale worker counts to
+   available memory. Keep the `if __name__ == "__main__":` guard in process-based scripts.
+5. Inspect worker warnings and target coverage, save the full ranked network, and
+   assess stability across seeds and resampled observations before prioritizing edges.
 
-**Local (default)** - Uses all available cores automatically:
-```python
-network = grnboost2(expression_data=matrix)
-```
+## Run the bundled wrapper
 
-**Custom local client** - Control resources:
-```python
-from distributed import LocalCluster, Client
-
-local_cluster = LocalCluster(n_workers=10, memory_limit='8GB')
-client = Client(local_cluster)
-
-network = grnboost2(expression_data=matrix, client_or_address=client)
-
-client.close()
-local_cluster.close()
-```
-
-**Cluster computing** - Connect to remote Dask scheduler:
-```python
-from distributed import Client
-
-client = Client('tcp://scheduler:8786')
-network = grnboost2(expression_data=matrix, client_or_address=client)
-```
-
-**For cluster setup, performance optimization, and large-scale workflows**: `references/distributed_computing.md`
-
-## Installation
+From this skill directory, with a TSV containing gene headers and numeric rows:
 
 ```bash
-uv pip install arboreto
+.venv-arboreto/bin/python scripts/basic_grn_inference.py expression_data.tsv network.tsv \
+  --tf-file tfs.txt --seed 777 --workers 2 --limit 5000
 ```
 
-Conda (Bioconda):
+Add `--index-col 0` only if the first column contains cell/sample identifiers.
+The wrapper rejects duplicate headers before pandas can rename them, nonnumeric
+or nonfinite values, empty TF overlap, invalid limits, and wholly empty results.
+It reports TF overlap and uses a fresh bounded Dask client that closes on error.
+The default is one worker; increase it after a successful pilot. Without a TF
+file, **all genes** are candidate regulators, even though the output column is
+named `TF`.
 
-```bash
-conda install -c bioconda arboreto
-```
+Output is a headerless TSV in `TF`, `target`, `importance` order. For downstream
+consumers that require column headers (including pySCENIC adjacency loading),
+write a separate copy with `header=True` rather than assuming every tool accepts
+the headerless upstream example format.
 
-**Dependencies** (from upstream `requirements.txt`): `dask[complete]`, `distributed`, `numpy`, `pandas`, `scikit-learn`, `scipy`
+## Minimal Python example
 
-**Input formats**: pandas DataFrame, dense `numpy.ndarray`, or sparse `scipy.sparse.csc_matrix` (rows = observations, columns = genes). For array/matrix inputs, pass `gene_names` explicitly.
+This synthetic example checks execution and output structure; it is not a
+biological benchmark. The same calls were tested with a 32-observation,
+four-gene fixture.
 
-## Common Use Cases
-
-### Single-Cell RNA-seq Analysis
 ```python
+import dask
+dask.config.set({"dataframe.query-planning": False})
+import numpy as np
 import pandas as pd
 from arboreto.algo import grnboost2
+from distributed import Client, LocalCluster
 
-if __name__ == '__main__':
-    # Load single-cell expression matrix (cells x genes)
-    sc_data = pd.read_csv('scrna_counts.tsv', sep='\t')
-
-    # Infer cell-type-specific regulatory network
-    network = grnboost2(expression_data=sc_data, seed=42)
-
-    # Filter high-confidence links
-    high_confidence = network[network['importance'] > 0.5]
-    high_confidence.to_csv('grn_high_confidence.tsv', sep='\t', index=False)
+if __name__ == "__main__":
+    rng = np.random.default_rng(123)
+    values = rng.normal(size=(32, 4))
+    values[:, 2] = 3 * values[:, 0] + rng.normal(scale=0.1, size=32)
+    matrix = pd.DataFrame(values, columns=["TF1", "TF2", "G1", "G2"])
+    with LocalCluster(n_workers=1, threads_per_worker=1,
+                      dashboard_address=None) as cluster, Client(cluster) as client:
+        network = grnboost2(expression_data=matrix, tf_names=["TF1", "TF2"],
+                            seed=777, client_or_address=client)
+    assert not network.empty
+    assert not (network["TF"] == network["target"]).any()
+    network.to_csv("network.tsv", sep="\t", index=False, header=False)
 ```
 
-### Bulk RNA-seq with TF Filtering
-```python
-from arboreto.utils import load_tf_names
-from arboreto.algo import grnboost2
+For real DataFrame, ndarray, CSC, and AnnData input conventions, read
+[basic inference](references/basic_inference.md).
 
-if __name__ == '__main__':
-    # Load data
-    expression_data = pd.read_csv('rnaseq_tpm.tsv', sep='\t')
-    tf_names = load_tf_names('human_tfs.txt')
+## Interpret and validate output
 
-    # Infer with TF restriction
-    network = grnboost2(
-        expression_data=expression_data,
-        tf_names=tf_names,
-        seed=123
-    )
+| Column | Meaning |
+| --- | --- |
+| `TF` | Candidate predictor gene, restricted only if a TF list was supplied |
+| `target` | Gene whose expression was predicted |
+| `importance` | Nonnegative feature importance used to rank candidate links |
 
-    network.to_csv('tf_target_network.tsv', sep='\t', index=False)
-```
+Results are sorted by decreasing importance; zero-importance links are omitted.
+GRNBoost2 rescales feature importance by the fitted number of trees, so its
+scores can exceed 1 and are not on the same scale as GENIE3. There is no universal
+`importance > 0.5` confidence cutoff. `limit=N` keeps the top N links globally;
+it does not limit target regressions or return N links per target.
 
-### Comparative Analysis (Multiple Conditions)
-```python
-from arboreto.algo import grnboost2
+For consensus, define a per-run selection rule first, then count the fraction of
+**all runs** retaining each TF-target pair. An edge missing from a run is not an
+observed score to average only over present rows. Archive individual networks,
+seeds, package versions, filters, and identifier lists. Match preprocessing,
+sample sizes and gene sets across conditions; differences in scores alone do not
+establish differential regulation. Use independent motif, binding or perturbation
+evidence to assess candidates. Agreement between GRNBoost2 and GENIE3 is method
+sensitivity analysis, not independent biological validation.
 
-if __name__ == '__main__':
-    # Infer networks for different conditions
-    conditions = ['control', 'treatment_24h', 'treatment_48h']
+Upstream retries target-level regression failures and can return empty target
+results after warnings. A nonempty overall network does not prove every target
+fit succeeded. Check logs and expected target coverage; absence of an edge may
+reflect zero importance, filtering, missing predictors, or a failed regression.
 
-    for condition in conditions:
-        data = pd.read_csv(f'{condition}_expression.tsv', sep='\t')
-        network = grnboost2(expression_data=data, seed=42)
-        network.to_csv(f'{condition}_network.tsv', sep='\t', index=False)
-```
+## pySCENIC boundary
 
-## Output Interpretation
-
-Arboreto returns a DataFrame with regulatory links:
-
-| Column | Description |
-|--------|-------------|
-| `TF` | Transcription factor (regulator) |
-| `target` | Target gene |
-| `importance` | Regulatory importance score (higher = stronger) |
-
-`importance` ranks predictive contributions in the fitted regressions; it is not
-a binding probability, p-value, or proof of direct causal regulation. The example
-cutoff of 0.5 is illustrative, not a calibrated high-confidence threshold. Compare
-matched preprocessing, sample sizes, gene sets, and seed stability before calling
-a link condition-specific; validate candidate edges with motif or perturbation evidence.
-
-**Filtering strategy**:
-- `limit=N` at inference time (return top N links globally)
-- Post-hoc importance threshold (e.g., > 0.5)
-- Top links per target via `groupby('target')`
-- Statistical significance testing (permutation tests, external tools)
-
-## Integration with pySCENIC
-
-Arboreto powers the GRN inference step in [pySCENIC](https://github.com/aertslab/pySCENIC). pySCENIC 0.11+ passes sparse expression matrices to `grnboost2` / `genie3`; pySCENIC 0.12+ defaults to `arboreto_with_multiprocessing.py` (no Dask) for compatibility — use standalone arboreto when you need Dask scaling.
-
-```python
-# Standalone: infer co-expression modules before pySCENIC cisTarget pruning
-from arboreto.algo import grnboost2
-
-network = grnboost2(expression_data=expression_df, tf_names=tf_list, limit=5000)
-
-# Downstream: pySCENIC ctx pruning, regulon definition, AUCell (see pySCENIC docs)
-```
-
-Convert AnnData to a DataFrame for arboreto directly:
-
-```python
-expression_df = adata.to_df()  # cells x genes
-```
-
-## Reproducibility
-
-Always set a seed for reproducible results:
-```python
-network = grnboost2(expression_data=matrix, seed=777)
-```
-
-Run multiple seeds for robustness analysis:
-```python
-from distributed import LocalCluster, Client
-
-if __name__ == '__main__':
-    client = Client(LocalCluster())
-
-    seeds = [42, 123, 777]
-    networks = []
-
-    for seed in seeds:
-        net = grnboost2(expression_data=matrix, client_or_address=client, seed=seed)
-        networks.append(net)
-
-    # Consensus: links recurring across runs (example: mean importance per TF-target pair)
-    import pandas as pd
-    combined = pd.concat(networks)
-    consensus = (
-        combined.groupby(['TF', 'target'], as_index=False)['importance']
-        .mean()
-        .query('importance > 0.5')
-    )
-```
+Arboreto supplies the adjacency inference stage; motif pruning/regulon definition
+and AUCell are separate downstream steps. pySCENIC supplies the separate
+`arboreto_with_multiprocessing.py` utility to run inference without Dask. Do not
+assume `pyscenic grn` automatically uses that utility: the reviewed CLI still
+calls Arboreto with a Dask client. Its `custom_multiprocessing` default concerns
+`ctx` pruning. Downstream pySCENIC execution was not tested in this refresh.
 
 ## Troubleshooting
 
-**Memory errors**: Reduce dataset size by filtering low-variance genes or use distributed computing
+- **`Must supply at least one delayed object`**: check the installed release and
+  Dask backend first; this can be PyPI 0.1.6's empty metadata graph even with valid input.
+- **Sparse `.A` error or repeated empty targets**: use the tested SciPy pin and
+  `scipy.sparse.csc_matrix`, not a newer sparse array type.
+- **Import error with very old Dask**: Dask 2023.12.1 failed on Python 3.11.11's
+  `inspect` behavior during review; do not mix arbitrary old and new components.
+- **Cancelled futures on repeat runs**: use a fresh client/cluster per run when
+  reusing scattered inputs triggers this error; a repeated in-process client
+  probe hit it during review, while separate process clients passed.
+- **Memory pressure**: reduce worker count, restrict regulators, and estimate
+  dense matrix plus per-worker TF copies before scaling. A cluster does not make
+  the client-side expression matrix out-of-core.
 
-**Slow performance**: Use GRNBoost2 instead of GENIE3, enable distributed client, filter TF list
+## Sources and review scope
 
-**Dask errors**: Ensure `if __name__ == '__main__':` guard is present in scripts (required on Windows/macOS with spawn-based multiprocessing)
-
-**Empty results**: Check data format (genes as columns), verify TF names match column names in the expression matrix
-
-**Sparse data**: Use `scipy.sparse.csc_matrix` and pass matching `gene_names`; supported since arboreto 0.1.6 / pySCENIC 0.11
+Reviewed 2026-09-30: [PyPI release](https://pypi.org/project/arboreto/0.1.6/),
+[official guide](https://arboreto.readthedocs.io/en/latest/userguide.html),
+[algorithm source](https://github.com/aertslab/arboreto/blob/master/arboreto/algo.py),
+[core source](https://github.com/aertslab/arboreto/blob/master/arboreto/core.py),
+[Dask 2024.7.1 backend selection](https://github.com/dask/dask/blob/2024.7.1/dask/dataframe/__init__.py),
+[SciPy 1.14 removals](https://docs.scipy.org/doc/scipy/release/1.14.0-notes.html), and
+[pySCENIC CLI](https://github.com/aertslab/pySCENIC/blob/master/src/pyscenic/cli/pyscenic.py).
+Local synthetic runs verify mechanics only. Remote scheduling, large biological
+datasets, Windows/Linux, and pySCENIC downstream analysis remain untested.
+There are no hosted service endpoints, authentication, or pagination in this skill.
 
 ## Citing Scientific Agent Skills
 

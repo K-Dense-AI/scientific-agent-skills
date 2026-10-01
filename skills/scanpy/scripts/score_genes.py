@@ -17,9 +17,9 @@ Examples:
 import argparse
 import json
 
-from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata
+from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata, die
 
-# Tirosh et al. (2016) cell-cycle genes (human). Lowercase/title for mouse if needed.
+# Tirosh et al. (2016) legacy human symbols. Map IDs/orthologs explicitly for other organisms.
 S_GENES = ["MCM5", "PCNA", "TYMS", "FEN1", "MCM2", "MCM4", "RRM1", "UNG", "GINS2",
            "MCM6", "CDCA7", "DTL", "PRIM1", "UHRF1", "MLF1IP", "HELLS", "RFC2",
            "RPA2", "NASP", "RAD51AP1", "GMNN", "WDR76", "SLBP", "CCNE2", "UBR7",
@@ -47,6 +47,8 @@ def main():
 
     sc = configure_scanpy(figdir=args.figdir)
     adata = load_anndata(args.input)
+    if not args.gene_sets and not args.cell_cycle:
+        die("provide --gene-sets and/or --cell-cycle")
     var_names = adata.raw.var_names if adata.raw is not None else adata.var_names
     plot_keys = []
 
@@ -66,6 +68,8 @@ def main():
     if args.cell_cycle:
         s = [g for g in S_GENES if g in var_names]
         g2m = [g for g in G2M_GENES if g in var_names]
+        if not s or not g2m:
+            die("cell-cycle scoring needs both S and G2M genes; verify organism and gene identifiers")
         sc.tl.score_genes_cell_cycle(adata, s_genes=s, g2m_genes=g2m,
                                      use_raw=adata.raw is not None)
         plot_keys += ["phase"]

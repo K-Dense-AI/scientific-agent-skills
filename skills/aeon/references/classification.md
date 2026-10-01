@@ -1,6 +1,6 @@
 # Time Series Classification
 
-Aeon provides 13 categories of time series classifiers with scikit-learn compatible APIs.
+Selected aeon 1.6 classifiers with scikit-learn compatible APIs. Verify estimator capability tags before choosing multivariate, missing-value, or unequal-length data.
 
 ## Convolution-Based Classifiers
 
@@ -10,7 +10,7 @@ Apply random convolutional transformations for efficient feature extraction:
 - `HydraClassifier` - Multi-resolution convolution with dilation
 - `RocketClassifier` - Random convolution kernels with ridge regression
 - `MiniRocketClassifier` - Simplified ROCKET variant for speed
-- `MultiRocketClassifier` - Combines multiple ROCKET variants
+- `MultiRocketClassifier` - Convolutional features from raw and differenced series with multiple pooling operators
 
 **Use when**: Need fast, scalable classification with strong performance across diverse datasets.
 
@@ -23,7 +23,7 @@ Neural network architectures optimized for temporal sequences:
 - `InceptionTimeClassifier` - Multi-scale inception modules
 - `TimeCNNClassifier` - Standard CNN for time series
 - `MLPClassifier` - Multi-layer perceptron baseline
-- `EncoderClassifier` - Generic encoder wrapper
+- `EncoderClassifier` - Convolutional encoder architecture
 - `DisjointCNNClassifier` - Shapelet-focused architecture
 
 **Use when**: Large datasets available, need end-to-end learning, or complex temporal patterns.
@@ -33,7 +33,7 @@ Neural network architectures optimized for temporal sequences:
 Transform time series into symbolic representations:
 
 - `BOSSEnsemble` - Bag-of-SFA-Symbols with ensemble voting
-- `TemporalDictionaryEnsemble` - Multiple dictionary methods combined
+- `TemporalDictionaryEnsemble` - Ensemble of symbolic Fourier bag-of-words models
 - `WEASEL` - Word ExtrAction for time SEries cLassification
 - `MrSEQLClassifier` - Multiple symbolic sequence learning
 
@@ -57,7 +57,7 @@ Extract statistical and signature features before classification:
 - `TSFreshClassifier` - Automated feature extraction via tsfresh
 - `SignatureClassifier` - Path signature transformations
 - `SummaryClassifier` - Summary statistics extraction
-- `FreshPRINCEClassifier` - Combines multiple feature extractors
+- `FreshPRINCEClassifier` - TSFresh features followed by rotation forest
 
 **Use when**: Need interpretable features, domain expertise available, or feature engineering approach.
 
@@ -79,7 +79,6 @@ Extract features from random or supervised intervals:
 Identify discriminative subsequences (shapelets):
 
 - `ShapeletTransformClassifier` - Discovers and uses discriminative shapelets
-- `LearningShapeletClassifier` - Learns shapelets via gradient descent
 - `SASTClassifier` - Scalable approximate shapelet transform
 - `RDSTClassifier` - Random dilated shapelet transform
 
@@ -116,8 +115,10 @@ Handle ordered class labels:
 Build custom pipelines and ensembles:
 
 - `ClassifierPipeline` - Chain transformers with classifiers
-- `WeightedEnsembleClassifier` - Weighted combination of classifiers
+- `ClassifierEnsemble` - Weighted combination of classifiers
 - `SklearnClassifierWrapper` - Adapt sklearn classifiers for time series
+
+`LearningShapeletClassifier` was removed in aeon 1.6 after deprecation in 1.5. Use the supported shapelet estimators above.
 
 ## Quick Start
 

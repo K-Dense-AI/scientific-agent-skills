@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Batch-convert trusted local files with Microsoft MarkItDown 0.1.6.
+"""Batch-convert trusted local files with Microsoft MarkItDown 0.1.8.
 
 The script deliberately uses convert_local(), skips symlinks, preserves relative
 directories, and keeps plugins disabled unless explicitly requested.

@@ -1,7 +1,9 @@
 # Using Waypoint from Python
 
 The CLI covers the standard paths. Drop to Python when you need a custom training loop, a different
-head, or embeddings inside a larger pipeline.
+head, or embeddings inside a larger pipeline. Hub examples are source-checked templates;
+the review ran tiny random CPU models and local synthetic taxa, without gated weights or data.
+Use the compatibility stack in `SKILL.md`; see `upstream-review.md` for release limitations.
 
 ## Package surface
 
@@ -29,18 +31,26 @@ The model itself is a stock GPT-2 and does not need it.
 ```python
 from transformers import AutoTokenizer, AutoModel
 
-tok = AutoTokenizer.from_pretrained("outpost-bio/Waypoint-45m", trust_remote_code=True)
-model = AutoModel.from_pretrained("outpost-bio/Waypoint-45m")   # gated: needs HF_TOKEN
+model_id = "outpost-bio/Waypoint-45m"
+revision = "1664ab5ec88b4bdf571f2512968f99dc222ce0ac"  # Hub metadata checked 2026-10-01
+tok = AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=True)
+model = AutoModel.from_pretrained(model_id, revision=revision)  # requires approved access
 ```
 
-`trust_remote_code=True` executes the tokenizer code stored in the repo. Pin a revision when that
-matters to you, so the code cannot change under a later run:
+Review the repository's `tokenization_taxonomic.py` before executing it. The upstream
+`load_tokenizer(model_path)` and `try_load_token_std_means(model_path)` do not accept a
+`revision`, and CLI commands do not expose one. To keep tokenizer, weights and statistics
+at the same revision, download a snapshot after access approval and use its local path:
 
 ```python
-tok = AutoTokenizer.from_pretrained(
-    "outpost-bio/Waypoint-45m", trust_remote_code=True, revision="1664ab5"
-)
+from huggingface_hub import snapshot_download
+
+checkpoint = snapshot_download(repo_id=model_id, revision=revision)
+# Pass checkpoint to --model, load_tokenizer and try_load_token_std_means.
 ```
+
+This downloads model artifacts; it was not executed during the bounded review. A public Hub
+model card or metadata response does not grant access to its gated files.
 
 `AutoModelForCausalLM` also works if you want the LM head for likelihood scoring or generation —
 generation samples taxa, which is occasionally useful for probing what the model learned about
@@ -66,13 +76,15 @@ Checking whether a taxon is in vocabulary:
 
 ```python
 vocab = tok.get_vocab()
-"g__Lactobacillus" in vocab          # True for anything seen in Atlas
+"g__Lactobacillus" in vocab          # inspect the exact checkpoint vocabulary
 tok.convert_tokens_to_ids("g__Nonesuch") == tok.unk_token_id
 ```
 
-`tok._extract(lineage)` applies the rank extraction and higher-rank fallback and returns the token
-string, or `None`. It is private but stable across 1.0.x and is what the datasets and
-`scripts/vocab_coverage.py` use.
+`tok._extract(lineage)` applies rank extraction and higher-rank fallback, returning a token
+string or `None`. It is private and source-checked only for the reviewed versions; the bundled
+coverage helper instead uses `convert_tokens_to_ids`. `tok(sample)` alone does not reproduce
+the dataset encoding: it does not sort by abundance or explicitly add BOS/EOS. Use the dataset
+or `tokenize_for_embedding` for the model's sample representation.
 
 ## Building a dataset
 
@@ -89,18 +101,26 @@ ds = MicrobiomePretrainingDataset(df, tok, max_length=512, token_std_means=stats
 ds[0]["input_ids"].shape        # torch.Size([512])
 ```
 
-Each item is `[BOS] + z-score-ordered token ids + [EOS]`, right-padded.
+Each item is `[BOS] + ordered token ids + [EOS]`, right-padded. With no statistics it uses raw
+abundance order. `MicrobiomePretrainingDataset` drops rows with no known taxa, so its row count
+can differ from `df`. Its raw `labels` include pad IDs; use `DataCollatorForLanguageModeling`
+with `mlm=False` to mask pad labels, as the CLI does.
 
 Computing the ordering statistics for a corpus of your own:
 
 ```python
 from waypoint_bio.dataset import compute_token_std_means
 
-stats = compute_token_std_means(df, tok, show_progress=True)
+train_df = df  # replace with the training subset only when holding out validation/test data
+stats = compute_token_std_means(train_df, tok, show_progress=True)
 stats.to_parquet("token_std_means.parquet")   # index name "token", columns mean/std
 ```
 
-Drop that file next to a checkpoint and `embed`, `finetune`, and `benchmark` will pick it up.
+For a newly trained model, store these statistics beside its checkpoint. For an existing
+pretrained model, retain its original statistics: replacing them changes token ordering and
+the input distribution. Upstream catches every Hub statistics-download exception and falls
+back to raw abundance order, including authorization/network errors; require the expected
+local file for reproducible comparisons.
 
 ## Embeddings without the CLI
 
@@ -112,14 +132,15 @@ from waypoint_bio.embed import tokenize_for_embedding
 from waypoint_bio.models import _pool
 from waypoint_bio.tokenizer import load_tokenizer
 
-model_id = "outpost-bio/Waypoint-45m"
+model_path = checkpoint  # reviewed local snapshot from above
 df = load_waypoint_dataframe("dataset.parquet")
-tok = load_tokenizer(model_id)
-model = AutoModel.from_pretrained(model_id).eval()
+tok = load_tokenizer(model_path)
+model = AutoModel.from_pretrained(model_path).eval()
 
 samples = tokenize_for_embedding(df, tok, max_length=512,
-                                 token_std_means=try_load_token_std_means(model_id))
+                                 token_std_means=try_load_token_std_means(model_path))
 
+# This small example materializes the whole batch; use a DataLoader for large datasets.
 input_ids = torch.stack([s["input_ids"] for s in samples])
 attn = torch.stack([s["attention_mask"] for s in samples])
 
@@ -154,7 +175,7 @@ Both pool `last_hidden_state`, concatenate the one-hot covariate block if presen
 with missing values in some rows are handled without dropping the row.
 
 Pooling strategies: `mean` (mask-weighted average), `last_token` (last non-padding position — the
-default and what the checkpoints were tuned for), `first_token` / `cls_token` (position 0, the BOS
+default for supervised heads; pretraining has no sample-pooling objective), `first_token` / `cls_token` (position 0, the BOS
 token; weak in a causal LM).
 
 ## Loading Atlas and Compass
@@ -162,17 +183,21 @@ token; weak in a causal LM).
 ```python
 from datasets import load_dataset
 
-atlas = load_dataset("outpost-bio/Atlas", split="pretrain")       # 485,377 rows
-atlas_bench = load_dataset("outpost-bio/Atlas", split="benchmark")  # 53,931 held out
+atlas = load_dataset("outpost-bio/Atlas", split="pretrain",
+                     revision="9dad400edb9e4f1e483a2f9021208c16f694aec2")       # 485,377 rows
+atlas_bench = load_dataset("outpost-bio/Atlas", split="benchmark",
+                           revision="9dad400edb9e4f1e483a2f9021208c16f694aec2")  # 53,931 held out
 
-compass = load_dataset("outpost-bio/Compass", "mastrorilli")
+compass = load_dataset("outpost-bio/Compass", "mastrorilli",
+                       revision="370f857265cab6756bb06c72451c083b13e2418f")
 compass["train"], compass["validation"], compass["test"]
 ```
 
 Atlas is ~5.6 GB. Stream it if you are only inspecting:
 
 ```python
-atlas = load_dataset("outpost-bio/Atlas", split="pretrain", streaming=True)
+atlas = load_dataset("outpost-bio/Atlas", split="pretrain", streaming=True,
+                     revision="9dad400edb9e4f1e483a2f9021208c16f694aec2")
 first = next(iter(atlas))
 ```
 
@@ -184,15 +209,15 @@ how you would hold out whole studies.
 Provenance: scraped from MGnify across pipeline versions v1.0–v5.0 and four modalities (16S amplicon,
 whole-genome shotgun, metagenomic assembly, and metatranscriptomic), then filtered to a minimum
 relative abundance of 1e-4 and a minimum of 10 taxa per sample. The pretrain/benchmark split is
-random with `seed=42` — it is *not* a study-level holdout, so the Atlas `benchmark` split shares
-studies with `pretrain`.
+random with `seed=42` — it is *not* a study-level holdout, so the Atlas `benchmark` split can share
+studies with `pretrain`; verify overlap for your intended evaluation.
 
 ## Fine-tuning programmatically
 
 There is no stable public function for the whole loop; `waypoint_bio.finetune` is written as a CLI
 module. Two workable options:
 
-1. Call the CLI with `subprocess` and read `finetune_results.json` — what the upstream webinar
+1. Once tokenizer save/reload is verified, call the CLI with `subprocess` and read `finetune_results.json` — what the upstream webinar
    notebooks do.
 2. Assemble it yourself from `MicrobiomeBenchmarkDataset` + `ClassificationModel`/`RegressionModel`
    and a `transformers.Trainer`, mirroring `benchmark.py`. Reuse `waypoint_bio.scoring.score_task`

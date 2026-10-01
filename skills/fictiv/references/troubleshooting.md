@@ -25,15 +25,15 @@ Find the symptom, then apply the fix. The entries marked "(seen live)" were repr
 
 ## 2. Upload problems
 
-Run `scripts/check_cad_file.py` first. It catches most of these.
+Run `scripts/check_cad_file.py` first for format and heuristic STEP/STL checks. Native CAD geometry, PDF contents, functional multi-body eligibility and actual manufacturability require separate review.
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | Upload zone greyed out, nothing happens on file select (seen live) | No process card selected (the URL has no `?process=`) | Click the process **card** text, not the radio input, then upload again |
 | File picked but nothing happens | Ad blocker, or a corporate firewall blocking uploads | Disable the ad blocker for app.fictiv.com and refresh; try another network |
-| File rejected by type | IGES, F3D, DXF, drawing-only, assembly | Export STEP (one part per file); attach the PDF to its part |
+| File rejected by type | IGES, F3D, DXF, native PSM/PWD, drawing-only, assembly | Export STEP (one part per file); attach the PDF to its part |
 | Mesh rejected for CNC, urethane or IM | Mesh is 3DP-only | Upload STEP or native CAD |
-| Multi-body file shows "Please request a quote" and the whole quote loses instant pricing (seen live) | More than one solid in the file | Split into one file per body. For a genuine 3DP interlinked assembly, leave it and accept manual review. |
+| Multi-body file loses instant pricing or is rejected | Multiple solids need review | Split separate parts. CNC modeled-in pins/inserts and functional 3DP interlinked components have documented exceptions; separate floating 3DP bodies are unacceptable. A manual quote is not proof that an unsupported file can be manufactured. |
 | "Not watertight" / non-manifold | Holes in the mesh (surface modelers) | Repair (Netfabb, Meshmixer) or re-export as a solid |
 | SolidWorks part rejected | Multiple configurations | Save a single-configuration copy, or export STEP |
 | Part 25.4× too big or small | Units mismatch (unitless mesh, or wrong mm/in toggle) | Delete the part and re-upload with the correct units; confirm the bounding box in the viewer |
@@ -73,12 +73,12 @@ In every case, tell the user what Fictiv said, then offer three paths: **proceed
 |---|---|---|
 | No prices at all, banner "Required: Are these parts for prototype or commercial use?" (seen live) | End use not declared | Ask the user and click Prototype or Commercial |
 | "Configure parts to receive lead times"; Request quote disabled (seen live) | At least one row still shows **Configure** | Configure every part, or move or delete the unconfigured part |
-| Every tier shows `$ --`; Summary says "Some of your parts require a human to quote" (seen live) | At least one part needs manual pricing (multi-body, custom material, drawing callouts, complex geometry) | Remove the trigger, or split the manual part into its own quote with **Move to…** so the rest can be bought now, or click **Request quote** (after user OK; about 2 business hours) |
+| Every available tier shows `$ --`; Summary says "Some of your parts require a human to quote" (seen live) | At least one part needs manual pricing (multi-body, custom material, drawing callouts, complex geometry) | Remove the trigger, or split the manual part into its own quote with **Move to…** so the rest can be bought now, or click **Request quote** (after user OK; about 2 business hours) |
 | Configuration panel price differs from the table price (seen live: $286/ea in panel, $520.80 in table) | The panel price uses a default tier; the table uses the selected lead-time tier | Trust the table and Summary after choosing the tier |
 | Material or finish missing from the dropdown | Not offered for that process, or the list is virtualized | Run `list_dropdown_options.js`; choose "Custom Materials / Other" (manual quote) or ask Materials.AI |
 | Finish disappeared after changing material | Finish not valid for the new material | Re-add a valid finish |
 | Can't select the thread size the user wants (seen live: an 8 mm hole offers M9, 3/8-16…) | The modeled hole diameter doesn't match that thread's tap drill | Remodel the hole at tap-drill size, or attach a drawing |
-| Threads tab missing | No holes detected, a PDF drawing is attached (auto-detection off), or the process isn't CNC | Configure threads before attaching drawings; use a drawing for custom threads |
+| Threads tab missing | No compatible holes detected, process is not CNC, or configuration/UI differs | Review modeled tap-drill sizes and final thread requirements; current CNC drawing reconciliation can extract threaded holes from PDFs. Use a drawing for custom threads. |
 | Threads locked | An exact or manual quote was already requested | Duplicate or re-upload the part to change them, or ask Fictiv via chat |
 | Quote stuck "in review" | Manual quoting in progress | CNC takes under about 2 business hours; IM, die casting and compression 24–48 h; custom up to 2 business days. Follow up via chat or the account manager. Don't re-request. |
 | Price much higher than expected | Tight lead time, exotic material, many setups, thin walls or deep pockets, finish, low quantity | Show the user the cheaper tiers, overseas options and quantity breaks; suggest DFM changes |
@@ -110,8 +110,8 @@ In every case, tell the user what Fictiv said, then offer three paths: **proceed
 | Symptom | Fix |
 |---|---|
 | Need to cancel or change | Contact the program manager or hello@fictiv.com immediately (window: minutes to hours). ECOs cost fees and days. |
-| Parts out of spec, wrong finish, missing threads | Within **72 h of delivery**, send the program manager photos and measurements against the order requirements. Remedy is rework or remake. |
-| Customs hold | Call the carrier to find the holding agent; supply CBP 5106 and part description and end use; DDP customs fields are due within 48 h of checkout |
+| Parts out of spec, wrong finish, missing threads | Contact the program manager immediately with photos and measurements and obtain RMA instructions; standard Terms include 72-hour warranty/return deadlines and exclusions. Fictiv determines repair, remake or refund eligibility (orders-library-teams.md §5). |
+| Customs hold | Read the Customs Information tab and displayed deadline. For DDP, complete descriptions/end use; Fictiv handles import documents. For US EXW, the customer handles HTS/CBP registration/POA through the carrier. Canada requires its own import documentation. |
 | Can't find an order | Search uses contiguous substrings (order name, part name, PO#); check Team workspaces |
 | Need certs or reports | Order detail → "Inspection report data" / "View inspection". Certs only exist if they were added before ordering. |
 

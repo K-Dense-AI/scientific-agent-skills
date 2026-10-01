@@ -47,13 +47,17 @@ items = list(islice(image.listAnnotations(), max_annotations + 1))
 truncated = len(items) > max_annotations
 
 for annotation in items[:max_annotations]:
-    print(annotation.getId(), annotation.OMERO_CLASS, annotation.getNs())
+    print(annotation.getId(), type(annotation).__name__, annotation.getNs())
 
 print({"truncated": truncated})
 ```
 
-Do not call `getValue()` when values are outside the approved export scope.
-Merely avoiding printing after retrieval is weaker than not retrieving.
+Avoid `getValue()` when values are outside the export scope. However,
+`listAnnotations()` loads linked annotations, including their values, before
+yielding, and its namespace filter is applied locally. Thus redaction and
+iteration caps protect output; they do not prevent transfer into client memory
+or bound the server query. Annotation wrappers inherit `OMERO_CLASS=None`;
+use their concrete wrapper class for an annotation type name.
 
 For explicit parent IDs, annotation links can be queried:
 
@@ -78,7 +82,7 @@ def annotation_summary(annotation):
     owner = details.getOwner() if details is not None else None
     return {
         "id": annotation.getId(),
-        "type": annotation.OMERO_CLASS,
+        "type": type(annotation).__name__.removesuffix("Wrapper"),
         "namespace": annotation.getNs(),
         "owner_id": owner.getId() if owner is not None else None,
         "value_redacted": True,

@@ -5,6 +5,8 @@ The official
 implements GCPN and GraphAF on ZINC250k. It pretrains with negative
 log-likelihood (NLL), then optionally fine-tunes with proximal policy optimization
 (PPO) for QED or penalized logP.
+Full ZINC250k training and generation are illustrative. Source review and tiny
+CPU checks do not establish validity rates, optimization quality, or convergence.
 
 ## Shared dataset
 
@@ -70,12 +72,15 @@ Use `gpus=(0,)` or `gpus=[0]` only on supported CUDA hardware.
 
 ```python
 solver.load("gcpn-zinc250k.pth")
+task.eval()
 results = task.generate(num_sample=32, max_resample=5)
 print(results.to_smiles())
 ```
 
 `results` is a packed molecule object. Validate all returned structures before
-downstream use.
+downstream use. Set `task.eval()` before generation; both generation methods
+disable gradients internally but do not automatically disable training-mode
+batch normalization. Record requested/returned counts and bounded resampling.
 
 ### Goal-directed fine-tuning
 
@@ -194,6 +199,7 @@ solver.train(num_epoch=10)
 solver.save("graphaf-zinc250k.pth")
 
 solver.load("graphaf-zinc250k.pth")
+task.eval()
 results = task.generate(num_sample=32)
 print(results.to_smiles())
 ```

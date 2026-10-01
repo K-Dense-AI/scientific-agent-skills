@@ -1,6 +1,6 @@
 """Post-processing helpers for a params.npz written by runner.py.
 
-Verified against openpiv 0.25.4. Pure numpy -- no OpenPIV import needed here.
+Verified against openpiv 0.26.1. Pure numpy -- no OpenPIV import needed here.
 """
 
 from pathlib import Path
@@ -14,20 +14,22 @@ class PIVAnalyzer:
 
     The fields in params.npz are already scaled to physical units by runner.py, so
     x and y are in the same unit as the scaling factor and u and v are that unit per
-    second. Pass the matching grid spacing to the gradient methods -- the default
-    dx=1.0 yields per-grid-cell derivatives, not per-unit-length ones.
+    second. Gradient methods infer spacing and orientation from saved coordinates.
+    Derivatives use interpolated fluid vectors; permanently masked regions stay NaN.
     """
 
     def __init__(self, params_file: str):
         self.params_file = Path(params_file)
 
-        data = np.load(self.params_file)
-        self.x = data["x"]
-        self.y = data["y"]
-        self.u = data["u"]
-        self.v = data["v"]
-        # Boolean: True marks a vector flagged as spurious during processing.
-        self.flags = data["flags"].astype(bool)
+        with np.load(self.params_file, allow_pickle=False) as data:
+            self.x = data["x"]
+            self.y = data["y"]
+            self.u = data["u"]
+            self.v = data["v"]
+            self.flags = data["flags"].astype(bool)
+            self.mask = data["mask"].astype(bool) if "mask" in data else np.zeros_like(self.flags)
+        self.u = np.where(self.mask, np.nan, self.u)
+        self.v = np.where(self.mask, np.nan, self.v)
 
     @property
     def grid_spacing(self) -> Tuple[float, float]:
@@ -40,12 +42,11 @@ class PIVAnalyzer:
     def axis_signs(self) -> Tuple[float, float]:
         """(+-1, +-1): whether x and y increase or decrease along the array axes.
 
-        runner.py finishes with openpiv.tools.transform_coordinates(), which relabels
-        the grid into a physical right-handed (y-up) frame while leaving the rows in
+        runner.py converts to a physical right-handed (y-up) frame while leaving rows in
         image order -- so physical y *decreases* as the row index grows. np.gradient
         only sees the array, so differentiating with a positive spacing would return
-        -du/dy there and silently flip the sign of the vorticity and of the shear
-        strain rate. These signs put the derivatives back on the physical axes.
+        -du/dy there and change the vorticity and shear-strain contributions.
+        These signs put the derivatives back on the physical axes.
         """
         x_sign = -1.0 if self.x.shape[1] > 1 and self.x[0, 1] < self.x[0, 0] else 1.0
         y_sign = -1.0 if self.y.shape[0] > 1 and self.y[1, 0] < self.y[0, 0] else 1.0
@@ -73,7 +74,7 @@ class PIVAnalyzer:
         """Quiver plot of the valid vectors. Saves to save_path, or shows interactively."""
         import matplotlib.pyplot as plt
 
-        valid = ~self.flags
+        valid = ~(self.flags | self.mask) & np.isfinite(self.u) & np.isfinite(self.v)
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.quiver(
             self.x[valid],
@@ -122,21 +123,30 @@ class PIVAnalyzer:
         dv_dy = y_sign * np.gradient(self.v, dy, axis=0)
         return du_dx, dv_dy, 0.5 * (du_dy + dv_dx)
 
-    def compute_statistics(self) -> Dict[str, float]:
+    def compute_statistics(self, include_interpolated: bool = False) -> Dict[str, float]:
         """Spatial mean and RMS over this single frame.
 
         This is NOT Reynolds decomposition: subtracting one frame's spatial mean
         measures spatial variance, which equals turbulent intensity only for a
         homogeneous field. True turbulence statistics need an ensemble of pairs --
         average over the time axis, then subtract that mean field from each frame.
+        By default exclude flagged/interpolated vectors and masked obstacles.
+        The legacy key 'tke' is only two-component spatial variance energy, not
+        three-component turbulent kinetic energy.
         """
-        u_prime = self.u - np.nanmean(self.u)
-        v_prime = self.v - np.nanmean(self.v)
+        valid = ~self.mask & np.isfinite(self.u) & np.isfinite(self.v)
+        if not include_interpolated:
+            valid &= ~self.flags
+        if not valid.any():
+            raise ValueError("No valid fluid vectors remain for statistics")
+        u, v = self.u[valid], self.v[valid]
+        u_prime = u - np.mean(u)
+        v_prime = v - np.mean(v)
         rms_u = float(np.nanstd(u_prime))
         rms_v = float(np.nanstd(v_prime))
         return {
-            "u_mean": float(np.nanmean(self.u)),
-            "v_mean": float(np.nanmean(self.v)),
+            "u_mean": float(np.mean(u)),
+            "v_mean": float(np.mean(v)),
             "rms_u": rms_u,
             "rms_v": rms_v,
             "tke": 0.5 * (rms_u**2 + rms_v**2),

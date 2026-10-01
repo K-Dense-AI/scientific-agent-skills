@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--pooling", choices=("mean", "max"), default="mean")
     parser.add_argument("--geniml-version", default="0.8.4")
-    parser.add_argument("--gtars-version", default="0.9.2")
+    parser.add_argument("--gtars-version", default="0.10.0")
     parser.add_argument(
         "--max-file-bytes",
         type=int_type(minimum=1, maximum=HARD_MAX_BYTES, label="max-file-bytes"),
@@ -272,8 +272,14 @@ def plan(args: argparse.Namespace) -> tuple[dict, int]:
             "stage": "environment",
             "executed": False,
             "requirements": [
-                f"geniml[ml]=={args.geniml_version}",
+                f"geniml=={args.geniml_version}",
                 f"gtars=={args.gtars_version}",
+                "anndata==0.12.19",
+                "scanpy==1.12.4",
+                "zarr==2.18.7",
+                "torch==2.14.1",
+                "gensim==4.4.0",
+                "huggingface-hub==2.0.0",
             ],
             "instruction": "resolve with uv and retain the generated lockfile",
         },
@@ -327,8 +333,8 @@ def plan(args: argparse.Namespace) -> tuple[dict, int]:
                         "gtars.tokenizers.Tokenizer",
                     ],
                     "note": (
-                        "synthetically test ScEmbed.encode token shape with the pinned "
-                        "Gtars version before real data"
+                        "Geniml 0.8.4 ScEmbed.encode/tokenize_anndata fail with Gtars "
+                        "0.10.0; use the explicit token/projection recipe in references/scembed.md"
                     ),
                 },
                 {

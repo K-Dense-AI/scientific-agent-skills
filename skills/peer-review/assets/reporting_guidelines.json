@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0",
-  "reviewed_on": "2026-07-23",
+  "reviewed_on": "2026-10-01",
   "notice": "This catalog supports reporting-guideline selection only. Verify the official source, applicable extensions, and target venue policy. Checklist coverage is not a quality or merit score.",
   "guidelines": [
     {
@@ -104,7 +104,7 @@
       ],
       "main_item_count": null,
       "url": "https://www.equator-network.org/reporting-guidelines/consort-artificial-intelligence/",
-      "notes": "Use with CONSORT 2025 for randomized trials evaluating an AI intervention; verify whether updated extension guidance applies."
+      "notes": "Use the 2020 extension alongside CONSORT 2025 for AI intervention trials. It was written against CONSORT 2010; map items by meaning, not inherited item numbers, and check current extension guidance."
     },
     {
       "id": "COREQ-2007",
@@ -187,6 +187,28 @@
       "main_item_count": 34,
       "url": "https://www.consort-spirit.org/",
       "notes": "Supersedes SPIRIT 2013. Compare protocol, registry, statistical analysis plan, amendments, and final report for consistency."
+    },
+    {
+      "id": "SPIRIT-AI-2020",
+      "name": "SPIRIT-AI",
+      "version": "2020 extension",
+      "status": "current",
+      "category": "reporting_guideline",
+      "study_types": [
+        "randomized_trial"
+      ],
+      "report_kinds": [
+        "protocol"
+      ],
+      "required_features": [
+        "ai_intervention"
+      ],
+      "domains": [
+        "health"
+      ],
+      "main_item_count": null,
+      "url": "https://www.equator-network.org/reporting-guidelines/spirit-artificial-intelligence/",
+      "notes": "Use the 2020 AI-intervention extension alongside SPIRIT 2025. It was written against SPIRIT 2013; map items by meaning, not inherited item numbers, and check current extension guidance."
     },
     {
       "id": "SQUIRE-2.0",
@@ -320,6 +342,7 @@
       "status": "current",
       "category": "reporting_guideline",
       "study_types": [
+        "llm_study",
         "prediction_model"
       ],
       "report_kinds": [
@@ -333,7 +356,7 @@
       ],
       "main_item_count": 19,
       "url": "https://www.equator-network.org/reporting-guidelines/the-tripod-llm-reporting-guideline-for-studies-using-large-language-models/",
-      "notes": "Use with TRIPOD+AI for studies of large language models in biomedicine and healthcare."
+      "notes": "For biomedical/healthcare studies developing, tuning, prompt engineering, or evaluating LLMs, including non-prediction tasks. Use TRIPOD+AI additionally when prediction-model reporting applies; consult the separate abstract checklist for abstracts."
     },
     {
       "id": "MIAME-2001",
@@ -354,7 +377,7 @@
       ],
       "main_item_count": null,
       "url": "https://www.ncbi.nlm.nih.gov/geo/info/MIAME.html",
-      "notes": "Retained because GEO and ArrayExpress still implement it; verify current repository submission fields."
+      "notes": "GEO guidance supports MIAME; verify current repository submission fields and required data content."
     },
     {
       "id": "MIAPE-CURRENT",
@@ -438,7 +461,7 @@
       ],
       "main_item_count": null,
       "url": "https://www.ncbi.nlm.nih.gov/geo/info/MIAME.html",
-      "notes": "Retained because GEO and ArrayExpress still implement it; verify platform-specific repository requirements."
+      "notes": "GEO guidance supports MINSEQE for high-throughput functional genomics experiments; verify platform-specific repository requirements."
     },
     {
       "id": "MIxS-CURRENT",

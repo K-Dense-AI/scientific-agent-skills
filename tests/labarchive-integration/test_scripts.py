@@ -8,11 +8,11 @@ without touching LabArchives:
   check;
 * the path validators in front of that signature, which refuse anything that
   would sign a different route than the one actually requested;
-* the `.eln` container inspector, which unpacks untrusted archives and must
-  reject traversal, absolute paths, and symlink members.
+* the LA container inspector, which inspects untrusted ZIP archives without extraction;
+  they must reject traversal, absolute paths, and symlink members.
 
-Nothing here uses a real credential; the only key material is the vendor's own
-published dummy vector.
+Nothing here uses a real credential; key material consists of dummy strings and the vendor's
+published test vector.
 """
 
 from __future__ import annotations
@@ -139,16 +139,53 @@ class AuthParameterTests(unittest.TestCase):
 
     def test_inventory_headers_sign_the_resolved_path(self) -> None:
         headers = entry_operations.build_inventory_headers(
-            "keyid", "secret", "user", "lab", "/public/v1/items/42", expires_ms=1000
+            "keyid", "secret", "user", "lab", "/public/v1/inventory/42", expires_ms=1000
         )
         self.assertEqual(
             headers["X-LabArchives-Signature"],
             entry_operations.create_signature(
-                "keyid", "/public/v1/items/42", 1000, "secret"
+                "keyid", "/public/v1/inventory/42", 1000, "secret"
             ),
         )
         self.assertEqual(headers["X-LabArchives-UId"], "user")
         self.assertEqual(headers["X-LabArchives-LabId"], "lab")
+
+    def test_inventory_bootstrap_omits_lab_header_when_not_known(self) -> None:
+        for lab_id in (None, "", "  "):
+            with self.subTest(lab_id=lab_id):
+                headers = entry_operations.build_inventory_headers(
+                    "keyid", "secret", "user", lab_id, "/public/v1/users/me", expires_ms=1000
+                )
+                self.assertNotIn("X-LabArchives-LabId", headers)
+                self.assertEqual(len(headers), 4)
+                self.assertEqual(
+                    headers["X-LabArchives-Signature"],
+                    entry_operations.create_signature("keyid", "/public/v1/users/me", 1000, "secret"),
+                )
+
+    def test_inventory_lab_scoped_calls_still_require_lab_header(self) -> None:
+        for path in ("/public/v1/inventory", "/public/v1/inventory/ITEM-42", "/public/v1/users/me/"):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(setup_config.ConfigError, "Inventory Lab ID"):
+                    entry_operations.build_inventory_headers("k", "s", "u", None, path)
+
+    def test_inventory_bootstrap_plan_works_before_lab_selection(self) -> None:
+        args = entry_operations.build_parser().parse_args([
+            "inventory-plan", "--path", "/public/v1/users/me", "--expires-ms", "1000"
+        ])
+        env = {
+            setup_config.ENV_ACCESS_KEY_ID: "fake-key",
+            setup_config.ENV_ACCESS_PASSWORD: "fake-secret",
+            setup_config.ENV_USER_ID: "fake-user",
+        }
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            self.assertEqual(entry_operations.command_inventory_plan(args, env), 0)
+        payload = json.loads(buffer.getvalue())
+        self.assertNotIn("X-LabArchives-LabId", payload["authentication_header_names"])
+        self.assertFalse(payload["remote_request_performed"])
+        for value in env.values():
+            self.assertNotIn(value, buffer.getvalue())
 
     def test_an_omitted_expiry_defaults_to_now(self) -> None:
         params = entry_operations.build_eln_auth_params("k", "s", "entry_attachment")
@@ -173,13 +210,13 @@ class ComponentValidationTests(unittest.TestCase):
 
 class InventoryPathTests(unittest.TestCase):
     def test_a_resolved_route_is_accepted(self) -> None:
-        for path in ("/public/v1/items", "/public/v1/items/42", "/public/v1/a.b~c"):
+        for path in ("/public/v1/inventory", "/public/v1/inventory/42", "/public/v1/a.b~c"):
             with self.subTest(path=path):
                 self.assertEqual(entry_operations.validate_inventory_path(path), path)
 
     def test_a_query_or_fragment_is_refused(self) -> None:
-        # Signing a path but sending it with a query signs the wrong thing.
-        for path in ("/public/v1/items?page=2", "/public/v1/items#top"):
+        # The signature excludes the query; callers pass query parameters separately.
+        for path in ("/public/v1/inventory?page=2", "/public/v1/inventory#top"):
             with self.subTest(path=path):
                 with self.assertRaisesRegex(ValueError, "query strings and fragments"):
                     entry_operations.validate_inventory_path(path)
@@ -190,7 +227,7 @@ class InventoryPathTests(unittest.TestCase):
 
     def test_unresolved_placeholders_are_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "resolve all Inventory route placeholders"):
-            entry_operations.validate_inventory_path("/public/v1/items/{id}")
+            entry_operations.validate_inventory_path("/public/v1/inventory/{id}")
 
     def test_a_path_outside_the_public_v1_prefix_is_refused(self) -> None:
         for path in ("/private/v1/items", "public/v1/items", "/public/v2/items"):
@@ -267,7 +304,7 @@ class ApiUrlTests(unittest.TestCase):
 
 
 class ContainerMemberTests(unittest.TestCase):
-    """`.eln` archives come from outside; every member name is untrusted."""
+    """LA container ZIP archives come from outside; member names are untrusted."""
 
     def test_ordinary_member_paths_are_accepted(self) -> None:
         for name in ("lamanifest.xml", "data/entry.json", "a/b/c.txt"):

@@ -61,7 +61,7 @@ PROHIBITED_LOGIC = (
 
 def _safe_csv(value: Any) -> str:
     text = str(value).replace("\r", " ").replace("\n", " ")
-    if text.startswith(("=", "+", "-", "@")):
+    if text.lstrip().startswith(("=", "+", "-", "@")):
         return "'" + text
     return text
 
@@ -113,7 +113,7 @@ def validate_matrix(
             log.errors.append(
                 "metadata.decision_role must be research_governance_only"
             )
-        if metadata.get("data_level") not in {"aggregate", "synthetic", "metadata_only"}:
+        if not isinstance(metadata.get("data_level"), str) or metadata.get("data_level") not in {"aggregate", "synthetic", "metadata_only"}:
             log.errors.append(
                 "metadata.data_level must be aggregate, synthetic, or metadata_only"
             )
@@ -142,7 +142,7 @@ def validate_matrix(
         edges: dict[str, list[str]] = {}
         for index, node in enumerate(nodes):
             field = f"nodes[{index}]"
-            node_id = str(node["id"])
+            node_id = require_nonempty_text(node["id"], f"{field}.id", max_length=64)
             node_type = require_nonempty_text(node.get("type"), f"{field}.type")
             if node_type not in ALLOWED_NODE_TYPES:
                 log.errors.append(f"{field}.type is unsupported")
@@ -249,6 +249,8 @@ def validate_matrix(
 
     if log.ok:
         log.info.append("Research/governance traceability matrix is structurally valid")
+    else:
+        normalized = []
     return log, normalized
 
 
@@ -293,14 +295,16 @@ def main() -> int:
     try:
         document = load_json_object(args.input)
         log, rows = validate_matrix(document)
-        if args.output:
-            write_text(args.output, _csv_text(rows), {".csv"})
-        else:
-            print(_csv_text(rows), end="")
         for message in log.errors:
             print(f"ERROR: {message}", file=sys.stderr)
         for message in log.warnings:
             print(f"WARNING: {message}", file=sys.stderr)
+        if not log.ok or (args.strict and log.warnings):
+            return 1
+        if args.output:
+            write_text(args.output, _csv_text(rows), {".csv"})
+        else:
+            print(_csv_text(rows), end="")
     except InputError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

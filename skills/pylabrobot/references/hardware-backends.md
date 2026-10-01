@@ -1,7 +1,7 @@
 # Hardware backends and supported robots
 
-Verified against **PyLabRobot 0.2.1** on **2026-07-23**. Support labels below
-come from the stable supported-machines page, not from marketing claims.
+Verified against **PyLabRobot 0.2.2** on **2026-10-01**. Released exports were inspected without constructing hardware backends. Hosted
+`/stable/` support tables now describe development APIs; see [review](review.md).
 
 ## Architecture
 
@@ -14,7 +14,7 @@ PyLabRobot separates:
 
 A common frontend does not guarantee identical channels, tools, operations,
 parameters, calibration, error semantics, timing, or firmware support.
-Backend-specific kwargs must be reviewed against the exact stable model page.
+Backend-specific kwargs must be reviewed against the exact release implementation and model page.
 
 ## Verified stable liquid-handler names
 
@@ -32,7 +32,7 @@ from pylabrobot.liquid_handling.backends import (
 Do not use stale names from older skill text:
 
 - `STAR` is not the stable high-level backend name; use `STARBackend`.
-- `TecanBackend` is not the 0.2.1 EVO backend; use `EVOBackend`.
+- `TecanBackend` is not the 0.2.2 EVO backend; use `EVOBackend`.
 - `OpentronsBackend` is stale; use `OpentronsOT2Backend`.
 - `ChatterboxBackend` has incorrect naming/capitalization for the recommended
   generic liquid-handler testing backend; use
@@ -41,29 +41,18 @@ Do not use stale names from older skill text:
   Avoid it when the stable docs specifically call for
   `LiquidHandlerChatterboxBackend`.
 
-## Stable liquid-handling support levels
+## Released exports and current support listings
 
-- **Hamilton STAR(let): Full.** Stable class `STARBackend`; deck definitions
-  include `STARDeck` and `STARLetDeck`.
-- **Hamilton Vantage: Mostly.** Stable class `VantageBackend`; verify unsupported
-  commands and installed options.
-- **Hamilton Prep: WIP.**
-- **Hamilton Nimbus: WIP.**
-- **Tecan Freedom EVO: Basic.** Stable class `EVOBackend`; do not describe it as
-  full or backend-equivalent to STAR.
-- **Opentrons OT-2: Mostly.** Stable class `OpentronsOT2Backend(host, port=31950)`;
-  network/API/firmware compatibility is model-specific.
+The 0.2.2 wheel exposes STAR, Vantage, EVO and OT-2 backends listed above.
+The current hosted machine table labels STAR **Full**, Vantage **Mostly**,
+EVO **Basic**, OT-2 **Mostly**, Nimbus **Mostly**, and Prep **WIP**. These are
+upstream development-support assessments, not validation of the 0.2.2 wheel,
+firmware, attachments, or a protocol. Nimbus/Prep entries do not establish a
+portable released backend import. Read the exact device source before using it.
 
-Upstream defines:
-
-- **WIP**: work in progress;
-- **Basics/Basic**: core functionality is integrated and documented;
-- **Mostly**: most capabilities are available but known commands are missing;
-- **Full**: upstream considers at least 90% of hardware/firmware capabilities
-  supported with extensive documentation.
-
-These labels do not validate a particular firmware, attachment, computer,
-transport, or protocol.
+The hosted table also distinguishes v0 and v1 drivers; these labels are not
+PyLabRobot release numbers. Never infer a released capability from that table
+alone or from inherited method presence.
 
 ## Offline backend
 
@@ -93,7 +82,7 @@ or untrusted config.
 
 ```bash
 python3 skills/pylabrobot/scripts/inspect_backends.py \
-  --expected-version 0.2.1 --strict
+  --expected-version 0.2.2 --strict
 ```
 
 The inspector:
@@ -110,8 +99,7 @@ backends deliberately raise `NotImplementedError`.
 
 ## Extras and transports
 
-Base `PyLabRobot==0.2.1` keeps hardware dependencies optional. Stable
-installation documentation lists extras including:
+Base `PyLabRobot==0.2.2` keeps hardware dependencies optional. The release metadata lists extras including:
 
 - `serial`
 - `usb`
@@ -129,10 +117,10 @@ pin:
 
 ```bash
 # Example form only; do not run until the device and transport are approved.
-uv pip install "PyLabRobot[serial]==0.2.1"
+uv pip install "PyLabRobot[serial]==0.2.2"
 ```
 
-`all` intentionally does not include microscopy in stable 0.2.1 because of its
+`all` intentionally does not include microscopy in stable 0.2.2 because of its
 separate NumPy/SDK constraints. Optional transport packages can enumerate or
 communicate with devices; installation does not authorize their use.
 
@@ -170,24 +158,27 @@ and all device-specific errors.
 
 ### Tecan EVO
 
-Stable status is **Basic**, not full. Use `EVOBackend`; verify which LiHa/RoMa
+The current hosted EVO support label remains **Basic**. Use `EVOBackend`; verify which LiHa/RoMa
 commands, arms, tips, carriers, and firmware paths are implemented. Never infer
 Hamilton behavior or liquid classes.
 
 ### Opentrons OT-2
 
-`OpentronsOT2Backend` communicates with an explicitly configured host over
-HTTP. Do not scan a network or probe a robot. Confirm robot software/API
-compatibility and unsupported operations; stable source explicitly rejects
-some features such as a 96 head and robotic-arm methods.
+`OpentronsOT2Backend(host, port=31950)` uses the optional pinned
+`opentrons-http-api-client==0.2.1`. Its `setup(skip_home=False)` creates an HTTP
+run and homes by default; `skip_home=True` still creates a run and queries the
+robot. Neither is an offline connectivity check. Current 0.2.2 `stop()` tries
+cancellation paths not in the current official HTTP specification and swallows
+failures. **Do not treat successful cleanup as confirmation that a robot stopped.**
+The [transport review](review.md) records exact paths and the supported API
+contract. No robot HTTP request was made during this review.
 
 ## Stable versus development
 
-The stable pin/tag is `v0.2.1`. Repository `main` continued changing through
-2026-07-22 during this review. Development docs and `CHANGELOG.md`'s
-`Unreleased` section may describe classes not in the wheel. For example,
-HighRes MicroSpin support is unreleased and must not be presented as a stable
-0.2.1 capability.
+The tested pin is 0.2.2. No `v0.2.2` GitHub tag was listed at review time,
+and the changelog did not have a 0.2.2 section. MicroSpin and plate stacking
+metadata are in the released wheel despite remaining under `Unreleased` in
+the changelog. Prefer the PyPI source artifact plus executable checks.
 
 When considering a later release:
 
@@ -198,18 +189,8 @@ When considering a later release:
 
 ## Sources
 
-Checked **2026-07-23**:
-
-- [Stable supported machines](https://docs.pylabrobot.org/stable/user_guide/machines.html)
-  — model/status tables and status definitions (page metadata surfaced
-  2025-01-01; docs version 0.2.1).
-- [Stable liquid-handling API](https://docs.pylabrobot.org/stable/api/pylabrobot.liquid_handling.html)
-  — abstract, hardware, serializing, and testing backends.
-- [Stable installation](https://docs.pylabrobot.org/stable/user_guide/_getting-started/installation.html)
-  — optional extras and stable/source distinction.
-- [`v0.2.1` backend source](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/liquid_handling/backends)
-  — exact classes and limitations; tag commit dated 2026-03-23.
-- [Project README](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1#readme)
-  — supported robot families and manufacturer/warranty disclaimer.
-- [Changelog](https://github.com/PyLabRobot/pylabrobot/blob/main/CHANGELOG.md)
-  — stable 0.2.1 versus development-only `Unreleased`.
+Reviewed **2026-10-01**: [PyPI release files and extras](https://pypi.org/project/PyLabRobot/0.2.2/#files),
+[current supported machines](https://docs.pylabrobot.org/stable/user_guide/machines.html),
+[official Opentrons HTTP specification](https://docs.opentrons.com/http/api_reference.html),
+and the [release/transport evidence ledger](review.md). Support listings and
+physical firmware compatibility were not tested on instruments.

@@ -1,132 +1,119 @@
-# Tamarind Bio — validated examples & output shapes
+# Tamarind Bio illustrative settings and output interpretation
 
-**The freshest example for any tool is the `exampleJob` field MCP `getJobSchema(<tool>)`
-now returns** — an `{jobName, type, settings}` built from each param's example/default
-(with an `exampleJobNote`; org-gated params you can't use are omitted, file params get
-placeholder filenames). It's the best starting point, but **run `validateJob` on it
-before submitting** — it's assembled from per-param examples, not a guaranteed-valid
-payload, so a given tool's `exampleJob` can need a tweak. The payloads below are a
-`validateJob`-confirmed fallback for REST callers or when you want a worked example.
-Tool schemas evolve — if one stops validating, re-fetch with `getJobSchema(<tool>)` /
-`GET /tools`. Sequences here are illustrative; swap your own.
+Reviewed **2026-09-30** using the [live public catalog](https://app.tamarind.bio/tools.json),
+[REST contract](https://app.tamarind.bio/api/openapi.json), and tool documentation.
+These examples are **not authenticated `validate-job` results**. Replace file
+placeholders, read `GET /tools/{name}/schema`, then validate each settings object
+before a compute submission. Historical exact error messages are not a contract.
 
-**File params (`proteinFile`, `pdbFile`, `ligandFile`, …) need a real file value** —
-either the **bare filename** of an uploaded file (`target.pdb` — NOT email-prefixed),
-a prior-job output **path** (`JobName/out/x.pdb`), or
-**inline PDB/SDF-format text** (multi-line `ATOM`/`HETATM` records). The
-`<...>` placeholders below are NOT valid as written — replace them. **Do not put an
-amino-acid sequence in a file param** — `validateJob` rejects it with
-`File ... must be of types: ["pdb"]`. (A sequence goes in `sequence`, a structure
-goes in a file param.)
+## Authentication and discovery check
 
-`BASE = "https://app.tamarind.bio/api"`, `HEADERS = {"x-api-key": <key>}`.
-
-## Self-check (run this first to confirm the skill works for you)
-
-Read-only + dry-run, no submission, no cost. Confirms the discover → schema →
-validate loop end-to-end:
+This read-only check does not submit jobs. Supply the user's deployment and key:
 
 ```python
-import os, requests
-BASE, HEADERS = "https://app.tamarind.bio/api", {"x-api-key": os.environ["TAMARIND_API_KEY"]}
+import os
+import requests
 
-# 1. discovery reachable?
-tools = requests.get(f"{BASE}/tools", headers=HEADERS).json()
-assert isinstance(tools, list) and any(t["name"] == "alphafold" for t in tools), "tools endpoint"
-
-# 2. validate a known-good payload (MCP validateJob; or skip if REST-only)
-#    expect {"valid": true, ...}
+base = os.environ.get("TAMARIND_BASE_URL", "https://app.tamarind.bio/api").rstrip("/")
+headers = {"x-api-key": os.environ["TAMARIND_API_KEY"]}
+response = requests.get(f"{base}/tools", headers=headers, timeout=(10, 60))
+response.raise_for_status()
+tools = response.json()
+assert isinstance(tools, list)
+print("[OK] Account tool catalog returned", len(tools), "entries")
 ```
 
-With the MCP server: `validateJob(jobName="selfcheck", type="alphafold",
-settings={"sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIE"})` → `valid: true`.
+To check a payload next, use `/validate-job` as shown in [workflows](workflows.md).
+That call requires authentication even though it does not spend a compute job.
 
-## Validated input payloads
+## AlphaFold monomer and multimer
 
-### AlphaFold — monomer
+`sequence` is the public catalog's required setting for `alphafold`:
+
 ```json
-{ "sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKR",
-  "numModels": "1", "numRecycles": 3 }
+{"sequence": "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"}
 ```
-Only `sequence` is required; everything else has a default. `numModels` is a string
-dropdown (`"1"`–`"5"`).
 
-### AlphaFold — multimer (colon-separated chains)
+For a homodimer, this illustrative short sequence pair shows colon separation:
+
 ```json
-{ "sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIE:DIQMTQSPSSLSASVGDRVTITCRASQSISSYLN" }
+{"sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIE:MKTAYIAKQRQISFVKSHFSRQLEERLGLIE"}
 ```
-Join chains with `:`. No separate "multimer" flag — chain count drives it.
 
-### Boltz-2 — sequence mode
+It does not establish that these chains interact. Read optional model-count,
+recycle, MSA, and template fields from the account schema instead of assuming
+string versus numeric representations or defaults.
+
+## Boltz and Chai sequence modes
+
 ```json
-{ "inputFormat": "sequence",
-  "sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALP" }
+{"inputFormat": "sequence", "sequence": "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALP"}
 ```
-`inputFormat` is **required** (`"sequence"` / `"list"` / `"molecules"` / `"yaml"`).
-Omitting it fails — see "What fails" below.
 
-### DiffDock — protein + SMILES ligand
+The current public catalog makes `inputFormat` **optional with default
+`"sequence"`** for both tools. Boltz advertises `sequence`, `list`, `molecules`,
+and `yaml`; Chai advertises `sequence`, `molecules`, and `list` (no YAML mode in
+this catalog). Set a mode explicitly when useful, then supply its conditional
+fields. Do not claim that omitting `inputFormat` universally fails validation.
+
+## DiffDock with a SMILES ligand
+
 ```json
-{ "ligandFormat": "SMILES",
-  "ligandSmiles": "CC(=O)Oc1ccccc1C(=O)O",
-  "proteinFile": "<uploaded-path-or-inline-PDB-text>" }
+{"proteinFile": "target.pdb", "ligandFormat": "SMILES",
+ "ligandSmiles": "CC(=O)Oc1ccccc1C(=O)O"}
 ```
-`ligandFormat` chooses the conditional field: `"SMILES"` → `ligandSmiles`;
-`"sdf/mol2 file"` → `ligandFile`. `proteinFile` is a file param — pass an uploaded
-file's bare filename (`target.pdb`, not email-prefixed), a prior-job path
-(`JobName/...`), or inline PDB text (see file-input rules in `api_reference.md`).
 
-### Autodock Vina — protein + SMILES ligand (classical docking into a pocket)
+Upload an actual target first. The current `proteinFile` declaration accepts PDB
+and CIF extensions. `ligandFormat` defaults to `"sdf/mol2 file"`; set `"SMILES"`
+to activate `ligandSmiles`. The file branch uses `ligandFile` with SDF/MOL2.
+
+## AutoDock Vina with a SMILES ligand
+
 ```json
-{ "receptorFile": "receptor.pdb",
-  "ligandFormat": "smiles",
-  "ligandSmiles": "CC(=O)Oc1ccccc1C(=O)O",
-  "boxX": 15.19, "boxY": 53.903, "boxZ": 16.917,
-  "width": 20, "height": 20, "depth": 20 }
+{"receptorFile": "receptor.pdb", "ligandFormat": "smiles",
+ "ligandSmiles": "CC(=O)Oc1ccccc1C(=O)O"}
 ```
-Unlike DiffDock, Autodock Vina docks into a **fixed pocket**, so it requires a bounding
-box (`boxX/Y/Z` center + `width/height/depth`, all required) and the receptor in
-`receptorFile` (not `proteinFile`). Its `ligandFormat` enum is **lowercase**
-(`"smiles"` / `"sdf"`) — different from DiffDock's `"SMILES"` / `"sdf/mol2 file"`, so
-don't copy DiffDock's value across. `exhaustiveness` (default 8) is optional. `validateJob`-confirmed.
 
-### ProteinMPNN — design residues on a backbone
+This is the **catalog-backed minimum branch**, not a complete scientific docking
+protocol. Vina uses `receptorFile`, accepts PDB/CIF, and its `ligandFormat` values
+are lowercase `"sdf"`/`"smiles"` with default `"sdf"`. Determine a meaningful
+search box from the receptor/pocket and read its current fields, units, and
+sampling settings from the full account schema. The public required-settings
+catalog does not verify optional box parameter names or their defaults; do not
+reuse coordinates from an unrelated target or claim arbitrary example coordinates
+are required API settings.
+
+## ProteinMPNN inverse folding
+
 ```json
-{ "pdbFile": "<uploaded-path-or-inline-PDB-text>",
-  "designedResidues": { "A": "1 2 3 4 5" },
-  "numSequences": 4, "modelType": "proteinmpnn" }
-```
-Requires `pdbFile` + `designedResidues` (per-chain, space-separated resnums).
-`modelType` ∈ `proteinmpnn`/`ligandmpnn`/`solublempnn`/`hypermpnn`/`abmpnn`.
-Note `designedChains` is `exclude:["api"]` — don't send it over the API.
-
-### Batch (same tool, many jobs)
-```json
-{ "batchName": "screen-1", "type": "alphafold",
-  "jobNames": ["s1", "s2"],
-  "settings": [ { "sequence": "MKT..." }, { "sequence": "AVF..." } ] }
+{"pdbFile": "backbone.pdb", "designedResidues": {"A": "1 2 3 4 5"}}
 ```
 
-## What fails (and the exact error) — confirmed live
+The selected residues must exist on chain A of the uploaded structure. The
+catalog currently declares PDB/CIF input and a space-separated residue-list
+representation. Its empty-map default does not justify assuming which chains or
+residues will be redesigned. Inspect the full schema to choose a model variant,
+sample count, and explicit design region, then validate. Fold generated sequences
+through the folding tool's `sequence` field, not a template parameter.
 
-- **Boltz without `inputFormat`** → `valid:false`, `Missing required boltz field "inputFormat"`. Always check required fields with `getJobSchema` first; `sequence` alone is not enough for boltz/chai.
-- **Building a submit from `validateJob`'s `normalized` blob** — `normalized` is informational (defaults filled in, sometimes platform-managed fields). Submit the clean `settings` you validated, not the normalized echo.
-- **File param given a bare string that isn't a real path** → treated as INLINE file content (uploaded as `<email>/<jobname>-<param>.<ext>`), not a reference. To point at an existing uploaded file use its **bare filename** (`target.pdb` — do NOT email-prefix it; `{email}/{filename}` is the S3 key and 400s as not-uploaded), or `JobName/...` for a prior job's output. Referencing a path that doesn't exist → `File ... has not been uploaded`.
+## Outputs and failure interpretation
 
-## Output shapes (describe, don't expect exact values)
-
-Outputs are non-deterministic (seed/model/MSA) — reason about the *shape*, not
-golden numbers.
-
-- **Job row `Score`** (JSON string on completed jobs): tool-family dependent.
-  - Folding (alphafold/boltz/chai/esmfold): `plddt`, `ptm`, and for complexes
-    `iptm` plus interface metrics (`ipSAE_*`, `pDockQ_*`). Higher pLDDT/pTM = more
-    confident; iptm/ipSAE gauge interface quality.
-  - Other families carry their own metrics — read the keys, don't assume.
-- **Results zip** (`POST /result` → presigned URL → GET): per-tool, typically the
-  structure files (`rank_*.pdb` / `*.cif`), a scores CSV, and logs. Use
-  `listJobFiles(jobName)` (MCP) to enumerate exact filenames before downloading.
-- **`WeightedHours`** on the row is the billing unit (see `usage-statistics`).
-
-To learn a specific tool's exact outputs, run one small job and `listJobFiles` it —
-don't hardcode filenames, which vary by tool and version.
+- `Score` is optional and can be JSON text, a number, or null; parse by actual
+  type. Metrics and output filenames depend on the tool/task/version.
+- `/tools` can expose `outputs.mainCSV`, task-specific `outputs.byTask`, column
+  metadata, and `filterMetrics`. Use these and the actual archive to find data;
+  do not assume every folder emits `rank_*.pdb` or every tool has pLDDT.
+- pLDDT, pTM, and interface confidence are model confidence estimates, not proof
+  of affinity, specificity, or experimental validation. Assess geometries and
+  chemical validity and compare only compatible metrics/scales.
+- `Complete` permits result retrieval but does not prove usable scientific
+  output. `Stopped`/`Failed` require log inspection (`fileName: "output.log"`).
+- `/result` 202 means archive preparation: wait and repeat retrieval. It is not
+  an instruction to run the scientific job again.
+- `/validate-job` success returns the normalized settings to submit. An unknown
+  key warning still needs correction; a typo in an optional field can otherwise
+  run with the wrong default.
+- Relative uploaded paths and `JobName/path/to/file.ext` references are distinct
+  from inline content. Avoid inventing storage keys or treating arbitrary text
+  as an existing file. Current documentation says redundant email prefixes are
+  stripped; older double-prefix errors are no longer universal.

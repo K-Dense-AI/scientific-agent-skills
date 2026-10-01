@@ -215,6 +215,10 @@ def load_aggregate_csv(raw_path: str) -> list[AggregateRow]:
         if reader.fieldnames is None:
             raise ValidationError("CSV header is required")
         normalized_headers = [header.strip() for header in reader.fieldnames]
+        if len(normalized_headers) != len(set(normalized_headers)):
+            raise ValidationError("duplicate CSV columns are not allowed")
+        if normalized_headers != reader.fieldnames:
+            raise ValidationError("CSV column names must not contain surrounding whitespace")
         lowered = {header.lower() for header in normalized_headers}
         for header in lowered:
             if any(fragment in header for fragment in FORBIDDEN_HEADER_FRAGMENTS):

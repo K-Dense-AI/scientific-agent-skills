@@ -1,119 +1,112 @@
-# Using Hugging Science Spaces (interactive demos)
+# Using Hugging Science Spaces
 
-A **Hugging Face Space** is a hosted web app — usually Gradio or Streamlit — that wraps a model behind a UI. The `hugging-science` org maintains ~27 of these, and many catalog entries point to a Space rather than (or in addition to) raw weights. Spaces are the fastest way to get scientific output without managing models or GPUs yourself.
+A Space can be Gradio, Docker or static content. An organization listing does not
+mean every entry is an inference service or has a public API. Check `sdk`, runtime
+and the actual application before passing inputs. Public Spaces can sleep, fail,
+queue or require paid compute; they are not an availability or cost guarantee.
 
-Spaces are not just web pages — every Gradio Space exposes a programmatic API. You can call them from Python with `gradio_client` and parse the result as a normal Python value.
-
-## When to call a Space (vs. running the model locally)
-
-Reach for a Space when:
-- The user wants a one-shot result, not a fine-tuning loop.
-- The model is huge (40B+) and the user has no GPU.
-- The model has private weights and the Space is the only public interface.
-- The Space already implements complex orchestration (tokenization, sampling, post-processing) you'd otherwise reimplement.
-
-Reach for local execution instead when:
-- You'll call it many times in a loop (Spaces have rate limits and queues).
-- You're fine-tuning, batching at scale, or need offline reproducibility.
-- The Space is private/gated and you can't get access.
-
-## Setup
+## Inspect before calling
 
 ```bash
-uv pip install gradio_client python-dotenv    # or: uv add gradio_client python-dotenv
+uv pip install 'gradio-client==2.7.1' 'huggingface-hub<2' python-dotenv
 ```
 
-For private/gated Spaces, store the token in `.env` and load it at startup:
-
-```
-# .env (gitignored)
-HF_TOKEN=hf_...
-```
+Metadata-only discovery (no inference or uploads):
 
 ```python
+from huggingface_hub import HfApi
+api = HfApi(token=False)
+for space in api.list_spaces(author="hugging-science", limit=100):
+    print(space.id, space.sdk)
+info = api.space_info("hugging-science/BoltzGen_Demo")
+print(info.sdk, info.runtime.stage)
+```
+
+`list_spaces` is a paginated iterator; `limit` caps the number yielded, not a promise
+of a complete organization inventory. Names are case sensitive: the reviewed
+BoltzGen demo is `hugging-science/BoltzGen_Demo`, not `boltzgen-demo`.
+
+When the selected Gradio runtime is available, inspect its schema:
+
+```python
+import os
 from dotenv import load_dotenv
-load_dotenv()    # gradio_client picks up HF_TOKEN automatically
-```
-
-Note what that convenience implies: once `HF_TOKEN` is loaded, `gradio_client` sends it to whatever Space you call, and `file(...)` uploads local data to that Space's operator. Both are fine for the `hugging-science` org's own Spaces. Neither is fine for a Space name you picked up from the catalog and haven't looked at — catalog entries are curated for scientific relevance, not audited, and the catalog is fetched over the network at read time. Before calling a Space outside the `hugging-science` org, name it to the user along with the files you intend to upload, and let them decide.
-
-## The general pattern
-
-```python
+load_dotenv()
 from gradio_client import Client
 
-client = Client("hugging-science/<space-name>")
-
-# Find the API endpoints exposed by this Space:
-print(client.view_api())
-
-# Call the endpoint named in view_api(), e.g. "/predict":
-result = client.predict(
-    "argument_one",
-    42,
-    api_name="/predict",
-)
-print(result)
+# token=False suppresses implicit credentials for a public app.
+# Use token=os.environ["HF_TOKEN"] only when authentication is needed and authorized.
+client = Client("hugging-science/BoltzGen_Demo", token=False,
+                analytics_enabled=False, httpx_kwargs={"timeout": 30})
+schema = client.view_api(return_format="dict")
+print(schema)
 ```
 
-`view_api()` is the discovery step — it prints every exposed endpoint with parameter names and types. Always run it once when wrapping a new Space; the function signature varies between Spaces and isn't always obvious from the UI.
+Gradio Client 2.7.1 uses `token=` (older examples may say `hf_token=`).
+`token=None` allows the locally saved/HF_TOKEN credential. Access authentication
+and `oauth_token=` are distinct: the latter lets an app act on your behalf and is
+only sent to endpoints declaring OAuth requirements. Do not provide an OAuth token
+for ordinary inference. Review the actual app/operator and data-transfer scope
+regardless of its organization. Follow existing user authorization; clarify only
+when the proposed upload or execution is outside that scope.
 
-## Worked example: BoltzGen (protein/peptide/nanobody binder design)
+## BoltzGen: source contract, runtime currently unverified
 
-BoltzGen is one of the flagship Spaces in the `hugging-science` org. It generates designed binders against a target protein.
+On 2026-10-01 the public Space repository resolved with runtime `PAUSED`, while `/config` and
+`/gradio_api/info` returned HTTP 503. Thus `Client` discovery and end-to-end
+inference were **not** validated. Do not substitute an invented `/generate` API.
+
+The [reviewed app source](https://huggingface.co/spaces/hugging-science/BoltzGen_Demo/blob/main/app.py)
+registers `run_boltzgen` with five inputs, in order:
+
+1. Design YAML file.
+2. Target PDB/CIF file referenced by that YAML.
+3. Protocol: `protein-anything`, `peptide-anything` or `nanobody-anything`.
+4. Number of candidate designs.
+5. Budget: final diversified design count, at most the number of candidates.
+
+Budget is not an LLM token allowance. The run returns a **status string**; it does
+not directly return sequences or coordinates. Separate download actions exist.
+Their exact generated API names and return arity must be checked in `view_api()`
+when the runtime recovers. The reviewed source has shared `/tmp/output` paths and
+a download function returning two values for a one-output event; file isolation
+and download behavior need verification before relying on a public run.
+
+After the live schema is confirmed, an illustrative call pattern is:
 
 ```python
-from gradio_client import Client, file
+from gradio_client import handle_file
 
-client = Client("hugging-science/boltzgen-demo")
-print(client.view_api())   # inspect first
-
-# Typical call shape (verify against view_api() — endpoint names evolve):
-result = client.predict(
-    target_pdb=file("/path/to/target.pdb"),
-    binder_type="protein",         # or "peptide", "nanobody"
-    n_designs=8,
-    api_name="/generate",
+# Set this from the live schema; it is deliberately not a guessed endpoint.
+api_name = confirmed_run_api_name
+status = client.predict(
+    handle_file("design.yaml"), handle_file("target.pdb"),
+    "protein-anything", 2, 1, api_name=api_name,
 )
-# result is usually a list of generated sequences/structures or a path
-# to a downloadable file inside the Space's tmp dir.
+print(status)
 ```
 
-When the Space returns a file path, `gradio_client` downloads the file to a local temp location and returns the path — handy for pipelines that need the actual output (`.pdb`, `.fasta`).
+`handle_file` marks an input for upload. A local filename alone may be interpreted
+as text. It does not upload until the client call is submitted. Returned Gradio file
+components normally download to the client's local output directory; status text
+containing a server path is not itself a downloaded file. Use the actual output
+schema and verify artifacts belong to the current job.
 
-## File inputs
+## Other reviewed organization entries
 
-Many scientific Spaces take structured file inputs (PDB, CIF, FASTA, NIfTI, FITS). Wrap them with `gradio_client.file(...)`:
-
-```python
-from gradio_client import file
-result = client.predict(file("target.pdb"), api_name="/predict")
-```
-
-Don't pass raw paths as strings — Gradio uploads files differently from text and the type wrapper signals which is which.
-
-## Other notable Spaces in `hugging-science`
-
-These are good defaults to know about. Always check `view_api()` for the current signature.
-
-| Space | Purpose |
+| Space | What the public metadata/source establishes |
 |---|---|
-| `hugging-science/boltzgen-demo` | Protein / peptide / nanobody binder design |
-| `hugging-science/anatomy-of-boltzgen` | Educational walkthrough of BoltzGen architecture |
-| `hugging-science/dataset-quest` | Browse and submit community scientific datasets |
-| `hugging-science/science-release-heatmap` | Visualize AI4Science contributors across orgs and domains |
-| `hugging-science/HuggingMod` | Community moderation tooling |
+| `hugging-science/anatomy-of-boltzgen` | Static educational site; no Gradio inference API |
+| `hugging-science/dataset-quest` | Gradio dataset discovery/submission app; submission is a write |
+| `hugging-science/science-release-map` | Docker visualization; old `science-release-heatmap` ID did not resolve publicly |
+| `hugging-science/HuggingMod` | Gradio moderation tooling, not scientific inference |
 
-The full live list lives at `huggingface.co/hugging-science` (Spaces tab). If a Space name 404s, the org may have renamed it — search the org page or check the catalog entry.
+Do not retry a submitted design job blindly after a timeout: inspect its job/status
+first to avoid duplicate compute. Duplicating a Space provisions separate resources
+and may incur charges; it is a deployment action, not a read-only workaround. When
+no runtime/API is available, report that limitation and use the author's local
+workflow if it is feasible and within the task.
 
-## Rate limits and queue behavior
-
-Free Spaces share a community GPU queue. For interactive use this is fine; for any kind of batching:
-
-- Expect occasional `queue is full` or timeout errors. Add retry-with-backoff.
-- For large workloads, duplicate the Space into your own account (the "Duplicate" button on the Space page) to get private compute.
-- Or: run the underlying model locally if weights are public — usually preferable for >10s of calls.
-
-## When the Space has no API
-
-A small minority of Spaces disable the API or are Streamlit-based without a clean programmatic interface. In that case, fall back to local model execution (`using-models.md`) or surface the limitation to the user — don't try to scrape the UI.
+Sources: [Gradio Client 2.7.1](https://github.com/gradio-app/gradio/blob/gradio_client%402.7.1/client/python/gradio_client/client.py),
+[file handling](https://github.com/gradio-app/gradio/blob/gradio_client%402.7.1/client/python/gradio_client/utils.py),
+[HfApi Space methods](https://huggingface.co/docs/huggingface_hub/package_reference/hf_api).

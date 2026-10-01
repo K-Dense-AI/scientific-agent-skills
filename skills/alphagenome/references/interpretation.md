@@ -2,8 +2,8 @@
 
 Distilled from the AlphaGenome and Atlas papers, the official FAQ, and the
 interpretation guide DeepMind ships with its own AlphaGenome agent skill.
-Everything here is a rule for writing up a prediction, not a claim about
-biology.
+Reviewed against official scoring definitions and model source on 2026-09-30.
+These rules describe predictions, not established effects in a patient.
 
 ## The frame
 
@@ -26,26 +26,28 @@ biosample the model was trained on**, nothing more:
 
 | Quantity | What it is | Use it for |
 | --- | --- | --- |
-| `raw_score` | effect size on the scorer's own scale (RNA_SEQ: log2 fold change; center-mask scorers: log2 ratio of summed signal; splicing: change in probability or usage) | magnitude, direction, comparing tissues **within one scorer** |
-| `quantile_score` | rank against common variants (gnomAD v3 MAF > 0.01), signed, saturates near +/-0.99999 | unusualness; comparing across scorers |
+| `raw_score` | effect size on the scorer's own scale (RNA_SEQ: natural-log fold change with 0.001 pseudocount; center-mask scorers: log2 ratio of summed signal; splicing: change in probability or usage) | magnitude, direction, comparing tissues **within one scorer** |
+| `quantile_score` | rank against common variants (gnomAD v3 MAF > 0.01), signed scorers map CDF p to 2p-1; unsigned retain p; finite ranks saturate near 1 | unusualness; comparing across scorers |
 | AVI `avi_raw` | composite model output | ranking within a set |
 | AVI Phred | -10 log10(1 - cdf); 10 / 20 / 30 = top 10 % / 1 % / 0.1 % of all SNVs | genome-wide rank, thresholds |
 
-Rules of thumb for `raw_score`, derived mainly from RNA-seq and to be checked
-against the plotted tracks:
+For `RNA_SEQ`, the scorer is
+`ln(mean ALT + 0.001) - ln(mean REF + 0.001)`. Thus `exp(raw_score)`
+is the ratio of pseudocount-adjusted means: -1 is about 0.37x, not 0.5x;
+`ln(2)` is about 0.693. At very low expression the pseudocount matters, so
+inspect baseline tracks before translating a score into a biological fold change.
+Recommended center-mask accessibility/TF/TSS scorers instead use a **log2**
+ratio of summed signal with a +1 pseudocount. `RNA_SEQ_ACTIVE` is the larger
+mean activity, with no log transform. Never apply one scorer's scale to another.
 
-| \|raw\| | Reading |
-| --- | --- |
-| < 0.1 | small on this scale; inspect tracks and biological context before interpreting |
-| 0.1 to 0.5 | weak; report as a possible subtle change |
-| 0.5 to 1.0 | moderate (about 1.4x to 2x for RNA-seq) |
-| > 1.0 | strong (more than 2x for RNA-seq); -4 is a 16-fold reduction |
-
-Raw scores are not percentages. Quote them with the scorer name and track.
-These RNA-seq heuristics do not apply to every scorer: splicing probabilities,
-contact-map differences, and activity scores have different units and scales.
-Quantiles are ranks, not significance tests or evidence of benignity.
-See the [official scoring definitions](https://www.alphagenomedocs.com/variant_scoring.html).
+The scripts' `--min-abs-quantile 0.99` keeps signed quantiles at or beyond
++/-0.99 (the two 0.5% CDF tails), or unsigned quantiles >=0.99 (the upper 1%).
+It does not retain small unsigned scores near zero. Missing calibration does
+not pass this filter; mouse and custom scorers may have only raw scores.
+AVI has a separate genome-wide SNV CDF and Phred transformation.
+Quantiles are ranks, not significance tests or evidence of benignity. See the
+[official scoring definitions](https://www.alphagenomedocs.com/variant_scoring.html)
+and [calibration FAQ](https://www.alphagenomedocs.com/faqs.html).
 
 **The common trap: high quantile, tiny raw score.** In low-expression genes and
 quiet regions the background distribution is so narrow that a raw change of
@@ -98,8 +100,9 @@ when REF and ALT tracks are identical.
 
 - **Trans effects.** Only cis-regulatory grammar in a 1 Mb window; nothing about
   TF abundance, signalling, or the rest of the genome.
-- **Training-data gaps.** Poly(A)-selected RNA-seq misses non-polyadenylated
-  RNAs (snRNAs such as *RNU4-2* / *RNU4ATAC*); many cell types are absent;
+- **Training-data gaps.** RNA-seq training includes poly(A)+ and total RNA assays,
+  with uneven coverage of non-polyadenylated RNAs (including snRNAs);
+  inspect the relevant assay before claiming the model captures them. Many cell types are absent;
   coverage is uneven across assays. A flat prediction in an untrained cell type
   is absence of data, not absence of effect.
 - **Protein-level consequences.** Missense stability, catalysis, folding: use
@@ -120,7 +123,9 @@ when REF and ALT tracks are identical.
 1. Assembly must be GRCh38 for the Atlas (hg38 for the human model, mm10 for
    mouse). Lift over GRCh37 sources first and re-check REF.
 2. REF must equal the reference base; the Atlas key ignores REF, so a swapped
-   allele silently returns the wrong record.
+   allele can miss; a mismatched REF/build can misidentify a record. These
+   helpers compare the returned variant to the requested variant but do not
+   perform a FASTA reference check.
 3. Variants are 1-based, `genome.Interval` is 0-based half-open. Converting a
    1-based closed `chr:start-end` means `start - 1, end`.
 4. Left-normalise indels before scoring with the model.

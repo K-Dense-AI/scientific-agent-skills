@@ -90,6 +90,8 @@ METHODS: dict[str, tuple[str, str, list[str]]] = {
             "download",
             "rmr",
             "fetch_metadata",
+            "modify_time",
+            "version_id",
         ],
     ),
     "Table": (

@@ -24,7 +24,7 @@ uses the public routes.
 
 ## Rate Limits
 
-Documented on the API site; stay well under interactive use. Serialize.
+The official recommendation is **at most 1 request/second**. Abuse can be throttled or blocked even though the docs describe no automatic rate limiter. Serialize.
 
 ## Key Endpoints
 
@@ -42,7 +42,7 @@ First hit was a CRISPR supplementary dataset (`defined_type_name: dataset`).
 
 There is no count in the body and no useful `Link`/`X-Count` header on this
 call. Walk `page` until a page comes back shorter than `page_size` or empty.
-Do not invent a total.
+Do not invent a total. The API limits paging depth to an offset of 1,000 (page limit depends on `page_size`); a 422 beyond that is a bound, not completion. Narrow a query or use the documented bulk interface for larger sets.
 
 **GET is not a search.** This is the trap that produces a confident wrong
 paper:
@@ -88,3 +88,7 @@ id or a record you are not allowed to read (the API uses 404 for both).
 | `GET /articles?search_for=…` | HTTP 200, unrelated latest-ish articles | POST `/articles/search` |
 | Expected `{hits: …, total: N}` | A raw array | Treat `[]` as empty; no total to reconcile |
 | Reported a Figshare hit as a journal article | `defined_type_name` may be dataset, figure, media | Read and report the type |
+
+## Official sources reviewed 2026-09-30
+
+- https://docs.figshare.com/v2/

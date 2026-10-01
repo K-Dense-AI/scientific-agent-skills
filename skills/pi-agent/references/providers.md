@@ -2,14 +2,16 @@
 
 Source: https://pi.dev/docs/latest/providers
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi supports subscription providers via OAuth and API-key providers via environment variables or `~/.pi/agent/auth.json`. Built-in catalogs ship with Pi; configured providers may refresh newer catalogs and cache them in `~/.pi/agent/models-store.json` for offline use.
 
 ## Subscription Providers
 
-Run `/login` and select: ChatGPT Plus/Pro (Codex), Claude Pro/Max, GitHub Copilot, xAI (Grok/X subscription), OpenRouter, or Radius. `/logout` clears credentials. Tokens live in `auth.json` and auto-refresh.
+Run `/login` to choose the provider and one of its supported methods. Pi 0.99 adds Sign in with ChatGPT on `openai`; `openai-codex` remains a legacy provider. Other methods include Claude, GitHub Copilot, Meta Muse, xAI, OpenRouter, and Radius. `/logout` clears credentials. Tokens live in `auth.json` and auto-refresh.
 
-- **OpenAI Codex** requires ChatGPT Plus or Pro.
-- **Claude Pro/Max**: third-party harness usage draws from Anthropic "extra usage" and is billed per token, not against plan limits.
+- **OpenAI** Sign in with ChatGPT supersedes the legacy Codex login; check current account entitlements in the login flow.
+- **Claude**: use the login flow offered by the installed provider and confirm current account eligibility and billing with Anthropic; subscription entitlement is not guaranteed by a successful token exchange.
 - **GitHub Copilot**: Enter for github.com, or enter a GitHub Enterprise Server domain. "Model not supported" is fixed by enabling the model in VS Code Copilot Chat.
 - **xAI**: `/login xai` → **Use a subscription**; `XAI_API_KEY` remains available under **Use an API key**.
 - **OpenRouter**: `/login openrouter` → **Sign in with OpenRouter** runs a PKCE flow that mints a user-controlled API key billed from OpenRouter credits (it does not expire automatically). On remote/headless machines (e.g. over SSH) the browser cannot reach the loopback callback — paste the final redirect URL or the authorization code into the login prompt instead.
@@ -29,6 +31,10 @@ Set an environment variable before startup, or store a key with `/login`.
 | NVIDIA NIM | `NVIDIA_API_KEY` | `nvidia` |
 | Google Gemini | `GEMINI_API_KEY` | `google` |
 | Amazon Bedrock | `AWS_BEARER_TOKEN_BEDROCK` | `amazon-bedrock` |
+| Meta | `META_API_KEY` | `meta` |
+| TypeSafe classifiers | `TYPESAFE_API_KEY` | `typesafe` |
+| Moonshot AI | `MOONSHOT_API_KEY` | `moonshotai` / `moonshotai-cn` |
+| GitHub Copilot | `COPILOT_GITHUB_TOKEN` | `github-copilot` |
 | Mistral | `MISTRAL_API_KEY` | `mistral` |
 | Groq | `GROQ_API_KEY` | `groq` |
 | Cerebras | `CEREBRAS_API_KEY` | `cerebras` |
@@ -53,7 +59,7 @@ Set an environment variable before startup, or store a key with `/login`.
 
 `qwen-token-plan-individual` uses the same international endpoint and `QWEN_TOKEN_PLAN_API_KEY` as `qwen-token-plan`, but limits the picker to models documented for Individual subscriptions; the older provider keeps its broader catalog for backward compatibility. With `auth.json`, store the credential under the provider you select — the environment variable is shared by both international providers.
 
-Authoritative source: `packages/ai/src/env-api-keys.ts` in `earendil-works/pi`.
+Authoritative source: `packages/ai/src/providers/` and `packages/coding-agent/docs/providers.md` in `earendil-works/pi`.
 
 ## Auth File
 
@@ -100,13 +106,13 @@ A leading `!` executes the whole value as a command and uses stdout (cached for 
 
 **Azure OpenAI**: `AZURE_OPENAI_API_KEY` plus `AZURE_OPENAI_BASE_URL` (`*.ai.azure.com`, `*.cognitiveservices.azure.com`, or `*.openai.azure.com`; root endpoints auto-normalize to `/openai/v1`) or `AZURE_OPENAI_RESOURCE_NAME`. Optional `AZURE_OPENAI_API_VERSION` and `AZURE_OPENAI_DEPLOYMENT_NAME_MAP=gpt-4=my-gpt4,...`.
 
-**Amazon Bedrock**: `/login amazon-bedrock` for an API key, or ambient AWS credentials — `AWS_PROFILE`, IAM keys (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), or `AWS_BEARER_TOKEN_BEDROCK`. `AWS_REGION` defaults to `us-east-1`. ECS task roles (`AWS_CONTAINER_CREDENTIALS_*`) and IRSA (`AWS_WEB_IDENTITY_TOKEN_FILE`) are supported. Prompt caching is automatic for Claude models whose ID contains a recognizable model name; for application inference profiles set `AWS_BEDROCK_FORCE_CACHE=1`. Proxy support: `AWS_ENDPOINT_URL_BEDROCK_RUNTIME`, `AWS_BEDROCK_SKIP_AUTH=1`, `AWS_BEDROCK_FORCE_HTTP1=1`.
+**Amazon Bedrock**: `/login amazon-bedrock` for an API key, or ambient AWS credentials — `AWS_PROFILE`, IAM keys (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), or `AWS_BEARER_TOKEN_BEDROCK`. Region resolves from `AWS_REGION`, `AWS_DEFAULT_REGION`, AWS profile/SDK configuration, then the provider fallback; set it explicitly for reproducibility. ECS task roles (`AWS_CONTAINER_CREDENTIALS_*`) and IRSA (`AWS_WEB_IDENTITY_TOKEN_FILE`) are supported. Prompt caching is automatic for Claude models whose ID contains a recognizable model name; for application inference profiles set `AWS_BEDROCK_FORCE_CACHE=1`. Proxy support: `AWS_ENDPOINT_URL_BEDROCK_RUNTIME`, `AWS_BEDROCK_SKIP_AUTH=1`, `AWS_BEDROCK_FORCE_HTTP1=1`.
 
 **Cloudflare AI Gateway**: `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_GATEWAY_ID`. Routes to OpenAI (`/openai`, native IDs), Anthropic (`/anthropic`, native IDs), and Workers AI (Unified API `/compat`, `workers-ai/@cf/...` IDs). The Cloudflare token is sent as `cf-aig-authorization`. Upstream auth modes: Workers AI, unified billing, stored BYOK, or inline BYOK (needs an extra upstream `Authorization` header). Prefer unified billing or stored BYOK.
 
 **Cloudflare Workers AI**: `CLOUDFLARE_API_KEY` + `CLOUDFLARE_ACCOUNT_ID`. Pi sets `x-session-affinity` for prefix-caching discounts.
 
-**Google Vertex AI**: Application Default Credentials (`gcloud auth application-default login`) plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`, or `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account key.
+**Google Vertex AI**: `GOOGLE_CLOUD_API_KEY` or Application Default Credentials (`gcloud auth application-default login`) plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`, or `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account key.
 
 **llama.cpp**: `/login llama.cpp`, manage models with `/llama`, select with `/model` — see `references/llama-cpp.md`.
 
@@ -118,5 +124,7 @@ Via `models.json` for anything speaking a supported API (`references/models.md`)
 
 1. CLI `--api-key`
 2. `auth.json` entry (API key or OAuth token)
-3. Environment variable
-4. Custom provider keys from `models.json`
+3. Configured API key from `models.json`
+4. Provider environment variables or ambient cloud credentials
+
+Native provider extensions can supply their own auth resolution. Anthropic also supports `ANTHROPIC_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, and (without a key/token) workload identity federation through `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, and `ANTHROPIC_IDENTITY_TOKEN_FILE`; optional service-account/workspace IDs pass through. Keep identity-token files refreshed.

@@ -150,9 +150,11 @@ def solve(path: Path, output_dir: Path, *, par1_type: str, par2_type: str,
     for index, row in enumerate(rows):
         flags = []
         for suffix in ("", "_out") if has_output else ("",):
+            label = "output" if suffix else "input"
             if not (tmin < row["temperature" + suffix] < tmax and smin < row["salinity"] < smax):
-                label = "output" if suffix else "input"
                 flags.append(f"outside_k_carbonic_{label}_range")
+            if row["pressure" + suffix] > 0:
+                flags.append(f"gas_pressure_correction_disabled_{label}")
         if flags:
             warnings.append({"sample_id": row["sample_id"], "flags": flags})
         result_rows.append({"sample_id": row["sample_id"],
@@ -162,12 +164,17 @@ def solve(path: Path, output_dir: Path, *, par1_type: str, par2_type: str,
     assumptions = [f"{key}=0 micromol/kg seawater" for key in ("total_ammonia", "total_sulfide")
                    if key not in fields]
     manifest = {
-        "schema_version": "1.0", "skill_version": "1.0",
+        "schema_version": "1.0", "skill_version": "1.1",
         "software": {"PyCO2SYS": pyco2.__version__, "numpy": np.__version__,
                      "python": platform.python_version()},
         "input_file": path.name, "input_sha256": digest, "sample_count": len(rows),
         "parameter_types": {"par1": par1_type, "par2": par2_type}, "settings": settings,
         "output_conditions": "provided per row" if has_output else "input conditions only",
+        "gas_pressure_convention": (
+            "CO2 solubility and fugacity use 1 atm atmospheric pressure without hydrostatic "
+            "gas corrections (opt_pressured_kCO2=0). Other pressure-dependent equilibria "
+            "still use the supplied sea pressure; nonzero-pressure pCO2/fCO2 must not be "
+            "interpreted as fully pressure-corrected in situ gas values."),
         "units": {"carbon_and_nutrients": "micromol/kg seawater", "pCO2_and_fCO2": "microatm",
                   "temperature": "degrees Celsius", "pressure": "dbar, sea pressure",
                   "salinity": "Practical Salinity, dimensionless", "pH_total": "total scale",
@@ -205,7 +212,7 @@ def main():
                          k_carbonic=args.k_carbonic, total_borate=args.total_borate)
     except (ValueError, OSError, UnicodeError) as exc:
         parser.exit(2, f"error: {exc}\n")
-    print(f"Solved {manifest['sample_count']} samples; {len(manifest['warnings'])} with range flags.")
+    print(f"Solved {manifest['sample_count']} samples; {len(manifest['warnings'])} with QC flags.")
     for entry in manifest["warnings"]:
         print(f"WARNING {entry['sample_id']}: {', '.join(entry['flags'])}")
     print(f"Results: {args.output_dir / 'carbonate.csv'}")

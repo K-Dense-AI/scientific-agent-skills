@@ -10,7 +10,7 @@ Discrete choice models handle outcomes that are:
 - **Ordinal**: Ordered categories
 - **Count**: Non-negative integers
 
-All models use maximum likelihood estimation and assume i.i.d. errors.
+These models use likelihood-based estimation. Independence and sampling assumptions are model-specific: conditional models condition out group intercepts, while clustered sampling needs an appropriate covariance/design. Check finite estimates, design rank, convergence and separation; convergence alone does not establish identifiability.
 
 ## Binary Models
 
@@ -61,7 +61,7 @@ print(odds_ci)
 **Marginal effects:**
 ```python
 # Average marginal effects (AME)
-marginal_effects = results.get_margeff(at='mean')
+marginal_effects = results.get_margeff(at='overall')
 print(marginal_effects.summary())
 
 # Marginal effects at means (MEM)
@@ -69,7 +69,7 @@ marginal_effects_mem = results.get_margeff(at='mean', method='dydx')
 
 # Marginal effects at representative values
 marginal_effects_custom = results.get_margeff(at='mean',
-                                              atexog={'x1': 1, 'x2': 5})
+                                              atexog={1: 1, 2: 5})  # Zero-based design-column indices
 ```
 
 **Predictions:**
@@ -85,7 +85,7 @@ threshold = 0.3
 predictions_custom = (probs > threshold).astype(int)
 
 # For new data
-X_new = sm.add_constant(X_new_data)
+X_new = sm.add_constant(X_new_data, has_constant="add")
 new_probs = results.predict(X_new)
 ```
 
@@ -178,7 +178,7 @@ print(results.summary())
 probs = results.predict(X)  # Shape: (n_samples, n_categories)
 
 # Most likely category
-predicted_categories = probs.argmax(axis=1)
+predicted_categories = np.asarray(probs).argmax(axis=1)
 ```
 
 **Relative risk ratios:**
@@ -188,10 +188,10 @@ import numpy as np
 import pandas as pd
 
 # Get parameter names and values
-params_df = pd.DataFrame({
-    'coef': results.params,
-    'RRR': np.exp(results.params)
-})
+params_df = pd.concat({
+    'coef': pd.DataFrame(results.params),
+    'RRR': pd.DataFrame(np.exp(results.params))
+}, axis=1)
 print(params_df)
 ```
 
@@ -207,8 +207,9 @@ For choice models where alternatives have characteristics.
 ```python
 from statsmodels.discrete.conditional_models import ConditionalLogit
 
-# Data structure: long format with choice indicator
-model = ConditionalLogit(y_choice, X_alternatives, groups=individual_id)
+# Long format, binary choice indicator, no constant in X_alternatives.
+# One group per choice occasion (not one person across multiple occasions).
+model = ConditionalLogit(y_choice, X_alternatives, groups=choice_set_id)
 results = model.fit()
 ```
 
@@ -245,20 +246,11 @@ print("Rate ratios:", rate_ratios)
 
 **Check overdispersion:**
 ```python
-# Mean and variance should be similar for Poisson
-print(f"Mean: {y_counts.mean():.2f}")
-print(f"Variance: {y_counts.var():.2f}")
-
-# Formal test
-from statsmodels.stats.stattools import durbin_watson
-
-# Overdispersion if variance >> mean
-# Rule of thumb: variance/mean > 1.5 suggests overdispersion
-overdispersion_ratio = y_counts.var() / y_counts.mean()
-print(f"Variance/Mean: {overdispersion_ratio:.2f}")
-
-if overdispersion_ratio > 1.5:
-    print("Consider Negative Binomial model")
+# Dispersion concerns the conditional variance, not raw variance/mean.
+mu = results.predict(X)
+pearson_dispersion = np.sum((y_counts - mu)**2 / mu) / results.df_resid
+print(f"Pearson dispersion: {pearson_dispersion:.2f}")
+# A screening statistic: inspect mean misspecification, exposure and dependence.
 ```
 
 **With offset (for rates):**
@@ -288,7 +280,7 @@ model = NegativeBinomial(y_counts, X)
 results = model.fit()
 
 print(results.summary())
-print(f"Dispersion parameter alpha: {results.params['alpha']:.4f}")
+print(f"Dispersion parameter alpha: {np.asarray(results.params)[-1]:.4f}")
 ```
 
 **Compare with Poisson:**
@@ -301,14 +293,11 @@ nb_results = NegativeBinomial(y_counts, X).fit()
 print(f"Poisson AIC: {poisson_results.aic:.2f}")
 print(f"Negative Binomial AIC: {nb_results.aic:.2f}")
 
-# Likelihood ratio test (if NB is better)
-from scipy import stats
+# Alpha=0 is a boundary under the Poisson null. A naive chi-square(1)
+# likelihood-ratio p-value is not the ordinary regular nested-model test.
+# Use a justified boundary reference distribution or parametric bootstrap.
 lr_stat = 2 * (nb_results.llf - poisson_results.llf)
-lr_pval = 1 - stats.chi2.cdf(lr_stat, df=1)  # 1 extra parameter (alpha)
-print(f"LR test p-value: {lr_pval:.4f}")
-
-if lr_pval < 0.05:
-    print("Negative Binomial significantly better")
+print("Boundary LR statistic (no naive p-value):", lr_stat)
 ```
 
 ### Zero-Inflated Models
@@ -345,10 +334,13 @@ print(zip_results.summary())
 # 2. Count model: distribution of counts
 
 # Predicted probabilities of inflation
-inflation_probs = zip_results.predict(X, which='prob')
+inflation_probs = 1 - zip_results.predict(
+    X, exog_infl=X_inflation, which='prob-main')
+zero_probs = zip_results.predict(X, exog_infl=X_inflation, which='prob-zero')
+pmf = zip_results.predict(X, exog_infl=X_inflation, which='prob')
 
 # Predicted counts
-predicted_counts = zip_results.predict(X, which='mean')
+predicted_counts = zip_results.predict(X, exog_infl=X_inflation, which='mean')
 ```
 
 ### Hurdle Models
@@ -388,8 +380,8 @@ For ordered categorical outcomes.
 ```python
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 
-# y should be ordered integers: 0, 1, 2, ...
-model = OrderedModel(y_ordered, X, distr='logit')  # or 'probit'
+# Ordered integers or an ordered pandas categorical; X_data has NO constant
+model = OrderedModel(y_ordered, X_data, distr='logit')  # or 'probit'
 results = model.fit(method='bfgs')
 
 print(results.summary())
@@ -398,29 +390,32 @@ print(results.summary())
 **Interpretation:**
 ```python
 # Cutpoints (thresholds between categories)
-cutpoints = results.params[-n_categories+1:]
+cutpoints = results.model.transform_threshold_params(results.params)[1:-1]
 print("Cutpoints:", cutpoints)
 
 # Coefficients
-coefficients = results.params[:-n_categories+1]
+coefficients = np.asarray(results.params)[:results.model.k_vars]
 print("Coefficients:", coefficients)
 
 # Predicted probabilities for each category
-probs = results.predict(X)  # Shape: (n_samples, n_categories)
+probs = results.predict(X_data)  # Shape: (n_samples, n_categories)
 
 # Most likely category
-predicted_categories = probs.argmax(axis=1)
+predicted_categories = np.asarray(probs).argmax(axis=1)
 ```
 
 **Proportional odds assumption:**
 ```python
-# Test if coefficients are same across cutpoints
-# (Brant test - implement manually or check residuals)
-
-# Check: model each cutpoint separately and compare coefficients
+# Separate binary fits can be exploratory, but comparing coefficients visually
+# is not a calibrated Brant test. A formal proportional-odds assessment needs
+# the covariance between cutpoint-specific estimates.
 ```
 
+The hurdle model uses the same exog for both processes; `zerodist` is a censored count distribution, not a logit keyword. Check identification of NB zero-process parameters. OrderedModel reports transformed increments after its first threshold; only `transform_threshold_params` gives actual cutpoints.
+
 ## Model Diagnostics
+
+Select the matching result type for each fragment; pseudo-R²/null-likelihood and marginal-effect helpers are not universal across every count/ordinal result. Binary metrics below are in-sample diagnostics unless X/y are replaced by held-out data. Thresholds and tuning must be chosen without the test set.
 
 ### Goodness of Fit
 
@@ -438,7 +433,7 @@ print(f"Log-likelihood: {results.llf:.2f}")
 # Likelihood ratio test vs null model
 lr_stat = 2 * (results.llf - results.llnull)
 from scipy import stats
-lr_pval = 1 - stats.chi2.cdf(lr_stat, results.df_model)
+lr_pval = stats.chi2.sf(lr_stat, results.df_model)
 print(f"LR test p-value: {lr_pval}")
 ```
 
@@ -467,7 +462,7 @@ from sklearn.metrics import accuracy_score, classification_report, log_loss
 
 # Predicted categories
 probs = results.predict(X)
-predictions = probs.argmax(axis=1)
+predictions = np.asarray(probs).argmax(axis=1)
 
 # Accuracy
 accuracy = accuracy_score(y, predictions)
@@ -484,31 +479,26 @@ print(f"Log Loss: {logloss:.4f}")
 ### Count Model Diagnostics
 
 ```python
-# Observed vs predicted frequencies
-observed = pd.Series(y_counts).value_counts().sort_index()
-predicted = results.predict(X)
-predicted_counts = pd.Series(np.round(predicted)).value_counts().sort_index()
-
-# Compare distributions
+# Expected frequencies require probabilities, not rounded conditional means.
+# This example is specifically a fitted ordinary Poisson result.
+values = np.arange(int(np.max(y_counts)) + 1)
+pmf = results.predict(X, which="prob", y_values=values)
+expected = pmf.sum(axis=0)
+observed = np.bincount(np.asarray(y_counts, dtype=int), minlength=len(values))
 import matplotlib.pyplot as plt
-fig, ax = plt.subplots()
-observed.plot(kind='bar', alpha=0.5, label='Observed', ax=ax)
-predicted_counts.plot(kind='bar', alpha=0.5, label='Predicted', ax=ax)
-ax.legend()
-ax.set_xlabel('Count')
-ax.set_ylabel('Frequency')
+plt.plot(values, observed, label="Observed")
+plt.plot(values, expected, label="Model expected")
+plt.legend()
 plt.show()
-
-# Rootogram (better visualization)
-from statsmodels.graphics.agreement import mean_diff_plot
-# Custom rootogram implementation needed
+# Include/report the model tail beyond values[-1] when assessing total mass.
 ```
 
 ### Influence and Outliers
 
 ```python
-# Standardized residuals
-std_resid = (y - results.predict(X)) / np.sqrt(results.predict(X))
+# Pearson residuals for an ordinary Poisson model only.
+mu = results.predict(X)
+std_resid = (y_counts - mu) / np.sqrt(mu)
 
 # Check for outliers (|std_resid| > 2)
 outliers = np.where(np.abs(std_resid) > 2)[0]
@@ -534,9 +524,9 @@ model_reduced = Logit(y, X_reduced).fit()
 model_full = Logit(y, X_full).fit()
 
 lr_stat = 2 * (model_full.llf - model_reduced.llf)
-df = model_full.df_model - model_reduced.df_model
+df_diff = model_full.df_model - model_reduced.df_model
 from scipy import stats
-lr_pval = 1 - stats.chi2.cdf(lr_stat, df)
+lr_pval = stats.chi2.sf(lr_stat, df_diff)
 print(f"LR test p-value: {lr_pval:.4f}")
 ```
 
@@ -577,13 +567,13 @@ formula = 'y ~ x1 + x2 + C(category) + x1:x2'
 results = smf.logit(formula, data=df).fit()
 
 # MNLogit with formula
-results = smf.mnlogit(formula, data=df).fit()
+results = smf.mnlogit('choice ~ x1 + x2', data=df).fit()  # Numeric category codes
 
 # Poisson with formula
-results = smf.poisson(formula, data=df).fit()
+results = smf.poisson('count ~ x1 + x2', data=df).fit()
 
 # Negative Binomial with formula
-results = smf.negativebinomial(formula, data=df).fit()
+results = smf.negativebinomial('count ~ x1 + x2', data=df).fit()
 ```
 
 ## Common Applications
@@ -609,9 +599,9 @@ model = MNLogit(mode_choice, X)
 results = model.fit()
 
 # Predicted mode for new commuter
-new_commuter = sm.add_constant(new_features)
+new_commuter = sm.add_constant(new_features, has_constant="add")
 mode_probs = results.predict(new_commuter)
-predicted_mode = mode_probs.argmax(axis=1)
+predicted_mode = np.asarray(mode_probs).argmax(axis=1)
 ```
 
 ### Count Data (Number of Doctor Visits)
@@ -635,17 +625,18 @@ expected_visits = results.predict(new_patient_X)
 zip_model = ZeroInflatedPoisson(claims, X_count, exog_infl=X_inflation)
 results = zip_model.fit()
 
-# P(never file claim)
-never_claim_prob = results.predict(X, which='prob-zero')
+# Fitted structural-zero mixture probability; not a permanent individual trait
+structural_zero_prob = 1 - results.predict(
+    X_count, exog_infl=X_inflation, which='prob-main')
 
 # Expected claims
-expected_claims = results.predict(X, which='mean')
+expected_claims = results.predict(X_count, exog_infl=X_inflation, which='mean')
 ```
 
 ## Best Practices
 
 1. **Check data type**: Ensure response matches model (binary, counts, categories)
-2. **Add constant**: Always use `sm.add_constant()` unless no intercept desired
+2. **Specify intercept correctly**: Array Logit/Poisson usually need a constant; OrderedModel and ConditionalLogit forbid one
 3. **Scale continuous predictors**: For better convergence and interpretation
 4. **Check convergence**: Look for convergence warnings
 5. **Use formula API**: For categorical variables and interactions

@@ -1,443 +1,135 @@
-# Quantum Circuits in PennyLane
+# Quantum circuits
 
-## Table of Contents
-1. [Basic Gates and Operations](#basic-gates-and-operations)
-2. [Multi-Qubit Gates](#multi-qubit-gates)
-3. [Controlled Operations](#controlled-operations)
-4. [Measurements](#measurements)
-5. [Circuit Construction Patterns](#circuit-construction-patterns)
-6. [Dynamic Circuits](#dynamic-circuits)
-7. [Circuit Inspection](#circuit-inspection)
+Examples target PennyLane 0.45.1. Each Python block is self-contained and tested.
 
-## Basic Gates and Operations
+## Gates, controls and wire labels
 
-### Single-Qubit Gates
+`RX`, `RY`, `RZ` take angles in radians. `Rot(phi, theta, omega, wires=...)`
+and `U3(theta, phi, delta, wires=...)` have different conventions; inspect their
+matrices before substituting. `CNOT`, `CZ`, `SWAP`, `CRX`, `CRY`, `CRZ`,
+`IsingXX`, `IsingYY`, `IsingZZ`, `Toffoli` and `MultiRZ` use ordered wire lists.
+For a multi-controlled X, `wires` contains all controls followed by the target;
+`control_wires=` is not the current constructor.
 
 ```python
 import pennylane as qml
+import numpy as np
 
-# Pauli gates
-qml.PauliX(wires=0)  # X gate (bit flip)
-qml.PauliY(wires=0)  # Y gate
-qml.PauliZ(wires=0)  # Z gate (phase flip)
-
-# Hadamard gate (superposition)
-qml.Hadamard(wires=0)
-
-# Phase gates
-qml.S(wires=0)       # S gate (π/2 phase)
-qml.T(wires=0)       # T gate (π/4 phase)
-qml.PhaseShift(phi, wires=0)  # Arbitrary phase
-
-# Rotation gates (parameterized)
-qml.RX(theta, wires=0)  # Rotation around X-axis
-qml.RY(theta, wires=0)  # Rotation around Y-axis
-qml.RZ(theta, wires=0)  # Rotation around Z-axis
-
-# General single-qubit rotation
-qml.Rot(phi, theta, omega, wires=0)
-
-# Universal gate (any single-qubit unitary)
-qml.U3(theta, phi, delta, wires=0)
-```
-
-### Basis State Preparation
-
-```python
-# Computational basis state
-qml.BasisState([1, 0, 1], wires=[0, 1, 2])  # |101⟩
-
-# Amplitude encoding
-amplitudes = [0.5, 0.5, 0.5, 0.5]  # Must be normalized
-qml.MottonenStatePreparation(amplitudes, wires=[0, 1])
-```
-
-## Multi-Qubit Gates
-
-### Two-Qubit Gates
-
-```python
-# CNOT (Controlled-NOT)
-qml.CNOT(wires=[0, 1])  # control=0, target=1
-
-# CZ (Controlled-Z)
-qml.CZ(wires=[0, 1])
-
-# SWAP gate
-qml.SWAP(wires=[0, 1])
-
-# Controlled rotations
-qml.CRX(theta, wires=[0, 1])
-qml.CRY(theta, wires=[0, 1])
-qml.CRZ(theta, wires=[0, 1])
-
-# Ising coupling gates
-qml.IsingXX(phi, wires=[0, 1])
-qml.IsingYY(phi, wires=[0, 1])
-qml.IsingZZ(phi, wires=[0, 1])
-```
-
-### Multi-Qubit Gates
-
-```python
-# Toffoli gate (CCNOT)
-qml.Toffoli(wires=[0, 1, 2])  # control=0,1, target=2
-
-# Multi-controlled X
-qml.MultiControlledX(control_wires=[0, 1, 2], wires=3)
-
-# Multi-qubit Pauli rotations
-qml.MultiRZ(theta, wires=[0, 1, 2])
-```
-
-## Controlled Operations
-
-### General Controlled Operations
-
-```python
-# Apply controlled version of any operation
-qml.ctrl(qml.RX(0.5, wires=1), control=0)
-
-# Multiple control qubits
-qml.ctrl(qml.RY(0.3, wires=2), control=[0, 1])
-
-# Negative controls (activate when control is |0⟩)
-qml.ctrl(qml.Hadamard(wires=2), control=0, control_values=[0])
-```
-
-### Conditional Operations
-
-```python
+dev = qml.device("default.qubit", wires=["a", "b", "target"])
 @qml.qnode(dev)
-def conditional_circuit():
-    qml.Hadamard(wires=0)
+def controlled():
+    qml.BasisState(np.array([1, 1, 0]), wires=["a", "b", "target"])
+    qml.MultiControlledX(wires=["a", "b", "target"])
+    return qml.probs(wires=["a", "b", "target"])
+assert np.argmax(controlled()) == 7
 
-    # Mid-circuit measurement
-    m = qml.measure(0)
-
-    # Apply gate conditionally
-    qml.cond(m, qml.PauliX)(wires=1)
-
-    return qml.expval(qml.PauliZ(1))
-```
-
-## Measurements
-
-### Expectation Values
-
-```python
-@qml.qnode(dev)
-def measure_expectation():
-    qml.Hadamard(wires=0)
-
-    # Single observable
-    return qml.expval(qml.PauliZ(0))
-
-@qml.qnode(dev)
-def measure_tensor():
-    qml.Hadamard(wires=0)
-    qml.Hadamard(wires=1)
-
-    # Tensor product of observables
-    return qml.expval(qml.PauliZ(0) @ qml.PauliZ(1))
-```
-
-### Probability Distributions
-
-```python
-@qml.qnode(dev)
-def measure_probabilities():
-    qml.Hadamard(wires=0)
-    qml.CNOT(wires=[0, 1])
-
-    # Probabilities of all basis states
-    return qml.probs(wires=[0, 1])  # Returns [p(|00⟩), p(|01⟩), p(|10⟩), p(|11⟩)]
-```
-
-### Samples and Counts
-
-```python
-@qml.set_shots(1000)
-@qml.qnode(dev)
-def measure_samples():
-    qml.Hadamard(wires=0)
-
-    # Raw samples
-    return qml.sample(qml.PauliZ(0))
-
-@qml.set_shots(1000)
-@qml.qnode(dev)
-def measure_counts():
-    qml.Hadamard(wires=0)
-    qml.CNOT(wires=[0, 1])
-
-    # Count occurrences
-    return qml.counts(wires=[0, 1])
-```
-
-### Variance
-
-```python
-@qml.qnode(dev)
-def measure_variance():
-    qml.RX(0.5, wires=0)
-
-    # Variance of observable
-    return qml.var(qml.PauliZ(0))
-```
-
-### Mid-Circuit Measurements
-
-```python
-@qml.qnode(dev)
-def mid_circuit_measure():
-    qml.Hadamard(wires=0)
-
-    # Measure qubit 0 during circuit
-    m0 = qml.measure(0)
-
-    # Use measurement result
-    qml.cond(m0, qml.PauliX)(wires=1)
-
-    # Final measurement
-    return qml.expval(qml.PauliZ(1))
-```
-
-## Circuit Construction Patterns
-
-### Layer-Based Construction
-
-```python
 def layer(weights, wires):
-    """Single layer of parameterized gates."""
-    for i, wire in enumerate(wires):
-        qml.RY(weights[i], wires=wire)
-
-    for wire in wires[:-1]:
-        qml.CNOT(wires=[wire, wire+1])
+    for angle, wire in zip(weights, wires, strict=True):
+        qml.RY(angle, wires=wire)
+    for a, b in zip(wires[:-1], wires[1:]):
+        qml.CNOT(wires=[a, b])
 
 @qml.qnode(dev)
-def layered_circuit(weights):
-    n_layers = len(weights)
-    wires = range(4)
-
-    for i in range(n_layers):
-        layer(weights[i], wires)
-
-    return qml.expval(qml.PauliZ(0))
+def negative_control():
+    qml.ctrl(qml.X, control="a", control_values=[0])(wires="target")
+    return qml.expval(qml.Z("target"))
+assert np.allclose(negative_control(), -1)
 ```
 
-### Data Encoding
+Do not construct neighbors using `wire + 1`: labels need not be consecutive
+integers. Basis encodings require binary entries; amplitude preparation requires
+`2**n` amplitudes with nonzero finite norm. `qml.AmplitudeEmbedding(...,
+normalize=True)` normalizes amplitudes, but does not make arbitrary feature
+preprocessing differentiable.
+
+## Measurement feedback
 
 ```python
-def angle_encoding(x, wires):
-    """Encode classical data as rotation angles."""
-    for i, wire in enumerate(wires):
-        qml.RX(x[i], wires=wire)
+import pennylane as qml
+import numpy as np
 
-def amplitude_encoding(x, wires):
-    """Encode data as quantum state amplitudes."""
-    qml.MottonenStatePreparation(x, wires=wires)
-
-def basis_encoding(x, wires):
-    """Encode binary data in computational basis."""
-    for i, val in enumerate(x):
-        if val:
-            qml.PauliX(wires=i)
-```
-
-### Ansatz Patterns
-
-```python
-# Hardware-efficient ansatz
-def hardware_efficient_ansatz(weights, wires):
-    n_layers = len(weights) // len(wires)
-
-    for layer in range(n_layers):
-        # Rotation layer
-        for i, wire in enumerate(wires):
-            qml.RY(weights[layer * len(wires) + i], wires=wire)
-
-        # Entanglement layer
-        for wire in wires[:-1]:
-            qml.CNOT(wires=[wire, wire+1])
-
-# Alternating layered ansatz
-def alternating_ansatz(weights, wires):
-    for w in weights:
-        for wire in wires:
-            qml.RX(w[wire], wires=wire)
-        for wire in wires[:-1]:
-            qml.CNOT(wires=[wire, wire+1])
-```
-
-## Dynamic Circuits
-
-### For Loops
-
-```python
+dev = qml.device("default.qubit", wires=3)  # one auxiliary wire for deferred measurement
 @qml.qnode(dev)
-def dynamic_for_loop(n_iterations):
-    qml.Hadamard(wires=0)
-
-    # Dynamic for loop
-    for i in range(n_iterations):
-        qml.RX(0.1 * i, wires=0)
-
-    return qml.expval(qml.PauliZ(0))
+def adaptive():
+    qml.Hadamard(0)
+    bit = qml.measure(0)
+    qml.cond(bit, qml.X)(wires=1)
+    return qml.expval(qml.Z(0) @ qml.Z(1))
+assert np.allclose(adaptive(), 1.0)
 ```
 
-### While Loops (with Catalyst)
+A measurement value is symbolic during circuit construction. Use `qml.cond`
+(and bitwise `&`, `|`, `~` for combinations), not ordinary `if bit` or `while bit`.
+Native one-shot execution, deferred measurements and tree traversal have different
+resource costs/support. Check device, shot and differentiation compatibility.
+Ordinary Python loops unroll during construction; compiled dynamic loops require
+Catalyst's supported control flow. Reset/postselection changes the state and the
+effective accepted shot count; report the acceptance rate.
+
+## QFT and inverse
+
+Use the library transform rather than a partial hand-written controlled-RZ
+circuit: controlled phase and final wire reversal matter.
 
 ```python
-from catalyst import qjit
+import pennylane as qml
+import numpy as np
 
-compiled_dev = qml.device("lightning.qubit", wires=1)
-
-@qjit  # Just-in-time compilation with Catalyst
-@qml.qnode(compiled_dev)
-def dynamic_while_loop():
-    qml.Hadamard(wires=0)
-
-    # Dynamic while loop
-    @qml.while_loop(lambda i: i < 5)
-    def loop(i):
-        qml.RX(0.1, wires=0)
-        return i + 1
-
-    loop(0)
-    return qml.expval(qml.PauliZ(0))
+wires = [0, 1, 2]
+U = qml.matrix(qml.QFT(wires=wires), wire_order=wires)
+indices = np.arange(8)
+expected = np.exp(2j * np.pi * np.outer(indices, indices) / 8) / np.sqrt(8)
+assert np.allclose(U, expected)
+Uinv = qml.matrix(qml.adjoint(qml.QFT)(wires=wires), wire_order=wires)
+assert np.allclose(Uinv @ U, np.eye(8))
 ```
 
-### Adaptive Circuits
+## Inspect and transform
 
 ```python
+import pennylane as qml
+import numpy as np
+
+dev = qml.device("default.qubit", wires=2)
 @qml.qnode(dev)
-def adaptive_circuit():
-    qml.Hadamard(wires=0)
+def circuit(x):
+    qml.Hadamard(0)
+    qml.Hadamard(0)
+    qml.RY(x, 0)
+    qml.CNOT([0, 1])
+    return qml.expval(qml.Z(1))
 
-    # Measure and adapt
-    m = qml.measure(0)
+optimized = qml.transforms.cancel_inverses(circuit)
+assert np.allclose(optimized(0.2), circuit(0.2))
+print(qml.draw(optimized)(0.2))
+spec = qml.specs(optimized, level="device")(0.2)
+resources = spec.resources
+assert resources.num_gates == 2
+assert resources.depth == 2
+print(resources.gate_types)
 
-    # Different paths based on measurement
-    if m:
-        qml.RX(0.5, wires=1)
-    else:
-        qml.RY(0.5, wires=1)
-
-    return qml.expval(qml.PauliZ(1))
-```
-
-## Circuit Inspection
-
-### Drawing Circuits
-
-```python
-# Text representation
-print(qml.draw(circuit)(params))
-
-# ASCII art
-print(qml.draw(circuit, wire_order=[0,1,2])(params))
-
-# Matplotlib visualization
-fig, ax = qml.draw_mpl(circuit)(params)
-```
-
-### Analyzing Circuit Structure
-
-```python
-# Get circuit specs
-specs = qml.specs(circuit)(params)
-print(f"Gates: {specs['gate_sizes']}")
-print(f"Depth: {specs['depth']}")
-print(f"Parameters: {specs['num_trainable_params']}")
-
-# Resource estimation
-resources = qml.specs(circuit)(params)["resources"]
-print(f"Total gates: {resources.num_gates}")
-```
-
-### Tape Inspection
-
-```python
-# Record operations
 with qml.tape.QuantumTape() as tape:
-    qml.Hadamard(wires=0)
-    qml.CNOT(wires=[0, 1])
-    qml.expval(qml.PauliZ(0))
-
-# Inspect tape contents
-print("Operations:", tape.operations)
-print("Measurements:", tape.measurements)
-print("Wires used:", tape.wires)
+    qml.Rot(0.1, 0.2, 0.3, wires=0)
+    qml.expval(qml.Z(0))
+tapes, postprocess = qml.transforms.decompose(tape, gate_set={qml.RZ, qml.RY})
+results = qml.execute(tapes, dev)
+assert np.allclose(postprocess(results), np.cos(0.2))
 ```
 
-### Circuit Transformations
+A tape transform returns `(tapes, postprocessing_fn)`, not a single tape.
+`commute_controlled` moves compatible gates through controlled operations; it does
+not move measurements to the end. `merge_rotations` combines compatible rotations.
+Compare outputs before/after transforms, and record the `qml.specs` level. In
+0.45.1 the result is `CircuitSpecs`, with a `SpecsResources` object under
+`.resources`; splitting transforms can make `.resources` a list. Dictionary
+lookups such as `specs['depth']` and legacy `num_trainable_params` do not apply.
+`qml.draw_mpl` additionally needs Matplotlib and returns `(figure, axes)`.
 
-```python
-# Expand composite operations to a target gate set
-expanded = qml.transforms.decompose(tape, gate_set={qml.RX, qml.RY, qml.RZ, qml.CNOT})
+## Sources
 
-# Cancel adjacent operations
-optimized = qml.transforms.cancel_inverses(tape)
-
-# Commute measurements to end
-commuted = qml.transforms.commute_controlled(tape)
-```
-
-## Best Practices
-
-1. **Use native gates** - Prefer gates supported by target device
-2. **Minimize circuit depth** - Reduce decoherence effects
-3. **Encode efficiently** - Choose encoding matching data structure
-4. **Reuse circuits** - Cache compiled circuits when possible
-5. **Validate measurements** - Ensure observables are Hermitian
-6. **Check qubit count** - Verify device has sufficient wires
-7. **Profile circuits** - Use `qml.specs()` to analyze complexity
-
-## Common Patterns
-
-### Bell State Preparation
-
-```python
-@qml.qnode(dev)
-def bell_state():
-    qml.Hadamard(wires=0)
-    qml.CNOT(wires=[0, 1])
-    return qml.state()  # Returns |Φ+⟩ = (|00⟩ + |11⟩)/√2
-```
-
-### GHZ State
-
-```python
-@qml.qnode(dev)
-def ghz_state(n_qubits):
-    qml.Hadamard(wires=0)
-    for i in range(n_qubits-1):
-        qml.CNOT(wires=[0, i+1])
-    return qml.state()
-```
-
-### Quantum Fourier Transform
-
-```python
-def qft(wires):
-    """Quantum Fourier Transform."""
-    n_wires = len(wires)
-    for i in range(n_wires):
-        qml.Hadamard(wires=wires[i])
-        for j in range(i+1, n_wires):
-            qml.CRZ(np.pi / (2**(j-i)), wires=[wires[j], wires[i]])
-```
-
-### Inverse QFT
-
-```python
-def inverse_qft(wires):
-    """Inverse Quantum Fourier Transform."""
-    n_wires = len(wires)
-    for i in range(n_wires-1, -1, -1):
-        for j in range(n_wires-1, i, -1):
-            qml.CRZ(-np.pi / (2**(j-i)), wires=[wires[j], wires[i]])
-        qml.Hadamard(wires=wires[i])
-```
+- [Operations](https://docs.pennylane.ai/en/stable/code/qml.html)
+- [MultiControlledX](https://docs.pennylane.ai/en/stable/code/api/pennylane.MultiControlledX.html)
+- [Dynamic circuits](https://docs.pennylane.ai/en/stable/introduction/dynamic_quantum_circuits.html)
+- [QFT](https://docs.pennylane.ai/en/stable/code/api/pennylane.QFT.html)
+- [Transforms](https://docs.pennylane.ai/en/stable/code/qml_transforms.html)
+- [specs](https://docs.pennylane.ai/en/stable/code/api/pennylane.specs.html)

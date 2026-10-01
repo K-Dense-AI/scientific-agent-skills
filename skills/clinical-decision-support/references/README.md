@@ -23,7 +23,7 @@ No reference or script establishes regulatory authorization, HIPAA compliance, c
 | `model_biomarker_evaluation.md` | Aggregate validation, calibration, uncertainty, and subgroup review |
 | `privacy_and_disclosure.md` | HHS de-identification methods and output controls |
 | `decision_logic_traceability.md` | Research/governance logic matrices |
-| `sources.md` | Authoritative source ledger checked 2026-07-23 |
+| `sources.md` | Authoritative source ledger checked 2026-09-30 |
 | `security_validation.md` | Baseline remediation, scan results, and accepted LOW findings |
 
 ## Assets

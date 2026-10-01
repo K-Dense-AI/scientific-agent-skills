@@ -1,7 +1,7 @@
 # Genomic tokenizers and fragment tokenization
 
-Verified against Python `gtars==0.9.2`, wrapper crate `gtars==0.9.0`, and
-component `gtars-tokenizers==0.5.3` on **2026-07-23**.
+Local synthetic examples tested with Python `gtars==0.10.0`, wrapper crate `gtars==0.10.0`, and
+component `gtars-tokenizers==0.5.3` on **2026-10-01**.
 
 ## Current class and constructors
 
@@ -76,9 +76,12 @@ attention_mask = batch["attention_mask"]
 The overlap index returns every universe region overlapping each query region.
 A query can therefore produce zero, one, or multiple region tokens; if the
 entire call yields no overlap, it returns the unknown token. Unknown contigs also
-fall through to unknown behavior.
+fall through to unknown behavior. In a mixed call, unmatched regions disappear:
+there is no one-ID-per-input-row alignment and no unknown placeholder for each
+miss. The returned batch does not automatically add BOS/EOS/CLS tokens; record
+any model-specific insertion separately.
 
-The verified 0.9.2 wheel rejected a list of strings such as
+The verified 0.10.0 wheel rejected a list of strings such as
 `["chr1:100-200"]` because the native extractor expected region objects.
 Older documentation showing string-list input is not reliable for this pin.
 Pass a `RegionSet` or `Region` objects.
@@ -91,6 +94,8 @@ round_trip = tokenizer.convert_ids_to_tokens(ids)
 vocabulary = tokenizer.get_vocab()
 vocab_size = tokenizer.vocab_size
 specials = tokenizer.special_tokens_map
+special_ids = {role: getattr(tokenizer, f"{role}_token_id")
+               for role in ("unk", "pad", "mask", "cls", "bos", "eos", "sep")}
 ```
 
 `encode()` maps token strings to IDs. Calling the tokenizer on regions performs
@@ -109,7 +114,7 @@ Record this manifest before training or inference:
   "schema_version": "1.0",
   "assembly": "GRCh38.p14",
   "coordinate_system": "0-based-half-open",
-  "gtars_python_version": "0.9.2",
+  "gtars_python_version": "0.10.0",
   "universe": {
     "sha256": "<64 lowercase hex>",
     "records": 100000,
@@ -144,7 +149,10 @@ python3 -B scripts/tokenizer_manifest.py \
   --chrom-sizes GRCh38.p14.chrom.sizes
 ```
 
-The helper requires exact SHA-256 and record count, seven distinct in-range
+The helper checks manifest structure and declared compatibility without importing
+Gtars; it does not prove that declared IDs equal the instantiated tokenizer.
+Compare `special_ids`, vocabulary, and a fixed query corpus at runtime.
+It requires exact SHA-256 and record count, seven distinct in-range
 special IDs, compatible assembly/coordinates/version, and a unique valid BED.
 
 ## `from_pretrained` is network-capable
@@ -223,10 +231,10 @@ allows.
 
 ```toml
 [dependencies]
-gtars = { version = "=0.9.0", default-features = false, features = ["tokenizers"] }
+gtars = { version = "=0.10.0", default-features = false, features = ["tokenizers"] }
 ```
 
-The wrapper exposes:
+The wrapper exposes this source-reviewed, uncompiled Rust template:
 
 ```rust
 use gtars::tokenizers::Tokenizer;
@@ -244,13 +252,13 @@ revision/checksum gate.
 
 The current API does not provide `TreeTokenizer.from_bed_file`,
 `from_region_string`, YAML tokenizer config, token objects with `.metadata`, or
-the old CLI `tokenize` command in `gtars-cli 0.9.0`.
+the old CLI `tokenize` command in `gtars-cli 0.10.0`.
 
-## Official sources (accessed 2026-07-23)
+## Official sources (accessed 2026-10-01)
 
 - [Gtars tokenizer guide](https://docs.bedbase.org/gtars/tokenizers/)
-- [Python 0.9.2 tokenizer stubs](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/py_src/gtars/tokenizers/__init__.pyi)
-- [Python 0.9.2 tokenizer binding](https://github.com/databio/gtars/blob/gtars-python-v0.9.2/gtars-python/src/tokenizers/py_tokenizers/mod.rs)
-- [Tokenizer implementation at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-tokenizers/src/tokenizer.rs)
-- [Tokenizer TOML schema at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-tokenizers/src/config.rs)
-- [Fragment tokenizer source at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-tokenizers/src/utils/fragments.rs)
+- [Python 0.10.0 tokenizer stubs](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/py_src/gtars/tokenizers/__init__.pyi)
+- [Python 0.10.0 tokenizer binding](https://github.com/databio/gtars/blob/gtars-python-v0.10.0/gtars-python/src/tokenizers/py_tokenizers/mod.rs)
+- [Tokenizer implementation at v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-tokenizers/src/tokenizer.rs)
+- [Tokenizer TOML schema at v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-tokenizers/src/config.rs)
+- [Fragment tokenizer source at v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-tokenizers/src/utils/fragments.rs)

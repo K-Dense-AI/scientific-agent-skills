@@ -1,5 +1,7 @@
 # Pipelines and Composite Estimators Reference
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 ## Overview
 
 Pipelines chain multiple processing steps into a single estimator, preventing data leakage and simplifying code. They enable reproducible workflows and seamless integration with cross-validation and hyperparameter tuning.
@@ -10,7 +12,7 @@ Pipelines chain multiple processing steps into a single estimator, preventing da
 
 **Pipeline (`sklearn.pipeline.Pipeline`)**
 - Chains transformers with a final estimator
-- All intermediate steps must have fit_transform()
+- All intermediate steps must implement `fit` and `transform` (`fit_transform` is optional)
 - Final step can be any estimator (transformer, classifier, regressor, clusterer)
 - Example:
 ```python
@@ -132,6 +134,12 @@ print(f"Best score: {grid_search.best_score_:.3f}")
 ### Tuning Multiple Pipeline Steps
 
 ```python
+pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('pca', PCA()),
+    ('classifier', SVC())
+])
+# Every PCA candidate must fit within min(n_training_fold, n_features).
 param_grid = {
     # PCA parameters
     'pca__n_components': [5, 10, 20, 50],
@@ -151,7 +159,7 @@ grid_search.fit(X_train, y_train)
 
 **ColumnTransformer (`sklearn.compose.ColumnTransformer`)**
 - Apply different preprocessing to different columns
-- Prevents data leakage in cross-validation
+- Prevents preprocessing leakage only when placed inside the estimator passed to cross-validation
 - Example:
 ```python
 from sklearn.compose import ColumnTransformer
@@ -212,7 +220,7 @@ from sklearn.compose import make_column_transformer
 
 preprocessor = make_column_transformer(
     (StandardScaler(), numeric_features),
-    (OneHotEncoder(), categorical_features),
+    (OneHotEncoder(handle_unknown='ignore'), categorical_features),
     remainder='passthrough'
 )
 ```
@@ -253,10 +261,7 @@ preprocessor = ColumnTransformer([
 ### Getting Feature Names
 
 ```python
-# Get output feature names
-feature_names = preprocessor.get_feature_names_out()
-
-# After fitting
+# Fit before requesting names
 preprocessor.fit(X_train)
 output_features = preprocessor.get_feature_names_out()
 print(f"Input features: {X_train.columns.tolist()}")
@@ -365,6 +370,10 @@ rmtree(cachedir)
 
 ```python
 from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 
 # Inner pipeline for text processing
 text_pipeline = Pipeline([
@@ -374,9 +383,9 @@ text_pipeline = Pipeline([
 
 # Outer pipeline combining text and numeric features
 full_pipeline = Pipeline([
-    ('features', FeatureUnion([
-        ('text', text_pipeline),
-        ('numeric', StandardScaler())
+    ('features', ColumnTransformer([
+        ('text', text_pipeline, 'text'),  # Scalar selects 1D text input
+        ('numeric', StandardScaler(), ['age', 'income'])
     ])),
     ('classifier', LogisticRegression())
 ])
@@ -387,7 +396,7 @@ full_pipeline = Pipeline([
 ```python
 from sklearn.base import BaseEstimator, TransformerMixin
 
-class TextLengthExtractor(BaseEstimator, TransformerMixin):
+class TextLengthExtractor(TransformerMixin, BaseEstimator):
     def fit(self, X, y=None):
         return self
 
@@ -555,7 +564,7 @@ pipeline = Pipeline([
 ])
 pipeline.fit(X_train, y_train)
 
-# Bad: Preprocessing outside pipeline (can cause leakage)
+# Unsafe if these once-scaled values are subsequently passed to CV/search
 X_train_scaled = StandardScaler().fit_transform(X_train)
 model = LogisticRegression()
 model.fit(X_train_scaled, y_train)
@@ -607,6 +616,16 @@ Ensure all steps are compatible:
 - Final step needs fit() and predict() (or transform())
 - Use set_output(transform='pandas') for DataFrame output
 ```python
-pipeline.set_output(transform='pandas')
-X_transformed = pipeline.transform(X)  # Returns DataFrame
+# This is a transformer-only pipeline; a final classifier has no transform().
+transformers = Pipeline([
+    ('imputer', SimpleImputer()),
+    ('scaler', StandardScaler())
+]).set_output(transform='pandas')
+X_transformed = transformers.fit_transform(X_train[numeric_features])
+# OneHotEncoder must use sparse_output=False for pandas output.
 ```
+
+## Upstream references
+
+- https://scikit-learn.org/stable/modules/compose.html
+- https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html

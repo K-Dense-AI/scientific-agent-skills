@@ -1,5 +1,8 @@
 # SymPy Advanced Topics
 
+Examples in this reference are ordered session fragments: run earlier imports and
+setup first. Tested with SymPy 1.14.0; exceptions are explicitly marked illustrative.
+
 This document covers SymPy's advanced mathematical capabilities including geometry, number theory, combinatorics, logic and sets, statistics, polynomials, and special functions.
 
 ## Geometry
@@ -59,7 +62,8 @@ poly.vertices
 
 ```python
 # Check if point is on line/curve
-point = Point(0.5, 0.5)
+from sympy import Rational
+point = Point(Rational(1, 2), Rational(1, 2))
 line.contains(point)
 
 # Check if parallel/perpendicular
@@ -129,6 +133,7 @@ from sympy.ntheory import isprime, primerange, prime, nextprime, prevprime
 # Check if prime
 isprime(7)    # True
 isprime(10)   # False
+# Results are definitive below 2**64; larger inputs use a probable-prime test.
 
 # Generate primes in range
 list(primerange(10, 50))  # [11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]
@@ -170,13 +175,14 @@ lcm(60, 48)   # 240
 ilcm(60, 48)  # 240 (integer version)
 
 # Multiple arguments
-gcd(60, 48, 36)  # 12
+igcd(60, 48, 36)  # 12; gcd accepts two expressions or a sequence
 ```
 
 ### Modular Arithmetic
 
 ```python
-from sympy.ntheory import mod_inverse, totient, is_primitive_root
+from sympy import mod_inverse, totient
+from sympy.ntheory import is_primitive_root
 
 # Modular inverse (find x such that a*x ≡ 1 (mod m))
 mod_inverse(3, 7)  # 5 (because 3*5 = 15 ≡ 1 (mod 7))
@@ -250,7 +256,7 @@ from sympy.combinatorics import Permutation
 
 # Create permutation (cycle notation)
 p = Permutation([1, 2, 0, 3])  # Sends 0->1, 1->2, 2->0, 3->3
-p = Permutation(0, 1, 2)(3)    # Cycle notation: (0 1 2)(3)
+p = Permutation(0, 1, 2, size=4)    # Cycle notation: (0 1 2)(3)
 
 # Permutation operations
 p.order()       # Order of permutation
@@ -259,7 +265,7 @@ p.inversions()  # Number of inversions
 
 # Compose permutations
 q = Permutation([2, 0, 1, 3])
-r = p * q       # Composition
+r = p * q       # Composition: (p*q)(i) == q(p(i))
 ```
 
 ### Partitions
@@ -302,7 +308,7 @@ G = PermutationGroup(p1, p2)
 # Group properties
 G.order()        # Order of group
 G.is_abelian     # Check if abelian
-G.is_cyclic()    # Check if cyclic
+G.is_cyclic      # Boolean property
 G.elements       # All group elements
 ```
 
@@ -315,7 +321,7 @@ from sympy import symbols, And, Or, Not, Xor, Implies, Equivalent
 from sympy.logic.boolalg import truth_table, simplify_logic
 
 # Define boolean variables
-x, y, z = symbols('x y z', bool=True)
+x, y, z = symbols('x y z')
 
 # Logical operations
 expr = And(x, Or(y, Not(z)))
@@ -329,7 +335,7 @@ simplified = simplify_logic(expr)  # Returns x
 
 # Truth table
 expr = Implies(x, y)
-print(truth_table(expr, [x, y]))
+print(list(truth_table(expr, [x, y])))
 ```
 
 ### Sets
@@ -382,7 +388,7 @@ squares = ImageSet(Lambda(x, x**2), S.Integers)
 # Power set
 from sympy.sets import FiniteSet
 A = FiniteSet(1, 2, 3)
-# Note: SymPy doesn't have direct powerset, but can generate
+power_set = A.powerset()  # FiniteSet of all eight subsets
 ```
 
 ## Polynomials
@@ -390,7 +396,7 @@ A = FiniteSet(1, 2, 3)
 ### Polynomial Manipulation
 
 ```python
-from sympy import Poly, symbols, factor, expand, roots
+from sympy import Poly, symbols, factor, expand, roots, div
 x, y = symbols('x y')
 
 # Create polynomial
@@ -416,14 +422,17 @@ from sympy import roots, real_roots, count_roots
 
 p = Poly(x**3 - 6*x**2 + 11*x - 6, x)
 
-# All roots
+# Roots expressible by radicals; complete for this cubic
 r = roots(p)  # {1: 1, 2: 1, 3: 1}
+assert sum(r.values()) == p.degree()
+# roots() can return a partial dictionary or {} for irreducible quintics.
+all_roots = p.all_roots()  # Includes exact CRootOf objects where necessary
 
 # Real roots only
 r = real_roots(p)
 
 # Count roots in interval
-count_roots(p, a, b)  # Number of roots in [a, b]
+count_roots(p, 0, 4)  # 3 distinct roots in this closed interval
 ```
 
 ### Polynomial GCD and Factorization
@@ -489,18 +498,19 @@ density(X)(x)  # sqrt(2)*exp(-x**2/2)/(2*sqrt(pi))
 
 ```python
 from sympy.stats import Die, Bernoulli, Binomial, Poisson
+from sympy import Eq, Rational
 
 # Die
 D = Die('D', 6)
 P(D > 3)  # 1/2
 
 # Bernoulli
-B = Bernoulli('B', 0.5)
-P(B)  # 1/2
+B = Bernoulli('B', Rational(1, 2))
+P(Eq(B, 1))  # 1/2
 
 # Binomial
-X = Binomial('X', 10, 0.5)
-P(X == 5)  # Probability of exactly 5 successes in 10 trials
+X = Binomial('X', 10, Rational(1, 2))
+P(Eq(X, 5))  # 63/256; X == 5 is Python structural equality, not an event
 
 # Poisson
 Y = Poisson('Y', 3)
@@ -518,7 +528,9 @@ X = Normal('X', 0, 1)
 Y = Normal('Y', 0, 1)
 
 # Joint probability
-P((X > 0) & (Y > 0))  # 1/4
+P(X > 0) * P(Y > 0)  # 1/4, because these separately created variables are independent
+# SymPy 1.14.0 can fail on P((X > 0) & (Y > 0)) for independent normals.
+# Do not factor joint probabilities when variables are dependent.
 
 # Covariance
 from sympy.stats import covariance
@@ -545,7 +557,7 @@ from sympy import (
 
 # Gamma function
 gamma(5)  # 24 (equivalent to 4!)
-gamma(1/2)  # sqrt(pi)
+gamma(Rational(1, 2))  # sqrt(pi); Python 1/2 would produce a Float
 
 # Bessel functions
 besselj(0, x)  # J_0(x)
@@ -590,7 +602,7 @@ perimeter = tri.perimeter  # a + b + sqrt(a**2 + b**2)
 ### Pattern 2: Number Theory Calculation
 
 ```python
-from sympy.ntheory import factorint, totient, isprime
+from sympy import factorint, totient, isprime
 
 # Factor and analyze
 n = 12345
@@ -602,7 +614,8 @@ is_prime = isprime(n)
 ### Pattern 3: Combinatorial Generation
 
 ```python
-from sympy.utilities.iterables import multiset_permutations, combinations
+from sympy.utilities.iterables import multiset_permutations
+from itertools import combinations
 
 # Generate all permutations
 perms = list(multiset_permutations([1, 2, 3]))
@@ -616,6 +629,9 @@ combs = list(combinations([1, 2, 3, 4], 2))
 ```python
 from sympy.stats import Normal, P, E, variance
 
+from sympy import symbols
+mu, a = symbols('mu a', real=True)
+sigma = symbols('sigma', positive=True)
 X = Normal('X', mu, sigma)
 
 # Compute statistics

@@ -100,13 +100,13 @@ def solve_custom_problem():
     problem = MyBiObjectiveProblem()
 
     # Configure algorithm
-    algorithm = NSGA2(pop_size=100)
+    algorithm = NSGA2(pop_size=40)
 
     # Solve
     result = minimize(
         problem,
         algorithm,
-        ('n_gen', 200),
+        ('n_gen', 50),
         seed=1,
         verbose=False
     )
@@ -135,19 +135,26 @@ def solve_constrained_problem():
     problem = ConstrainedProblem()
 
     # Configure algorithm
-    algorithm = NSGA2(pop_size=100)
+    algorithm = NSGA2(pop_size=40)
 
     # Solve
     result = minimize(
         problem,
         algorithm,
-        ('n_gen', 200),
+        ('n_gen', 50),
         seed=1,
         verbose=False
     )
 
-    # Check feasibility
-    feasible = result.CV[:, 0] == 0  # Constraint violation = 0
+    # A constrained run can return no feasible optimum.
+    if result.F is None:
+        print("[FAIL] No feasible solution was found.")
+        return result
+    feasible = result.opt.get("FEAS").ravel()
+    # Recheck the original equations, not only aggregated CV.
+    _, G = problem.evaluate(result.X, return_values_of=["F", "G"])
+    if not np.all(G[feasible] <= 0):
+        raise ValueError("Selected candidates violate the original constraints")
 
     print(f"Total solutions: {len(result.F)}")
     print(f"Feasible solutions: {np.sum(feasible)}")

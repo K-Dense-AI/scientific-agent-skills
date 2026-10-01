@@ -46,6 +46,8 @@ https://alphafold.ebi.ac.uk/files/AF-P00533-F1-predicted_aligned_error_v6.json
 
 Coordinate files are available as PDB, mmCIF, and binary CIF. Prefer mmCIF/BCIF for large structures. Per-residue confidence is stored in the coordinate file B-factor column and is also available as confidence JSON. PAE is JSON.
 
+A single accession can return multiple isoforms as well as fragments: the 2026-09-30 `P04637` response returned nine model entities. Select the intended isoform and residue interval, and retain `modelEntityId`; do not silently take the first array element.
+
 Proteins longer than the model size limit may be represented as overlapping fragments (`F1`, `F2`, ...). Preserve fragment identifiers and residue ranges when reporting results.
 
 ## Rate Limits

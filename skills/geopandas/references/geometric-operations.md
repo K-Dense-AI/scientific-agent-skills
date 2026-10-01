@@ -118,11 +118,16 @@ attaching a precision model:
 merged = geometry.union_all(method="unary", grid_size=0.01)
 ```
 
+GeoPandas 1.2 also accepts `grid_size=` on row-wise `intersection`, `union`,
+`difference`, and `symmetric_difference`. This does not add a `grid_size`
+argument to `overlay`; snap valid inputs explicitly for that workflow.
+`buffer(resolution=...)` is deprecated in 1.2; use `quad_segs=`.
+
 Record whether precision was attached to inputs or applied only to an operation.
 
 ## `union_all` algorithms
 
-GeoPandas 1.1.4 signature:
+GeoPandas 1.2.0 signature:
 
 ```python
 geometry.union_all(method="unary", grid_size=None)
@@ -157,7 +162,7 @@ The old `unary_union` attribute is deprecated. Use `union_all()`.
 All distance/tolerance arguments are CRS units:
 
 ```python
-buffered = geometry.buffer(50)
+buffered = geometry.buffer(50, quad_segs=16)
 simplified = geometry.simplify(5, preserve_topology=True)
 densified = geometry.segmentize(max_segment_length=10)
 centroids = geometry.centroid
@@ -250,7 +255,7 @@ For every geometry-changing operation, record:
 The bundled `scripts/geometry_validity_report.py` provides bounded dry-run
 counts and optional new-file repair without emitting geometries or coordinates.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [GeoPandas geometric manipulations](https://geopandas.org/en/stable/docs/user_guide/geometric_manipulations.html).
 - [GeoSeries.make_valid](https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoSeries.make_valid.html).

@@ -1,690 +1,338 @@
-# Adaptyv Bio Foundry API — Complete Endpoint Reference
+# Adaptyv Foundry endpoint reference
 
-Base URL: `https://devs.adaptyvbio.com/api/v1`
-OpenAPI spec: `GET /openapi.json`
+Reviewed 2026-09-30 against the deployed
+[OpenAPI 0.0.2 schema](https://devs.adaptyvbio.com/api/v1/openapi.json), the
+[API guide](https://docs.adaptyvbio.com/api-reference/api-introduction), and
+[official SDK source](https://github.com/adaptyvbio/adaptyv-sdk/tree/cdf207819ed5a58e0c127453626d2bce125c8064).
+All paths below are relative to `https://devs.adaptyvbio.com/api/v1`.
 
-## Table of Contents
+## Endpoint inventory
 
-- [Experiments](#experiments)
-- [Sequences](#sequences)
-- [Results](#results)
-- [Targets](#targets)
-- [Quotes](#quotes)
-- [Tokens](#tokens)
-- [Updates](#updates)
-- [Feedback](#feedback)
+These are the 43 operations in the reviewed schema. Schema names refer to
+`components.schemas` in the linked OpenAPI document. `Page<T>` means
+`{items: T[], total, count, offset}`. Most pages use inline item schemas;
+use the operation's response definition when a name is not provided.
+The table lists success responses; detailed constraints follow it.
 
----
+| Method and path | JSON request schema | Success response |
+|---|---|---|
+| `GET /experiments` | `None` | `200 Page<inline item>` |
+| `POST /experiments` | `CreateExpRequest` | `200 ConfirmQuoteResponse`; `201 CreateExpResponse` |
+| `POST /experiments/cost-estimate` | `CostEstimateRequest` | `200 CostEstimateResponse` |
+| `GET /experiments/{experiment_id}` | `None` | `200 ExpInfo` |
+| `PATCH /experiments/{experiment_id}` | `ModifyExpRequest` | `200 ModifyExpResponse` |
+| `GET /experiments/{experiment_id}/invoice` | `None` | `200 ExperimentInvoiceResponse` |
+| `GET /experiments/{experiment_id}/quote` | `None` | `200 ExperimentQuoteResponse` |
+| `POST /experiments/{experiment_id}/quote/confirm` | `ConfirmQuoteRequest` | `200 ConfirmQuoteResponse` |
+| `GET /experiments/{experiment_id}/quote/pdf` | `None` | `200 PDF bytes` |
+| `GET /experiments/{experiment_id}/results` | `None` | `200 Page<inline item>` |
+| `GET /experiments/{experiment_id}/sequences` | `None` | `200 Page<inline item>` |
+| `POST /experiments/{experiment_id}/submit` | `None` | `200 ExperimentConfirmationResponse` |
+| `GET /experiments/{experiment_id}/updates` | `None` | `200 Page<inline item>` |
+| `POST /feedback/submit` | `SubmitFeedbackRequest` | `201 SubmitFeedbackResponse` |
+| `GET /info/health` | `None` | `200 HealthResponse` |
+| `GET /info/health-db` | `None` | `200 HealthDbResponse` |
+| `GET /invoices` | `None` | `200 Page<inline item>` |
+| `GET /invoices/{invoice_id}` | `None` | `200 InvoiceDetailResponse` |
+| `POST /invoices/{invoice_id}/pay` | `None` | `200 PayInvoiceResponse` |
+| `GET /invoices/{invoice_id}/pdf` | `None` | `307 Redirect to PDF` |
+| `GET /quotes` | `None` | `200 Page<inline item>` |
+| `GET /quotes/{quote_id}` | `None` | `200 QuoteInfo` |
+| `POST /quotes/{quote_id}/confirm` | `ConfirmQuoteRequest` | `200 ConfirmQuoteResponse` |
+| `POST /quotes/{quote_id}/reject` | `RejectQuoteRequest` | `200 RejectQuoteResponse` |
+| `GET /results` | `None` | `200 Page<inline item>` |
+| `GET /results/{result_id}` | `None` | `200 ResultInfo` |
+| `GET /sequences` | `None` | `200 Page<inline item>` |
+| `POST /sequences` | `SequenceAddRequest` | `201 SequenceAddResponse` |
+| `GET /sequences/{sequence_id}` | `None` | `200 SequenceInfo` |
+| `GET /targets` | `None` | `200 Page<inline item>` |
+| `GET /targets/request-custom` | `None` | `200 Page<inline item>` |
+| `POST /targets/request-custom` | `CreateCustomTargetRequest` | `201 CreateCustomTargetResponse` |
+| `GET /targets/request-custom/{request_id}` | `None` | `200 CustomTargetRequestInfo` |
+| `GET /targets/{target_id}` | `None` | `200 TargetInfo` |
+| `GET /tokens` | `None` | `200 Page<inline item>` |
+| `POST /tokens/attenuate` | `AttenuateTokenRequest` | `201 AttenuateTokenResponse` |
+| `POST /tokens/revoke` | `None` | `200 RevokeTokenResponse` |
+| `GET /updates` | `None` | `200 Page<inline item>` |
+| `GET /webhooks` | `None` | `200 OrgWebhook[]` |
+| `POST /webhooks` | `CreateOrgWebhookRequest` | `201 OrgWebhook` |
+| `DELETE /webhooks/{webhook_id}` | `None` | `204 No body` |
+| `PATCH /webhooks/{webhook_id}` | `UpdateOrgWebhookRequest` | `200 OrgWebhook` |
+| `GET /whoami` | `None` | `200 WhoAmIResponse` |
+
+## Authentication and request scope
+
+Send `Authorization: Bearer <token>` to resource endpoints and
+`Content-Type: application/json` for JSON bodies. Obtain tokens through Foundry;
+`GET /whoami` returns `organizations`, `permissions`, optional `user_id`,
+`active_organization_id`, and `token_expires_at`. Each organization entry marks
+whether it is active. Do not invent an `organization_id` create-body field from
+the SDK's legacy optional argument: it is absent from current `CreateExpRequest`.
+Use a token scoped to the intended organization and inspect `whoami`.
+
+`GET /openapi.json` (schema discovery, not counted above) and the liveness probe
+`GET /info/health` are public. The database probe reports 200 or 503; its
+operation does not explicitly override the schema's global bearer security,
+so do not rely on anonymous database-probe access.
+
+## Pagination and query parameters
+
+| GET endpoint | Query parameters |
+|---|---|
+| `/experiments` | `limit`, `offset`, `filter`, `search`, `sort` |
+| `/experiments/{experiment_id}/results` | `limit`, `offset`, `filter`, `search`, `sort` |
+| `/experiments/{experiment_id}/sequences` | `limit`, `offset`, `search`, `sort` |
+| `/experiments/{experiment_id}/updates` | `limit`, `offset`, `filter`, `sort` |
+| `/invoices` | `limit`, `offset`, `filter`, `sort` |
+| `/quotes` | `limit`, `offset`, `filter`, `sort` |
+| `/results` | `limit`, `offset`, `filter`, `search`, `sort` |
+| `/sequences` | `limit`, `offset`, `search`, `sort`, `experiment_id` |
+| `/targets` | `limit`, `offset`, `search`, `filter`, `sort`, `selfservice_only`, `show_conjugated`, `detailed` |
+| `/targets/request-custom` | `limit`, `offset`, `filter`, `sort` |
+| `/tokens` | `limit`, `offset` |
+| `/updates` | `limit`, `offset`, `filter`, `sort` |
+
+`limit` is 1–100 (default 50); `offset` starts at zero. Advance by the number of
+returned items and stop at `total` or an empty page. `count` is the current page
+size, not the total. Organization webhook listing is an array without pagination.
+Search, filters, and sorting are not universal; only use listed parameters.
+
+For filters use `filter=eq(status,draft)` or
+`filter=and(gte(created_at,2026-01-01),eq(status,done))`. Canonical sort syntax is
+`desc(created_at),asc(name)`; prefix and suffix forms also work. Targets support
+filter/sort on `name`, `vendor_name`, `catalog_number`, and `purity` (e.g.
+`gte(purity,90)`). The reviewed SDK `targets.list()` does not expose `filter`;
+use REST for that parameter. Global updates are newest first; the experiment
+update feed is oldest first by default.
 
 ## Experiments
 
-### POST /experiments — Create experiment
-
-Creates a new experiment. Starts in `Draft` status by default.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | Yes | Human-readable name |
-| `experiment_spec` | ExperimentSpec | Yes | Experiment definition (see below) |
-| `skip_draft` | boolean | No (default false) | Bypass Draft, go straight to WaitingForConfirmation |
-| `auto_accept_quote` | boolean | No (default false) | Auto-accept quote and create invoice |
-| `webhook_url` | string/null | No | URL for customer-facing experiment_update POST notifications |
-
-**ExperimentSpec:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `experiment_type` | string | Yes | `affinity`, `screening`, `thermostability`, `fluorescence`, or `expression` |
-| `method` | string | Required for binding types | `bli` or `spr` |
-| `target_id` | uuid | Required for binding types | Target UUID from catalog |
-| `sequences` | object | Yes | Map of name → amino acid string or rich object |
-| `n_replicates` | integer | Recommended (default 3) | Technical replicates (min 1) |
-| `antigen_concentrations` | number[] | No (affinity only) | Defaults to `[1000.0, 316.2, 100.0, 31.6, 0.0]` nM |
-| `parameters` | object | No | Experiment-specific settings |
-
-**Field requirements by experiment type:**
-
-| Field | Affinity | Screening | Thermostability | Fluorescence | Expression |
-|---|---|---|---|---|---|
-| `experiment_type` | required | required | required | required | required |
-| `method` | required | required | — | — | — |
-| `target_id` | required | required | — | — | — |
-| `sequences` | required | required | required | required | required |
-| `n_replicates` | recommended | recommended | optional | optional | optional |
-| `antigen_concentrations` | optional | — | — | — | — |
-
-**Response (201):**
-
-| Field | Type | Description |
-|---|---|---|
-| `experiment_id` | string | UUID of new experiment |
-| `error` | string/null | Error message if validation fails |
-| `stripe_hosted_invoice_url` | string/null | Present when `auto_accept_quote` created an invoice |
-| `stripe_invoice_id` | string/null | Stripe invoice ID |
-
-**Status codes:** 201, 400, 401, 403, 404
-
----
-
-### GET /experiments — List experiments
-
-Lists experiments accessible to caller, sorted by creation date (newest first).
-
-**Query params:** `limit`, `offset`, `filter`, `search`, `sort`
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Unique identifier |
-| `code` | string | e.g., "EXP-2024-001" |
-| `name` | string/null | Human-readable name |
-| `status` | ExperimentStatus | Current lifecycle status |
-| `experiment_type` | ExperimentType | affinity/screening/thermostability/fluorescence/expression |
-| `results_status` | ResultsStatus | none/partial/all |
-| `created_at` | datetime | ISO 8601 |
-| `experiment_url` | string | URL to Foundry portal |
-| `stripe_invoice_url` | string/null | Invoice URL |
-| `stripe_quote_url` | string/null | Quote URL |
-
-**Status codes:** 200, 401
-
----
-
-### GET /experiments/{experiment_id} — Get experiment
-
-Returns full metadata for a single experiment.
-
-**Path param:** `experiment_id` (uuid)
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Unique identifier |
-| `code` | string | Experiment code |
-| `status` | ExperimentStatus | Current status |
-| `experiment_spec` | ExperimentSpec | Full experiment definition |
-| `results_status` | ResultsStatus | none/partial/all |
-| `created_at` | datetime | ISO 8601 |
-| `experiment_url` | string | Portal URL |
-| `costs` | object | Cost breakdown |
-
-**Status codes:** 200, 401, 404, 500
-
----
-
-### PATCH /experiments/{experiment_id} — Update experiment
-
-Modify an existing experiment. Draft experiments allow full edits; after quote generation, only `name`, `description`, and `webhook_url` are editable.
-
-**Path param:** `experiment_id` (uuid)
-
-**Request body:** All fields optional — only provided fields are updated.
-
-**Status codes:** 200, 400, 401, 404, 409
-
----
-
-### POST /experiments/{experiment_id}/submit — Submit experiment
-
-Submits a draft experiment for review. Advances from `Draft` to `WaitingForConfirmation`.
-
-**Path param:** `experiment_id` (uuid)
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `experiment_id` | string | Experiment UUID |
-
-**Status codes:** 200, 401, 403, 404, 409, 500
-
----
-
-### POST /experiments/cost-estimate — Estimate cost
-
-Calculates cost without creating an experiment.
-
-**Request body:**
-```json
-{
-  "experiment_spec": {
-    "experiment_type": "screening",
-    "method": "bli",
-    "target_id": "...",
-    "sequences": {"seq1": "MKTL..."},
-    "n_replicates": 3
-  }
-}
-```
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `pricing_version` | string | e.g., "v1_2026-01-20" |
-| `assay` | object | Per-type costs with base and replicate pricing |
-| `materials` | object | Target material costs (binding experiments) |
-| `total_cents` | integer | Sum in USD cents |
-
-All prices exclude VAT; taxes calculated at invoicing. Targets without self-service pricing return incomplete estimates.
-
-**Status codes:** 200, 400, 401
-
----
-
-### GET /experiments/{experiment_id}/quote — Get quote
-
-Returns quote metadata (totals, currency, status, expiration).
-
-**Path param:** `experiment_id` (uuid)
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `experiment_id` | string | Experiment UUID |
-| `stripe_quote_url` | string | Stripe quote URL |
-| `amount_total` | int64 | Total in smallest currency unit |
-| `amount_subtotal` | int64 | Subtotal |
-| `currency` | string | ISO currency code (e.g., "usd") |
-| `status` | string | Quote status |
-| `expires_at` | datetime/null | Expiration time |
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
-
-### GET /experiments/{experiment_id}/quote/pdf — Get quote PDF
-
-Returns the quote as a PDF file (`application/pdf`).
-
-**Path param:** `experiment_id` (uuid)
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
-
-### POST /experiments/{experiment_id}/quote/confirm — Accept quote (by experiment)
-
-Accepts Stripe quote, creates draft invoice, transitions to `WaitingForMaterials`.
-
-**Path param:** `experiment_id` (uuid)
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `purchase_order_number` | string/null | No | PO number for your records |
-| `notes` | string/null | No | Reserved |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Quote ID |
-| `status` | StripeQuoteStatus | New status |
-| `hosted_invoice_url` | string/null | Stripe payment URL |
-| `invoice_id` | string/null | Generated invoice ID |
-
-**Status codes:** 200, 401, 403, 404, 409
-
----
-
-### GET /experiments/{experiment_id}/invoice — Get invoice
-
-Returns invoice metadata including hosted payment URL.
-
-**Path param:** `experiment_id` (uuid)
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
-
-### GET /experiments/{experiment_id}/results — List results for experiment
-
-Returns all analysis results for a specific experiment.
-
-**Path param:** `experiment_id` (uuid)
-**Query params:** `limit`, `offset`, `filter`, `sort`
-
-**Status codes:** 200, 400, 401, 403, 404
-
----
-
-### GET /experiments/{experiment_id}/sequences — List sequences for experiment
-
-Returns all sequences for a specific experiment, sorted newest first.
-
-**Path param:** `experiment_id` (uuid)
-**Query params:** `limit`, `offset`, `search`, `sort`
-
-**Status codes:** 200, 400, 401, 403, 404
-
----
-
-### GET /experiments/{experiment_id}/updates — List experiment updates
-
-Returns updates for one experiment, oldest first. Types: `status_change`, `progress`, `error`.
-
-**Path param:** `experiment_id` (uuid)
-**Query params:** `limit`, `offset`, `filter`, `sort`
-
-Filter example: `filter=eq(type,status_change)`
-
----
-
-## Sequences
-
-### GET /sequences — List sequences
-
-Returns sequences from all experiments, sorted newest first.
-
-**Query params:** `limit`, `offset`, `search`, `sort`, `experiment_id` (filter by experiment UUID)
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Unique identifier |
-| `name` | string/null | Optional name |
-| `aa_preview` | string/null | Truncated preview (first 50 chars) |
-| `length` | int32 | Sequence length in amino acids |
-| `experiment_id` | uuid | Parent experiment |
-| `experiment_code` | string | Human-readable experiment code |
-| `is_control` | boolean | Whether this is a control |
-| `created_at` | datetime | Creation timestamp |
-
-**Status codes:** 200, 401
-
----
-
-### GET /sequences/{sequence_id} — Get sequence
-
-Returns full details including complete amino acid string.
-
-**Path param:** `sequence_id` (uuid)
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Unique identifier |
-| `aa_string` | string/null | Complete amino acid sequence |
-| `length` | int32 | Length in amino acids |
-| `is_control` | boolean | Control flag |
-| `metadata` | object | Sequence-level annotations |
-| `experiment` | object | Parent experiment reference |
-| `created_at` | datetime | Creation timestamp |
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
-
-### POST /sequences — Add sequences to experiment
-
-Appends sequences to a **Draft** experiment identified by its human-readable code.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `experiment_code` | string | Yes | e.g., "PROJ-001" |
-| `sequences` | array | Yes | Array of sequence entries |
-
-**Each sequence entry:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `aa_string` | string | Yes | Amino acid sequence |
-| `name` | string | No | Human-readable name |
-| `control` | boolean | No | Whether this is a control |
-| `metadata` | object | No | Annotations |
-
-**Response (201):**
-
-| Field | Type | Description |
-|---|---|---|
-| `added_count` | int32 | Number of sequences added |
-| `experiment_id` | string | Experiment UUID |
-| `experiment_code` | string | Experiment code |
-| `sequence_ids` | array | IDs of added sequences |
-
-**Status codes:** 201, 400, 404, 409 (experiment not in Draft), 500
-
----
-
-## Results
-
-### GET /results — List results
-
-Lists completed analysis results, sorted newest first. Results appear when `results_status` reaches `partial` or `all`.
-
-**Query params:** `limit`, `offset`, `filter`, `search`, `sort`
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Result identifier |
-| `title` | string | Human-readable title |
-| `experiment_id` | uuid | Associated experiment |
-| `result_type` | string | e.g., "affinity", "thermostability" |
-| `summary` | array | Key results (type-specific, see below) |
-| `metadata` | object | Extended metadata (e.g., instrument info) |
-| `data_package_url` | string/null | Download URL for raw data package |
-| `created_at` | datetime | When result was generated |
-
-**AffinityResult summary fields:** `kd_mean`, `kd_std`, `kon_mean`, `kon_log_std`, `koff_mean`, `koff_std`, `replicates` (array with per-replicate `kd`, `kon`, `koff`, `binding_strength`, `kon_method`, `koff_method`, `replicate` index), `sequence`, `target_id`
-
-**ThermostabilityResult summary fields:** Tm values and melting curves
-
-**Status codes:** 200, 401
-
----
-
-### GET /results/{result_id} — Get result
-
-Returns detailed result data including full summary array.
-
-**Path param:** `result_id` (uuid)
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
+### Create and estimate
+
+`POST /experiments` requires `name` and `experiment_spec`. Optional fields:
+
+| Field | Contract |
+|---|---|
+| `skip_draft` | Boolean; starts processing at `waiting_for_confirmation` instead of `draft` |
+| `auto_accept_quote` | Boolean, default false; implies `skip_draft`, requires full pricing |
+| `webhook_url` | HTTPS notification URL |
+| `webhook_secret` | Write-only HMAC secret, minimum 32 characters; inherited if omitted |
+| `payment` | Optional `{method: ...}` selector; must agree with `X-Adaptyv-Payment-Method` when both are supplied |
+
+The ordinary 201 response has `experiment_id`, optional `error`,
+`stripe_invoice_id`, and `stripe_hosted_invoice_url`. It does not promise an
+experiment URL, code, or status; fetch the experiment for those. With
+`auto_accept_quote` and a machine payment method the response is instead
+200 `ConfirmQuoteResponse`. Automatic quote acceptance does not settle a
+machine payment or emit the payment challenge; follow the returned pointer.
+
+`ExperimentSpec` accepts:
+
+| Field | Contract |
+|---|---|
+| `experiment_type` | `affinity`, `screening`, `thermostability`, `fluorescence`, `expression`, `epitope_binning`, `enzyme_activity` |
+| `method` | Required for affinity/screening (`bli` or `spr`); rejected otherwise |
+| `target_id` | Catalog UUID required for affinity, screening, epitope binning; rejected otherwise |
+| `sequences` | Name-to-sequence map, at least one entry; epitope binning requires 4–28 entries in multiples of 4 |
+| `n_replicates` | Default 3, range 1–5 per create-operation description; rejected for epitope binning |
+| `antigen_concentrations` | Affinity-only, nM; defaults to `[1000.0, 316.2, 100.0, 31.6, 0.0]` |
+| `parameters` | Optional settings object; readback adds `experiment_type` if absent |
+
+Strings or `{aa_string, control?, metadata?}` are accepted as sequence values.
+Use only full amino acid strings and colon-separated chains. Creation metadata
+uses the strict `SequenceMetadata` schema: `type`, `VH`, `VL`, `linker`,
+`framework_regions`, `tag_location`, `chain_order`; unknown fields are rejected.
+`ScFv` requires `VH`/`VL`, `FAB` requires `framework_regions.ch`/`.cl`.
+`SingleChain` and `IgG` need no additional format fields. REST documentation also
+allows lowercase aliases `sc_fv`, `fab`, `single_chain`, `igg`; SDK enums use
+`ScFv`, `FAB`, `SingleChain`, `IgG`. `scfv` is not a documented alias.
+
+`POST /experiments/cost-estimate` takes exactly the wrapper
+`{"experiment_spec": spec}`. Its response has optional `breakdown`, `incomplete`,
+and `warnings`; `pricing_version`, `assay`, `materials`, `total_cents` live inside
+`breakdown`, not at the top level. `materials` may be absent for non-binding
+assays. An incomplete response carries assay cost plus
+`materials_unavailable` and cannot be treated as a total. Estimates are USD
+cents excluding VAT; inspect the actual quote before committing to a price.
+
+### Read, edit, submit
+
+`GET /experiments` returns identifiers, code, nullable name/type, timestamps,
+wire status, results availability, portal URL and optional billing references.
+`GET /experiments/{experiment_id}` adds `experiment_spec` and optional `costs`.
+Its specification is `ExperimentSpecInfo`: the resolved target is
+`experiment_spec.target`, with `target_catalog_id` and name, rather than the
+creation field `target_id`. `stripe_quote_id` is usable with `/quotes/{quote_id}`.
+The invoice reference on list/detail is not a reliable substitute for the
+experiment invoice endpoint.
+
+`PATCH /experiments/{experiment_id}` accepts optional `name`, `description`,
+`target_id`, `antigen_concentrations`, `n_replicates`, `parameters`, `sequences`,
+`webhook_url`. Most edits are restricted to `draft` or `in_review`; later edits
+return 409. `webhook_url` can change at any status. Omitted `target_id` preserves
+it; explicit JSON null clears it. `sequences` is a **replacement array** of
+`SequenceEntry`, not the create-time map. The SDK uses `exclude_none` and cannot
+express clearing a target with null; use REST for that operation.
+
+`POST /experiments/{experiment_id}/submit` needs no body and returns
+`experiment_id`, `previous_status`, `status`, `confirmed_at`, and optional billing
+references. Its name `confirmed_at` does not imply that the quote is paid.
+A 409 uses `SubmitConflictError` with conflict details; inspect the current state
+before retrying.
+
+Wire statuses: `draft`, `waiting_for_confirmation`, `quote_sent`,
+`waiting_for_materials`, `in_queue`, `in_production`, `data_analysis`, `in_review`,
+`done`, `canceled`. Results availability is `none`, `partial`, or `all`.
+
+## Quotes and invoices
+
+`GET /experiments/{experiment_id}/quote` returns `experiment_id`,
+`stripe_quote_url`, `amount_total`, `amount_subtotal`, `currency`, `status`, and
+optional `expires_at`/`updated_at`. Quote generation is asynchronous: 404 after
+submission can mean pending, while a draft has no forthcoming quote. Poll with
+a timeout or wait for `stripe_quote_id` on the experiment. The quote PDF endpoint
+returns PDF bytes directly.
+
+`GET /quotes` provides summary rows with ID, quote number, organization,
+`amount_cents`, currency, status, validity/creation times, and Stripe quote URL.
+`GET /quotes/{quote_id}` uses the Stripe quote ID (`qt_...`) and returns itemized
+`line_items`, `subtotal_cents`, `tax_cents`, `total_cents`, organization name,
+notes, terms, and quote URL.
+
+Both quote-confirm endpoints require a JSON body; send `{}` when not supplying
+`purchase_order_number` or reserved `notes`. Confirmation is **non-settling**:
+it accepts the quote, prepares an open unpaid invoice, and returns
+`id`, `status`, optional `invoice_id`, `hosted_invoice_url`, and `payment`.
+The last field directs the client to hosted checkout or the machine-pay route.
+`POST /quotes/{quote_id}/reject` takes required `reason` (`price`, `scope`,
+`timeline`, `budget`, `other`) and optional `feedback`; it cancels the quote and
+returns the experiment to `draft`.
+
+`GET /experiments/{experiment_id}/invoice` returns `experiment_id`, optional
+`stripe_invoice_url` and `status`. A 404 before quote confirmation means no
+invoice exists yet. Organization invoice listing includes billing history;
+`GET /invoices/{invoice_id}` accepts a Foundry UUID or Stripe `in_...` ID and
+returns `id`, `stripe_invoice_id`, `status`, currency, optional amount,
+experiment/quote links, and hosted URL. The invoice PDF endpoint returns a
+**307 redirect**, not PDF bytes; follow its current Location without forwarding
+the Foundry bearer token to Stripe. A draft invoice has no PDF (404).
+
+`POST /invoices/{invoice_id}/pay` is the settlement endpoint. Its documented
+machine methods are `mpp-spt` and `x402-exact`; use `payment.methods` from quote
+confirmation to discover what the deployment/token allows. The explicit method
+header must match the experiment's selected method (409 on mismatch). Machine
+flows first receive 402 with the challenge in response headers (`WWW-Authenticate`
+or `PAYMENT-REQUIRED`), then repeat with the challenge-specific credential.
+Do not substitute a generic JSON body for that handshake or assume a headerless
+request settles: the ordinary invoice flow only returns current state and its
+hosted URL. Machine-policy tokens have additional headerless discovery behavior;
+read the current operation description before implementing it. On successful
+settlement capture optional `settlement_reference` immediately. Repeats return
+`already_paid: true` without charging again, and do not reproduce that reference.
+
+Payment calls and automatic quote acceptance require the user's authorized
+purchase scope. This skill's examples do not execute payment or laboratory work
+as a verification step.
+
+## Sequences and results
+
+Sequence lists return ID, optional name, `aa_preview` (first 50 characters),
+length, experiment ID/code, control flag and creation time. Fetch
+`GET /sequences/{sequence_id}` for `aa_string`, metadata and parent experiment.
+`POST /sequences` appends only to a draft, with required `experiment_code` and
+`sequences: [{aa_string, name?, control?, metadata?}, ...]`. Its 201 response
+contains `added_count`, `experiment_id`, `experiment_code`, and `sequence_ids`.
+
+Global and experiment-scoped result lists return `ResultInfo`: ID, title,
+experiment ID, result type, timestamp, `summary` array, metadata, and optional
+`data_package_url`. The detail endpoint returns the same complete result shape.
+Fetch every page even after `results_status` is `all`.
+
+Each summary entry has its own `result_type` discriminator. The reviewed schema
+currently describes `affinity` and `thermostability` variants; it does not provide
+separate typed summaries for every supported creation assay.
+
+- Affinity entries include `sequence`, optional resolved `target` (not `target_id`),
+  `binding_strength`, `positive_control`, control-relative `performance`, and
+  `replicates`. KD is molar (M), kon is M^-1 s^-1, koff is s^-1. Aggregates use
+  `kd_mean`/`kd_log_std`, `kon_mean`/`kon_log_std`, `koff_mean`/`koff_log_std`;
+  the old `kd_std`/`koff_std` fields are absent. New optional fields include
+  `kd_app`, `kon_1to1`, `koff_1to1` with confidence intervals, `binding_model`,
+  `fit_quality`, expression/concentration readouts and `rmse_max_signal_pct`.
+  Preserve nulls, model identity, and per-replicate QC; KD means aggregate
+  strong-binding replicates only.
+- Thermostability entries carry `sequence_id`, optional sequence/name,
+  `tm` in degrees Celsius, `onset_pts_for_ratio`, `inflection_pts_for_ratio`,
+  optional `initial_330nm` and `bli_result_id`. These describe nanoDSF readouts;
+  the summary does not promise full melting curves. Use the raw package for
+  underlying data.
 
 ## Targets
 
-### GET /targets — List targets
-
-Lists validated antigens available for experiments.
-
-**Query params:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `limit` | int | Max items (1-100, default 50) |
-| `offset` | int | Skip count |
-| `search` | string | Free-text search on product name |
-| `sort` | string | Sort expression |
-| `selfservice_only` | boolean | Only targets with self-service pricing |
-| `show_conjugated` | boolean | Include conjugated targets (default: unconjugated only) |
-| `detailed` | boolean | Populate `details` block with enrichment data |
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Target UUID (use as `experiment_spec.target_id`) |
-| `name` | string | Target name |
-| `vendor_name` | string | Vendor name |
-| `catalog_number` | string | Vendor catalog/SKU number |
-| `url` | string | Target URL |
-| `pricing` | object/null | Self-service pricing (null = custom quote required) |
-| `details` | object/null | Enrichment data (gene names, structures, sequence, bioactivity) |
-
-**Status codes:** 200, 401
-
----
-
-### GET /targets/{target_id} — Get target
-
-Returns catalog record for a single target.
-
-**Path param:** `target_id` (uuid)
-
-**Status codes:** 200, 400, 401, 403, 404, 500
-
----
-
-### POST /targets/request-custom — Submit custom target request
-
-Submit a new custom target for staff review. At least one of `sequence` or `pdb_id` must be provided.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | Yes | Display name |
-| `product_id` | string | Yes | Must be unique within organization |
-| `sequence` | string/null | At least one | Amino acid sequence |
-| `pdb_id` | string/null | At least one | PDB identifier |
-| `pdb_file` | string/null | No | PDB file content |
-| `molecular_weight` | number/null | No | Weight in kDa |
-| `note` | string/null | No | Additional notes |
-
-**Status codes:** 201, 400, 401, 403, 500
-
----
-
-### GET /targets/request-custom — List custom target requests
-
-Returns custom target requests for your organization, sorted newest first.
-
-**Query params:** `limit`, `offset`, `filter`, `sort`
-
-Filter example: `filter=eq(status,pending_review)`
-
----
-
-### GET /targets/request-custom/{request_id} — Get custom target request
-
-**Path param:** `request_id` (uuid)
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | uuid | Request identifier |
-| `name` | string | Target name |
-| `product_id` | string | Your product ID |
-| `status` | string | e.g., "pending_review" |
-| `material_id` | string/null | Linked catalog ID if approved |
-| `molecular_weight` | number/null | Weight in kDa |
-| `note` | string/null | User notes |
-| `created_at` | datetime | Created |
-| `updated_at` | datetime | Last updated |
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
-
-## Quotes
-
-### GET /quotes — List quotes
-
-Returns all quotes for caller's organization.
-
-**Query params:** `limit`, `offset`, `filter`, `sort`
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Quote identifier |
-| `quote_number` | string | Human-readable quote number |
-| `organization_id` | uuid | Organization |
-| `amount_cents` | int | Amount in cents |
-| `currency` | string | ISO 4217 code |
-| `status` | StripeQuoteStatus | Quote status |
-| `valid_until` | datetime | Expiration |
-| `created_at` | datetime | Creation timestamp |
-
----
-
-### GET /quotes/{quote_id} — Get quote
-
-Returns full quote document with itemized pricing.
-
-**Path param:** `quote_id` (string, e.g., "qt_1Abc2DefGhi")
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Quote identifier |
-| `quote_number` | string | Reference number |
-| `organization_id` | uuid | Organization |
-| `organization_name` | string | Organization name |
-| `line_items` | array | Itemized pricing |
-| `subtotal_cents` | int | Subtotal in cents |
-| `tax_cents` | int | Tax in cents |
-| `total_cents` | int | Total in cents |
-| `currency` | string | ISO 4217 |
-| `status` | StripeQuoteStatus | Current status |
-| `valid_until` | datetime | Expiration |
-| `notes` | string | Special pricing info |
-| `terms_and_conditions` | string | Terms |
-| `stripe_quote_url` | string | Stripe URL |
-| `created_at` | datetime | Created |
-
-**Status codes:** 200, 401, 403, 404, 500
-
----
-
-### POST /quotes/{quote_id}/confirm — Accept quote
-
-Finalizes quote, creates draft invoice, advances experiment to `WaitingForMaterials`.
-
-**Path param:** `quote_id` (string)
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `purchase_order_number` | string/null | No | PO number |
-| `notes` | string/null | No | Reserved |
-
-**Response:** `id`, `status`, `hosted_invoice_url`, `invoice_id`
-
-**Status codes:** 200, 403, 404, 409, 500
-
----
-
-### POST /quotes/{quote_id}/reject — Reject quote
-
-Cancels quote; linked experiment reverts to `Draft`.
-
-**Path param:** `quote_id` (string)
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `reason` | QuoteRejectionReason | Yes | Primary reason |
-| `feedback` | string/null | No | Additional feedback |
-
-**Response:** `id`, `status` (canceled)
-
-**Status codes:** 200, 403, 404, 409, 500
-
----
-
-## Tokens
-
-### GET /tokens — List tokens
-
-Returns all tokens (root and attenuated) the caller owns.
-
-**Query params:** `limit`, `offset`
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Token identifier |
-| `name` | string | Human-readable label |
-| `kind` | string | "root" or "attenuated" |
-| `created_at` | datetime | Created |
-| `expires_at` | datetime/null | Expiration (null = no expiry) |
-| `revoked_at` | datetime/null | Revocation timestamp |
-| `parent_token_id` | string/null | Parent (null for root) |
-| `root_token_id` | string/null | Root of derivation tree |
-| `attenuation_spec` | object/null | Restrictions (null for root) |
-
----
-
-### POST /tokens/attenuate — Attenuate token
-
-Creates a restricted version of an existing token using Biscuit cryptographic attenuation.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `token` | string | Yes | Existing token (`abs0_{slug}{biscuit_base64}`) |
-| `attenuation` | AttenuationSpec | Yes | Restrictions to apply |
-| `name` | string | Yes | Human-readable label |
-| `attenuated_parent_token_id` | uuid/null | No | Parent ID for chained attenuation |
-
-**Restriction types:** Organization, Resource (experiments/results), Action (read/create/update), Expiry
-
-**Response (201):** `id` (database ID), `token` (new attenuated token string)
-
-**Status codes:** 201, 400, 401, 403
-
----
-
-### POST /tokens/revoke — Revoke token and lineage
-
-Revokes the calling token's root and all attenuated descendants. Idempotent.
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `token_id` | string | Root token ID revoked |
-| `revoked_at` | datetime | Revocation timestamp |
-| `children_revoked` | int64 | Child tokens newly revoked |
-
-**Status codes:** 200, 403, 404
-
----
-
-## Updates
-
-### GET /updates — List updates
-
-Returns the experiment update feed (newest first): status changes, progress, errors.
-
-**Query params:** `limit`, `offset`, `filter`, `sort`
-
-**Filter examples:**
-- `filter=eq(experiment_id,<uuid>)`
-- `filter=in(experiment_id,uuid1,uuid2)`
-- `filter=eq(type,status_change)`
-
-**Response item:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Update identifier |
-| `experiment_id` | uuid | Associated experiment |
-| `experiment_code` | string | Human-readable code |
-| `name` | string | Update description |
-| `timestamp` | datetime | When the update occurred |
-
----
-
-## Feedback
-
-### POST /feedback/submit — Submit feedback
-
-For bug reports, feature requests, or general feedback.
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `request_uuid` | uuid | Yes | UUID from the problematic API request |
-| `feedback_type` | FeedbackType | Yes | `feature_request`, `feedback`, or `bug_report` |
-| `title` | string/null | No | Short title |
-| `json_body` | object/null | At least one | Structured error details |
-| `human_note` | string/null | At least one | Free-form description |
-
-**Response (201):** `reference` (feedback reference), `message` (confirmation)
-
-**Status codes:** 201, 400, 401, 500
+Catalog entries expose `id`, `name`, `vendor_name`, `catalog_number`, `url`,
+optional `uniprot_id`, `pricing`, and `details`. Details are returned on detail
+reads or with `detailed=true` on listing. `pricing.type` distinguishes
+`per_sequence` from `per_broken_lot`; missing pricing needs a custom quote.
+`selfservice_only=true` restricts to priced targets; `show_conjugated=true`
+includes conjugated entries otherwise excluded. Verify the exact construct and
+conjugation before using its catalog ID.
+
+A custom-target request requires `name`, unique-in-organization `product_id`,
+and at least one of `sequence` or `pdb_id`. Optional fields are `pdb_file`,
+`molecular_weight` (kDa), `note`, `product_url`, `vendor`. Creation returns its
+request ID/status; listing gives summary rows. Detail includes submitted fields,
+status, timestamps and optional `material_id` after approval. Submission for
+review is not proof that a target is immediately orderable.
+
+## Tokens, webhooks, updates and feedback
+
+Token listing returns flat lineage records (`id`, `name`, `kind`, timestamps,
+optional `parent_token_id`, `root_token_id`, `token_type`, `attenuation_spec`).
+`POST /tokens/attenuate` requires `token`, `name`, `attenuation`; optional
+`attenuated_parent_token_id` identifies a chained parent. Supported restrictions
+include `read_only`, `non_destructive`, `allowed_actions`, `allowed_resources`,
+`allowed_org_ids`, `expires_at`, `payment_policy`. Actions include `list`, `read`,
+`create`, `update`, `delete`, `issue`, `revoke`, `mint_token`; restrictions
+intersect existing capabilities. Response: `id`, `token` (store securely).
+Revocation takes no body and invalidates the authenticating token's **root and
+all descendants**, returning `token_id`, `revoked_at`, `children_revoked`.
+
+Organization webhook creation requires publicly routable HTTPS `url`; optional
+`secret` is write-only and at least 32 characters, and `headers` adds delivery
+headers. Response/list items contain `id`, `url`, `secret_set`, `headers`,
+`enabled`, timestamps. PATCH supports `url`, `headers`, `enabled`, `secret`;
+explicit null clears a secret. DELETE returns 204. An experiment-specific webhook
+overrides organization delivery. Per-experiment secrets inherit organization then
+deployment defaults when absent; provision a known secret for verifiable delivery.
+See the skill for event signature, deduplication and retry handling.
+
+Update rows contain `id`, `experiment_id`, `experiment_code`, `name`, `timestamp`.
+Filters include `eq(experiment_id,<uuid>)`, `in(experiment_id,uuid1,uuid2)`, and
+`eq(type,status_change)`.
+
+Feedback submission requires `request_uuid` and `feedback_type`
+(`feature_request`, `feedback`, `bug_report`); include at least one of `json_body`
+or `human_note`, and optional `title`. Response: `reference`, `message`.
+Preserve the request ID for debugging; never include tokens in feedback.
+
+## Upstream discrepancies and verification boundary
+
+The deployed schema's operation/component contracts were used over contradictory
+introductory examples: some prose still shows PascalCase statuses, an API base
+ending in `/openapi.json`, unsupported `adaptyv_sdk` imports, or the older filter
+notation. Replicate bounds and some assay-specific requirements appear in the
+create-operation description but are weaker in JSON Schema; JSON validation alone
+is not enough. Sequence metadata prose uses lowercase `vh`/`vl`, while properties
+are `VH`/`VL`; use the properties and SDK serialization shown above.
+
+The payment description documents 402 challenges even though 402 is missing from
+its response map. `auto_accept_quote` prose also describes legacy draft-invoice
+behavior for async payment, while confirm operations specify open unpaid invoices;
+inspect the returned invoice state instead of hardcoding it.
+
+Verified: all listed paths, declared request/response schemas, query parameters,
+SDK signatures/source, public schema retrieval and anonymous liveness. Authenticated
+reads, lab submissions, custom targets, webhook deliveries, billing and payment
+were not exercised. SDK 0.1.0's generated models omit some newer result/target
+fields and its high-level convenience methods have the limitations documented in
+SKILL.md; use raw REST JSON when lossless retrieval is required.

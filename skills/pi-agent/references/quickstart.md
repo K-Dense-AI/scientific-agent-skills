@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/quickstart
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 ## Install and Uninstall
 
 ```bash
@@ -23,7 +25,7 @@ Uninstalling Pi leaves settings, credentials, sessions, and installed packages i
 
 ## Authenticate
 
-Use `/login` in interactive mode for subscription providers; built-in subscription logins include Claude Pro/Max, ChatGPT Plus/Pro (Codex), and GitHub Copilot. API-key providers can be configured by environment variable or stored through `/login` in `~/.pi/agent/auth.json`.
+Use `/login` in interactive mode for subscription providers; built-in logins include OpenAI Sign in with ChatGPT, legacy OpenAI Codex, Claude, GitHub Copilot, Meta, xAI, OpenRouter, and Radius (available methods depend on the provider). API-key providers can be configured by environment variable or stored through `/login` in `~/.pi/agent/auth.json`.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -68,6 +70,6 @@ pi --mode json "List files"
 pi --mode rpc --no-session
 ```
 
-Use `!command` to run shell and send output to the model; `!!command` runs without adding output to model context. Paste text or images with Ctrl+V (Alt+V on Windows), or drag images into supported terminals.
+Use `!command` to run shell and send output to the model; `!!command` runs without adding output to model context. Paste text or images with Ctrl+V (Alt+V on Windows and WSL), or drag images into supported terminals.
 
 Switch models with `/model` or Ctrl+L, cycle thinking level with Shift+Tab, and cycle scoped models with Ctrl+P / Shift+Ctrl+P.

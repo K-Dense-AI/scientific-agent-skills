@@ -1,7 +1,7 @@
 # QuTiP 5.3 Advanced Methods and Package Boundaries
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0`.
+Research and API verification date: **2026-10-01**. Examples target
+`qutip==5.3.1`.
 
 Specialized methods add assumptions and convergence parameters. Use them only
 when the physical model requires them.
@@ -63,7 +63,7 @@ result = smesolve(
     seeds=20260723,
     options={
         "dt": 0.001,
-        "store_measurement": True,
+        "store_measurement": "end",
         "progress_bar": "",
     },
 )
@@ -97,7 +97,7 @@ import numpy as np
 from qutip import basis, nm_mcsolve, sigmam, sigmaz
 
 def rate(t):
-    return 0.1 * np.cos(t)
+    return 0.1 * np.sin(t)
 
 result = nm_mcsolve(
     0.5 * sigmaz(),
@@ -110,6 +110,11 @@ result = nm_mcsolve(
     options={"progress_bar": ""},
 )
 ```
+
+Here the integrated rate is `0.1 * (1 - cos(t)) >= 0`, so the exact
+excited population `exp(-0.1 * (1 - cos(t)))` stays in `[0, 1]` even
+when the instantaneous rate becomes negative. A cosine rate instead would
+produce population above one after pi for this initially excited state.
 
 This method does not make an arbitrary non-Markovian model valid. Verify that
 the time-local generator and influence-martingale construction apply, report
@@ -162,9 +167,12 @@ result = fmmesolve(
 ```
 
 The coupling operators and spectrum callbacks are paired by position. They are
-not ordinary Lindblad channels. Verify weak-coupling, bath, and thermal
+not ordinary Lindblad channels. Spectrum callbacks must accept and return
+NumPy arrays (use `np.where`, not scalar `if w > 0`). Use `FMESolver`
+directly to sweep its `kmax` sideband cutoff and `nT` quadrature count.
+Verify weak-coupling, bath, and thermal
 assumptions. QuTiP 5 result states are in the lab basis by default; the
-`store_floquet_state` option controls additional Floquet-basis storage.
+`store_floquet_states` option controls additional Floquet-basis storage.
 
 Old free-function mode workflows may remain for compatibility, but new work
 should use `FloquetBasis`.
@@ -237,7 +245,9 @@ Record \(\lambda\), cutoff, temperature, and all energies in one consistent
 `result.states` are reduced system states. Set `store_ados=True` only when the
 full auxiliary-density hierarchy is needed; then `result.ado_states` can be
 large. A previous final ADO state may initialize a continuation only when its
-hierarchy is compatible.
+hierarchy is compatible. QuTiP 5.3.1 fixes `final_ado_state` to return
+the hierarchy object; it returns `None` when ADOs were not stored. Do not
+replace the full hierarchy with `final_state` when continuing correlated dynamics.
 
 HEOM can mix supported bosonic and fermionic baths. Fermionic odd parity is a
 special solver construction and must match the initial operator parity.
@@ -291,14 +301,13 @@ Current conversions:
 
 ```python
 from qutip import (
-    choi_to_kraus,
-    choi_to_super,
     kraus_to_super,
     operator_to_vector,
     spre,
     spost,
-    super_to_choi,
-    super_to_kraus,
+    to_choi,
+    to_kraus,
+    to_super,
     vector_to_operator,
 )
 ```
@@ -313,7 +322,7 @@ Official PyPI metadata snapshot:
 
 | Distribution | Latest published | Release date | Maturity | `Requires-Python` | Required distributions |
 |---|---:|---:|---|---|---|
-| `qutip` | 5.3.0 | 2026-05-22 | production/stable | `>=3.11` | NumPy `>=1.23.2`; SciPy `>=1.9.2` except `1.16.0`/`1.17.0`; `packaging` |
+| `qutip` | 5.3.1 | 2026-08-04 | production/stable | `>=3.11` | NumPy `>=1.23.2`; SciPy `>=1.9.2` except `1.16.0`/`1.17.0`; `packaging` |
 | `qutip-qip` | 0.4.2 | 2026-06-23 | production/stable | not declared | NumPy `>=1.16.6`; SciPy `>=1.0`; QuTiP `>=4.6`; `packaging` |
 | `qutip-qtrl` | 0.2.0 | 2026-06-23 | pre-alpha classifier | not declared | NumPy `>=1.19`; SciPy `>=1.0`; QuTiP `>=5.0.1`; `packaging` |
 | `qutip-jax` | 0.1.1 | 2025-05-29 | pre-alpha classifier | not declared | QuTiP `>=5.1.0`; JAX; Diffrax; Equinox |
@@ -357,6 +366,19 @@ from qutip_qtrl import pulseoptim
 ```
 
 It replaces the old `qutip.control` import. It is **not** a trajectory viewer.
+For unitary control use `pulseoptim.optimize_pulse_unitary(H_d, H_c, U_0,
+U_targ, num_tslots=..., evo_time=...)`. The Hamiltonian per slot is
+`H_d + sum(amplitude[j] * H_c[j])`; no implicit `2*pi` conversion is added.
+With `H_c=[sigmax()/2]`, a constant angular amplitude `omega` rotates by
+`omega * evo_time`. Recompute the ordered product of slot propagators from
+`result.final_amps` and `np.diff(result.time)`, and compare it with
+`result.evo_full_final`. The equal-slot shortcut constructs float32 durations
+in 0.2.0, so replaying a fresh `evo_time / num_tslots` can differ. Supply an
+explicit float64 `tau` array when that precision matters. A PSU
+objective ignores global phase. Specify `max_iter`, `max_wall_time`, amplitude
+bounds and an intentional initial pulse; `seeds=` is not an optimizer argument.
+Random pulse initialization uses NumPy RNG state in this release.
+
 Optimization success does not establish robustness: report bounds, objective,
 gradient/termination status, seeds, discretization, and validation under model
 uncertainty.
@@ -369,8 +391,20 @@ as not ready for production use.
 Purpose: a JAX linear-algebra data backend for GPU execution and automatic
 differentiation. It depends on QuTiP 5.1 or newer plus JAX, Diffrax, and Equinox.
 
-Validate dtype, device placement, JIT/gradient support for each operation, and
-results against the built-in QuTiP data backend.
+Importing `qutip_jax` registers `Qobj.to("jax")`, `"jaxdia"`, and the
+`"diffrax"` integrator. Select those explicitly; installing it alone does not
+move an ordinary solver to GPU. Avoid process-wide `set_as_default()` in
+shared applications. Diffrax controls tolerances through a
+`diffrax.PIDController(atol=..., rtol=...)` passed as
+`options["stepsize_controller"]`, rather than ordinary solver `atol`/`rtol`.
+
+CPU smoke tests used JAX/JAXlib 0.11.2, Diffrax 0.7.2 and Equinox 0.13.8.
+That is a tested snapshot, not compatibility with every future release or
+with another package's JAX pin. Check `jax_enable_x64`, actual device, JIT and
+gradients for the required operations against the native backend. GPU,
+MPI, and large-system scaling were not tested. Diffrax can emit its upstream
+complex-dtype warning; a small CPU agreement test does not establish every
+complex solve or derivative as correct.
 
 ### qutip-cupy
 
@@ -399,15 +433,20 @@ it to this pinned skill snapshot.
 - QuTiP 5.3's `matrix_form` option for `mesolve` and new Krylov density-matrix
   support are performance choices that require output equivalence tests.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [Bloch-Redfield guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-bloch-redfield.html)
 - [Stochastic solver guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-stochastic.html)
 - [Floquet API](https://qutip.readthedocs.io/en/stable/apidoc/solver.html#floquet-states-and-floquet-markov-master-equation)
 - [HEOM API](https://qutip.readthedocs.io/en/stable/apidoc/heom.html)
 - [PIQS API](https://qutip.readthedocs.io/en/stable/apidoc/piqs.html)
-- [QuTiP 5.3.0 release](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [qutip-qip 0.4.2](https://pypi.org/project/qutip-qip/)
+- [QIP circuit and device API](https://qutip-qip.readthedocs.io/en/stable/apidoc/qutip_qip.circuit.html)
+- [QTRL 0.2.0 pulse API source](https://github.com/qutip/qutip-qtrl/blob/v0.2.0/src/qutip_qtrl/pulseoptim.py)
+- [QTRL 0.2.0 slot construction](https://github.com/qutip/qutip-qtrl/blob/v0.2.0/src/qutip_qtrl/dynamics.py)
+- [JAX solver guide](https://qutip-jax.readthedocs.io/en/latest/solver.html)
+- [JAX 0.1.1 integrator source](https://github.com/qutip/qutip-jax/blob/v0.1.1/src/qutip_jax/ode.py)
 - [qutip-qtrl 0.2.0](https://pypi.org/project/qutip-qtrl/)
 - [qutip-jax 0.1.1](https://pypi.org/project/qutip-jax/)
 - [official qutip-cupy repository](https://github.com/qutip/qutip-cupy)

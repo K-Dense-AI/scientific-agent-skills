@@ -218,7 +218,11 @@ def main(argv: list[str] | None = None) -> int:
         emit_json(report, pretty=not args.compact)
         return 1
     emit_json(report, pretty=not args.compact)
-    return 0
+    # A requested integrity check must fail the CLI when bytes do not match.
+    return 1 if (
+        report["expected_sha256_matches"] is False
+        or report["metadata_sha256_matches"] is False
+    ) else 0
 
 
 if __name__ == "__main__":

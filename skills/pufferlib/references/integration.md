@@ -1,17 +1,18 @@
 # Integration, Security, and Migration Guide
 
-Research snapshot: **2026-07-23**.
+Review: **2026-10-01**. Native 5.0 guidance is in [native-5.md](native-5.md);
+3.0 and the pinned 4.0 snapshot below are historical profiles.
 
 ## Compatibility matrix
 
-| Need | Published `pufferlib==3.0.0` | Current `4.0` source |
+| Need | Published `pufferlib==3.0.0` | Historical `4.0` source |
 |---|---|---|
-| Gymnasium instance adaptation | `pufferlib.emulation.GymnasiumPufferEnv` | Removed from current source |
-| PettingZoo Parallel adaptation | `pufferlib.emulation.PettingZooPufferEnv` | Removed from current source |
-| Python vector backends | `pufferlib.vector` | Removed from current source |
-| Native Python `PufferEnv` | Supported | Replaced by current C/Ocean interface |
+| Gymnasium instance adaptation | `pufferlib.emulation.GymnasiumPufferEnv` | Removed from reviewed 4.0 source |
+| PettingZoo Parallel adaptation | `pufferlib.emulation.PettingZooPufferEnv` | Removed from reviewed 4.0 source |
+| Python vector backends | `pufferlib.vector` | Removed from reviewed 4.0 source |
+| Native Python `PufferEnv` | Supported | Replaced by historical C/Ocean interface |
 | Trainer | `pufferlib.pufferl.PuffeRL` | Native backend or `pufferlib.torch_pufferl.PuffeRL` |
-| External logging | W&B and Neptune | W&B in current CLI |
+| External logging | W&B; Neptune historical/shut down | W&B in historical CLI |
 | Primary config | merged INI sections | different INI schema |
 | Checkpoints | Torch state dict plus trainer state | native `.bin`; Torch fallback state dict |
 
@@ -28,9 +29,9 @@ import pufferlib.emulation
 import pufferlib.vector
 
 
-def make_env():
+def make_env(buf=None, seed=0):
     raw = gymnasium.make("CartPole-v1")
-    return pufferlib.emulation.GymnasiumPufferEnv(raw)
+    return pufferlib.emulation.GymnasiumPufferEnv(raw, buf=buf, seed=seed)
 
 
 vecenv = pufferlib.vector.make(
@@ -41,15 +42,17 @@ vecenv = pufferlib.vector.make(
 )
 try:
     observations, infos = vecenv.reset(seed=42)
+    vecenv.action_space.seed(43)
     actions = vecenv.action_space.sample()
     observations, rewards, terminals, truncations, infos = vecenv.step(actions)
 finally:
     vecenv.close()
 ```
 
-This example is an API pattern, not authorization to install or execute
-`CartPole-v1` or another plug-in. Review the exact environment and dependencies
-first.
+This source-reviewed pattern is illustrative, not a native PufferLib runtime
+test. The vectorizer injects `buf` and `seed` into creators; a zero-argument
+factory fails. Use Gymnasium 0.29.1/NumPy <2 with the published package, not
+the current Gymnasium 1.3 vector API.
 
 ### PettingZoo
 
@@ -97,8 +100,8 @@ This is a redesign, not a drop-in upgrade:
 2. Inventory use of `emulation`, `vector`, `PufferEnv`, third-party environments,
    policy wrappers, INI keys, logger flags, and Torch checkpoints.
 3. Decide whether the application should stay on published 3.0.0 or port to a
-   native 4.0 C environment. The current docs say the Python/third-party layer
-   was removed from 4.0.
+   historical 4.0 C environment. The pinned 4.0 package tree has no Python
+   emulation/vector modules. For a new native port, use the separate 5.0 guide.
 4. Port environment logic to the reviewed Squared/Target C binding contract.
 5. Recreate configuration using 4.0 `[vec]`, `[policy]`, `[torch]`, and `[train]`
    keys. Do not mechanically rename old keys.
@@ -109,7 +112,7 @@ This is a redesign, not a drop-in upgrade:
 8. Re-run contract, same-seed trace, throughput, and held-out learning
    baselines. Attribute behavior changes; do not compare headline SPS alone.
 
-The default branch contains some stale 3.0-style examples even though the
+The historical 4.0 snapshot contains some stale 3.0-style examples even though the
 corresponding modules are absent. Prefer current implementation and docs over
 those copied examples.
 
@@ -137,7 +140,10 @@ Never download ROM sets or auto-accept a license on the user's behalf.
 ## Logging integration
 
 External tracking is disabled by default. The stable logger implementations can
-log the full argument mapping and can upload model artifacts. Therefore:
+log the full argument mapping and upload model artifacts at close. The PyPI
+3.0.0 sdist has no CLI opt-out for that upload; use local logging or a reviewed
+custom logger for metrics-only tracking. Neptune hosted service is retired
+(2026-03-05); its token/integration names below are historical. Therefore:
 
 - sanitize arguments before logger construction;
 - keep `WANDB_API_KEY` and `NEPTUNE_API_TOKEN` only in an approved environment
@@ -180,10 +186,10 @@ Only then consider GPU training, external logging, or larger parallelism.
   — stable vector API; accessed 2026-07-23.
 - [PufferLib 3.0 trainer source](https://github.com/PufferAI/PufferLib/blob/3.0/pufferlib/pufferl.py)
   — stable logger/checkpoint behavior; accessed 2026-07-23.
-- [PufferLib 4.0 package tree](https://github.com/PufferAI/PufferLib/tree/4.0/pufferlib)
-  — current modules; accessed 2026-07-23.
-- [PufferLib 4.0 docs](https://puffer.ai/docs.html) — current architecture and
-  removal note; accessed 2026-07-23.
+- [PufferLib 4.0 package tree](https://github.com/PufferAI/PufferLib/tree/25647630e1b15330bb3153a5a0d3ff8d234c3acf/pufferlib)
+  — historical modules; accessed 2026-07-23.
+- [PufferLib live 5.0 docs](https://puffer.ai/docs.html) — current native architecture;
+  checked 2026-10-01. Historical 4.0 module removal is verified from pinned source.
 - [PufferLib releases](https://github.com/PufferAI/PufferLib/releases) —
   checked for source releases on 2026-07-23.
 - [Gymnasium Env API](https://gymnasium.farama.org/api/env/) — current

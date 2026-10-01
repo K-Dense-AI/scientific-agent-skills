@@ -1,383 +1,129 @@
-# LaminDB Core Concepts
+# Core concepts and lineage
 
-This document covers the fundamental concepts and building blocks of LaminDB: Artifacts, Records, Runs, Transforms, Features, and data lineage tracking.
+Targets LaminDB 2.10.0. These examples assume an initialized instance and imports
+`import lamindb as ln` and `import pandas as pd`. User file paths and pre-existing
+keys below are illustrative; the equivalent local workflows have regression tests.
 
-## Artifacts
+## Register and retrieve content
 
-Artifacts represent datasets in various formats (DataFrames, AnnData, SpatialData, Parquet, Zarr, etc.). They serve as the primary data objects in LaminDB.
-
-### Creating and Saving Artifacts
-
-**From file:**
 ```python
-import lamindb as ln
-
-# Save a file as artifact
-ln.Artifact("sample.fasta", key="sample.fasta").save()
-
-# With description
-artifact = ln.Artifact(
-    "data/analysis.h5ad",
-    key="experiments/scrna_batch1.h5ad",
-    description="Single-cell RNA-seq batch 1"
+artifact = ln.Artifact("sample.fasta", key="reference/sample.fasta").save()
+frame = ln.Artifact.from_dataframe(
+    pd.DataFrame({"count": [1, 2]}), key="experiments/counts.parquet"
 ).save()
+# For a user-provided AnnData object:
+# annotated = ln.Artifact.from_anndata(adata, key="scrna/batch.h5ad").save()
+loaded = frame.load()
+local_path = frame.cache()
 ```
 
-**From DataFrame:**
-```python
-import pandas as pd
+`Artifact` records carry `uid`, `key`, `suffix`, `size`, `hash`, `created_by`,
+`run`, and schema/provenance links. `describe()` displays metadata;
+`view_lineage()` renders lineage and needs Graphviz's system executable in
+addition to its Python package. Check whether a run exists before accessing it.
 
-df = pd.read_csv("data.csv")
-artifact = ln.Artifact.from_dataframe(
-    df,
-    key="datasets/processed_data.parquet",
-    description="Processed experimental data"
+## Revisions
+
+```python
+changed = loaded.assign(count=[3, 4])
+new = ln.Artifact.from_dataframe(
+    changed,
+    key="experiments/counts.parquet",
+    revises=frame,
+    version_tag="2",
 ).save()
+latest = ln.Artifact.get(key="experiments/counts.parquet")
+versions = new.versions.to_dataframe(limit=None)
+exact_revision = ln.Artifact.get(frame.uid)
 ```
 
-**From AnnData:**
-```python
-import anndata as ad
+A key is a logical name, whereas a full UID identifies a revision. `get(key=...)`
+preferentially selects a latest version; `.filter(key=...)` can include several
+revisions. Identical content can be deduplicated; re-saving is not a guarantee
+of a new revision. Use `version_tag`, not the retired `version` field, for labels.
+Overwrite-enabled storage formats have additional old-content access restrictions;
+review them before assuming all historical bytes remain accessible.
 
-adata = ad.read_h5ad("data.h5ad")
-artifact = ln.Artifact.from_anndata(
-    adata,
-    key="scrna/experiment1.h5ad",
-    description="scRNA-seq data with QC"
-).save()
-```
-
-### Retrieving Artifacts
-
-```python
-# By key
-artifact = ln.Artifact.get(key="sample.fasta")
-
-# By UID
-artifact = ln.Artifact.get("aRt1Fact0uid000")
-
-# By filter
-artifact = ln.Artifact.filter(suffix=".h5ad").first()
-```
-
-### Accessing Artifact Content
-
-```python
-# Get cached local path
-local_path = artifact.cache()
-
-# Load into memory
-data = artifact.load()  # Returns DataFrame, AnnData, etc.
-
-# Streaming access (for large files)
-with artifact.open() as f:
-    # Read incrementally
-    chunk = f.read(1000)
-```
-
-### Artifact Metadata
-
-```python
-# View all metadata
-artifact.describe()
-
-# Access specific metadata
-artifact.size          # File size in bytes
-artifact.suffix        # File extension
-artifact.created_at    # Timestamp
-artifact.created_by    # User who created it
-artifact.run          # Associated run
-artifact.transform    # Associated transform
-artifact.version      # Version string
-```
-
-## Records
-
-Records represent experimental entities: samples, perturbations, instruments, cell lines, and any other metadata entities. They support hierarchical relationships through type definitions.
-
-### Creating Records
-
-```python
-# Define a type
-sample_type = ln.Record(name="Sample", is_type=True).save()
-
-# Create instances of that type
-ln.Record(name="P53mutant1", type=sample_type).save()
-ln.Record(name="P53mutant2", type=sample_type).save()
-ln.Record(name="WT-control", type=sample_type).save()
-```
-
-### Searching Records
-
-```python
-# Text search
-ln.Record.search("p53").to_dataframe()
-
-# Filter by fields
-ln.Record.filter(type=sample_type).to_dataframe()
-
-# Get specific record
-record = ln.Record.get(name="P53mutant1")
-```
-
-### Hierarchical Relationships
-
-```python
-# Establish parent-child relationships
-parent_record = ln.Record.get(name="P53mutant1")
-child_record = ln.Record(name="P53mutant1-replicate1", type=sample_type).save()
-child_record.parents.add(parent_record)
-
-# Query relationships
-parent_record.children.to_dataframe()
-child_record.parents.to_dataframe()
-```
-
-## Runs & Transforms
-
-These capture computational lineage. A **Transform** represents a reusable analysis step (notebook, script, or function), while a **Run** documents a specific execution instance.
-
-### Basic Tracking Workflow
-
-```python
-import lamindb as ln
-
-# Start tracking (beginning of notebook/script)
-ln.track()
-
-# Your analysis code
-data = ln.Artifact.get(key="input.csv").load()
-# ... perform analysis ...
-result.to_csv("output.csv")
-artifact = ln.Artifact("output.csv", key="output.csv").save()
-
-# Finish tracking (end of notebook/script)
-ln.finish()
-```
-
-### Tracking with Parameters
-
-```python
-ln.track(params={
-    "learning_rate": 0.01,
-    "batch_size": 32,
-    "epochs": 100,
-    "downsample": True
-})
-
-# Query runs by parameters
-ln.Run.filter(params__learning_rate=0.01).to_dataframe()
-ln.Run.filter(params__downsample=True).to_dataframe()
-```
-
-### Tracking with Projects
-
-```python
-# Associate with project
-ln.track(project="Cancer Drug Screen 2025")
-
-# Query by project
-project = ln.Project.get(name="Cancer Drug Screen 2025")
-ln.Artifact.filter(projects=project).to_dataframe()
-ln.Run.filter(project=project).to_dataframe()
-```
-
-### Function-Level Tracking
-
-Use `@ln.flow()` for workflow entry points and `@ln.step()` for fine-grained lineage inside workflows:
-
-```python
-@ln.step()
-def preprocess_data(input_key: str, output_key: str, normalize: bool = True) -> None:
-    """Preprocess raw data and save result."""
-    # Load input (automatically tracked)
-    artifact = ln.Artifact.get(key=input_key)
-    data = artifact.load()
-
-    # Process
-    if normalize:
-        data = (data - data.mean()) / data.std()
-
-    # Save output (automatically tracked)
-    ln.Artifact.from_dataframe(data, key=output_key).save()
-
-@ln.flow()
-def run_preprocessing() -> None:
-    preprocess_data("raw/batch1.csv", "processed/batch1.csv", normalize=True)
-    preprocess_data("raw/batch2.csv", "processed/batch2.csv", normalize=False)
-
-run_preprocessing()
-```
-
-### Accessing Lineage Information
-
-```python
-# From artifact to run
-artifact = ln.Artifact.get(key="output.csv")
-run = artifact.run
-transform = run.transform
-
-# View details
-run.describe()          # Run metadata
-transform.describe()    # Transform metadata
-
-# Access inputs
-run.inputs.to_dataframe()
-
-# Visualize lineage graph
-artifact.view_lineage()
-```
-
-## Features
-
-Features define typed metadata fields for validation and querying. They enable structured annotation and searching.
-
-### Defining Features
+## Features and experimental entities
 
 ```python
 from datetime import date
 
-# Numeric feature
-ln.Feature(name="gc_content", dtype=float).save()
-ln.Feature(name="read_count", dtype=int).save()
+score = ln.Feature(name="gc_content", dtype=float).save()
+observed = ln.Feature(name="experiment_date", dtype=date, coerce=True).save()
+frame.features.set_values({score: 0.55, observed: "2026-09-30"})
+ln.Artifact.filter(gc_content__gte=0.5).to_dataframe(include="features")
 
-# Date feature
-ln.Feature(name="experiment_date", dtype=date).save()
-
-# Categorical feature
-ln.Feature(name="cell_type", dtype=str).save()
-ln.Feature(name="treatment", dtype=str).save()
+sample_type = ln.Record(name="Sample", is_type=True).save()
+sample = ln.Record(name="control-1", type=sample_type).save()
+replicate = ln.Record(name="control-1-replicate", type=sample_type).save()
+replicate.parents.add(sample)
+frame.records.add(sample)
+label = ln.ULabel(name="reviewed").save()
+frame.ulabels.add(label)
 ```
 
-### Annotating Artifacts with Features
+`set_values()` adds typed values, not merely a feature-name link. A string dtype
+is free text; a categorical dtype backed by `Record`, `ULabel`, or Bionty enables
+controlled terms. Date strings need deliberate coercion; preserve units and
+original values when conversions matter scientifically.
+
+## Script and notebook tracking
+
+Run this pattern from a real script/notebook, with the input already registered:
 
 ```python
-# Single values
-artifact.features.set_values({
-    "gc_content": 0.55,
-    "experiment_date": "2025-10-31"
-})
+ln.Project(name="QC study").save()
+ln.track(project="QC study", params={"minimum_count": 2})
+inp = ln.Artifact.get(key="experiments/counts.parquet")
+data = inp.load()
+out = ln.Artifact.from_dataframe(
+    data[data["count"] >= 2], key="experiments/filtered.parquet"
+).save()
+ln.finish()
 
-# Using feature registry records
-gc_content_feature = ln.Feature.get(name="gc_content")
-artifact.features.add(gc_content_feature)
+run = out.run
+assert inp in run.input_artifacts.all()
+run.output_artifacts.to_dataframe()
+run.transform.describe()
+ln.Run.filter(params__minimum_count=2).to_dataframe()
+ln.Run.filter(projects__name="QC study").to_dataframe()
+ln.Artifact.filter(transform=run.transform).to_dataframe()
 ```
 
-### Querying by Features
+Tracking stores code, environment, parameters, and tracked input/output links.
+Unregistered reads outside LaminDB need explicit registration/tracking. Do not
+mark failed computation as successfully finished. The `params` JSON is distinct
+from validated run `features`; arbitrary parameter dictionaries do not create
+Feature records automatically.
+
+## Function tracking
 
 ```python
-# Filter by feature value
-ln.Artifact.filter(gc_content=0.55).to_dataframe()
-ln.Artifact.filter(experiment_date="2025-10-31").to_dataframe()
+@ln.step()
+def filter_counts(input_key: str, output_key: str, threshold: int = 2):
+    data = ln.Artifact.get(key=input_key).load()
+    return ln.Artifact.from_dataframe(
+        data[data["count"] >= threshold], key=output_key
+    ).save()
 
-# Comparison operators
-ln.Artifact.filter(read_count__gt=1000000).to_dataframe()
-ln.Artifact.filter(gc_content__gte=0.5, gc_content__lte=0.6).to_dataframe()
-
-# Check for presence of annotation
-ln.Artifact.filter(cell_type__isnull=False).to_dataframe()
-
-# Include features in output
-ln.Artifact.filter(treatment="DMSO").to_dataframe(include="features")
+@ln.flow()
+def analysis():
+    return filter_counts("experiments/counts.parquet", "experiments/step.parquet")
 ```
 
-### Nested Dictionary Features
+Invoke `analysis()` from a saved Python script. Decorator parameters are tracked;
+function source discovery and code/environment capture depend on execution context.
+Do not claim a decorator tracks every external tool or scheduler transition.
 
-For complex metadata stored as dictionaries:
+## Projects, branches, and spaces
 
-```python
-# Access nested values
-ln.Artifact.filter(study_metadata__detail1="123").to_dataframe()
-ln.Artifact.filter(study_metadata__assay__type="RNA-seq").to_dataframe()
-```
+Projects label data/runs; branch and space settings control which records are
+created or visible in the current context. Inspect `lamin info` before writes.
+The current CLI supports `lamin create project`, `lamin switch -c <branch>`, and
+`lamin switch --space <space>`. Branch merging moves metadata records and should
+be reviewed in the target instance; it is not a file-system merge or backup.
 
-## Data Lineage Tracking
-
-LaminDB automatically captures execution context and relationships between data, code, and runs.
-
-### What Gets Tracked
-
-- **Source code**: Script/notebook content and git commit
-- **Environment**: Python packages and versions
-- **Input artifacts**: Data loaded during execution
-- **Output artifacts**: Data created during execution
-- **Execution metadata**: Timestamps, user, parameters
-- **Computational dependencies**: Transform relationships
-
-### Viewing Lineage
-
-```python
-# Visualize full lineage graph
-artifact.view_lineage()
-
-# View captured metadata
-artifact.describe()
-
-# Access related entities
-artifact.run              # The run that created it
-artifact.run.transform    # The transform (code) used
-artifact.run.inputs       # Input artifacts
-artifact.run.report       # Execution report
-```
-
-### Querying Lineage
-
-```python
-# Find all outputs from a transform
-transform = ln.Transform.get(name="preprocessing.py")
-ln.Artifact.filter(transform=transform).to_dataframe()
-
-# Find all artifacts from a specific user
-user = ln.User.get(handle="researcher123")
-ln.Artifact.filter(created_by=user).to_dataframe()
-
-# Find artifacts using specific inputs
-input_artifact = ln.Artifact.get(key="raw/data.csv")
-runs = ln.Run.filter(inputs=input_artifact)
-ln.Artifact.filter(run__in=runs).to_dataframe()
-```
-
-## Versioning
-
-LaminDB manages artifact versioning automatically when source data or code changes.
-
-### Automatic Versioning
-
-```python
-# First version
-artifact_v1 = ln.Artifact("data.csv", key="experiment/data.csv").save()
-
-# Modify and save again - creates new version
-# (modify data.csv)
-artifact_v2 = ln.Artifact("data.csv", key="experiment/data.csv").save()
-```
-
-### Working with Versions
-
-```python
-# Get latest version (default)
-artifact = ln.Artifact.get(key="experiment/data.csv")
-
-# View all versions
-artifact.versions.to_dataframe()
-
-# Get specific version
-artifact_v1 = artifact.versions.filter(version="1").first()
-
-# Compare versions
-v1_data = artifact_v1.load()
-v2_data = artifact.load()
-```
-
-## Best Practices
-
-1. **Use meaningful keys**: Structure keys hierarchically (e.g., `project/experiment/sample.h5ad`)
-2. **Add descriptions**: Help future users understand artifact contents
-3. **Track consistently**: Call `ln.track()` at the start of every analysis
-4. **Define features upfront**: Create feature registry before annotation
-5. **Use typed features**: Specify dtypes for better validation
-6. **Leverage versioning**: Don't create new keys for minor changes
-7. **Document transforms**: Add docstrings to tracked functions
-8. **Set projects**: Group related work for easier organization and access control
-9. **Query efficiently**: Use filters before loading large datasets
-10. **Visualize lineage**: Use `view_lineage()` to understand data provenance
+Sources: [tracking](https://docs.lamin.ai/track),
+[change management](https://docs.lamin.ai/manage-changes),
+[2.10.0 artifact implementation](https://github.com/laminlabs/lamindb/blob/2.10.0/lamindb/models/artifact.py).

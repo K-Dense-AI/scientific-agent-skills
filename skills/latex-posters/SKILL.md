@@ -1,373 +1,187 @@
 ---
 name: latex-posters
-description: "Create professional research posters in LaTeX using beamerposter, tikzposter, or baposter. Support for conference presentations, academic posters, and scientific communication. Includes layout design, color schemes, multi-column formats, figure integration, and poster-specific best practices for visual communication."
+description: "Creates research posters in LaTeX using beamerposter, tikzposter, or baposter. Use for conference posters, academic presentations, multi-column scientific layouts, figure integration, typography, compilation, and PDF preflight."
 allowed-tools: Read Write Edit Bash
+compatibility: Requires a LaTeX distribution with the selected poster class and Poppler for PDF checks. Optional AI schematics require Python 3.10+, requests, network access, and OPENROUTER_API_KEY. baposter needs a separately supplied class file.
 metadata:
-  version: "1.9"
+  version: "1.10"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
     envVars:
     - name: OPENROUTER_API_KEY
       required: false
-      description: OpenRouter API key for the skill's LLM-powered steps.
+      description: OpenRouter API key for optional schematic generation and review.
 ---
 
 # LaTeX Research Posters
 
-## Overview
-
-Research posters are a critical medium for scientific communication at conferences, symposia, and academic events. This skill provides comprehensive guidance for creating professional, visually appealing research posters using LaTeX packages. Generate publication-quality posters with proper layout, typography, color schemes, and visual hierarchy.
-
-## When to Use This Skill
-
-This skill should be used when:
-- Creating research posters for conferences, symposia, or poster sessions
-- Designing academic posters for university events or thesis defenses
-- Preparing visual summaries of research for public engagement
-- Converting scientific papers into poster format
-- Creating template posters for research groups or departments
-- Designing posters that comply with specific conference size requirements (A0, A1, 36×48", etc.)
-- Building posters with complex multi-column layouts
-- Integrating figures, tables, equations, and citations in poster format
-
-## AI-Powered Visual Element Generation
-
-**STANDARD WORKFLOW: Generate ALL major visual elements using AI before creating the LaTeX poster.**
-
-This is the recommended approach for creating visually compelling posters:
-1. Plan all visual elements needed (title, intro, methods, results, conclusions)
-2. Generate each element using scientific-schematics or Nano Banana Pro
-3. Assemble generated images in the LaTeX template
-4. Add text content around the visuals
-
-**Target: 60-70% of poster area should be AI-generated visuals, 30-40% text.**
-
----
-
-### Hard limits (do not exceed)
-
-These are limits, not guidelines. Violating them is the single most common cause of a
-failed poster. Full reasoning, per-graphic-type tables, and worked examples are in
-[references/ai_graphics_for_posters.md](references/ai_graphics_for_posters.md).
-
-| Constraint | Limit |
-| --- | --- |
-| Elements per AI-generated graphic | **3-4 maximum** (3 ideal) |
-| Words per graphic | **10 maximum** |
-| White space per graphic | **50% minimum** (60% better) |
-| Key numbers / metrics | **120pt+** |
-| Labels | **80pt+** |
-| Body text on the poster | **24pt+** |
-| Content sections (A0) | **5-6 maximum** |
-| Total words on the poster | **300-800** |
-| Figure width | `0.85\linewidth`, never `1.0` |
-
-Every graphic prompt must include: `POSTER FORMAT for A0`, an explicit element or word
-count (`ONLY 3 icons`, `3 words total`), a font size (`GIANT (120pt+)`), `60% white space`,
-and a viewing distance (`readable from 10-12 feet`).
-
-**Two mandatory review gates.** Skipping either is how unreadable posters happen:
-
-- **Before generating** — for each planned graphic, confirm it is 3-4 items, one message,
-  under 10 words, and not a 5+ stage workflow. If not, split it into several graphics.
-- **After generating, before assembly** — open each figure at 25% zoom. All text readable,
-  4 or fewer elements, 50%+ white space, understandable in 2 seconds. Any failure means
-  regenerate or split. Do not assemble a poster from figures that failed.
-
-Patterns that always fail: `7-stage workflow`, `timeline with annual milestones`,
-`3 case studies in one graphic`, `comparison of 5+ methods`, `architecture with all layers`.
-Collapse each to 3 high-level items, or make several separate graphics.
-
-**Overflow is an error, not a warning.** After compiling, run `grep -i overfull poster.log`
-and inspect all four edges at 100% zoom. See
-[references/compilation_and_quality_control.md](references/compilation_and_quality_control.md).
-
-## Scientific Schematics Integration
-
-For detailed guidance on creating schematics, refer to the **scientific-schematics** skill documentation.
-
-**Key capabilities:**
-- Nano Banana Pro automatically generates, reviews, and refines diagrams
-- Creates publication-quality images with proper formatting
-- Ensures accessibility (colorblind-friendly, high contrast)
-- Supports iterative refinement for complex diagrams
-
----
-
-## Core Capabilities
-
-Three poster packages are supported — **beamerposter** (Beamer syntax, institutional
-themes), **tikzposter** (modern, colorful, flexible), and **baposter** (structured
-multi-column). Package comparison, layout and grid systems, design principles, standard
-sizes, per-package templates, figure and image integration, color schemes, typography,
-and QR codes are all documented in
-[references/latex_poster_reference.md](references/latex_poster_reference.md).
-
-Reusable per-section content patterns, accessibility requirements, and presentation-day
-guidance are in
-[references/poster_patterns_and_presentation.md](references/poster_patterns_and_presentation.md).
-
-## Workflow for Poster Creation
-
-### Stage 1: Planning and Content Development
-
-1. **Determine poster requirements**:
-   - Conference size specifications (A0, 36×48", etc.)
-   - Orientation (portrait vs. landscape)
-   - Submission deadlines and format requirements
-
-2. **Develop content outline**:
-   - Identify 1-3 core messages
-   - Select key figures (typically 3-6 main visuals)
-   - Draft concise text for each section (bullet points preferred)
-   - Aim for 300-800 words total
-
-3. **Choose LaTeX package**:
-   - beamerposter: If familiar with Beamer, need institutional themes
-   - tikzposter: For modern, colorful designs with flexibility
-   - baposter: For structured, professional multi-column layouts
-
-### Stage 2: Generate Visual Elements (AI-Powered)
-
-**CRITICAL: Generate SIMPLE figures with MINIMAL content. Each graphic = ONE message.**
-
-**Content limits:**
-- Maximum 4-5 elements per graphic
-- Maximum 15 words total per graphic
-- 50% white space minimum
-- GIANT fonts (80pt+ for labels, 120pt+ for key numbers)
-
-1. **Create figures directory**:
-   ```bash
-   mkdir -p figures
-   ```
-
-2. **Generate SIMPLE visual elements**:
-   ```bash
-   # Introduction - ONLY 3 icons/elements
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE visual with ONLY 3 elements: [icon1] [icon2] [icon3]. ONE word labels (80pt+). 50% white space. Readable from 8 feet." -o figures/intro.png
-   
-   # Methods - ONLY 4 steps maximum
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE flowchart with ONLY 4 boxes: STEP1 → STEP2 → STEP3 → STEP4. GIANT labels (100pt+). 50% white space. NO sub-steps." -o figures/methods.png
-   
-   # Results - ONLY 3 bars/comparisons
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE chart with ONLY 3 bars. GIANT percentages ON bars (120pt+). NO axis, NO legend. 50% white space." -o figures/results.png
-   
-   # Conclusions - EXACTLY 3 items with GIANT numbers
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. EXACTLY 3 key findings: '[NUMBER]' (150pt) '[LABEL]' (60pt) for each. 50% white space. NO other text." -o figures/conclusions.png
-   ```
-
-3. **Review generated figures - check for overflow:**
-   - **View at 25% zoom**: All text still readable?
-   - **Count elements**: More than 5? → Regenerate simpler
-   - **Check white space**: Less than 40%? → Add "60% white space" to prompt
-   - **Font too small?**: Add "EVEN LARGER" or increase pt sizes
-   - **Still overflowing?**: Reduce to 3 elements instead of 4-5
-
-### Stage 3: Design and Layout
-
-1. **Select or create template**:
-   - Start with provided templates in `assets/`
-   - Customize color scheme to match branding
-   - Configure page size and orientation
-
-2. **Design layout structure**:
-   - Plan column structure (2, 3, or 4 columns)
-   - Map content flow (typically left-to-right, top-to-bottom)
-   - Allocate space for title (10-15%), content (70-80%), footer (5-10%)
-
-3. **Set typography**:
-   - Configure font sizes for different hierarchy levels
-   - Ensure minimum 24pt body text
-   - Test readability from 4-6 feet distance
-
-### Stage 4: Content Integration
-
-1. **Create poster header**:
-   - Title (concise, descriptive, 10-15 words)
-   - Authors and affiliations
-   - Institution logos (high-resolution)
-   - Conference logo if required
-
-2. **Integrate AI-generated figures**:
-   - Add all figures from Stage 2 to appropriate sections
-   - Use `\includegraphics` with proper sizing
-   - Ensure figures dominate each section (visuals first, text second)
-   - Center figures within blocks for visual impact
-
-3. **Add minimal supporting text**:
-   - Keep text minimal and scannable (300-800 words total)
-   - Use bullet points, not paragraphs
-   - Write in active voice
-   - Text should complement figures, not duplicate them
-
-4. **Add supplementary elements**:
-   - QR codes for supplementary materials
-   - References (cite key papers only, 5-10 typical)
-   - Contact information and acknowledgments
-
-### Stage 5: Refinement and Testing
-
-1. **Review and iterate**:
-   - Check for typos and errors
-   - Verify all figures are high resolution
-   - Ensure consistent formatting
-   - Confirm color scheme works well together
-
-2. **Test readability**:
-   - Print at 25% scale and read from 2-3 feet (simulates poster from 8-12 feet)
-   - Check color on different monitors
-   - Verify QR codes function correctly
-   - Ask colleague to review
-
-3. **Optimize for printing**:
-   - Embed all fonts in PDF
-   - Verify image resolution
-   - Check PDF size requirements
-   - Include bleed area if required
-
-### Stage 6: Compilation and Delivery
-
-1. **Compile final PDF**:
-   ```bash
-   pdflatex poster.tex
-   # Or for better font support:
-   lualatex poster.tex
-   ```
-
-2. **Verify output quality**:
-   - Check all elements are visible and correctly positioned
-   - Zoom to 100% and inspect figure quality
-   - Verify colors match expectations
-   - Confirm PDF opens correctly on different viewers
-
-3. **Prepare for printing**:
-   - Export as PDF/X-1a if required
-   - Save backup copies
-   - Get test print on regular paper first
-   - Order professional printing 2-3 days before deadline
-
-4. **Create supplementary materials**:
-   - Save PNG/JPG version for social media
-   - Create handout version (8.5×11" summary)
-   - Prepare digital version for email sharing
-
-## Integration with Other Skills
-
-This skill works effectively with:
-- **Scientific Schematics**: CRITICAL - Use for generating all poster diagrams and flowcharts
-- **Generate Image / Nano Banana Pro**: For stylized graphics, conceptual illustrations, and summary visuals
-- **Scientific Writing**: For developing poster content from papers
-- **Literature Review**: For contextualizing research
-- **Data Analysis**: For creating result figures and charts
-
-**Recommended workflow**: Always use scientific-schematics and generate-image skills BEFORE creating the LaTeX poster to generate all visual elements.
-
-## Common Pitfalls to Avoid
-
-**AI-Generated Graphics Mistakes (MOST COMMON):**
-- ❌ Too many elements in one graphic (10+ items) → Keep to 3-5 max
-- ❌ Text too small in AI graphics → Specify "GIANT (100pt+)" or "HUGE (150pt+)"
-- ❌ Too much detail in prompts → Use "SIMPLE" and "ONLY X elements"
-- ❌ No white space specification → Add "50% white space" to every prompt
-- ❌ Complex flowcharts with 8+ steps → Limit to 4-5 steps maximum
-- ❌ Comparison charts with 6+ items → Limit to 3 items maximum
-- ❌ Key findings with 5+ metrics → Show only top 3
-
-**Fixing Overflow in AI Graphics:**
-If your AI-generated graphics are overflowing or have small text:
-1. Add "SIMPLER" or "ONLY 3 elements" to prompt
-2. Increase font sizes: "150pt+" instead of "80pt+"
-3. Add "60% white space" instead of "50%"
-4. Remove sub-details: "NO sub-steps", "NO axis labels", "NO legend"
-5. Regenerate with fewer elements
-
-**Design Mistakes**:
-- ❌ Too much text (over 1000 words)
-- ❌ Font sizes too small (under 24pt body text)
-- ❌ Low-contrast color combinations
-- ❌ Cluttered layout with no white space
-- ❌ Inconsistent styling across sections
-- ❌ Poor quality or pixelated images
-
-**Content Mistakes**:
-- ❌ No clear narrative or message
-- ❌ Too many research questions or objectives
-- ❌ Overuse of jargon without definitions
-- ❌ Results without context or interpretation
-- ❌ Missing author contact information
-
-**Technical Mistakes**:
-- ❌ Wrong poster dimensions for conference requirements
-- ❌ RGB colors sent to CMYK printer (color shift)
-- ❌ Fonts not embedded in PDF
-- ❌ File size too large for submission portal
-- ❌ QR codes too small or not tested
-
-**Best Practices**:
-- ✅ Generate SIMPLE AI graphics with 3-5 elements max
-- ✅ Use GIANT fonts (100pt+) for key numbers in graphics
-- ✅ Specify "50% white space" in every AI prompt
-- ✅ Follow conference size specifications exactly
-- ✅ Test print at reduced scale before final printing
-- ✅ Use high-contrast, accessible color schemes
-- ✅ Keep text minimal and highly scannable
-- ✅ Include clear contact information and QR codes
-- ✅ Proofread carefully (errors are magnified on posters!)
-
-## Package Installation
-
-Ensure required LaTeX packages are installed:
+Create a conference-sized PDF from scientific content, editable LaTeX, and verified
+figures. Use for new posters, paper-to-poster adaptation, institutional templates,
+and poster compilation or print preflight.
+
+## Choose the poster package
+
+| Package | Use when | Reviewed target |
+| --- | --- | --- |
+| beamerposter | Beamer blocks or institutional Beamer themes fit the project | CTAN 1.13 |
+| tikzposter | TikZ styling and automatically stacked blocks are useful | CTAN 2.0 |
+| baposter | A supplied project uses its named, relative-positioned boxes | Archived class v2.0, 2011/11/26; upstream site unavailable at review |
+
+The three bundled templates were compiled locally with pdfLaTeX (TeX Live 2025)
+and inspected using Poppler 26.09.0. baposter was tested using the pinned archival
+source described in [references/latex_poster_packages.md](references/latex_poster_packages.md).
+Do not interpret an old stable package version as proof of current tagged-PDF support.
+Other reference snippets are illustrative building blocks unless explicitly tested;
+they require the indicated class, packages, actual data, and figure files.
+
+## Workflow
+
+### 1. Establish the scientific content and output requirements
+
+- Record exact paper width, height, orientation, venue rules, and printer requirements.
+- Choose 1-3 main messages and the results needed to support them. A useful starting
+  budget is 300-800 words with 3-5 figures; adjust to the audience and available space.
+- Preserve study design, sample sizes, units, effect sizes, uncertainty, limitations,
+  and data provenance. Include the relevant citations, contact, and acknowledgments.
+- Use actual analysis outputs for plots and original research images for evidence.
+  Do not use an image model to invent numerical charts, microscopy, spectra, or results.
+
+### 2. Prepare and review figures
+
+Prefer vector PDF for numerical plots, TikZ for precise diagrams, and suitable PNG/JPEG
+for photographs or conceptual artwork. Convert SVG to PDF before ordinary
+`\includegraphics`; SVG is not a directly supported pdfLaTeX image format.
+
+Optional AI schematics can help explain a concept. Generate them only when useful;
+there is no required AI-image quota. Keep titles, citations, numerical values, and QR
+codes editable in LaTeX or a deterministic plotting tool. Use official logo assets.
 
 ```bash
-# For TeX Live (Linux/Mac)
-tlmgr install beamerposter tikzposter baposter
-
-# For MiKTeX (Windows)
-# Packages typically auto-install on first use
-
-# Additional recommended packages
-tlmgr install qrcode graphics xcolor tcolorbox subcaption
+# From the skill root; save project output outside the installed skill directory.
+# Illustrative paid call, not executed during this review.
+python scripts/generate_schematic.py \
+  "Conceptual A0 poster diagram: three boxes SAMPLE, MEASURE, ANALYZE connected left to right. Large dark labels on white, generous margins, no numerical results." \
+  -o /path/to/project/figures/methods.png --doc-type poster --iterations 1
 ```
 
-## Scripts and Automation
+The helper uses OpenRouter's `POST /api/v1/images` with Nano Banana 2
+(`google/gemini-3.1-flash-image`) and reviews through `POST /api/v1/chat/completions`
+with `google/gemini-3.7-flash`. It accepts PNG output paths and 1-2 iterations.
+Generation and review both consume API credits. A saved image or an AI score does
+not establish scientific correctness or final print quality. Check the image and
+`*_review_log.json`, including `quality_met` and `termination_reason`.
 
-Helper scripts available in `scripts/` directory:
+Inspect every figure before assembly: relationships, labels, units, colors, license,
+and accuracy. Check actual placed size, pixel dimensions, and raster PPI. A requested
+“120 pt” font in an image prompt is not a physical typesetting guarantee. See
+[references/ai_graphics_for_posters.md](references/ai_graphics_for_posters.md).
 
-- `review_poster.sh`: Poster review and validation
-- `generate_schematic.py`: Generate scientific diagrams and schematics
+### 3. Create the layout
 
-## References
+Copy one of the three files in `assets/` into the project:
 
-- [references/ai_graphics_for_posters.md](references/ai_graphics_for_posters.md): full AI
-  graphic rules, per-type limits, worked prompt examples, and the review gates.
-- [references/latex_poster_reference.md](references/latex_poster_reference.md): packages,
-  layout, design, sizes, templates, figures, color, typography, QR codes.
-- [references/compilation_and_quality_control.md](references/compilation_and_quality_control.md):
-  compilation engines and the complete pre-print QC procedure.
-- [references/poster_patterns_and_presentation.md](references/poster_patterns_and_presentation.md):
-  content patterns, accessibility, presentation tips.
-- [references/latex_poster_packages.md](references/latex_poster_packages.md): detailed
-  comparison of beamerposter, tikzposter, and baposter with examples.
-- [references/poster_layout_design.md](references/poster_layout_design.md): layout
-  principles, grid systems, and visual flow.
+- `beamerposter_template.tex`
+- `tikzposter_template.tex`
+- `baposter_template.tex`
+
+Each template compiles with visibly marked draft figure boxes when its assets are
+missing. These are placeholders, not example research findings. Replace them,
+example references, author details, logo boxes, and the example QR target before delivery.
+
+Use 2-3 columns as a starting layout. Keep sufficient page margins and gaps between
+blocks. Figure widths must fit the containing box; `0.85\linewidth` is a reasonable
+starting point, not a universal maximum. Body text around 24-36 pt at final print
+size is a starting range. Font commands vary with class and scale; verify the actual
+rendered sizes rather than assuming that `\Large` is always a fixed size.
+
+Package details, valid option keys, and layout caveats:
+[references/latex_poster_packages.md](references/latex_poster_packages.md).
+
+### 4. Compile and inspect the actual PDF
+
+Run these from the poster project directory:
+
+```bash
+pdflatex -interaction=nonstopmode -halt-on-error poster.tex
+pdflatex -interaction=nonstopmode -halt-on-error poster.tex
+pdfinfo poster.pdf
+pdffonts poster.pdf
+pdfimages -list poster.pdf
+pdftoppm -scale-to 2000 -singlefile -png poster.pdf poster-preview
+rg -n 'Overfull|Underfull|Warning|undefined' poster.log
+```
+
+Use LuaLaTeX/XeLaTeX if a project needs `fontspec` and installed OpenType fonts;
+changing engines still requires compilation and visual verification. Run BibTeX
+or Biber only when the bibliography setup calls for it.
+
+Open the rendered page and inspect all edges, column boundaries, figure labels, and
+footer. Overfull boxes require investigation; they do not always imply page clipping.
+TikZ/baposter overlaps can occur without overfull warnings, so a clean log is insufficient.
+An underfull box is a spacing diagnostic, not automatic evidence of clipped content.
+
+Run the bundled read-only preflight using its absolute path:
+
+```bash
+bash /path/to/latex-posters/scripts/review_poster.sh poster.pdf
+```
+
+Exit status is 0 when automated checks pass, 1 for failures such as unreadable PDF,
+multiple pages, or unembedded fonts, and 2 when required Poppler tools are absent.
+The script reports all fonts and placed raster PPI. It does not certify accessibility,
+PDF/X compliance, scientific accuracy, QR destinations, or absence of overlap.
+
+### 5. Proof and deliver
+
+- Compare exact PDF dimensions with the venue specification and confirm one page.
+- Check all `emb` entries from `pdffonts`; rebuild offending fonts in the LaTeX or
+  imported figure source. `-dEmbedAllFonts=true` is a Ghostscript option, not pdflatex.
+- For raster artwork, calculate PPI at placed size; use the printer's requirements.
+  A 300 PPI target is useful for close inspection, but vector figures have no raster PPI.
+- A0-to-A4 is approximately 25% linear scale. A 36×48-inch poster becomes 9×12 inches
+  at 25%, so it does not fit Letter paper at that scale. Judge reduced proofs from
+  the same scale factor times the intended full-size viewing distance.
+- Confirm color profile, bleed, and any PDF/X variant with the printer. Preserve the
+  original when making a compressed or color-converted copy and recheck the result.
+- Provide the PDF and its reproducible source/figure bundle. Add an accessible text
+  summary if digital accessibility is required; a caption alone is not PDF tagging.
+
+Use [assets/poster_quality_checklist.md](assets/poster_quality_checklist.md) and
+[references/compilation_and_quality_control.md](references/compilation_and_quality_control.md)
+for final checks.
+
+## Installation
+
+```bash
+# On an existing supported TeX Live installation; distribution permissions vary.
+tlmgr install beamerposter tikzposter qrcode graphics xcolor booktabs
+# Check available classes before selecting a template.
+kpsewhich beamerposter.sty
+kpsewhich tikzposter.cls
+kpsewhich baposter.cls
+```
+
+Do not assume `tlmgr install baposter` is available. Obtain a trusted `baposter.cls`
+with its license and record its revision, or use a bundled TeX Live poster package.
+MiKTeX may offer missing packages on demand, depending on its configuration.
+Install Poppler (`pdfinfo`, `pdffonts`, `pdfimages`, `pdftoppm`) through the platform's
+package manager. Optional schematic calls additionally need `requests` and the
+`OPENROUTER_API_KEY` environment variable; never put credential values into poster sources.
+
+## Supporting material
+
+- [references/latex_poster_reference.md](references/latex_poster_reference.md): figures,
+  sizes, typography, themes, and QR codes.
+- [references/poster_layout_design.md](references/poster_layout_design.md): grids,
+  reading order, whitespace, and per-research-type layouts.
 - [references/poster_design_principles.md](references/poster_design_principles.md):
-  typography, color theory, visual hierarchy, and accessibility.
-- [references/poster_content_guide.md](references/poster_content_guide.md): content
-  organization, writing style, and section-specific guidance.
-
-## Templates
-
-Ready-to-use poster templates in `assets/` directory:
-
-- beamerposter templates (classic, modern, colorful)
-- tikzposter templates (default, rays, wave, envelope)
-- baposter templates (portrait, landscape, minimal)
-- Example posters from various scientific disciplines
-- Color scheme definitions and institutional templates
-
-Load these templates and customize for your specific research and conference requirements.
+  contrast, accessible encoding, typography, and visual hierarchy.
+- [references/poster_content_guide.md](references/poster_content_guide.md): section
+  content, statistical reporting, and adapting a manuscript.
+- [references/poster_patterns_and_presentation.md](references/poster_patterns_and_presentation.md):
+  content patterns, accessibility, and presentation practice.
 
 ## Citing Scientific Agent Skills
 

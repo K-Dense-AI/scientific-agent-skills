@@ -2,8 +2,8 @@
 
 When several factors might affect a response, testing them **one factor at a time
 (OFAT)** is both wasteful and blind to interactions. Factorial designs vary factors
-*together*, so you estimate every main effect and interaction from the same runs,
-with better precision per run. This file covers the family of DOE designs and the
+*together*, so the appropriate full design separates main effects and interactions;
+reduced designs trade some of that information for fewer runs. This file covers the family of DOE designs and the
 concepts (resolution, aliasing) needed to read them. Generate them with
 `scripts/doe_designs.py`.
 
@@ -28,7 +28,10 @@ a 2^k factorial is more precise than k separate OFAT studies of the same size.
 ## Full factorial
 
 A **2^k** design runs every combination of k factors at two levels (low/high, coded
-−1/+1). It estimates all k main effects and all 2^k − k − 1 interactions.
+−1/+1). It estimates all k main effects and all 2^k − k − 1 interactions. With one observation per combination, the
+model containing every effect plus an intercept is saturated: it has zero residual
+degrees of freedom. Replicate independently or pre-specify a defensible reduced
+model before claiming standard errors or significance.
 
 - Runs = 2^k: 8 for 3 factors, 16 for 4, 32 for 5. Practical to ~5 factors.
 - Use when you have a handful of factors and want a full picture including
@@ -63,8 +66,8 @@ data cannot separate them. Which effects are aliased is summarized by the design
 | Resolution | Aliasing | Interpretation |
 |------------|----------|----------------|
 | **III** | main effects aliased with 2-factor interactions | Screening only; a "significant" main effect might be an interaction |
-| **IV** | main effects clear of 2FI, but 2FIs aliased with each other | Good for screening; main effects trustworthy |
-| **V** | main effects and 2FIs all clear of each other (aliased with 3FI+) | Can model main effects and 2-factor interactions confidently |
+| **IV** | main effects clear of 2FI, but 2FIs aliased with each other | Main effects require negligible aliased 3FI+ |
+| **V** | main effects and 2FIs all clear of each other (aliased with 3FI+) | Main/2FI separation assumes negligible aliased higher effects |
 
 Always state the resolution and inspect the alias structure before interpreting a
 fractional design. Concluding "factor C has no effect" is unsafe if C is aliased with
@@ -77,10 +80,18 @@ When the goal is to **find the vital few** factors out of many (5, 10, 20+), use
 screening design that estimates main effects only, as cheaply as possible:
 - **Plackett-Burman** (`plackett_burman`): runs = the next multiple of 4 above k
   (e.g. 12 runs for up to 11 factors). Resolution III — two-factor interactions are
-  heavily confounded with main effects. Perfect for triage: run it, keep the few
+  often confounded with main effects. Use for triage: run it, keep the few
   factors with large effects, then study those with a full or higher-resolution
   factorial.
 - Resolution III fractional factorials serve the same purpose.
+
+The current `pydoe==1.5.0` implementation supports run counts in the families
+`2^a`, `12*2^a`, and `20*2^a`. It can reject a requested factor count whose next
+multiple of four is unsupported (25 factors require 28 runs and raise
+`ValueError`). Inspect the actual matrix before budgeting; choose a supported
+design or a suitable fractional factorial. Reduced subsets may have better
+aliasing properties than the full saturated design, so inspect actual aliases.
+See the [current factorial API](https://pydoe.github.io/pydoe/reference/factorial/).
 
 Screen first, optimize later — don't try to learn interactions and find the optimum
 in one cheap design.
@@ -98,7 +109,18 @@ response-surface methodology (RSM) design over continuous factors:
   use `face="inscribed"` or `"faced"` to keep everything within the original range.
 - **Box-Behnken** (`box_behnken`, needs ≥3 factors): a quadratic design that avoids
   the extreme all-low/all-high corners — useful when those corners are unsafe,
-  expensive, or infeasible. More economical than a CCD for 3–5 factors.
+  expensive, or infeasible. Compare actual run counts and the same center-point
+  replication: Box-Behnken is not always smaller (for five factors, its 40
+  non-center runs exceed a half-fraction CCD with 26). The bundled CCD wrapper
+  uses the full factorial and does not build that half-fraction.
+  See [NIST response-surface comparisons](https://www.itl.nist.gov/div898/handbook/pri/section3/pri3363.htm).
+
+The wrappers default to a single center run (`center=(0, 1)` for CCD;
+`center=1` for Box-Behnken). That supplies no pure-error replication. Pre-plan
+independent replicate runs, inspect quadratic-model rank, and budget lack-of-fit
+assessment. CCD `center` counts refer to factorial and axial construction blocks;
+the wrapper returns a globally shuffled table without block IDs. Preserve or
+construct those IDs before using a physically blocked experiment.
 
 Workflow: screen → factorial (find important factors & rough region) → response
 surface (model curvature, locate optimum), often moving the experimental region
@@ -107,12 +129,14 @@ between steps (path of steepest ascent).
 ## Space-filling designs
 
 For **computer experiments / simulations** (deterministic or expensive models) where
-classical replication and blocking don't apply, you want even coverage of a
+space coverage may be the main objective, you want even coverage of a
 high-dimensional input space:
 - **Latin hypercube** (`latin_hypercube`): each factor's range is divided into
   n_samples equal bins, sampled once each, arranged to spread points apart
   (`criterion="maximin"`). Gives good coverage with relatively few points and is the
-  standard input design for surrogate/emulator modeling and sensitivity analysis.
+  common input design for surrogate/emulator modeling. A generic LHS alone is not
+  a Saltelli/Sobol sensitivity estimator design. Stochastic simulations may still
+  need replicated random seeds; experimental batches may still need blocking.
 
 ## Choosing a design
 
@@ -125,6 +149,8 @@ high-dimensional input space:
 | Optimize a response (curvature) | 2–5 | Central composite / Box-Behnken | `central_composite`, `box_behnken` |
 | Cover a simulation input space | any | Latin hypercube | `latin_hypercube` |
 
-In all cases, **randomize run order** (the scripts do by default) so factors aren't
-confounded with time-related drift, and add center points to two-level designs as a
-curvature check.
+For physical experiments, **randomize run order within the allowed blocks** to
+avoid systematic alignment with drift. DOE wrappers default to a global shuffle;
+Latin hypercube defaults to `randomize=False` and already has stochastic sample
+placement. Add replicated center points to two-level continuous designs for an
+aggregate curvature check; they cannot separate all pure quadratic coefficients.

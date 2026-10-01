@@ -1,815 +1,225 @@
-# gget Workflow Examples
+# gget workflow examples
 
-Extended workflow examples demonstrating how to combine multiple gget modules for common bioinformatics tasks.
+These are **illustrative integration recipes**, checked against gget 0.30.8
+signatures and response contracts, not fully executed scientific analyses.
+Remote results, optional dependencies, licenses, and input files vary. The
+[database contracts](database_info.md) record public verification and failures.
+Use the bundled scripts for tested export/control-flow behavior.
 
-## Table of Contents
-1. [Complete Gene Analysis Pipeline](#complete-gene-analysis-pipeline)
-2. [Comparative Structural Biology](#comparative-structural-biology)
-3. [Cancer Genomics Analysis](#cancer-genomics-analysis)
-4. [Single-Cell Expression Analysis](#single-cell-expression-analysis)
-5. [Building Reference Transcriptomes](#building-reference-transcriptomes)
-6. [Mutation Impact Assessment](#mutation-impact-assessment)
-7. [Drug Target Discovery](#drug-target-discovery)
+## Gene discovery to annotations and sequences
 
----
-
-## Complete Gene Analysis Pipeline
-
-Comprehensive analysis of a gene from discovery to functional annotation.
+`search` matches descriptions and synonyms. A search for `TP53` can return other
+genes before TP53; never use the first search hit as an exact identifier mapping.
 
 ```python
 import gget
-import pandas as pd
+from pathlib import Path
 
-# Step 1: Search for genes of interest
-print("Step 1: Searching for GABA receptor genes...")
-search_results = gget.search(["GABA", "receptor", "alpha"],
-                             species="homo_sapiens",
-                             andor="and")
-print(f"Found {len(search_results)} genes")
+symbol = "TP53"
+hits = gget.search(symbol, species="homo_sapiens")
+if hits is None:
+    raise RuntimeError("Search failed")
+exact = hits.loc[hits["gene_name"].eq(symbol)].drop_duplicates("ensembl_id")
+if len(exact) != 1:
+    raise ValueError("Resolve missing or ambiguous symbol before proceeding")
+gene_id = exact.iloc[0]["ensembl_id"]
 
-# Step 2: Get detailed information
-print("\nStep 2: Getting detailed information...")
-gene_ids = search_results["ensembl_id"].tolist()[:5]  # Top 5 genes
-gene_info = gget.info(gene_ids, pdb=True)
-print(gene_info[["ensembl_id", "gene_name", "uniprot_id", "description"]])
+info = gget.info(gene_id, pdb=True)
+if info is None or info.empty:
+    raise RuntimeError("No annotation returned; inspect service errors")
+# Query IDs live in the index. Annotation fields can be missing or multi-valued.
+info.to_csv("tp53_info.csv", index_label="query_ensembl_id")
+print(info[["primary_gene_name", "ensembl_gene_name", "ensembl_description"]])
 
-# Step 3: Retrieve sequences
-print("\nStep 3: Retrieving sequences...")
-nucleotide_seqs = gget.seq(gene_ids)
-protein_seqs = gget.seq(gene_ids, translate=True)
-
-# Save sequences. gget.seq returns a list of FASTA lines, so join it first --
-# f.write(list) raises TypeError.
-with open("gaba_receptors_nt.fasta", "w") as f:
-    f.write("\n".join(nucleotide_seqs) + "\n")
-with open("gaba_receptors_aa.fasta", "w") as f:
-    f.write("\n".join(protein_seqs) + "\n")
-
-# Step 4: Get expression data
-print("\nStep 4: Getting tissue expression...")
-for gene_id, gene_name in zip(gene_ids, gene_info["gene_name"]):
-    expr_data = gget.archs4(gene_name, which="tissue")
-    print(f"\n{gene_name} expression:")
-    print(expr_data.head())
-
-# Step 5: Find correlated genes
-print("\nStep 5: Finding correlated genes...")
-correlated = gget.archs4(gene_info["gene_name"].iloc[0], which="correlation")
-correlated_top = correlated.head(20)
-print(correlated_top)
-
-# Step 6: Enrichment analysis on correlated genes
-print("\nStep 6: Performing enrichment analysis...")
-gene_list = correlated_top["gene_symbol"].tolist()
-enrichment = gget.enrichr(gene_list, database="ontology", plot=True)
-print(enrichment.head(10))
-
-# Step 7: Get disease associations
-print("\nStep 7: Getting disease associations...")
-for gene_id, gene_name in zip(gene_ids[:3], gene_info["gene_name"][:3]):
-    diseases = gget.opentargets(gene_id, resource="diseases", limit=5)
-    print(f"\n{gene_name} disease associations:")
-    print(diseases)
-
-# Step 8: Check for orthologs
-print("\nStep 8: Finding orthologs...")
-orthologs = gget.bgee(gene_ids[0], type="orthologs")
-print(orthologs)
-
-print("\nComplete gene analysis pipeline finished!")
+protein_fasta = gget.seq(gene_id, translate=True)
+if not protein_fasta:
+    raise RuntimeError("No protein sequence returned")
+Path("tp53_protein.fasta").write_text("\n".join(protein_fasta) + "\n")
 ```
 
----
+The released Ensembl HTTP adapter failed in this review. Do not treat that as
+absence of the gene; resolve transport before running this full recipe.
+Nucleotide `gget.seq(gene_id)` is genomic sequence, not an automatically selected CDS.
 
-## Comparative Structural Biology
+## Comparative sequences and structures
 
-Compare protein structures across species and analyze functional motifs.
+Choose orthologs from `gget.bgee(..., type="orthologs")`; verify species and
+one-to-many orthology before comparing. Save flat FASTA records, not nested
+lists of the output from `seq`.
+
+```python
+import gget
+from pathlib import Path
+
+orthologs = gget.bgee("ENSG00000169174", type="orthologs")  # human PCSK9
+print(orthologs[["gene_id", "gene_name", "species"]])
+# Select a confirmed mouse ortholog from the response, rather than guessing an ID.
+mouse = orthologs.loc[orthologs["species"].eq("musculus")]
+if len(mouse) != 1:
+    raise ValueError("Choose the intended mouse ortholog explicitly")
+human_lines = gget.seq("ENSG00000169174", translate=True)
+mouse_lines = gget.seq(mouse.iloc[0]["gene_id"], translate=True)
+if not human_lines or not mouse_lines:
+    raise RuntimeError("Sequence retrieval failed")
+Path("orthologs.fasta").write_text("\n".join(human_lines + mouse_lines) + "\n")
+gget.muscle("orthologs.fasta", out="orthologs.afa")  # returns None
+
+# G2P connects a specified protein to existing isoforms and structures.
+structure_map = gget.g2p("TP53", uniprot_id="P04637", resource="map")
+if structure_map is not None:
+    print(structure_map[["UniProt Isoform", "PDB Ids List"]])
+# An explicitly chosen structure, after checking chain and residue coverage:
+structure = gget.pdb("1TUP", resource="mmcif")
+if structure is not None:
+    Path("1TUP.cif").write_text(structure)
+```
+
+Do not extract a PDB accession by splitting free-text BLAST descriptions.
+Check chain sequence, residue numbering, coverage, ligands, experimental method,
+and structure quality. Predicted structure confidence is not experimental
+validation. The gget AlphaFold wrapper is deprecated and is not part of this recipe.
+
+## Cancer and drug associations
 
 ```python
 import gget
 
-# Define genes for comparison
-human_gene = "ENSG00000169174"  # PCSK9
-mouse_gene = "ENSMUSG00000044254"  # Pcsk9
+gene_id = "ENSG00000146648"  # EGFR, human
+associations = gget.opentargets(gene_id, resource="diseases", limit=10)
+print(associations[["disease.id", "disease.name", "score"]])
+drugs = gget.opentargets(gene_id, resource="drugs", limit=10)
+if not drugs.empty:
+    print(drugs[["drug.name", "drug.drugType", "drug.maximumClinicalStage"]])
+tractability = gget.opentargets(gene_id, resource="tractability")
+print(tractability)
 
-print("Comparative Structural Biology Workflow")
-print("=" * 50)
-
-# Step 1: Get gene information
-print("\n1. Getting gene information...")
-human_info = gget.info([human_gene])
-mouse_info = gget.info([mouse_gene])
-
-print(f"Human: {human_info['gene_name'].iloc[0]}")
-print(f"Mouse: {mouse_info['gene_name'].iloc[0]}")
-
-# Step 2: Retrieve protein sequences
-print("\n2. Retrieving protein sequences...")
-human_seq = gget.seq(human_gene, translate=True)
-mouse_seq = gget.seq(mouse_gene, translate=True)
-
-# Save to file for alignment (gget.seq returns a list of FASTA lines)
-with open("pcsk9_sequences.fasta", "w") as f:
-    f.write("\n".join(human_seq) + "\n")
-    f.write("\n".join(mouse_seq) + "\n")
-
-# Step 3: Align sequences. gget.muscle returns None -- it writes to `out`, or
-# prints the ClustalW alignment when `out` is omitted.
-print("\n3. Aligning sequences...")
-gget.muscle("pcsk9_sequences.fasta", out="pcsk9_aligned.afa")
-
-# Step 4: Get existing structures from PDB
-print("\n4. Searching PDB for existing structures...")
-# Search by sequence using BLAST (the amino-acid line, not the FASTA header)
-pdb_results = gget.blast(human_seq[1], database="pdbaa", limit=5)
-print("Top PDB matches:")
-print(pdb_results[["Description", "Max Score", "Query Coverage"]])
-
-# Download top structure
-if len(pdb_results) > 0:
-    # Extract PDB ID from description (usually format: "PDB|XXXX|...")
-    pdb_id = pdb_results.iloc[0]["Description"].split("|")[1]
-    print(f"\nDownloading PDB structure: {pdb_id}")
-    gget.pdb(pdb_id, save=True)
-
-# Step 5: Predict AlphaFold structures
-print("\n5. Predicting structures with AlphaFold...")
-# Note: This requires gget setup alphafold and is computationally intensive
-# Uncomment to run:
-# human_structure = gget.alphafold(human_seq, plot=True)
-# mouse_structure = gget.alphafold(mouse_seq, plot=True)
-print("(AlphaFold prediction skipped - uncomment to run)")
-
-# Step 6: Identify functional motifs
-print("\n6. Identifying functional motifs with ELM...")
-# Note: Requires gget setup elm
-# Uncomment to run:
-# human_ortholog_df, human_regex_df = gget.elm(human_seq)
-# print("Human PCSK9 functional motifs:")
-# print(human_regex_df)
-print("(ELM analysis skipped - uncomment to run)")
-
-# Step 7: Get orthology information
-print("\n7. Getting orthology information from Bgee...")
-orthologs = gget.bgee(human_gene, type="orthologs")
-print("PCSK9 orthologs:")
-print(orthologs)
-
-print("\nComparative structural biology workflow completed!")
+expression = gget.opentargets(gene_id, resource="expression", limit=100)
+if not expression.empty:
+    print(expression[["median", "unit", "datasourceId", "datatypeId"]])
+interactions = gget.opentargets(gene_id, resource="interactions", limit=10)
+print(interactions.reindex(columns=["targetB.id", "targetB.approvedSymbol", "score"]))
 ```
 
----
+These are bounded exploratory slices. gget does not traverse Open Targets pages;
+local filters cannot retrieve records outside the fetched page. A filter applied
+after `limit=10` searches only those ten rows. The disease score does not validate
+a target, and an associated drug is not a treatment recommendation. Do not label
+candidate targets “validated” from these queries alone.
 
-## Cancer Genomics Analysis
-
-Analyze cancer-associated genes and their mutations.
-
-```python
-import gget
-import pandas as pd
-import matplotlib.pyplot as plt
-
-print("Cancer Genomics Analysis Workflow")
-print("=" * 50)
-
-# Step 1: Search for cancer-related genes
-print("\n1. Searching for breast cancer genes...")
-genes = gget.search(["breast", "cancer", "BRCA"],
-                    species="homo_sapiens",
-                    andor="or",
-                    limit=20)
-print(f"Found {len(genes)} genes")
-
-# Focus on specific genes
-target_genes = ["BRCA1", "BRCA2", "TP53", "PIK3CA", "ESR1"]
-print(f"\nAnalyzing: {', '.join(target_genes)}")
-
-# Step 2: Get gene information
-print("\n2. Getting gene information...")
-gene_search = []
-for gene in target_genes:
-    result = gget.search([gene], species="homo_sapiens", limit=1)
-    if len(result) > 0:
-        gene_search.append(result.iloc[0])
-
-gene_df = pd.DataFrame(gene_search)
-gene_ids = gene_df["ensembl_id"].tolist()
-
-# Step 3: Get disease associations
-print("\n3. Getting disease associations from OpenTargets...")
-for gene_id, gene_name in zip(gene_ids, target_genes):
-    print(f"\n{gene_name} disease associations:")
-    diseases = gget.opentargets(gene_id, resource="diseases", limit=3)
-    print(diseases[["disease_name", "overall_score"]])
-
-# Step 4: Get drug associations
-print("\n4. Getting drug associations...")
-for gene_id, gene_name in zip(gene_ids[:3], target_genes[:3]):
-    print(f"\n{gene_name} drug associations:")
-    drugs = gget.opentargets(gene_id, resource="drugs", limit=3)
-    if len(drugs) > 0:
-        print(drugs[["drug_name", "drug_type", "max_phase_for_all_diseases"]])
-
-# Step 5: Search cBioPortal for studies
-print("\n5. Searching cBioPortal for breast cancer studies...")
-studies = gget.cbio_search(["breast", "cancer"])
-print(f"Found {len(studies)} studies")
-print(studies[:5])
-
-# Step 6: Create cancer genomics heatmap
-print("\n6. Creating cancer genomics heatmap...")
-if len(studies) > 0:
-    # Select relevant studies
-    selected_studies = studies[:2]  # Top 2 studies
-
-    gget.cbio_plot(
-        selected_studies,
-        target_genes,
-        stratification="cancer_type",
-        variation_type="mutation_occurrences",
-        show=False
-    )
-    print("Heatmap saved to ./gget_cbio_figures/")
-
-# Step 7: Query COSMIC database (requires setup)
-print("\n7. Querying COSMIC database...")
-# Note: Requires COSMIC account and database download
-# Uncomment to run:
-# for gene in target_genes[:2]:
-#     cosmic_results = gget.cosmic(
-#         gene,
-#         cosmic_tsv_path="cosmic_cancer.tsv",
-#         limit=10
-#     )
-#     print(f"\n{gene} mutations in COSMIC:")
-#     print(cosmic_results)
-print("(COSMIC query skipped - requires database download)")
-
-# Step 8: Enrichment analysis
-print("\n8. Performing pathway enrichment...")
-enrichment = gget.enrichr(target_genes, database="pathway", plot=True)
-print("\nTop enriched pathways:")
-print(enrichment.head(10))
-
-print("\nCancer genomics analysis completed!")
-```
-
----
-
-## Single-Cell Expression Analysis
-
-Analyze single-cell RNA-seq data for specific cell types and tissues.
-
-```python
-import gget
-import numpy as np
-import scanpy as sc
-
-print("Single-Cell Expression Analysis Workflow")
-print("=" * 50)
-
-# Note: Requires gget setup cellxgene
-
-# Step 1: Define genes and cell types of interest
-genes_of_interest = ["ACE2", "TMPRSS2", "CD4", "CD8A"]
-tissue = "lung"
-cell_types = ["type ii pneumocyte", "macrophage", "t cell"]
-
-print(f"\nAnalyzing genes: {', '.join(genes_of_interest)}")
-print(f"Tissue: {tissue}")
-print(f"Cell types: {', '.join(cell_types)}")
-
-# Step 2: Get metadata first
-print("\n1. Retrieving metadata...")
-metadata = gget.cellxgene(
-    gene=genes_of_interest,
-    tissue=tissue,
-    species="homo_sapiens",
-    meta_only=True
-)
-print(f"Found {len(metadata)} datasets")
-print(metadata.head())
-
-# Step 3: Download count matrices
-print("\n2. Downloading single-cell data...")
-# Note: This can be a large download
-adata = gget.cellxgene(
-    gene=genes_of_interest,
-    tissue=tissue,
-    species="homo_sapiens",
-    census_version="stable"
-)
-print(f"AnnData shape: {adata.shape}")
-print(f"Genes: {adata.n_vars}")
-print(f"Cells: {adata.n_obs}")
-
-# Step 4: Basic QC and filtering with scanpy
-print("\n3. Performing quality control...")
-sc.pp.filter_cells(adata, min_genes=200)
-sc.pp.filter_genes(adata, min_cells=3)
-print(f"After QC - Cells: {adata.n_obs}, Genes: {adata.n_vars}")
-
-# Step 5: Normalize and log-transform
-print("\n4. Normalizing data...")
-sc.pp.normalize_total(adata, target_sum=1e4)
-sc.pp.log1p(adata)
-
-# Step 6: Calculate gene expression statistics
-print("\n5. Calculating expression statistics...")
-for gene in genes_of_interest:
-    if gene in adata.var_names:
-        expr = adata[:, gene].X.toarray().flatten()
-        print(f"\n{gene} expression:")
-        print(f"  Mean: {expr.mean():.3f}")
-        print(f"  Median: {np.median(expr):.3f}")
-        print(f"  % expressing: {(expr > 0).sum() / len(expr) * 100:.1f}%")
-
-# Step 7: Get tissue expression from ARCHS4 for comparison
-print("\n6. Getting bulk tissue expression from ARCHS4...")
-for gene in genes_of_interest:
-    tissue_expr = gget.archs4(gene, which="tissue")
-    lung_expr = tissue_expr[tissue_expr["tissue"] == "lung"]
-    if len(lung_expr) > 0:
-        print(f"\n{gene} in lung (ARCHS4):")
-        print(f"  Median: {lung_expr['median'].iloc[0]:.3f}")
-
-# Step 8: Enrichment analysis
-print("\n7. Performing enrichment analysis...")
-enrichment = gget.enrichr(genes_of_interest, database="celltypes", plot=True)
-print("\nTop cell type associations:")
-print(enrichment.head(10))
-
-# Step 9: Get disease associations
-print("\n8. Getting disease associations...")
-for gene in genes_of_interest:
-    gene_search = gget.search([gene], species="homo_sapiens", limit=1)
-    if len(gene_search) > 0:
-        gene_id = gene_search["ensembl_id"].iloc[0]
-        diseases = gget.opentargets(gene_id, resource="diseases", limit=3)
-        print(f"\n{gene} disease associations:")
-        print(diseases[["disease_name", "overall_score"]])
-
-print("\nSingle-cell expression analysis completed!")
-```
-
----
-
-## Building Reference Transcriptomes
-
-Prepare reference data for RNA-seq analysis pipelines.
+cBioPortal and COSMIC are separate input routes:
 
 ```bash
-#!/bin/bash
-# Reference transcriptome building workflow
-
-echo "Reference Transcriptome Building Workflow"
-echo "=========================================="
-
-# Step 1: List available species
-echo -e "\n1. Listing available species..."
-gget ref --list_species > available_species.txt
-echo "Available species saved to available_species.txt"
-
-# Step 2: Download reference files for human
-echo -e "\n2. Downloading human reference files..."
-SPECIES="homo_sapiens"
-RELEASE=110  # Specify release for reproducibility
-
-# Download GTF annotation
-echo "Downloading GTF annotation..."
-gget ref -w gtf -r $RELEASE -d $SPECIES -o human_ref_gtf.json
-
-# Download cDNA sequences
-echo "Downloading cDNA sequences..."
-gget ref -w cdna -r $RELEASE -d $SPECIES -o human_ref_cdna.json
-
-# Download protein sequences
-echo "Downloading protein sequences..."
-gget ref -w pep -r $RELEASE -d $SPECIES -o human_ref_pep.json
-
-# Step 3: Build kallisto index (if kallisto is installed)
-echo -e "\n3. Building kallisto index..."
-if command -v kallisto &> /dev/null; then
-    # Get cDNA FASTA file from download
-    CDNA_FILE=$(ls *.cdna.all.fa.gz)
-    if [ -f "$CDNA_FILE" ]; then
-        kallisto index -i transcriptome.idx $CDNA_FILE
-        echo "Kallisto index created: transcriptome.idx"
-    else
-        echo "cDNA FASTA file not found"
-    fi
-else
-    echo "kallisto not installed, skipping index building"
-fi
-
-# Step 4: Download genome for alignment-based methods
-echo -e "\n4. Downloading genome sequence..."
-gget ref -w dna -r $RELEASE -d $SPECIES -o human_ref_dna.json
-
-# Step 5: Get gene information for genes of interest
-echo -e "\n5. Getting information for specific genes..."
-gget search -s $SPECIES "TP53 BRCA1 BRCA2" -o key_genes.csv
-
-echo -e "\nReference transcriptome building completed!"
+# Optional dependencies; then discover and select appropriate studies.
+gget setup cbio
+gget cbio search breast
+# Illustrative: downloads study data and writes a heatmap.
+gget cbio plot -s msk_impact_2017 -g EGFR TP53 -st tissue -vt mutation_occurrences
+# Requires a previously downloaded, licensed COSMIC TSV and matching project.
+gget cosmic EGFR --cosmic_project cancer --cosmic_tsv_path cosmic_data.tsv -l 10
 ```
 
-```python
-# Python version
-import gget
-import json
+Record study/sample coverage, assembly, mutation definitions, and denominators.
+A missing file or adapter failure is not a zero-mutation result.
 
-print("Reference Transcriptome Building Workflow")
-print("=" * 50)
-
-# Configuration
-species = "homo_sapiens"
-release = 110
-genes_of_interest = ["TP53", "BRCA1", "BRCA2", "MYC", "EGFR"]
-
-# Step 1: Get reference information
-print("\n1. Getting reference information...")
-ref_info = gget.ref(species, release=release)
-
-# Save reference information
-with open("reference_info.json", "w") as f:
-    json.dump(ref_info, f, indent=2)
-print("Reference information saved to reference_info.json")
-
-# Step 2: Download specific files
-print("\n2. Downloading reference files...")
-# GTF annotation
-gget.ref(species, which="gtf", release=release, download=True)
-# cDNA sequences
-gget.ref(species, which="cdna", release=release, download=True)
-
-# Step 3: Get information for genes of interest
-print(f"\n3. Getting information for {len(genes_of_interest)} genes...")
-gene_data = []
-for gene in genes_of_interest:
-    result = gget.search([gene], species=species, limit=1)
-    if len(result) > 0:
-        gene_data.append(result.iloc[0])
-
-# Get detailed info
-if gene_data:
-    gene_ids = [g["ensembl_id"] for g in gene_data]
-    detailed_info = gget.info(gene_ids)
-    detailed_info.to_csv("genes_of_interest_info.csv", index=False)
-    print("Gene information saved to genes_of_interest_info.csv")
-
-# Step 4: Get sequences
-print("\n4. Retrieving sequences...")
-sequences_nt = gget.seq(gene_ids)
-sequences_aa = gget.seq(gene_ids, translate=True)
-
-with open("key_genes_nucleotide.fasta", "w") as f:
-    f.write(sequences_nt)
-with open("key_genes_protein.fasta", "w") as f:
-    f.write(sequences_aa)
-
-print("\nReference transcriptome building completed!")
-print(f"Files created:")
-print("  - reference_info.json")
-print("  - genes_of_interest_info.csv")
-print("  - key_genes_nucleotide.fasta")
-print("  - key_genes_protein.fasta")
-```
-
----
-
-## Mutation Impact Assessment
-
-Analyze the impact of genetic mutations on protein structure and function.
+## Expression and enrichment
 
 ```python
 import gget
-import pandas as pd
 
-print("Mutation Impact Assessment Workflow")
-print("=" * 50)
-
-# Define mutations to analyze
-mutations = [
-    {"gene": "TP53", "mutation": "c.818G>A", "description": "R273H hotspot"},
-    {"gene": "EGFR", "mutation": "c.2573T>G", "description": "L858R activating"},
-]
-
-# Step 1: Get gene information
-print("\n1. Getting gene information...")
-for mut in mutations:
-    results = gget.search([mut["gene"]], species="homo_sapiens", limit=1)
-    if len(results) > 0:
-        mut["ensembl_id"] = results["ensembl_id"].iloc[0]
-        print(f"{mut['gene']}: {mut['ensembl_id']}")
-
-# Step 2: Get sequences
-print("\n2. Retrieving wild-type sequences...")
-for mut in mutations:
-    # Get nucleotide sequence
-    nt_seq = gget.seq(mut["ensembl_id"])
-    mut["wt_sequence"] = nt_seq
-
-    # Get protein sequence
-    aa_seq = gget.seq(mut["ensembl_id"], translate=True)
-    mut["wt_protein"] = aa_seq
-
-# Step 3: Generate mutated sequences
-print("\n3. Generating mutated sequences...")
-# Create mutation dataframe for gget mutate
-mut_df = pd.DataFrame({
-    "seq_ID": [m["gene"] for m in mutations],
-    "mutation": [m["mutation"] for m in mutations]
-})
-
-# For each mutation
-for mut in mutations:
-    # Extract sequence from FASTA
-    lines = mut["wt_sequence"].split("\n")
-    seq = "".join(lines[1:])
-
-    # Create single mutation df
-    single_mut = pd.DataFrame({
-        "seq_ID": [mut["gene"]],
-        "mutation": [mut["mutation"]]
-    })
-
-    # Generate mutated sequence
-    mutated = gget.mutate([seq], mutations=single_mut)
-    mut["mutated_sequence"] = mutated
-
-print("Mutated sequences generated")
-
-# Step 4: Get existing structure information
-print("\n4. Getting structure information...")
-for mut in mutations:
-    # Get info with PDB IDs
-    info = gget.info([mut["ensembl_id"]], pdb=True)
-
-    if "pdb_id" in info.columns and pd.notna(info["pdb_id"].iloc[0]):
-        pdb_ids = info["pdb_id"].iloc[0].split(";")
-        print(f"\n{mut['gene']} PDB structures: {', '.join(pdb_ids[:3])}")
-
-        # Download first structure
-        if len(pdb_ids) > 0:
-            pdb_id = pdb_ids[0].strip()
-            mut["pdb_id"] = pdb_id
-            gget.pdb(pdb_id, save=True)
-    else:
-        print(f"\n{mut['gene']}: No PDB structure available")
-        mut["pdb_id"] = None
-
-# Step 5: Predict structures with AlphaFold (optional)
-print("\n5. Predicting structures with AlphaFold...")
-# Note: Requires gget setup alphafold and is computationally intensive
-# Uncomment to run:
-# for mut in mutations:
-#     print(f"Predicting {mut['gene']} wild-type structure...")
-#     wt_structure = gget.alphafold(mut["wt_protein"])
-#
-#     print(f"Predicting {mut['gene']} mutant structure...")
-#     # Would need to translate mutated sequence first
-#     # mutant_structure = gget.alphafold(mutated_protein)
-print("(AlphaFold prediction skipped - uncomment to run)")
-
-# Step 6: Find functional motifs
-print("\n6. Identifying functional motifs...")
-# Note: Requires gget setup elm
-# Uncomment to run:
-# for mut in mutations:
-#     ortholog_df, regex_df = gget.elm(mut["wt_protein"])
-#     print(f"\n{mut['gene']} functional motifs:")
-#     print(regex_df)
-print("(ELM analysis skipped - uncomment to run)")
-
-# Step 7: Get disease associations
-print("\n7. Getting disease associations...")
-for mut in mutations:
-    diseases = gget.opentargets(
-        mut["ensembl_id"],
-        resource="diseases",
-        limit=5
-    )
-    print(f"\n{mut['gene']} ({mut['description']}) disease associations:")
-    print(diseases[["disease_name", "overall_score"]])
-
-# Step 8: Query COSMIC for mutation frequency
-print("\n8. Querying COSMIC database...")
-# Note: Requires COSMIC database download
-# Uncomment to run:
-# for mut in mutations:
-#     cosmic_results = gget.cosmic(
-#         mut["mutation"],
-#         cosmic_tsv_path="cosmic_cancer.tsv",
-#         limit=10
-#     )
-#     print(f"\n{mut['gene']} {mut['mutation']} in COSMIC:")
-#     print(cosmic_results)
-print("(COSMIC query skipped - requires database download)")
-
-print("\nMutation impact assessment completed!")
+bulk = gget.archs4("TP53", which="tissue", species="human")
+print(bulk[["id", "median"]].head())
+correlated = gget.archs4("TP53", which="correlation", gene_count=20)
+print(correlated[["gene_symbol", "pearson_correlation"]])
 ```
 
----
-
-## Drug Target Discovery
-
-Identify and validate potential drug targets for specific diseases.
+For a differential-expression list, supply the genes actually tested as the
+background; record mapped/unmapped counts and use an organism-appropriate full
+library identifier. The following uploads the lists to Enrichr and is illustrative:
 
 ```python
 import gget
-import pandas as pd
+from pathlib import Path
 
-print("Drug Target Discovery Workflow")
-print("=" * 50)
-
-# Step 1: Search for disease-related genes
-disease = "alzheimer"
-print(f"\n1. Searching for {disease} disease genes...")
-genes = gget.search([disease], species="homo_sapiens", limit=50)
-print(f"Found {len(genes)} potential genes")
-
-# Step 2: Get detailed information
-print("\n2. Getting detailed gene information...")
-gene_ids = genes["ensembl_id"].tolist()[:20]  # Top 20
-gene_info = gget.info(gene_ids[:10])  # Limit to avoid timeout
-
-# Step 3: Get disease associations from OpenTargets
-print("\n3. Getting disease associations...")
-disease_scores = []
-for gene_id, gene_name in zip(gene_info["ensembl_id"], gene_info["gene_name"]):
-    diseases = gget.opentargets(gene_id, resource="diseases", limit=10)
-
-    # Filter for Alzheimer's disease
-    alzheimer = diseases[diseases["disease_name"].str.contains("Alzheimer", case=False, na=False)]
-
-    if len(alzheimer) > 0:
-        disease_scores.append({
-            "ensembl_id": gene_id,
-            "gene_name": gene_name,
-            "disease_score": alzheimer["overall_score"].max()
-        })
-
-disease_df = pd.DataFrame(disease_scores).sort_values("disease_score", ascending=False)
-print("\nTop disease-associated genes:")
-print(disease_df.head(10))
-
-# Step 4: Get tractability information
-print("\n4. Assessing target tractability...")
-top_targets = disease_df.head(5)
-for _, row in top_targets.iterrows():
-    tractability = gget.opentargets(
-        row["ensembl_id"],
-        resource="tractability"
-    )
-    print(f"\n{row['gene_name']} tractability:")
-    print(tractability)
-
-# Step 5: Get expression data
-print("\n5. Getting tissue expression data...")
-for _, row in top_targets.iterrows():
-    # Brain expression from OpenTargets
-    expression = gget.opentargets(
-        row["ensembl_id"],
-        resource="expression",
-        filter_tissue="brain"
-    )
-    print(f"\n{row['gene_name']} brain expression:")
-    print(expression)
-
-    # Tissue expression from ARCHS4
-    tissue_expr = gget.archs4(row["gene_name"], which="tissue")
-    brain_expr = tissue_expr[tissue_expr["tissue"].str.contains("brain", case=False, na=False)]
-    print(f"ARCHS4 brain expression:")
-    print(brain_expr)
-
-# Step 6: Check for existing drugs
-print("\n6. Checking for existing drugs...")
-for _, row in top_targets.iterrows():
-    drugs = gget.opentargets(row["ensembl_id"], resource="drugs", limit=5)
-    print(f"\n{row['gene_name']} drug associations:")
-    if len(drugs) > 0:
-        print(drugs[["drug_name", "drug_type", "max_phase_for_all_diseases"]])
-    else:
-        print("No drugs found")
-
-# Step 7: Get protein-protein interactions
-print("\n7. Getting protein-protein interactions...")
-for _, row in top_targets.iterrows():
-    interactions = gget.opentargets(
-        row["ensembl_id"],
-        resource="interactions",
-        limit=10
-    )
-    print(f"\n{row['gene_name']} interacts with:")
-    if len(interactions) > 0:
-        print(interactions[["gene_b_symbol", "interaction_score"]])
-
-# Step 8: Enrichment analysis
-print("\n8. Performing pathway enrichment...")
-gene_list = top_targets["gene_name"].tolist()
-enrichment = gget.enrichr(gene_list, database="pathway", plot=True)
-print("\nTop enriched pathways:")
-print(enrichment.head(10))
-
-# Step 9: Get structure information
-print("\n9. Getting structure information...")
-for _, row in top_targets.iterrows():
-    info = gget.info([row["ensembl_id"]], pdb=True)
-
-    if "pdb_id" in info.columns and pd.notna(info["pdb_id"].iloc[0]):
-        pdb_ids = info["pdb_id"].iloc[0].split(";")
-        print(f"\n{row['gene_name']} PDB structures: {', '.join(pdb_ids[:3])}")
-    else:
-        print(f"\n{row['gene_name']}: No PDB structure available")
-        # Could predict with AlphaFold
-        print(f"  Consider AlphaFold prediction")
-
-# Step 10: Generate target summary report
-print("\n10. Generating target summary report...")
-report = []
-for _, row in top_targets.iterrows():
-    report.append({
-        "Gene": row["gene_name"],
-        "Ensembl ID": row["ensembl_id"],
-        "Disease Score": row["disease_score"],
-        "Target Status": "High Priority"
-    })
-
-report_df = pd.DataFrame(report)
-report_df.to_csv("drug_targets_report.csv", index=False)
-print("\nTarget report saved to drug_targets_report.csv")
-
-print("\nDrug target discovery workflow completed!")
+selected = Path("selected_gene_symbols.txt").read_text().splitlines()
+tested = Path("tested_gene_symbols.txt").read_text().splitlines()
+if not set(selected).issubset(tested):
+    raise ValueError("Selected genes must belong to the tested universe")
+result = gget.enrichr(selected, database="GO_Biological_Process_2021",
+                      background_list=tested, species="human", plot=False)
+if result is None:
+    raise RuntimeError("Enrichment failed")
+result.to_csv("enrichment.csv", index=False)
+significant = result.loc[result["adj_p_val"] < 0.05]
+print(significant[["path_name", "adj_p_val", "overlapping_genes"]])
 ```
 
----
+A coexpression-selected list needs a background from the genes eligible for that
+selection. Enrichr returns rows irrespective of your significance threshold;
+empty/error responses do not prove absence of enrichment. For fly/yeast/worm/fish,
+use a species-specific full library and omit custom backgrounds.
 
-## Tips for Workflow Development
+## Scoped single-cell exploration
 
-### Error Handling
+Install `gget[cellxgene]==0.30.8` in a compatible Python 3.12/3.13 environment.
+Choose a retained Census snapshot and an explicit dataset ID first; placeholders
+below deliberately require input selection. This example is not a full scRNA-seq
+analysis or a tested large download.
+
 ```python
 import gget
 
-def safe_gget_call(func, *args, **kwargs):
-    """Wrapper for gget calls with error handling"""
-    try:
-        result = func(*args, **kwargs)
-        return result
-    except Exception as e:
-        print(f"Error in {func.__name__}: {str(e)}")
-        return None
+census_version = "2025-11-08"  # Example LTS; confirm availability before querying.
+dataset_id = "REPLACE_WITH_SELECTED_DATASET_UUID"
+metadata = gget.cellxgene(dataset_id=dataset_id, species="homo_sapiens",
+                         census_version=census_version, meta_only=True,
+                         column_names=["dataset_id", "donor_id", "cell_type", "is_primary_data"])
+print(f"Selected cells: {len(metadata)}")  # gene filtering does not affect this table
 
-# Usage
-result = safe_gget_call(gget.search, ["ACE2"], species="homo_sapiens")
-if result is not None:
-    print(result)
+adata = gget.cellxgene(gene=["ACE2", "TMPRSS2"], dataset_id=dataset_id,
+                      species="homo_sapiens", census_version=census_version)
+print(adata.shape)
+print(adata.var[["feature_id", "feature_name"]])
+# var_names may be Ensembl IDs, not symbols. Match feature_name explicitly.
+for symbol in ["ACE2", "TMPRSS2"]:
+    selected = adata[:, adata.var["feature_name"].eq(symbol).to_numpy()]
+    if selected.n_vars == 1 and selected.n_obs:
+        print(symbol, "raw nonzero fraction", float((selected.X > 0).sum() / selected.n_obs))
 ```
 
-### Rate Limiting
+Do not filter cells at `min_genes=200` after retrieving two/four genes: that
+removes every cell. Do not normalize a selected marker panel as if it were a
+whole-transcriptome library. For QC/normalization, retrieve the required full
+feature universe or valid precomputed whole-cell metrics, and account for assay,
+dataset, donor, primary-data duplication, and batch before comparing expression.
+
+## Reference-file preparation
+
+```bash
+# Historical pinned example; verify the assembly and release suit the study.
+gget ref homo_sapiens -r 110 -w gtf,cdna -d -od reference -o reference_manifest.json
+# Python ref returns links/metadata; downloading is a CLI capability.
+```
+
+Use a dedicated output directory, record checksums, and build downstream indexes
+with the downloaded filenames actually present. Do not mix the pinned release
+with unrecorded latest annotations. `search` accepts a release, whereas `info`
+and `seq` query current REST data.
+
+## Applying a coding variant
+
+This local synthetic example was executed with 0.30.8:
+
 ```python
-import time
 import gget
 
-def rate_limited_queries(gene_ids, delay=1):
-    """Query multiple genes with rate limiting"""
-    results = []
-    for i, gene_id in enumerate(gene_ids):
-        print(f"Querying {i+1}/{len(gene_ids)}: {gene_id}")
-        result = gget.info([gene_id])
-        results.append(result)
-
-        if i < len(gene_ids) - 1:  # Don't sleep after last query
-            time.sleep(delay)
-
-    return pd.concat(results, ignore_index=True)
+cds = "ATCGCTAAGCT"
+assert cds[3] == "G"  # HGVS c.4 is 1-based
+mutated = gget.mutate(cds, "c.4G>T", verbose=False)
+assert mutated == ["ATCTCTAAGCT"]
 ```
 
-### Caching Results
-```python
-import os
-import pickle
-import gget
-
-def cached_gget(cache_file, func, *args, **kwargs):
-    """Cache gget results to avoid repeated queries"""
-    if os.path.exists(cache_file):
-        print(f"Loading from cache: {cache_file}")
-        with open(cache_file, "rb") as f:
-            return pickle.load(f)
-
-    result = func(*args, **kwargs)
-
-    with open(cache_file, "wb") as f:
-        pickle.dump(result, f)
-    print(f"Saved to cache: {cache_file}")
-
-    return result
-
-# Usage
-result = cached_gget("ace2_info.pkl", gget.info, ["ENSG00000130234"])
-```
-
----
-
-These workflows demonstrate how to combine multiple gget modules for comprehensive bioinformatics analyses. Adapt them to your specific research questions and data types.
+For real variants, first obtain the exact transcript-version CDS, confirm the
+reference base and reading frame, then apply the variant. Genomic gene sequences,
+UTRs, introns, negative-strand coordinates, and different isoforms cannot be used
+interchangeably. A sequence edit or structure comparison alone is not evidence of
+pathogenicity, frequency, or functional effect.

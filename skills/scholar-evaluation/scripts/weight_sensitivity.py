@@ -68,7 +68,7 @@ def analyze(
             )
         work_ids.add(evaluation["work_id"])
         evaluation_ids.add(evaluation["evaluation_id"])
-    if not 0 < delta <= 0.5:
+    if not _common.is_number(delta) or not 0 < delta <= 0.5:
         raise _common.ValidationError("DELTA_OUT_OF_RANGE")
 
     base_weights = _common.weights_by_criterion(rubric)
@@ -91,13 +91,13 @@ def analyze(
         score_lookup: dict[str, float | None] = {}
         for evaluation in evaluations:
             score_report = _common.score_evaluation(
-                rubric, evaluation, weights=weights
+                rubric, evaluation, weights=weights, round_output=False
             )
             score = score_report["aggregates"]["normalized_score"]
             coverage = score_report["aggregates"]["coverage_of_applicable_weight"]
             if score is None:
                 raise _common.ValidationError(
-                    "SENSITIVITY_SCORE_UNAVAILABLE", evaluation["work_id"]
+                    "SENSITIVITY_SCORE_UNAVAILABLE", "$.evaluations"
                 )
             if coverage is None or coverage < 1:
                 incomplete_work_ids.add(evaluation["work_id"])
@@ -116,8 +116,8 @@ def analyze(
             item_scores.append(
                 {
                     "work_id": evaluation["work_id"],
-                    "normalized_score": score,
-                    "coverage_of_applicable_weight": coverage,
+                    "normalized_score": _common.rounded(score),
+                    "coverage_of_applicable_weight": _common.rounded(coverage),
                 }
             )
         if scenario_index == 0:
@@ -132,9 +132,9 @@ def analyze(
             {
                 "scenario_id": scenario_id,
                 "perturbed_criterion_id": criterion_id,
-                "weight_multiplier": _common.rounded(multiplier),
+                "weight_multiplier": multiplier,
                 "weights": {
-                    key: _common.rounded(value)
+                    key: value
                     for key, value in sorted(weights.items())
                 },
                 "item_scores": sorted(item_scores, key=lambda item: item["work_id"]),
@@ -169,11 +169,21 @@ def analyze(
         warnings.append("INCOMPLETE_COVERAGE_LIMITS_COMPARABILITY")
     if pair_changes:
         warnings.append("ORDINAL_ORDER_CHANGES_UNDER_WEIGHT_PERTURBATION")
+    status_patterns = {
+        tuple(sorted((rating["criterion_id"], rating["status"]) for rating in evaluation["ratings"]))
+        for evaluation in evaluations
+    }
+    if len(status_patterns) > 1:
+        warnings.append("DIFFERENT_CRITERION_STATUS_PATTERNS_LIMIT_COMPARABILITY")
     return {
         "schema_version": _common.SCHEMA_VERSION,
         "report_type": "weight_sensitivity_and_rank_instability",
         "notice": _common.NOTICE,
         "rubric_id": rubric["rubric_id"],
+        "evaluation_records": [
+            {"evaluation_id": evaluation["evaluation_id"], "work_id": evaluation["work_id"]}
+            for evaluation in sorted(evaluations, key=lambda item: item["work_id"])
+        ],
         "purpose": _common.ALLOWED_PURPOSE,
         "unit_of_assessment": _common.ALLOWED_UNIT,
         "delta": delta,
@@ -183,6 +193,13 @@ def analyze(
         ),
         "scenario_count": len(scenario_output),
         "base_ordinal_order": base_order,
+        "base_tied_work_pairs": [
+            {"first_work_id": first, "second_work_id": second}
+            for first, second in pairs
+            if _direction(base_scores[first], base_scores[second]) == 0
+        ],
+        "order_comparison_absolute_tolerance": 1e-9,
+        "order_comparison_uses_unrounded_scores": True,
         "base_order_is_a_decision_recommendation": False,
         "rank_instability_detected": bool(pair_changes),
         "changed_pair_count": len(pair_changes),
@@ -199,6 +216,8 @@ def analyze(
             "This is a deterministic local stress test, not a validity study.",
             "Ordinal order must not be used to rank people or make high-impact decisions.",
             "Results depend on the submitted rubric, ratings, missingness, and perturbation size.",
+            "Linear list positions do not order tied pairs.",
+            "Different rated/applicable criterion sets do not establish comparable constructs.",
         ],
         "decision_recommendation_provided": False,
     }

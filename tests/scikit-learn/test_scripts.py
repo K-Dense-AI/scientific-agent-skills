@@ -106,6 +106,9 @@ class PreprocessingPipelineTests(unittest.TestCase):
         frame.loc[0, "city"] = None
         transformed = self.preprocessor.fit_transform(frame)
         self.assertEqual(len(transformed), len(frame))
+        names = self.preprocessor.get_feature_names_out()
+        self.assertIn("cat__city_missing", names)
+        self.assertFalse(any("None" in name for name in names))
 
     def test_it_can_be_composed_into_a_single_estimator(self) -> None:
         from sklearn.linear_model import LogisticRegression
@@ -186,8 +189,7 @@ class OptimalKTests(ScratchDirectoryTestCase):
             self.features, k_range=range(2, 7)
         )
         self.assertIsNotNone(result)
-        flattened = str(result)
-        self.assertIn("3", flattened)
+        self.assertEqual(result["best_k"], 3)
 
     def test_the_search_covers_every_k_it_was_given(self) -> None:
         result = clustering_analysis.find_optimal_k_kmeans(
@@ -256,6 +258,125 @@ class EndToEndTests(ScratchDirectoryTestCase):
             frame, target, NUMERIC, CATEGORICAL, random_state=0
         )
         self.assertIsNotNone(result)
+
+
+class ScientificRegressionTests(ScratchDirectoryTestCase):
+    def test_categorical_missing_sentinels_share_one_category(self):
+        frame = mixed_frame()
+        frame["city"] = frame["city"].astype(object)
+        frame.loc[0, "city"] = None
+        frame.loc[1, "city"] = pd.NA
+        frame.loc[2, "city"] = np.nan
+        prep = classification_pipeline.create_preprocessing_pipeline(NUMERIC, CATEGORICAL)
+        values = prep.fit_transform(frame)
+        names = prep.get_feature_names_out().tolist()
+        missing_column = names.index("cat__city_missing")
+        np.testing.assert_array_equal(values[:3, missing_column], 1)
+        self.assertEqual(len(names), 8)
+
+    def test_empty_training_columns_keep_schema_and_use_training_statistics(self):
+        frame = mixed_frame()
+        frame["score"] = np.nan
+        frame["grade"] = np.nan
+        prep = classification_pipeline.create_preprocessing_pipeline(NUMERIC, CATEGORICAL)
+        train = prep.fit_transform(frame)
+        test = frame.iloc[:2].copy()
+        test["age"] = 10000
+        test["score"] = 9
+        test["grade"] = "new"
+        transformed = prep.transform(test)
+        self.assertEqual(train.shape[1], transformed.shape[1])
+        self.assertIn("num__score", prep.get_feature_names_out())
+        self.assertIn("cat__grade_missing", prep.get_feature_names_out())
+        self.assertGreater(transformed[0, 0], 100)
+        numeric = prep.named_transformers_["num"]
+        self.assertAlmostEqual(numeric.named_steps["imputer"].statistics_[0], frame.age.median())
+
+    def test_all_noise_dbscan_is_retained_with_undefined_metrics(self):
+        features = np.arange(40, dtype=float).reshape(20, 2) * 10
+        results = clustering_analysis.compare_clustering_algorithms(features, 2)
+        noise = results["DBSCAN"]
+        self.assertEqual(noise["n_clusters"], 0)
+        self.assertEqual(noise["n_noise"], 20)
+        self.assertEqual(noise["coverage"], 0)
+        self.assertIsNone(noise["silhouette"])
+        self.assertTrue(noise["metric_reason"])
+        clustering_analysis.visualize_clusters(features, results)
+        self.assertTrue(Path("clustering_results.png").is_file())
+
+    def test_dbscan_coverage_excludes_noise_but_does_not_drop_result(self):
+        rng = np.random.default_rng(123)
+        features = np.vstack([rng.normal(-3, 0.05, (20, 2)),
+                              rng.normal(3, 0.05, (20, 2)), [[50, 50]]])
+        result = clustering_analysis.compare_clustering_algorithms(features, 2)["DBSCAN"]
+        self.assertEqual(result["n_clusters"], 2)
+        self.assertEqual(result["n_scored"], 40)
+        self.assertAlmostEqual(result["coverage"], 40 / 41)
+        self.assertGreater(result["silhouette"], 0.9)
+
+    def test_undefined_cluster_metrics_are_not_computed(self):
+        for labels in (np.zeros(5), np.arange(5)):
+            metrics = clustering_analysis.clustering_metrics(np.ones((5, 2)), labels)
+            self.assertIsNone(metrics["silhouette"])
+
+    def test_invalid_or_collapsed_k_candidates_fail_clearly(self):
+        for candidates in ([], [1], [5], [2.5]):
+            with self.assertRaisesRegex(ValueError, "k_range"):
+                clustering_analysis.find_optimal_k_kmeans(np.ones((5, 2)), candidates)
+        from sklearn.exceptions import ConvergenceWarning
+        with pytest.warns(ConvergenceWarning):
+            with self.assertRaisesRegex(ValueError, "No candidate"):
+                clustering_analysis.find_optimal_k_kmeans(np.ones((5, 2)), [2, 3])
+
+    def test_k_candidate_generator_is_supported(self):
+        features, _ = make_blobs(n_samples=40, centers=2, random_state=3)
+        result = clustering_analysis.find_optimal_k_kmeans(features, (k for k in [2, 3]))
+        self.assertEqual(result["k_values"], [2, 3])
+
+    def test_current_classical_mds_preserves_euclidean_distances(self):
+        from sklearn.manifold import ClassicalMDS
+        from sklearn.metrics import pairwise_distances
+        features = np.random.default_rng(2).normal(size=(12, 2))
+        embedded = ClassicalMDS(n_components=2).fit_transform(features)
+        np.testing.assert_allclose(pairwise_distances(embedded), pairwise_distances(features), atol=1e-7)
+
+    def test_target_encoding_crossfits_instead_of_memorizing_unique_ids(self):
+        from sklearn.preprocessing import TargetEncoder
+        from sklearn.model_selection import StratifiedKFold
+        X = np.array([f"id-{i}" for i in range(40)]).reshape(-1, 1)
+        y = np.tile([0, 1], 20)
+        encoder = TargetEncoder(cv=StratifiedKFold(5, shuffle=True, random_state=42))
+        cross_fitted = encoder.fit_transform(X, y)
+        np.testing.assert_allclose(cross_fitted, 0.5)
+        self.assertFalse(np.allclose(cross_fitted, encoder.transform(X)))
+
+    def test_text_and_numeric_pipeline_routes_columns_correctly(self):
+        from sklearn.compose import ColumnTransformer
+        from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.linear_model import LogisticRegression
+        frame = pd.DataFrame({"text": ["red star", "blue sea"] * 20,
+                              "age": np.arange(40), "income": np.arange(40) * 10})
+        text_pipeline = Pipeline([("vect", CountVectorizer()), ("tfidf", TfidfTransformer())])
+        pipeline = Pipeline([
+            ("features", ColumnTransformer([
+                ("text", text_pipeline, "text"),
+                ("numeric", StandardScaler(), ["age", "income"])])),
+            ("classifier", LogisticRegression())])
+        y = np.tile([0, 1], 20)
+        pipeline.fit(frame, y)
+        np.testing.assert_array_equal(pipeline.predict(frame), y)
+
+    def test_transformer_only_pipeline_returns_named_dataframe(self):
+        from sklearn.pipeline import Pipeline
+        from sklearn.impute import SimpleImputer
+        from sklearn.preprocessing import StandardScaler
+        transformers = Pipeline([("imputer", SimpleImputer()),
+                                 ("scaler", StandardScaler())]).set_output(transform="pandas")
+        result = transformers.fit_transform(mixed_frame()[NUMERIC])
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(result.columns.tolist(), NUMERIC)
 
 
 if __name__ == "__main__":

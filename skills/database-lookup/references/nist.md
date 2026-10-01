@@ -17,7 +17,7 @@ https://physics.nist.gov/cgi-bin/cuu
 ```
 https://physics.nist.gov/cuu/Constants/Table/allascii.txt
 ```
-Returns a tab-delimited text file of all fundamental constants with values, uncertainties, and units.
+Returns a fixed-width ASCII table (with header lines), not a tab-delimited file, of all fundamental constants with values, uncertainties, and units.
 
 **Individual constant lookup:**
 ```
@@ -66,7 +66,7 @@ https://physics.nist.gov/cgi-bin/ASD/lines1.pl?spectra=H&low_w=3000&upp_w=7000&u
 
 **Energy levels query:**
 ```
-https://physics.nist.gov/cgi-bin/ASD/energy1.pl?spectra={element}&units={units}&format={format}
+https://physics.nist.gov/cgi-bin/ASD/energy1.pl?spectrum={element}&units={units}&format={format}
 ```
 
 **No API key required. No formal rate limits but automated bulk queries are discouraged.**
@@ -97,8 +97,10 @@ https://webbook.nist.gov/cgi/cbook.cgi?Formula={formula}&Units=SI
 
 **JCAMP-DX spectra (machine-readable):**
 ```
-https://webbook.nist.gov/cgi/cbook.cgi?ID={cas_number}&Type=IR-Spec&Index=0&JCAMP=C{cas_no_dashes}
+https://webbook.nist.gov/cgi/cbook.cgi?JCAMP=C{cas_no_dashes}&Index=0&Type=IR
 ```
+
+Choose a spectrum index from the compound page; not every compound has an IR spectrum. The water request `?JCAMP=C7732185&Index=0&Type=IR` returned JCAMP-DX in the 2026-09-30 public probe.
 
 ## Summary
 

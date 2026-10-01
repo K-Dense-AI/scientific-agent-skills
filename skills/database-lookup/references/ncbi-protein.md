@@ -22,7 +22,8 @@ GET esearch.fcgi?db=protein&term=QUERY&retmax=N&retmode=json
 | Param | Description |
 |-------|-------------|
 | `term` | Search query (Entrez syntax). Fields: `[Protein Name]`, `[Organism]`, `[Accession]`, `[Gene Name]` |
-| `retmax` | Max IDs returned (default 20, max 100000) |
+| `retmax` | Max UIDs per response (default 20); use small batches and history for large sets. |
+| `idtype` | Set `acc` to return accession.version IDs instead of default numeric UIDs. |
 | `retstart` | Offset for pagination |
 | `usehistory` | `y` to store results on server (use with large sets) |
 
@@ -36,7 +37,7 @@ Response (JSON):
   "esearchresult": {
     "count": "1523",
     "retmax": "5",
-    "idlist": ["116734704", "AAA59172.1", "NP_000198.1", ...],
+    "idlist": ["116734704", "1240286123", "110591076", ...],
     "querytranslation": "insulin AND \"Homo sapiens\"[Organism]"
   }
 }
@@ -79,7 +80,7 @@ Returns: accession, title, organism, length, taxonomy, create/update dates.
 
 ### 4. ELink -- Find related records
 ```
-GET elink.fcgi?dbfrom=protein&db=gene&id=NP_000198.1
+GET elink.fcgi?dbfrom=protein&db=gene&id=NP_000198.1&retmode=json
 ```
 Links protein to gene, nucleotide, structure, taxonomy, etc.
 
@@ -97,6 +98,8 @@ term=insulin AND srcdb_refseq[Properties]
 # By sequence length range
 term=100:500[Sequence Length] AND kinase[Protein Name]
 ```
+
+ELink resolves protein accessions as well as numeric UIDs: the live `NP_000198.1` probe resolved UID `4557671` and Gene `3630`. Preserve both the accession version and the resolved UID in provenance.
 
 ## Rate Limits
 - Without API key: 3 requests/second

@@ -44,6 +44,9 @@ end
 ### Argument validation details
 
 - A size declaration such as `(:,1)` permits a column of any height.
+- Size declarations also reshape compatible vectors or expand scalars. If
+  orientation must be rejected rather than normalized, use a validator such
+  as `mustBeColumn` without a size declaration that reshapes first.
 - A class declaration can convert compatible input. Do not mistake conversion
   for validation.
 - Validators such as `mustBeFinite` check values without changing them.
@@ -51,6 +54,8 @@ end
   optional inputs.
 - Name-value inputs use a structure name in the signature and dotted fields in
   the block.
+- `namelengthmax` is 2048 from R2025a onward; filesystem limits can be shorter.
+  The bundled static helpers intentionally retain a 63-character subset.
 - Code generation support is a MATLAB Coder capability with additional
   restrictions and a separate license; an `arguments` block alone does not
   make code generation available.
@@ -207,11 +212,13 @@ projects.
 - [ ] Required products are declared separately from confirmed license status.
 - [ ] Migration evidence includes release notes and representative baselines.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [Scripts vs. Functions](https://www.mathworks.com/help/matlab/matlab_prog/scripts-and-functions.html)
 - [Create Scripts](https://www.mathworks.com/help/matlab/matlab_prog/create-scripts.html)
 - [`arguments`](https://www.mathworks.com/help/matlab/ref/arguments.html)
+- [`mustBeColumn`](https://www.mathworks.com/help/matlab/ref/mustbecolumn.html)
+- [`namelengthmax`](https://www.mathworks.com/help/matlab/ref/namelengthmax.html)
 - [Local Functions](https://www.mathworks.com/help/matlab/matlab_prog/local-functions.html)
 - [MATLAB Projects](https://www.mathworks.com/help/matlab/projects.html)
 - [Analyze Project Dependencies](https://www.mathworks.com/help/matlab/matlab_prog/analyze-project-dependencies.html)
@@ -222,4 +229,4 @@ projects.
 - [Run Unit Tests](https://www.mathworks.com/help/matlab/run-unit-tests.html)
 - [`runtests` R2026a history](https://www.mathworks.com/help/matlab/ref/runtests.html)
 - [MATLAB Test product boundary](https://www.mathworks.com/products/matlab-test.html)
-- [MATLAB R2026a release notes](https://www.mathworks.com/help/matlab/release-notes.html)
+- [MATLAB release notes](https://www.mathworks.com/help/matlab/release-notes.html)

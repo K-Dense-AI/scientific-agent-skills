@@ -1,5 +1,10 @@
 # LaTeX Poster Reference
 
+Reviewed 2026-09-30. Design numbers are starting points, not measured guarantees.
+Code fragments are illustrative; use the bundled tested templates as the executable
+starting point. Replace example names, statistics, citations, URLs, and assets with
+verified project content.
+
 Package selection, layout, design principles, standard sizes, templates, figures,
 color, typography, and QR codes. See also `latex_poster_packages.md`,
 `poster_layout_design.md`, and `poster_design_principles.md` for the deeper
@@ -115,7 +120,7 @@ Provide ready-to-use templates for each major package. Templates available in `a
 Optimize visual content for poster presentations:
 
 **Best Practices**:
-- Use vector graphics (PDF, SVG) when possible for scalability
+- Use vector graphics (PDF; convert SVG to PDF before inclusion) when possible for scalability
 - Raster images: minimum 300 DPI at final print size
 - Consistent image styling (borders, captions, sizes)
 - Group related figures together

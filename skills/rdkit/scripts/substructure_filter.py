@@ -21,22 +21,25 @@ except ImportError:
     sys.exit(1)
 
 
-# Common SMARTS pattern libraries
+from _common import SOURCE_INDEX, read_molecule_records, molecule_smiles
+
+
+# Neutral functional-group motifs; not universal chemistry or toxicity classifiers.
 PATTERN_LIBRARIES = {
     'functional-groups': {
-        'alcohol': '[OH][C]',
-        'aldehyde': '[CH1](=O)',
-        'ketone': '[C](=O)[C]',
+        'alcohol': '[OX2H1][CX4]',
+        'aldehyde': '[CX3H1](=O)[#6]',
+        'ketone': '[#6][CX3](=O)[#6]',
         'carboxylic_acid': 'C(=O)[OH]',
-        'ester': 'C(=O)O[C]',
+        'ester': '[CX3](=O)[OX2H0][#6]',
         'amide': 'C(=O)N',
-        'amine': '[NX3]',
-        'ether': '[C][O][C]',
+        'amine': '[NX3;$(N-[#6]);!$(N-C=O);!$(N-S(=O)=O);!$(N-P=O);!$(N=*)]',
+        'ether': '[#6][OX2H0;!$(O-C=O)][#6]',
         'nitrile': 'C#N',
         'nitro': '[N+](=O)[O-]',
-        'halide': '[C][F,Cl,Br,I]',
-        'thiol': '[C][SH]',
-        'sulfide': '[C][S][C]',
+        'halide': '[CX4][F,Cl,Br,I]',
+        'thiol': '[#6][SX2H1]',
+        'sulfide': '[#6][SX2H0][#6]',
     },
     'rings': {
         'benzene': 'c1ccccc1',
@@ -49,7 +52,7 @@ PATTERN_LIBRARIES = {
         'naphthalene': 'c1ccc2ccccc2c1',
     },
     'pains': {
-        'rhodanine': 'S1C(=O)NC(=S)C1',
+        'rhodanine': 'O=C1CSC(=S)N1',
         'catechol': 'c1ccc(O)c(O)c1',
         'quinone': 'O=C1C=CC(=O)C=C1',
         'michael_acceptor': 'C=CC(=O)',
@@ -66,42 +69,20 @@ PATTERN_LIBRARIES = {
 
 def load_molecules(file_path, keep_props=True):
     """Load molecules from file."""
-    path = Path(file_path)
-
-    if not path.exists():
-        print(f"Error: File not found: {file_path}")
-        return []
-
-    molecules = []
-
-    if path.suffix.lower() in ['.sdf', '.mol']:
-        suppl = Chem.SDMolSupplier(str(path))
-    elif path.suffix.lower() in ['.smi', '.smiles', '.txt']:
-        suppl = Chem.SmilesMolSupplier(str(path), titleLine=False)
-    else:
-        print(f"Error: Unsupported file format: {path.suffix}")
-        return []
-
-    for idx, mol in enumerate(suppl):
-        if mol is None:
-            print(f"Warning: Failed to parse molecule {idx+1}")
-            continue
-
-        molecules.append(mol)
-
-    return molecules
+    # keep_props retained for callers; RDKit reads SDF properties by default.
+    return [mol for _, mol in read_molecule_records(file_path)]
 
 
 def create_pattern_query(pattern_string):
     """Create SMARTS query from string or SMILES."""
     # Try as SMARTS first
     query = Chem.MolFromSmarts(pattern_string)
-    if query is not None:
+    if query is not None and query.GetNumAtoms() > 0:
         return query
 
     # Try as SMILES
     query = Chem.MolFromSmiles(pattern_string)
-    if query is not None:
+    if query is not None and query.GetNumAtoms() > 0:
         return query
 
     print(f"Error: Invalid pattern: {pattern_string}")
@@ -109,7 +90,7 @@ def create_pattern_query(pattern_string):
 
 
 def filter_molecules(molecules, include_patterns=None, exclude_patterns=None,
-                    match_all_include=False):
+                    match_all_include=False, use_chirality=False):
     """
     Filter molecules based on substructure patterns.
 
@@ -122,6 +103,10 @@ def filter_molecules(molecules, include_patterns=None, exclude_patterns=None,
     Returns:
         Tuple of (filtered_molecules, match_info)
     """
+    for patterns in (include_patterns, exclude_patterns):
+        for name, pattern in patterns or []:
+            if pattern is None or pattern.GetNumAtoms() == 0:
+                raise ValueError(f"Invalid or empty query: {name}")
     filtered = []
     match_info = []
 
@@ -129,19 +114,21 @@ def filter_molecules(molecules, include_patterns=None, exclude_patterns=None,
         if mol is None:
             continue
 
+        source_index = mol.GetIntProp(SOURCE_INDEX) if mol.HasProp(SOURCE_INDEX) else idx + 1
+
         # Check exclusion patterns first
         excluded = False
         exclude_matches = []
         if exclude_patterns:
             for name, pattern in exclude_patterns:
-                if mol.HasSubstructMatch(pattern):
+                if mol.HasSubstructMatch(pattern, useChirality=use_chirality):
                     excluded = True
                     exclude_matches.append(name)
 
         if excluded:
             match_info.append({
-                'index': idx + 1,
-                'smiles': Chem.MolToSmiles(mol),
+                'index': source_index,
+                'smiles': molecule_smiles(mol),
                 'status': 'excluded',
                 'matches': exclude_matches
             })
@@ -151,7 +138,7 @@ def filter_molecules(molecules, include_patterns=None, exclude_patterns=None,
         if include_patterns:
             include_matches = []
             for name, pattern in include_patterns:
-                if mol.HasSubstructMatch(pattern):
+                if mol.HasSubstructMatch(pattern, useChirality=use_chirality):
                     include_matches.append(name)
 
             # Decide if molecule passes inclusion filter
@@ -163,15 +150,15 @@ def filter_molecules(molecules, include_patterns=None, exclude_patterns=None,
             if passed:
                 filtered.append(mol)
                 match_info.append({
-                    'index': idx + 1,
-                    'smiles': Chem.MolToSmiles(mol),
+                    'index': source_index,
+                    'smiles': molecule_smiles(mol),
                     'status': 'included',
                     'matches': include_matches
                 })
             else:
                 match_info.append({
-                    'index': idx + 1,
-                    'smiles': Chem.MolToSmiles(mol),
+                    'index': source_index,
+                    'smiles': molecule_smiles(mol),
                     'status': 'no_match',
                     'matches': []
                 })
@@ -179,8 +166,8 @@ def filter_molecules(molecules, include_patterns=None, exclude_patterns=None,
             # No inclusion patterns, keep all non-excluded
             filtered.append(mol)
             match_info.append({
-                'index': idx + 1,
-                'smiles': Chem.MolToSmiles(mol),
+                'index': source_index,
+                'smiles': molecule_smiles(mol),
                 'status': 'included',
                 'matches': []
             })
@@ -200,12 +187,11 @@ def write_molecules(molecules, output_file):
     elif output_path.suffix.lower() in ['.smi', '.smiles', '.txt']:
         with open(output_path, 'w') as f:
             for mol in molecules:
-                smiles = Chem.MolToSmiles(mol)
+                smiles = molecule_smiles(mol)
                 name = mol.GetProp('_Name') if mol.HasProp('_Name') else ''
                 f.write(f"{smiles} {name}\n")
     else:
-        print(f"Error: Unsupported output format: {output_path.suffix}")
-        return
+        raise ValueError(f'Unsupported output format: {output_path.suffix}')
 
     print(f"Wrote {len(molecules)} molecules to {output_file}")
 
@@ -259,7 +245,7 @@ def main():
 Pattern libraries:
   --filter-type functional-groups    Common functional groups
   --filter-type rings               Ring systems
-  --filter-type pains               PAINS (Pan-Assay Interference)
+  --filter-type pains               Five illustrative alerts, NOT the RDKit PAINS catalogue
   --filter-type privileged          Privileged structures
 
 Examples:
@@ -272,15 +258,15 @@ Examples:
   # Filter by functional groups
   python substructure_filter.py molecules.smi --filter-type functional-groups -o fg.smi
 
-  # Remove PAINS
+  # Exclude illustrative alert motifs (not a toxicity or PAINS verdict)
   python substructure_filter.py compounds.smi --filter-type pains --exclude-mode -o clean.smi
 
   # Multiple patterns
-  python substructure_filter.py mol.smi --pattern "c1ccccc1" --pattern "N" -o aromatic_amines.smi
+  python substructure_filter.py mol.smi --pattern "c1ccccc1" --pattern "N" --match-all -o aromatic_amines.smi
         """
     )
 
-    parser.add_argument('input', help='Input file (SDF or SMILES)')
+    parser.add_argument('input', nargs='?', help='Input file (SDF or SMILES)')
     parser.add_argument('--pattern', '-p', action='append',
                        help='SMARTS/SMILES pattern to include (can specify multiple)')
     parser.add_argument('--exclude', '-e', action='append',
@@ -291,6 +277,8 @@ Examples:
                        help='Use filter-type patterns for exclusion instead of inclusion')
     parser.add_argument('--match-all', action='store_true',
                        help='Molecule must match ALL include patterns')
+    parser.add_argument('--chirality', action='store_true',
+                       help='Require specified query stereochemistry')
     parser.add_argument('--output', '-o', help='Output file')
     parser.add_argument('--report', '-r', help='Write detailed report to CSV')
     parser.add_argument('--list-patterns', action='store_true',
@@ -307,6 +295,9 @@ Examples:
             for name, pattern in patterns.items():
                 print(f"  {name:25s}: {pattern}")
         sys.exit(0)
+
+    if not args.input:
+        parser.error("input is required unless --list-patterns is used")
 
     # Load molecules
     print(f"Loading molecules from: {args.input}")
@@ -325,15 +316,17 @@ Examples:
     if args.pattern:
         for pattern_str in args.pattern:
             query = create_pattern_query(pattern_str)
-            if query:
-                include_patterns.append(('custom', query))
+            if query is None:
+                parser.error(f'Invalid include pattern: {pattern_str}')
+            include_patterns.append(('custom', query))
 
     # Add custom exclude patterns
     if args.exclude:
         for pattern_str in args.exclude:
             query = create_pattern_query(pattern_str)
-            if query:
-                exclude_patterns.append(('custom', query))
+            if query is None:
+                parser.error(f'Invalid exclude pattern: {pattern_str}')
+            exclude_patterns.append(('custom', query))
 
     # Add library patterns
     if args.filter_type:
@@ -367,7 +360,8 @@ Examples:
         molecules,
         include_patterns=include_patterns if include_patterns else None,
         exclude_patterns=exclude_patterns if exclude_patterns else None,
-        match_all_include=args.match_all
+        match_all_include=args.match_all,
+        use_chirality=args.chirality
     )
 
     # Print summary

@@ -40,8 +40,10 @@ Append machine-readable markers to every factual or numeric assertion while draf
 ```
 
 An alternative citation marker is `[@E001]`. Keep the claim and evidence markers on the
-same line until the audit passes. A final publisher conversion may replace evidence IDs
-with rendered citations only after preserving an auditable mapping.
+same physical line until the audit passes. Use exactly one claim marker per line.
+Each line can express a composite claim only when its evidence supports every part.
+A final publisher conversion may replace evidence IDs with rendered citations only
+after preserving an auditable mapping.
 
 ## Verification procedure
 
@@ -59,7 +61,11 @@ For each source:
 For each claim:
 
 1. Classify it as factual, numeric, method, result, interpretive, or declaration.
-2. Hash the normalized claim text and store the hash in `claims.csv`.
+2. Remove `[claim:C...]`, `[evidence:E...]`, and `[@E...]` markers from the
+   entire physical line, collapse whitespace with `" ".join(text.split())`, then
+   SHA-256 the UTF-8 bytes and store the lowercase hexadecimal digest in
+   `claims.csv`. Preserve case, punctuation, and other Markdown syntax. The bundled
+   `audit_claims.claim_text_hash` function implements this exact normalization.
 3. Map it to verified evidence IDs.
 4. Record uncertainty and whether the analysis was confirmatory, exploratory,
    descriptive, or not applicable.
@@ -92,3 +98,13 @@ python3 scripts/check_references.py source_manifest.json
 
 Tool output contains IDs and line numbers, not manuscript or source text. A passing
 machine audit supports review; it does not replace human scientific judgment.
+
+The claim audit compares that digest with the current manuscript line and rejects
+changed text or multiple claim markers on a line. Re-verify the evidence fit before
+replacing an old digest. A matching hash detects text changes; it proves neither
+scientific truth nor that a human performed the recorded verification. Hashes are
+not encryption and do not anonymize predictable sensitive statements.
+
+The lightweight audit skips headings, comment-start lines, and fenced code; numeric
+text outside these regions must be tagged. It cannot identify every untagged
+non-numeric assertion or inspect the contents of linked files. Review those manually.

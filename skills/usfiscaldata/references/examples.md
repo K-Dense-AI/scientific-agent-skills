@@ -1,260 +1,220 @@
 # Code Examples — U.S. Treasury Fiscal Data
 
-## Python Examples
+Python queries and transformations below were exercised against the public API on
+2026-09-30. First define `fetch_all()` from [parameters.md](parameters.md), then run
+the setup. Historic dates are fixed examples, not claims about the current year.
 
-### Setup
+## Setup
 
 ```python
+from datetime import date
+from decimal import Decimal
 import requests
 import pandas as pd
 
 BASE_URL = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
 
 def fetch(endpoint, **params):
-    resp = requests.get(f"{BASE_URL}{endpoint}", params=params)
+    """Fetch one page; callers requesting a complete result use fetch_all."""
+    allowed = {"fields", "filter", "sort", "format", "page[size]", "page[number]"}
+    if set(params) - allowed:
+        raise ValueError(f"Unknown query parameters: {set(params) - allowed}")
+    resp = requests.get(BASE_URL + endpoint, params=params, timeout=30)
     resp.raise_for_status()
-    return resp.json()
+    result = resp.json()
+    if "error" in result:
+        raise ValueError(result)
+    return result
 ```
 
-### National Debt Tracker
+## National Debt Tracker
 
 ```python
-# Current total public debt
-result = fetch("/v2/accounting/od/debt_to_penny", 
+result = fetch("/v2/accounting/od/debt_to_penny",
                sort="-record_date", **{"page[size]": 1})
 d = result["data"][0]
-debt = float(d["tot_pub_debt_out_amt"])
-print(f"National debt as of {d['record_date']}: ${debt/1e12:.2f} trillion")
+debt = Decimal(d["tot_pub_debt_out_amt"])
+print(f"National debt as of {d['record_date']}: ${debt:,.2f}")
 
-# Debt trend over last 5 years
-result = fetch("/v2/accounting/od/debt_to_penny",
-               fields="record_date,tot_pub_debt_out_amt",
-               filter="record_date:gte:2020-01-01",
-               sort="-record_date", **{"page[size]": 10000})
-df = pd.DataFrame(result["data"])
+# Complete fixed-period series; cents remain in raw strings if needed.
+df = fetch_all("/v2/accounting/od/debt_to_penny", {
+    "filter": "record_date:gte:2024-01-01,record_date:lte:2024-12-31",
+    "sort": "record_date", "page[size]": 100,
+})
 df["date"] = pd.to_datetime(df["record_date"])
-df["debt_trillion"] = df["tot_pub_debt_out_amt"].astype(float) / 1e12
-df = df.sort_values("date")
-print(df[["date", "debt_trillion"]].tail(10))
+df["debt_trillion"] = pd.to_numeric(df["tot_pub_debt_out_amt"]) / 1e12
+print(df[["date", "debt_trillion"]].tail())
 ```
 
-### Federal Exchange Rates
+## Treasury Reporting Exchange Rates
 
 ```python
-# All current Treasury exchange rates
-result = fetch("/v1/accounting/od/rates_of_exchange",
-               sort="-record_date", **{"page[size]": 300})
-df = pd.DataFrame(result["data"])
-latest = df[df["record_date"] == df["record_date"].max()]
-latest = latest.copy()
-latest["exchange_rate"] = latest["exchange_rate"].astype(float)
-latest = latest.sort_values("country_currency_desc")
-print(latest[["country_currency_desc", "exchange_rate", "record_date"]].to_string(index=False))
-
-# Convert USD amount to foreign currencies
-def convert_usd(usd_amount, rates_df):
-    rates_df = rates_df.copy()
-    rates_df["value_in_foreign"] = usd_amount * rates_df["exchange_rate"].astype(float)
-    return rates_df[["country_currency_desc", "value_in_foreign"]]
-
-conversions = convert_usd(1000, latest)
-print(conversions.head(10))
+endpoint = "/v1/accounting/od/rates_of_exchange"
+quarter = fetch(endpoint, sort="-record_date", **{"page[size]": 1})["data"][0]["record_date"]
+rates = fetch_all(endpoint, {
+    "filter": f"record_date:eq:{quarter}",
+    "sort": "country_currency_desc,effective_date,src_line_nbr",
+    "page[size]": 100,
+})
+rates["exchange_rate"] = pd.to_numeric(rates["exchange_rate"])
+# Preserve amendments as separate rows; pick the applicable reporting period first.
+rates["usd_1000_in_foreign_currency"] = 1000 * rates["exchange_rate"]
+print(rates[["country_currency_desc", "record_date", "effective_date",
+             "exchange_rate", "usd_1000_in_foreign_currency"]].head())
 ```
 
-### Treasury Securities Auction Analysis
+These are foreign-currency units per USD. Divide a foreign amount by its applicable
+rate to obtain USD. Amendments have later `effective_date` values; quarterly PDF
+reports omit amendments, so do not collapse rows without the official period rules.
+
+## Treasury Securities Auction Analysis
 
 ```python
-# Recent 10-year note auctions
+# Nominal fixed-rate 10-year notes. auction_date dates the event.
 result = fetch("/v1/accounting/od/auctions_query",
-               filter="security_type:eq:Note,security_term:eq:10-Year",
-               sort="-record_date", **{"page[size]": 20})
-df = pd.DataFrame(result["data"])
-numeric_cols = ["high_yield", "bid_to_cover_ratio", 
-                "total_accepted", "indirect_bidder_accepted"]
-for col in numeric_cols:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-# indirect_bidder_accepted is a USD amount, not a share; derive the percentage
-df["indirect_pct"] = 100 * df["indirect_bidder_accepted"] / df["total_accepted"]
-print(df[["record_date", "security_term", "high_yield", 
-         "bid_to_cover_ratio", "indirect_pct"]].head(10))
-
-# Auction yield trend: 2-year vs 10-year
-def get_auction_yields(term, n=24):
-    result = fetch("/v1/accounting/od/auctions_query",
-                   fields="record_date,security_term,high_yield",
-                   filter=f"security_type:eq:Note,security_term:eq:{term}",
-                   sort="-record_date", **{"page[size]": n})
-    df = pd.DataFrame(result["data"])
-    df["yield"] = df["high_yield"].astype(float)
-    df["date"] = pd.to_datetime(df["record_date"])
-    return df[["date", "yield", "security_term"]].sort_values("date")
-
-t2 = get_auction_yields("2-Year")
-t10 = get_auction_yields("10-Year")
-yield_curve = t2.merge(t10, on="date", suffixes=("_2y", "_10y"), how="inner")
-yield_curve["spread"] = yield_curve["yield_10y"] - yield_curve["yield_2y"]
-print("Yield curve spread (10y - 2y):")
-print(yield_curve[["date", "yield_2y", "yield_10y", "spread"]].tail(10))
+    filter="security_type:eq:Note,original_security_term:eq:10-Year,inflation_index_security:eq:No,floating_rate:eq:No",
+    sort="-auction_date,cusip", **{"page[size]": 20})
+auctions = pd.DataFrame(result["data"])
+for col in ["high_yield", "bid_to_cover_ratio", "total_accepted", "indirect_bidder_accepted"]:
+    auctions[col] = pd.to_numeric(auctions[col].replace("null", None), errors="coerce")
+auctions["indirect_pct_of_total"] = (
+    100 * auctions["indirect_bidder_accepted"] / auctions["total_accepted"].where(auctions["total_accepted"] > 0)
+)
+print(auctions[["auction_date", "cusip", "security_term", "reopening",
+                "high_yield", "indirect_pct_of_total"]].head())
 ```
 
-### Daily Treasury Statement Analysis
+`original_security_term` includes reopened securities whose remaining
+`security_term` is shorter. Name the denominator when reporting bidder shares;
+`total_accepted` is not the same as competitive awards. Missing yields can mean an
+auction has been announced but results are unavailable. Auction yields observed on
+different dates do not form a same-date yield curve; do not inner-join 2-year and
+10-year auctions on publication dates and label the difference a market spread.
+
+## Daily Treasury Statement
 
 ```python
-# Recent Treasury General Account (TGA) balance
-result = fetch("/v1/accounting/dts/operating_cash_balance",
-               sort="-record_date", **{"page[size]": 10})
-df = pd.DataFrame(result["data"])
-print("Treasury General Account Balances (most recent):")
-for _, row in df.head(5).iterrows():
-    bal = float(row["close_today_bal"])
-    print(f"  {row['record_date']}: ${bal:,.0f} million")
+endpoint = "/v1/accounting/dts/operating_cash_balance"
+closing = fetch(endpoint,
+    filter="account_type:eq:Treasury General Account (TGA) Closing Balance",
+    sort="-record_date", **{"page[size]": 5})
+for row in closing["data"]:
+    print(row["record_date"], Decimal(row["open_today_bal"]), "million USD, closing TGA")
 
-# Monthly total receipts and withdrawals
-result = fetch("/v1/accounting/dts/deposits_withdrawals_operating_cash",
-               fields="record_date,transaction_type,transaction_today_amt",
-               filter="record_date:gte:2024-01-01",
-               sort="-record_date", **{"page[size]": 10000})
-df = pd.DataFrame(result["data"])
-df["amount"] = df["transaction_today_amt"].astype(float)
-summary = df.groupby(["record_date", "transaction_type"])["amount"].sum().unstack()
-print(summary.tail(10))
+# Named totals avoid adding category detail to summary rows.
+cash = fetch_all(endpoint, {
+    "filter": "record_date:gte:2024-01-01,record_date:lte:2024-01-31",
+    "sort": "record_date,src_line_nbr",
+})
+cash = cash[cash["account_type"].isin([
+    "Total TGA Deposits (Table II)", "Total TGA Withdrawals (Table II) (-)",
+])].copy()
+cash["million_usd"] = pd.to_numeric(cash["open_today_bal"])
+print(cash.pivot(index="record_date", columns="account_type", values="million_usd"))
 ```
 
-### Monthly Treasury Statement (Budget)
+Since April 18, 2022, `close_today_bal` is null. The closing-balance account row
+stores its value in `open_today_bal`. Earlier layouts need separate handling.
+DTS cash movements include financing and differ from MTS budget receipts/outlays.
+
+## Monthly Budget Summary
 
 ```python
-# Federal budget receipts and outlays (MTS Table 1)
-result = fetch("/v1/accounting/mts/mts_table_1",
-               filter="record_fiscal_year:eq:2024",
-               sort="record_date", **{"page[size]": 1000})
-df = pd.DataFrame(result["data"])
-
-# Get total receipts line (line code varies; filter by description)
-receipts = df[df["classification_desc"].str.contains("Total Receipts", na=False, case=False)]
-outlays = df[df["classification_desc"].str.contains("Total Outlays", na=False, case=False)]
-print("FY2024 Monthly Summary:")
-print(receipts[["record_date", "current_month_gross_rcpt_amt"]].head(12))
+budget = fetch_all("/v1/accounting/mts/mts_receipts_outlays_deficit_surplus", {
+    "filter": "record_fiscal_year:eq:2024",
+    "sort": "record_date,src_line_nbr",
+})
+budget = budget[budget["amt_category"].isin(["Receipts", "Outlays", "Deficit/Surplus (-)"])].copy()
+budget["million_usd"] = pd.to_numeric(budget["mil_amt"])
+monthly = budget.pivot(index="record_date", columns="amt_category", values="million_usd")
+assert len(monthly) == 12, "Fiscal year is incomplete"
+# Published values are rounded to millions; allow rounding differences.
+residual = monthly["Outlays"] - monthly["Receipts"] - monthly["Deficit/Surplus (-)"]
+if (residual.abs() > 1).any():
+    print("[WARN] Reconcile source revisions/footnotes before using these months:")
+    print(residual[residual.abs() > 1])
+print(monthly)
 ```
 
-### Interest Rate Analysis
+The live FY2024 extract on the review date had a March 2024 reconciliation
+residual of -270 million USD, beyond rounding. This example exposes that source
+discrepancy; it does not treat the series as reconciled or overwrite the published
+values. Check the matching report/revisions before drawing budget conclusions.
+
+This summary has explicit million-dollar units. Tables 1 and 9 have different
+fields and dollar-scale API values; Table 1 repeats prior months and fiscal-year
+sections in each publication. Never add all Table 1 rows to obtain monthly totals.
+
+## Average Treasury and I Bond Rates
 
 ```python
-# Average interest rates on all marketable Treasury securities
-result = fetch("/v2/accounting/od/avg_interest_rates",
-               filter="security_type_desc:eq:Marketable,record_date:gte:2015-01-01",
-               sort="-record_date", **{"page[size]": 10000})
-df = pd.DataFrame(result["data"])
-df["date"] = pd.to_datetime(df["record_date"])
-df["rate"] = df["avg_interest_rate_amt"].astype(float)
+rates = fetch_all("/v2/accounting/od/avg_interest_rates", {
+    "filter": "security_type_desc:eq:Marketable,record_date:gte:2024-01-01,record_date:lte:2024-12-31",
+    "sort": "record_date,src_line_nbr",
+})
+rates["rate_pct"] = pd.to_numeric(rates["avg_interest_rate_amt"])
+print(rates.pivot(index="record_date", columns="security_desc", values="rate_pct"))
 
-# Pivot to compare rates across security types
-pivot = df.pivot_table(index="date", columns="security_desc", values="rate")
-print(pivot.tail(5))
-
-# I Bond rates history
-result = fetch("/v1/accounting/od/i_bonds_interest_rates",
-               sort="-earning_period_start", **{"page[size]": 20})
-df = pd.DataFrame(result["data"])
-df["combined_rate"] = df["combined_rate"].astype(float)
-df["fixed_rate"] = df["fixed_rate"].astype(float)
-print("I Bond rate history:")
-print(df[["earning_period_start", "fixed_rate", "combined_rate"]].head(10))
+# One issue vintage and a fixed earning-period cutoff, not a universal I Bond rate.
+issue_month = "2024-05"
+bonds = fetch("/v1/accounting/od/i_bonds_interest_rates",
+    filter=f"issue_year_month:eq:{issue_month},earning_period_start:lte:2024-11-01",
+    sort="-earning_period_start", **{"page[size]": 1})
+print(pd.DataFrame(bonds["data"])[["issue_year_month", "earning_period_start",
+                                  "earning_period_end", "fixed_rate", "combined_rate"]])
 ```
 
-### Fiscal Year Summary
+Average interest rates describe the outstanding debt portfolio, not current
+market yields. I Bond fixed rates depend on issue vintage; the earning-period
+columns and issue month must be retained together.
+
+## Completed Fiscal-Year Interest Expense
 
 ```python
-def get_fiscal_year_summary(fy: int):
-    """Get key fiscal metrics for a given fiscal year."""
-    
-    # Total debt at end of FY
-    fy_end = f"{fy}-09-30"
-    result = fetch("/v2/accounting/od/debt_to_penny",
-                   filter=f"record_date:lte:{fy_end}",
-                   sort="-record_date", **{"page[size]": 1})
-    debt = float(result["data"][0]["tot_pub_debt_out_amt"]) / 1e12
-
-    # Interest expense for FY
-    result = fetch("/v2/accounting/od/interest_expense",
-                   fields="record_date,expense_net_amt",
-                   filter=f"record_fiscal_year:eq:{fy}",
-                   **{"page[size]": 10000})
-    interest_df = pd.DataFrame(result["data"])
-    if not interest_df.empty:
-        total_interest = interest_df["expense_net_amt"].astype(float).sum() / 1e9
-    else:
-        total_interest = None
-    
-    return {
-        "fiscal_year": fy,
-        "total_debt_trillion": round(debt, 2),
-        "interest_expense_billion": round(total_interest, 1) if total_interest else None
-    }
-
-for fy in [2021, 2022, 2023, 2024]:
-    summary = get_fiscal_year_summary(fy)
-    print(f"FY{fy}: Debt=${summary['total_debt_trillion']}T, "
-          f"Interest=${summary['interest_expense_billion']}B")
+fy = 2024
+expenses = fetch_all("/v2/accounting/od/interest_expense", {
+    "filter": f"record_fiscal_year:eq:{fy}",
+    "sort": "record_date,src_line_nbr",
+})
+assert expenses["record_date"].nunique() == 12, "Fiscal year is incomplete"
+assert expenses["record_date"].max() == f"{fy}-09-30"
+assert not expenses.duplicated(["record_date", "src_line_nbr"]).any()
+monthly_total = sum(Decimal(x) for x in expenses["month_expense_amt"])
+september = expenses[expenses["record_date"] == f"{fy}-09-30"]
+fytd_total = sum(Decimal(x) for x in september["fytd_expense_amt"])
+assert abs(monthly_total - fytd_total) <= Decimal("0.01"), "Reconcile revisions/components"
+print(f"FY{fy} public-debt interest expense: ${fytd_total:,.2f}")
 ```
 
----
+This uses the expense dataset's components and accounting basis, not budget net
+interest. Sum monthly flows once, or take September FYTD once; never sum FYTD
+values across months. Preserve category/group/type fields to inspect components.
 
-## R Examples
+## R example (illustrative; R runtime not exercised)
 
 ```r
 library(httr)
 library(jsonlite)
-
-BASE_URL <- "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
-
-# National debt
-response <- GET(paste0(BASE_URL, "/v2/accounting/od/debt_to_penny"),
-                query = list(sort = "-record_date", `page[size]` = 1))
-data <- fromJSON(rawToChar(response$content))$data
-cat(sprintf("Total debt: $%.2f trillion\n", 
-            as.numeric(data$tot_pub_debt_out_amt) / 1e12))
-
-# Exchange rates
-response <- GET(paste0(BASE_URL, "/v1/accounting/od/rates_of_exchange"),
-                query = list(
-                    fields = "country_currency_desc,exchange_rate,record_date",
-                    filter = "record_date:gte:2024-01-01",
-                    sort = "-record_date",
-                    `page[size]` = 200
-                ))
-rates <- fromJSON(rawToChar(response$content))$data
-rates$exchange_rate <- as.numeric(rates$exchange_rate)
-head(rates)
-
-# MTS Table 9: latest total receipts
-response <- GET(paste0(BASE_URL, "/v1/accounting/mts/mts_table_9"),
-                query = list(
-                    filter = "line_code_nbr:eq:120",
-                    sort = "-record_date",
-                    `page[size]` = 1
-                ))
-mts_data <- fromJSON(rawToChar(response$content))$data
-cat("Latest total receipts line:", mts_data$current_month_gross_rcpt_amt, "\n")
+base <- "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
+response <- GET(paste0(base, "/v1/accounting/mts/mts_table_9"),
+                query = list(filter = "line_code_nbr:eq:120",
+                             sort = "-record_date", `page[size]` = 1),
+                timeout(30))
+stop_for_status(response)
+result <- fromJSON(rawToChar(response$content))
+stopifnot(nrow(result$data) == 1)
+print(result$data[c("record_date", "classification_desc", "current_month_rcpt_outly_amt")])
 ```
 
----
-
-## Discovering Available Fields
-
-To find available fields for any endpoint, request a small sample and inspect the `meta.labels` and `meta.dataTypes`:
+## Discovering fields and datasets
 
 ```python
 result = fetch("/v2/accounting/od/debt_to_penny", **{"page[size]": 1})
-meta = result["meta"]
-for field, label in meta["labels"].items():
-    dtype = meta["dataTypes"].get(field, "?")
-    fmt = meta["dataFormats"].get(field, "?")
-    print(f"{field:40s} | {dtype:12s} | {label}")
+for field, label in result["meta"]["labels"].items():
+    print(field, result["meta"]["dataTypes"][field], label)
 ```
 
-## Finding Datasets
-
-Browse the full list of 54 datasets and 179 data tables at:
-- [Dataset Search](https://fiscaldata.treasury.gov/datasets/) — searchable dataset catalog
-- [API endpoint table](https://fiscaldata.treasury.gov/api-documentation/#list-of-endpoints-table) — full endpoint list
+Use the [dataset catalog](https://fiscaldata.treasury.gov/datasets/) and each
+API Quick Guide/data dictionary for current paths, table coverage, units and
+limitations. The [API guide](https://fiscaldata.treasury.gov/api-documentation/)
+documents common filters, pagination and response metadata.

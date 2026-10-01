@@ -1,7 +1,7 @@
 # Consensus peaks and universe assessment
 
 Verified against `geniml==0.8.4` release source and official BEDbase
-documentation on 2026-07-23.
+documentation on 2026-10-01.
 
 ## Method scope
 
@@ -63,7 +63,10 @@ all_end.bw
 
 CC and CCF read `all_core.bw`. HMM and likelihood-based methods use
 start/core/end tracks. The tracks must share contigs and lengths with the
-checksummed chromosome-sizes file.
+checksummed chromosome-sizes file. CC, CCF, and HMM cast coverage to uint16:
+require finite nonnegative integer counts no greater than 65,535. Fractional
+coverage is truncated and larger counts can wrap. Do not feed normalized
+BigWigs into these methods without verifying the required count semantics.
 
 Official Geniml pages describe producing these tracks with the ecosystem's
 coverage tooling, but the current Gtars CLI has changed across releases. Do not
@@ -95,6 +98,10 @@ It does not execute Geniml, Gtars, native binaries, or network requests.
 
 ## Exact 0.8.4 CLI
 
+All shown CLI forms were checked against installed help. CC was executed on a
+synthetic BigWig; CCF, likelihood/ML, HMM, and assessment are source-verified
+illustrative templates, not completed end-to-end workflows in this review.
+
 The top-level command is `build-universe`, not `universe build`.
 
 ### CC
@@ -112,6 +119,15 @@ geniml build-universe cc \
 `--cutoff` is an integer. If omitted, release source uses mean base coverage
 for each chromosome. `--merge` merges nearby output segments; `--filter-size`
 removes shorter segments. The output file must not already exist.
+A tiny count-track smoke produced the exact expected BED interval. In contrast,
+all-zero selected positions, 0.5-valued tracks, and 65,536-valued tracks
+reproduced empty-selection IndexError failures. The release can leave partial
+output if a later chromosome fails; reconcile every requested chromosome.
+
+`merge=0, filter_size>0` enters the merging implementation and can split
+adjacent covered bases into individual bases. Until that upstream behavior is
+corrected, build with both zero and perform a separately validated BED
+length-filter/merge step when precise gap semantics matter.
 
 Do not claim `cutoff=number_of_files` is a strict sample intersection unless
 coverage generation contributes exactly one unit per sample at each base.
@@ -323,12 +339,12 @@ Remove or correct these stale patterns:
 ## Official sources
 
 - [Official consensus CLI guide](https://docs.bedbase.org/geniml/tutorials/create-consensus-peaks)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [Official consensus Python guide](https://docs.bedbase.org/geniml/notebooks/create-consensus-peaks-python)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [Official universe assessment guide](https://docs.bedbase.org/geniml/tutorials/assess-universe/)
-  (undated; accessed 2026-07-23)
+  (undated; fetch failed 2026-10-01; release source checked)
 - [Geniml v0.8.4 universe source](https://github.com/databio/geniml/tree/v0.8.4/geniml/universe)
-  (released 2026-01-14; accessed 2026-07-23)
+  (released 2026-01-14; accessed 2026-10-01)
 - [Primary consensus-universe paper](https://doi.org/10.1093/nar/gkae685)
   (2024)

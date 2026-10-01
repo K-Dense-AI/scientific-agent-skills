@@ -1,6 +1,8 @@
 # Cosmological Calculations (astropy.cosmology)
 
-The `astropy.cosmology` subpackage provides tools for cosmological calculations based on various cosmological models.
+The `astropy.cosmology` subpackage provides tools for cosmological calculations based on various cosmological models. Requires SciPy for these workflows.
+Pass redshifts positionally in 8.0.1. The shorter formula fragments below assume
+`cosmo`, `z`, and any measured magnitudes are defined for the science case.
 
 > **Import paths:** Always import classes and functions directly from `astropy.cosmology` (as shown in all examples below). The old submodule import paths (`astropy.cosmology.flrw`, `.core`, `.funcs`, `.connect`, `.parameter`) were deprecated in v7.1 and removed in Astropy 8.0.
 
@@ -71,6 +73,11 @@ cosmo_wz = w0wzCDM(H0=70 * u.km/u.s/u.Mpc, Om0=0.3, Ode0=0.7,
                    w0=-1.0, wz=0.1)
 ```
 
+`w0wzCDM` extrapolates `w(z)` linearly; upstream does not recommend it for
+`z > 1`. Its age integral samples to infinity and can fail numerically for
+parameters like `wz=0.1`; a finite low-redshift distance does not validate that
+extrapolation. Choose an appropriate physical model before interpreting ages.
+
 ## Distance Calculations
 
 ### Comoving Distance
@@ -127,7 +134,7 @@ Physical scale at a given redshift:
 
 ```python
 scale = cosmo.kpc_proper_per_arcmin(z)
-# e.g., "50 kpc per arcminute at z=1"
+# Returns proper kpc / arcmin; keep the angular unit when applying the scale.
 ```
 
 ### Comoving Volume
@@ -136,7 +143,7 @@ Volume element for survey volume calculations:
 
 ```python
 vol = cosmo.comoving_volume(z)  # Total volume to redshift z
-vol_element = cosmo.differential_comoving_volume(z)  # dV/dz
+vol_element = cosmo.differential_comoving_volume(z)  # dV / (dz dOmega), Mpc3 / sr
 ```
 
 ## Time Calculations
@@ -205,6 +212,15 @@ z = z_at_value(cosmo.luminosity_distance, 1000*u.Mpc)
 z = z_at_value(cosmo.age, 1*u.Gyr)
 ```
 
+Angular-diameter distance is not monotonic. Select a scientifically justified
+`zmin`/`zmax` branch and check the forward residual; a two-point Brent `bracket`
+does not constrain the solution to that interval.
+
+```python
+z_low = z_at_value(Planck18.angular_diameter_distance, 1500*u.Mpc, zmax=1.5)
+z_high = z_at_value(Planck18.angular_diameter_distance, 1500*u.Mpc, zmin=2.5, zmax=10)
+```
+
 ## Array Operations
 
 All methods accept array inputs:
@@ -235,15 +251,21 @@ cosmo = FlatLambdaCDM(
 )
 ```
 
-Note: Massive neutrinos reduce performance by 3-4x but provide more accurate results.
+Massive neutrinos can make evaluations slower. Choose their masses and `Neff`
+from the intended physical model; adding them does not establish model accuracy.
+The default `Tcmb0=0` disables photons and neutrinos, even when `m_nu` is given.
 
 ## Cloning and Modifying Cosmologies
 
-Cosmology objects are immutable. Create modified copies:
+Cosmology objects are immutable. Clone an already named model. Astropy 8.0.1
+raises `TypeError` when cloning an unnamed model with changes, even if a new
+`name` is passed; give custom models a name when constructing them.
 
 ```python
+# Start from a named built-in model
+cosmo = Planck18
 # Clone with different H0
-cosmo_new = cosmo.clone(H0=72 * u.km/u.s/u.Mpc)
+cosmo_new = cosmo.clone(name="Modified H0", H0=72 * u.km/u.s/u.Mpc)
 
 # Clone with modified name
 cosmo_named = cosmo.clone(name="My Custom Cosmology")
@@ -258,13 +280,13 @@ cosmo_named = cosmo.clone(name="My Custom Cosmology")
 z = 1.5
 m_app = 24.5  # Apparent magnitude
 d_L = cosmo.luminosity_distance(z)
-M_abs = m_app - cosmo.distmod(z).value
+M_abs = m_app - cosmo.distmod(z).value  # Distance-only; no extinction or K correction
 ```
 
 ### Survey Volume Calculations
 
 ```python
-# Volume between two redshifts
+# Full-sky comoving volume between two redshifts; multiply by survey solid angle / (4*pi*sr)
 z_min, z_max = 0.5, 1.5
 volume = cosmo.comoving_volume(z_max) - cosmo.comoving_volume(z_min)
 
@@ -278,7 +300,7 @@ volume_gpc3 = volume.to(u.Gpc**3)
 theta = 1 * u.arcsec  # Angular size
 z = 2.0
 d_A = cosmo.angular_diameter_distance(z)
-size_kpc = (d_A * theta.to(u.radian)).to(u.kpc)
+size_kpc = (d_A * theta.to_value(u.rad)).to(u.kpc)  # Small-angle approximation
 ```
 
 ### Time Since Big Bang
@@ -306,4 +328,7 @@ print(f"WMAP9 d_L: {WMAP9.luminosity_distance(z)}")
 - Calculations are fast for most purposes
 - Massive neutrinos reduce speed significantly
 - Array operations are vectorized and efficient
-- Results valid for z < 5000-6000 (depends on model)
+- Numerical evaluation is not evidence of physical validity at a chosen redshift;
+  record model parameters, radiation/neutrino assumptions and domain.
+- Check distance duality `d_L = (1+z)**2 * d_A` for these standard FLRW models,
+  and record the named cosmology or all custom parameters in output provenance.

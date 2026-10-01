@@ -97,6 +97,7 @@ reproduced from the raw data is the finding that costs the most to remediate.
 | [ ] | [ ] | [ ] | [ ] | [ ] |
 
 - Software and version used for calculations: [ ]
+- Independent unit, grouping, CI assumptions, and any unavailable statistics: [ ]
 - Calculation verification method: [ ]
 - Script outputs retained as records: [ ]
 

@@ -1,6 +1,6 @@
 # Specialized Topics
 
-Advanced specialized topics: geostatistics, optimization, ethics, and best practices.
+Geostatistics, optimization, privacy and provenance. Reviewed 2026-10-01. Data-dependent fragments remain illustrative; small numerical functions are exercised by the recipe suite. All Euclidean coordinates below require a suitable metric CRS.
 
 ## Geostatistics
 
@@ -15,33 +15,25 @@ def empirical_variogram(points, values, max_lag=None, n_lags=15):
     """
     Calculate empirical variogram.
     """
-    n = len(points)
-
-    # Distance matrix
-    dist_matrix = squareform(pdist(points))
-
-    if max_lag is None:
-        max_lag = np.max(dist_matrix) / 2
-
-    # Calculate semivariance
-    semivariance = []
-    mean_distances = []
-
-    for lag in np.linspace(0, max_lag, n_lags):
-        # Pair selection
-        mask = (dist_matrix >= lag) & (dist_matrix < lag + max_lag/n_lags)
-
-        if np.sum(mask) == 0:
-            continue
-
-        # Semivariance: (1/2n) * sum(z_i - z_j)^2
-        diff_squared = (values[:, None] - values) ** 2
-        gamma = 0.5 * np.mean(diff_squared[mask])
-
-        semivariance.append(gamma)
-        mean_distances.append(lag + max_lag/(2*n_lags))
-
-    return np.array(mean_distances), np.array(semivariance)
+    points = np.asarray(points, dtype=float)
+    values = np.asarray(values, dtype=float)
+    if points.ndim != 2 or values.shape != (len(points),) or len(points) < 2:
+        raise ValueError('At least two points with one value each are required')
+    if not np.isfinite(points).all() or not np.isfinite(values).all():
+        raise ValueError('Inputs must be finite')
+    distances = pdist(points)  # unique unordered pairs; no self-pairs
+    differences = pdist(values[:, None], metric='sqeuclidean')
+    max_lag = distances.max() / 2 if max_lag is None else max_lag
+    if not np.isfinite(max_lag) or max_lag <= 0 or n_lags < 1:
+        raise ValueError('Positive finite maximum lag and positive lag count required')
+    edges = np.linspace(0, max_lag, n_lags + 1)
+    centers, semivariance = [], []
+    for i, (low, high) in enumerate(zip(edges[:-1], edges[1:])):
+        keep = (distances >= low) & ((distances <= high) if i == n_lags - 1 else (distances < high))
+        if keep.any():
+            centers.append(distances[keep].mean())
+            semivariance.append(0.5 * differences[keep].mean())
+    return np.asarray(centers), np.asarray(semivariance)
 
 # Fit variogram model
 def fit_variogram_model(lags, gammas, model='spherical'):
@@ -51,7 +43,7 @@ def fit_variogram_model(lags, gammas, model='spherical'):
     from scipy.optimize import curve_fit
 
     def spherical(h, nugget, sill, range_):
-        """Spherical model."""
+        """Spherical model; sill argument is partial sill, total sill=nugget+sill."""
         h = np.asarray(h)
         gamma = np.where(h < range_,
                         nugget + sill * (1.5 * h/range_ - 0.5 * (h/range_)**3),
@@ -75,7 +67,7 @@ def fit_variogram_model(lags, gammas, model='spherical'):
     # Fit model
     popt, _ = curve_fit(models[model], lags, gammas,
                         p0=[np.min(gammas), np.max(gammas), np.max(lags)/2],
-                        bounds=(0, np.inf))
+                        bounds=([0, 0, 1e-12], [np.inf, np.inf, np.inf]))
 
     return popt, models[model]
 ```
@@ -109,16 +101,16 @@ def ordinary_kriging(x, y, z, grid_resolution=100):
     return zinterp, sigmasq, gridx, gridy
 
 # Cross-validation
-def kriging_cross_validation(x, y, z, n_folds=5):
+def kriging_cross_validation(x, y, z, groups, n_folds=5):
     """
     Perform k-fold cross-validation for kriging.
     """
-    from sklearn.model_selection import KFold
+    from sklearn.model_selection import GroupKFold
 
-    kf = KFold(n_splits=n_folds)
+    kf = GroupKFold(n_splits=n_folds)
     errors = []
 
-    for train_idx, test_idx in kf.split(z):
+    for train_idx, test_idx in kf.split(z, groups=groups):
         # Train
         OK = OrdinaryKriging(
             x[train_idx], y[train_idx], z[train_idx],
@@ -139,156 +131,59 @@ def kriging_cross_validation(x, y, z, n_folds=5):
 
 ## Spatial Optimization
 
-### Location-Allocation Problem
+### Location-allocation: explicit p-median formulation
 
-```python
-from scipy.optimize import minimize
-import numpy as np
+SLSQP over thresholded fractional variables is not a binary facility solver. For a
+small candidate set, use binary open-site variables `y_j` and assignment variables
+`x_ij`, minimize `sum(demand_i * cost_ij * x_ij)`, and constrain:
 
-def facility_location(demand_points, n_facilities=5):
-    """
-    Solve p-median facility location problem.
-    """
+- `sum_j x_ij = 1` for every demand point;
+- `x_ij <= y_j`;
+- `sum_j y_j = p`;
+- all variables in {0,1}.
 
-    n_demand = len(demand_points)
+Use `scipy.optimize.milp` with `integrality=1`, `Bounds(0, 1)` and explicit
+`LinearConstraint` objects, then require solver success and verify feasibility,
+objective and chosen site count. Costs may be network travel times, not straight-line
+distance; unreachable pairs must be prohibited. Weighted demand needs explicit units.
+KMeans/snapping is a heuristic and can select duplicate sites.
 
-    # Distance matrix
-    dist_matrix = np.zeros((n_demand, n_demand))
-    for i, p1 in enumerate(demand_points):
-        for j, p2 in enumerate(demand_points):
-            dist_matrix[i, j] = np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+### Routing optimization
 
-    # Decision variables: which demand points get facilities
-    def objective(x):
-        """Minimize total weighted distance."""
-        # x is binary array of facility locations
-        facility_indices = np.where(x > 0.5)[0]
+For a small connected undirected road graph, build a shortest-path metric closure
+before a TSP heuristic. `G[current][candidate]` assumes a direct edge and fails on
+ordinary sparse road graphs. NetworkX `traveling_salesman_problem(G, nodes=stops,
+weight='length', cycle=True)` computes a closure and expands the tour back onto
+original graph paths. Report it as approximate; repeated intermediate nodes are
+normal. Directed routing needs strong reachability and a compatible heuristic.
 
-        # Assign each demand to nearest facility
-        total_distance = 0
-        for i in range(n_demand):
-            min_dist = np.min([dist_matrix[i, f] for f in facility_indices])
-            total_distance += min_dist
-
-        return total_distance
-
-    # Constraints: exactly n_facilities
-    constraints = {'type': 'eq', 'fun': lambda x: np.sum(x) - n_facilities}
-
-    # Bounds: binary
-    bounds = [(0, 1)] * n_demand
-
-    # Initial guess: random locations
-    x0 = np.zeros(n_demand)
-    x0[:n_facilities] = 1
-
-    # Solve
-    result = minimize(
-        objective, x0,
-        method='SLSQP',
-        bounds=bounds,
-        constraints=constraints
-    )
-
-    facility_indices = np.where(result.x > 0.5)[0]
-    return demand_points[facility_indices]
-```
-
-### Routing Optimization
-
-```python
-import networkx as nx
-
-def traveling_salesman(G, start_node):
-    """
-    Solve TSP using heuristic.
-    """
-    unvisited = set(G.nodes())
-    unvisited.remove(start_node)
-
-    route = [start_node]
-    current = start_node
-
-    while unvisited:
-        # Find nearest unvisited node
-        nearest = min(unvisited,
-                     key=lambda n: G[current][n].get('weight', 1))
-        route.append(nearest)
-        unvisited.remove(nearest)
-        current = nearest
-
-    # Return to start
-    route.append(start_node)
-
-    return route
-
-# Vehicle Routing Problem
-def vehicle_routing(G, depot, customers, n_vehicles=3, capacity=100):
-    """
-    Solve VRP using heuristic (cluster-first, route-second).
-    """
-    from sklearn.cluster import KMeans
-
-    # 1. Cluster customers
-    coords = np.array([[G.nodes[n]['x'], G.nodes[n]['y']] for n in customers])
-    kmeans = KMeans(n_clusters=n_vehicles, random_state=42)
-    labels = kmeans.fit_predict(coords)
-
-    # 2. Route each cluster
-    routes = []
-    for i in range(n_vehicles):
-        cluster_customers = [customers[j] for j in range(len(customers)) if labels[j] == i]
-        route = traveling_salesman(G.subgraph(cluster_customers + [depot]), depot)
-        routes.append(route)
-
-    return routes
-```
+Vehicle routing additionally constrains capacity, depot starts/ends, customer demand,
+service time, time windows and fleet. Cluster-first routes that never inspect a
+`capacity` argument are not a capacity-constrained VRP solution. Use an appropriate
+routing optimizer and verify each route against the constraints afterward.
 
 ## Ethics and Privacy
 
-### Privacy-Preserving Geospatial Analysis
+### Privacy-preserving geospatial analysis
 
-```python
-# Differential privacy for spatial data
-def add_dp_noise(locations, epsilon=1.0, radius=100):
-    """
-    Add differential privacy noise to locations.
-    """
-    import numpy as np
+Independent metre-scale noise added directly to longitude/latitude is dimensionally
+wrong and does not establish a privacy guarantee. Define protected units, adjacency,
+release mechanism, sensitivity and composition before claiming differential privacy.
+Use a reviewed mechanism appropriate to location data and a threat model; geographic
+projection/extent and side information matter. For descriptive maps, aggregate to
+justified cells and suppress sparse groups, while reporting that aggregation alone
+does not prove anonymity.
 
-    noisy_locations = []
-    for lon, lat in locations:
-        # Calculate noise (Laplace mechanism)
-        sensitivity = radius
-        scale = sensitivity / epsilon
-
-        noise_lon = np.random.laplace(0, scale)
-        noise_lat = np.random.laplace(0, scale)
-
-        noisy_locations.append((lon + noise_lon, lat + noise_lat))
-
-    return noisy_locations
-
-# K-anonymity for trajectory data
-def k_anonymize_trajectory(trajectory, k=5):
-    """
-    Apply k-anonymity to trajectory.
-    """
-    # 1. Divide into segments
-    # 2. Find k-1 similar trajectories
-    # 3. Replace segment with generalization
-
-    # Simplified: spatial generalization
-    from shapely.geometry import LineString
-
-    simplified = LineString(trajectory).simplify(0.01)
-    return list(simplified.coords)
-```
+Line simplification is not k-anonymity: it does not create k indistinguishable people
+or protect sensitive places. Audit re-identification risk and consent/access controls;
+preserve sensitive raw trajectories separately from permitted outputs.
 
 ### Data Provenance
 
 ```python
 # Track geospatial data lineage
+import pandas as pd
+
 class DataLineage:
     def __init__(self):
         self.history = []
@@ -305,12 +200,17 @@ class DataLineage:
         self.history.append(record)
 
     def get_lineage(self, data_id):
-        """Get complete lineage for a dataset."""
-        lineage = []
-        for record in reversed(self.history):
-            if record['output'] == data_id:
-                lineage.append(record)
-                lineage.extend(self.get_lineage(record['input']))
+        """Traverse recorded edges without infinite recursion on cycles."""
+        lineage, seen, pending = [], set(), [data_id]
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            for record in self.history:
+                if record['output'] == current:
+                    lineage.append(record)
+                    pending.append(record['input'])
         return lineage
 ```
 
@@ -324,7 +224,7 @@ class DataLineage:
 """
 name: geomaster
 dependencies:
-  - python=3.11
+  - python=3.13
   - geopandas
   - rasterio
   - scikit-learn
@@ -426,3 +326,5 @@ def process_in_chunks(gdf, func, chunk_size=1000):
 ```
 
 For more code examples, see [code-examples.md](code-examples.md).
+
+Sources: [SciPy MILP](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.milp.html), [PyKrige](https://geostat-framework.readthedocs.io/projects/pykrige/en/stable/generated/pykrige.ok.OrdinaryKriging.html), [NetworkX TSP](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.approximation.traveling_salesman.traveling_salesman_problem.html), [GroupKFold](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupKFold.html).

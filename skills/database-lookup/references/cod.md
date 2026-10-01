@@ -26,45 +26,45 @@ Formula format uses spaces between elements: `Fe2 O3`, `Si O2`, `C6 H12 O6`. URL
 GET /result?el1=Fe&el2=O&format=json
 ```
 
-Use `el1`, `el2`, `el3`, etc. for element filters. Use `nel=2` to restrict to exactly 2 elements.
+Use `el1`, `el2`, `el3`, etc. for element filters. Use `strictmin=2&strictmax=2` to restrict the number of distinct elements to exactly two. `nel1`, `nel2`, etc. exclude individual elements; they are not element counts.
 
 ### Search by cell parameters
 
 ```
-GET /result?a_min=5.0&a_max=6.0&b_min=5.0&b_max=6.0&c_min=5.0&c_max=6.0&format=json
+GET /result?amin=5.0&amax=6.0&bmin=5.0&bmax=6.0&cmin=5.0&cmax=6.0&format=json
 ```
 
 Cell parameter filters:
-- `a_min`, `a_max` — a-axis length (Angstroms)
-- `b_min`, `b_max` — b-axis length
-- `c_min`, `c_max` — c-axis length
-- `alpha_min`, `alpha_max` — alpha angle (degrees)
-- `beta_min`, `beta_max` — beta angle
-- `gamma_min`, `gamma_max` — gamma angle
-- `vol_min`, `vol_max` — unit cell volume (A^3)
+- `amin`, `amax` — a-axis length (Angstroms)
+- `bmin`, `bmax` — b-axis length
+- `cmin`, `cmax` — c-axis length
+- `alpmin`, `alpmax` — alpha angle (degrees)
+- `betmin`, `betmax` — beta angle
+- `gamin`, `gamax` — gamma angle
+- `vmin`, `vmax` — unit cell volume (A^3)
 
 ### Search by space group
 
 ```
-GET /result?sg=F%20m%20-3%20m&format=json
+GET /result?space_group_number=225&format=json
 ```
 
 ### Search by text (author, journal, title)
 
 ```
-GET /result?text=perovskite&format=json
+GET /result?text1=perovskite&format=json
 ```
 
 ### Combined search example
 
 ```
-GET /result?el1=Ti&el2=O&nel=2&sg=P%2042/m%20n%20m&format=json
+GET /result?el1=Ti&el2=O&strictmin=2&strictmax=2&space_group_number=136&format=json
 ```
 
 ### Retrieve a specific CIF file
 
 ```
-GET /1000000.cif
+GET /1526463.cif
 ```
 
 COD IDs are 7-digit integers. Append `.cif` for the crystallographic information file, or `.html` for the web page.
@@ -72,7 +72,7 @@ COD IDs are 7-digit integers. Append `.cif` for the crystallographic information
 ### Retrieve entry metadata as JSON
 
 ```
-GET /result?id=1000000&format=json
+GET /result?id=1526463&format=json
 ```
 
 ### Output formats
@@ -84,28 +84,9 @@ GET /result?id=1000000&format=json
 
 ## Response Format
 
-```json
-[
-  {
-    "file": "1526463",
-    "a": "4.759",
-    "b": "4.759",
-    "c": "12.992",
-    "alpha": "90",
-    "beta": "90",
-    "gamma": "120",
-    "vol": "254.94",
-    "sg": "R -3 c",
-    "formula": "Fe2 O3",
-    "title": "Refinement of the crystal structure of ...",
-    "journal": "Zeitschrift fuer Kristallographie",
-    "year": "1966",
-    "authors": "Blake, R.L.; et al."
-  }
-]
-```
+JSON is an array of entries; `[]` means no matching entry. The `file` string is the COD ID. Cell parameters and other numbers may also be strings, with unavailable fields null. The live `1526463` record (2026-09-30) has `sgNumber="60"`, `a="12.1005"` and formula `- Li2.78 O12 P3 V1.8 Zr0.2 -`; it is not hematite. Fetch full structural data from `https://www.crystallography.net/cod/{file}.cif`.
 
-The `file` field is the COD ID. Use it to fetch the CIF: `https://www.crystallography.net/cod/{file}.cif`
+Use the current search form's parameter names: unknown names can be ignored and yield an unintended broad query. Formula comparison follows COD's Hill-formatted formula conventions; validate the returned formula rather than treating element presence as exact stoichiometry.
 
 ## Rate Limits
 
@@ -115,7 +96,7 @@ The `file` field is the COD ID. Use it to fetch the CIF: `https://www.crystallog
 
 ## Notes
 
-- COD contains ~500,000+ crystal structures from published literature
+- COD contains published crystal structures; record the retrieved entry revision for reproducibility.
 - All data is open-access under public domain / open licenses
 - The search API returns metadata; use the CIF endpoint for full structural data
 - Alternative access: MySQL database dumps and SVN access are available for bulk use

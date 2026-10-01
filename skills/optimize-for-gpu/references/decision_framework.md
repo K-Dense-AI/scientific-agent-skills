@@ -17,9 +17,9 @@ kernel. Validate output semantics and use synchronized GPU timing on representat
 Use CuPy when the user's code is primarily:
 - NumPy array operations (element-wise math, linear algebra, FFT, sorting, reductions)
 - SciPy operations (sparse matrices, signal processing, image filtering, special functions)
-- Any code that chains NumPy calls — CuPy is a drop-in replacement
+- Compatible chains of numeric NumPy calls — check CuPy coverage and semantics before porting
 
-CuPy wraps NVIDIA's optimized libraries (cuBLAS, cuFFT, cuSOLVER, cuSPARSE, cuRAND) so standard operations are already tuned. Most NumPy code works by changing `import numpy as np` to `import cupy as cp`.
+CuPy wraps NVIDIA's optimized libraries (cuBLAS, cuFFT, cuSOLVER, cuSPARSE, cuRAND) so standard operations are already tuned. Many numeric operations have matching names; unsupported dtypes, argument differences, and transfer boundaries still need review.
 
 **Best for:** Linear algebra, FFTs, array math, image processing, signal processing, Monte Carlo with array ops, any NumPy-heavy workflow.
 
@@ -98,7 +98,7 @@ Use cuGraph when the user's code is primarily:
 - NetworkX graph algorithms (centrality, community detection, shortest paths, PageRank)
 - Graph construction and analysis on large networks
 - Social network analysis, knowledge graphs, or recommendation systems
-- Any graph algorithm on networks with 10K+ edges
+- Supported graph algorithms with enough repeated work to amortize conversion
 
 Start with the `nx-cugraph` backend and inspect fallback behavior. Move to the native cuGraph API
 with cuDF edge lists for unsupported operations or a measured performance reason. Include graph
@@ -116,9 +116,9 @@ Use KvikIO when the user's code is primarily:
 - Working with Zarr arrays on GPU (GDSStore backend)
 - Any pipeline where file IO is the bottleneck between storage and GPU
 
-KvikIO provides Python bindings to NVIDIA cuFile, enabling GPUDirect Storage (GDS) — data flows directly between NVMe storage and GPU memory, bypassing CPU memory entirely. When GDS isn't available, it falls back to POSIX IO transparently. It handles both host and device data seamlessly.
+KvikIO can use cuFile/GDS for eligible local I/O. Compatibility mode and unsupported configurations stage through host memory. RemoteFile uses HTTP/libcurl and host bounce buffers; accepting a GPU destination does not mean network-to-GPU GDS.
 
-**Best for:** Loading binary data to GPU, saving GPU arrays to disk, reading from S3/HTTP directly to GPU, Zarr arrays on GPU, replacing `numpy.fromfile()` → `cupy` patterns, any IO-heavy GPU pipeline where data staging through CPU memory is a bottleneck.
+**Best for:** Loading binary data to GPU, saving GPU arrays to disk, reading S3/HTTP objects into device buffers, Zarr arrays on GPU, replacing `numpy.fromfile()` → `cupy` patterns, any IO-heavy GPU pipeline where data staging through CPU memory is a bottleneck.
 
 **Note:** For tabular formats (CSV, Parquet, JSON), use cuDF's built-in readers instead — they're optimized for those formats. KvikIO is for raw binary data and remote file access.
 
@@ -150,9 +150,9 @@ Use cuCIM when the user's code is primarily:
 - Image preprocessing pipelines for deep learning (resize, normalize, augment)
 - Digital pathology (whole-slide image reading, H&E stain normalization, cell counting)
 - Microscopy, remote sensing, or medical imaging workflows
-- Any scikit-image-heavy pipeline processing images at 512x512 or larger
+- scikit-image-heavy pipelines whose measured hot path has cuCIM coverage
 
-cuCIM's `cucim.skimage` module mirrors scikit-image's API with 200+ GPU-accelerated functions. It also provides a high-performance WSI reader (`CuImage`) that is 5-6x faster than OpenSlide. All functions work on CuPy arrays — zero-copy, all on GPU.
+cuCIM provides a substantial subset of scikit-image and a WSI reader (`CuImage`). Some operations return Python scalars, tuples, dictionaries, or region objects and may synchronize; array outputs and zero-copy behavior are operation-specific.
 
 **Best for:** Filtering (Gaussian, Sobel, Frangi), morphology, thresholding, connected component labeling, region properties, color space conversion, image registration, denoising, whole-slide image processing, DL preprocessing pipelines.
 
@@ -165,9 +165,9 @@ Use cuVS when the user's code is primarily:
 - k-NN graph construction for clustering or visualization
 - Any Faiss, Annoy, ScaNN, or sklearn NearestNeighbors workload on large embedding datasets
 
-cuVS provides GPU-accelerated ANN index types (CAGRA, IVF-Flat, IVF-PQ, brute force) plus HNSW for CPU serving from GPU-built indexes. It powers the GPU backends of Faiss, Milvus, and Lucene. Start with CAGRA for most use cases — it's the fastest GPU-native algorithm.
+cuVS provides GPU-accelerated ANN index types (CAGRA, IVF-Flat, IVF-PQ, brute force) plus HNSW for CPU serving from GPU-built indexes. It powers the GPU backends of Faiss, Milvus, and Lucene. Evaluate CAGRA as one ANN candidate and select by measured recall, memory, and latency.
 
-**Best for:** Embedding search, RAG retrieval, recommender systems, image/text/audio similarity search, k-NN graph construction, any nearest-neighbor workload on 10K+ vectors.
+**Best for:** Embedding search, RAG retrieval, recommender systems, image/text/audio similarity search, k-NN graph construction, nearest-neighbor workloads that justify index build and transfer costs.
 
 ### cuSpatial — archived geospatial pipelines only
 **Read:** `references/cuspatial.md`
@@ -204,7 +204,7 @@ RAFT provides the foundational primitives that cuML and cuGraph are built on. Mo
 
 ### Combining Libraries
 
-Many real workloads benefit from using multiple libraries together. They interoperate via the CUDA Array Interface — zero-copy data sharing between CuPy, Numba, Warp, cuDF, cuML, cuGraph, cuVS, cuCIM, cuSpatial, KvikIO, PyTorch, JAX, and other GPU libraries.
+Many real workloads benefit from using multiple libraries together. Many support the CUDA Array Interface or DLPack. Check the exact producer/consumer: dataframe conversion, dtype/layout changes, and cross-device movement may allocate or copy; JAX/TensorFlow generally need DLPack rather than assuming a CUDA Array Interface.
 
 Common combinations:
 - **cuDF + cuML**: Load and preprocess data with cuDF, train/predict with cuML — the full RAPIDS pipeline

@@ -12,12 +12,18 @@ def create_validation_image(page_number, fields_json_path, input_path, output_pa
 
         img = Image.open(input_path)
         draw = ImageDraw.Draw(img)
+        page_info = next(p for p in data["pages"] if p["page_number"] == page_number)
+        width_key = "image_width" if "image_width" in page_info else "pdf_width"
+        height_key = "image_height" if "image_height" in page_info else "pdf_height"
+        sx, sy = img.width / page_info[width_key], img.height / page_info[height_key]
+        def image_box(box):
+            return [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy]
         num_boxes = 0
         
         for field in data["form_fields"]:
             if field["page_number"] == page_number:
-                entry_box = field['entry_bounding_box']
-                label_box = field['label_bounding_box']
+                entry_box = image_box(field['entry_bounding_box'])
+                label_box = image_box(field['label_bounding_box'])
                 draw.rectangle(entry_box, outline='red', width=2)
                 draw.rectangle(label_box, outline='blue', width=2)
                 num_boxes += 2

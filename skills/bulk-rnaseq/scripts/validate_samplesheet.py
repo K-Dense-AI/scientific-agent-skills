@@ -29,6 +29,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from _tabular import validate_header
+
 VALID_STRANDEDNESS = {"auto", "forward", "reverse", "unstranded"}
 REMOTE_PREFIXES = ("http://", "https://", "ftp://", "s3://", "gs://", "az://")
 
@@ -63,12 +65,18 @@ def _is_remote(path: str) -> bool:
     return str(path).startswith(REMOTE_PREFIXES)
 
 
-def validate_samplesheet(path: Path, check_files: bool, rep: Report) -> pd.DataFrame | None:
+def validate_samplesheet(path: Path, check_files: bool, rep: Report,
+                         nfcore: bool = False) -> pd.DataFrame | None:
     if not path.is_file():
         rep.error(f"samplesheet not found: {path}")
         return None
 
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    try:
+        validate_header(path)
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except ValueError as exc:
+        rep.error(f"invalid samplesheet CSV: {exc}")
+        return None
     df.columns = [c.strip() for c in df.columns]
     for col in df.columns:
         df[col] = df[col].str.strip()
@@ -78,10 +86,14 @@ def validate_samplesheet(path: Path, check_files: bool, rep: Report) -> pd.DataF
         return None
     has_r2 = "fastq_2" in df.columns
     has_strand = "strandedness" in df.columns
+    if df.empty:
+        rep.error("samplesheet has no sample rows")
+    if nfcore and list(df.columns[:4]) != ["sample", "fastq_1", "fastq_2", "strandedness"]:
+        rep.error("nf-core requires the first four columns: sample,fastq_1,fastq_2,strandedness")
     if not has_strand:
-        rep.warn("no 'strandedness' column; nf-core/rnaseq recommends one (use 'auto')")
+        rep.warn("no 'strandedness' column; nf-core/rnaseq requires one (use 'auto')")
 
-    seen_r1: dict[str, int] = {}
+    seen_files: dict[str, int] = {}
     for i, row in df.iterrows():
         ln = i + 2  # +1 for header, +1 for 1-based
         sample, r1 = row["sample"], row["fastq_1"]
@@ -93,13 +105,19 @@ def validate_samplesheet(path: Path, check_files: bool, rep: Report) -> pd.DataF
             rep.error(f"row {ln}: empty 'fastq_1'")
         if r1 and r2 and r1 == r2:
             rep.error(f"row {ln} ({sample}): fastq_1 and fastq_2 are the same file")
-        if r1:
-            seen_r1[r1] = seen_r1.get(r1, 0) + 1
+        for fp in (r1, r2):
+            if fp:
+                identity = fp if _is_remote(fp) else str(Path(fp).resolve())
+                seen_files[identity] = seen_files.get(identity, 0) + 1
+                if nfcore and not fp.endswith((".fastq.gz", ".fq.gz")):
+                    rep.error(f"row {ln}: nf-core FASTQ must end in .fastq.gz or .fq.gz: {fp}")
 
         if has_strand:
             s = row["strandedness"].lower()
             if s and s not in VALID_STRANDEDNESS:
                 rep.error(f"row {ln} ({sample}): strandedness '{s}' not in {sorted(VALID_STRANDEDNESS)}")
+            if nfcore and row["strandedness"] not in VALID_STRANDEDNESS:
+                rep.error(f"row {ln}: nf-core strandedness must be non-empty and lowercase")
 
         if check_files:
             for label, fp in (("fastq_1", r1), ("fastq_2", r2)):
@@ -112,9 +130,17 @@ def validate_samplesheet(path: Path, check_files: bool, rep: Report) -> pd.DataF
                 elif not fp.endswith((".fastq.gz", ".fq.gz", ".fastq", ".fq")):
                     rep.warn(f"row {ln} ({sample}): {label} has an unusual extension: {fp}")
 
-    for r1, n in seen_r1.items():
+    for fp, n in seen_files.items():
         if n > 1:
-            rep.error(f"fastq_1 appears {n} times (each library file must be unique): {r1}")
+            rep.error(f"FASTQ appears {n} times (each library file must be unique across both mates): {fp}")
+
+    if has_strand:
+        for sample, grp in df.groupby("sample"):
+            if grp["strandedness"].str.lower().nunique() > 1:
+                rep.error(f"sample '{sample}' has inconsistent strandedness across lanes")
+    normalized = df["sample"].str.replace(" ", "_", regex=False)
+    if df.assign(normalized=normalized).groupby("normalized")["sample"].nunique().gt(1).any():
+        rep.error("sample IDs collide after nf-core replaces spaces with underscores")
 
     # Per-sample paired/single-end consistency (same sample over lanes is allowed in nf-core).
     if has_r2:
@@ -136,8 +162,19 @@ def validate_metadata(meta_path: Path, sheet: pd.DataFrame | None,
         rep.error(f"metadata not found: {meta_path}")
         return
 
-    meta = pd.read_csv(meta_path, dtype=str, keep_default_na=False, index_col=0)
+    try:
+        validate_header(meta_path)
+        meta = pd.read_csv(meta_path, dtype=str, keep_default_na=False, index_col=0)
+    except ValueError as exc:
+        rep.error(f"invalid metadata CSV: {exc}")
+        return
     meta.index = meta.index.astype(str).str.strip()
+    meta.columns = meta.columns.str.strip()
+    for col in meta.columns:
+        meta[col] = meta[col].str.strip()
+    if meta.index.has_duplicates or (meta.index == "").any():
+        rep.error("metadata sample IDs must be non-empty and unique; repeated rows are not biological replicates")
+        return
 
     if condition_col not in meta.columns:
         rep.error(f"metadata has no '{condition_col}' column (columns: {list(meta.columns)})")
@@ -153,17 +190,22 @@ def validate_metadata(meta_path: Path, sheet: pd.DataFrame | None,
             rep.error(f"samples in samplesheet but missing from metadata: {sorted(missing)}")
         if extra:
             rep.warn(f"samples in metadata but not in samplesheet: {sorted(extra)}")
+        meta = meta.loc[meta.index.isin(sheet_samples)]
 
     # Replication per condition group.
     groups = meta[condition_col].replace("", pd.NA).dropna()
     if groups.empty:
         rep.error(f"'{condition_col}' is empty for all samples")
         return
+    if len(groups) != len(meta) or groups.eq("CHANGE_ME").any():
+        rep.error(f"'{condition_col}' has missing or CHANGE_ME values")
+    if groups.nunique() < 2:
+        rep.error(f"'{condition_col}' needs at least two groups for this comparison workflow")
     sizes = groups.value_counts()
     print(f"design: '{condition_col}' groups -> {sizes.to_dict()}")
     for level, n in sizes.items():
         if n < 2:
-            rep.error(f"group '{level}' has {n} replicate(s); need >=2 to estimate variance")
+            rep.error(f"group '{level}' has {n} replicate(s); this workflow requires >=2 biological replicates per group")
         elif n < min_rep:
             rep.warn(f"group '{level}' has {n} replicate(s); >={min_rep} recommended for reliable DE")
 
@@ -189,11 +231,12 @@ def main() -> None:
     p.add_argument("--min-replicates", type=int, default=3, dest="min_rep",
                    help="Replicates per group to recommend (default: 3).")
     p.add_argument("--no-check-files", action="store_true", help="Skip local FASTQ existence checks.")
+    p.add_argument("--nfcore", action="store_true", help="Also enforce nf-core/rnaseq header, gzip extension and strandedness rules.")
     args = p.parse_args()
 
     rep = Report()
     print(f"Validating {args.samplesheet} ...")
-    sheet = validate_samplesheet(args.samplesheet, not args.no_check_files, rep)
+    sheet = validate_samplesheet(args.samplesheet, not args.no_check_files, rep, args.nfcore)
     if args.metadata:
         print(f"Validating {args.metadata} ...")
         validate_metadata(args.metadata, sheet, args.condition_col, args.min_rep, rep)

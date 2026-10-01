@@ -16,14 +16,16 @@ data = zot.fulltext_item('ATTACHMENTKEY')
 # For text docs: indexedChars/totalChars instead of pages
 
 text = data['content']
-coverage = data['indexedPages'] / data['totalPages']
+unit = 'Pages' if 'totalPages' in data else 'Chars'
+total = data.get('total' + unit, 0)
+coverage = data.get('indexed' + unit, 0) / total if total else None
 ```
 
 ## Finding Items with New Full-Text Content
 
 ```python
 # Get item keys with full-text updated since a library version
-new_fulltext = zot.new_fulltext(since='1085')
+new_fulltext = zot.new_fulltext(since=1085)
 # Returns dict: {'KEY1': 1090, 'KEY2': 1095, ...}
 # Values are the library version at which full-text was indexed
 ```
@@ -42,8 +44,8 @@ zot.set_fulltext('ATTACHMENTKEY', payload)
 # For text documents use indexedChars/totalChars
 payload = {
     'content': 'Full text here.',
-    'indexedChars': 15000,
-    'totalChars': 15000
+    'indexedChars': len('Full text here.'),
+    'totalChars': len('Full text here.')
 }
 zot.set_fulltext('ATTACHMENTKEY', payload)
 ```
@@ -66,3 +68,5 @@ pyzotero search -q "climate tipping points" --fulltext --json
 # Search in titles/creators + full-text content
 results = zot.items(q='protein folding', qmode='everything', limit=20)
 ```
+
+`fulltext_item()` sends GET to `/items/{attachmentKey}/fulltext`; a 404 can mean missing indexed content as well as a missing item. `new_fulltext()` uses `/fulltext?since=<version>` and returns a key-to-version dict. `set_fulltext()` PUTs the supplied index and returns Boolean success; it does not extract text from a PDF. Supply the actual extracted content and coverage, not guessed counts. Remote search sees synced indexed content; local search sees the local index and can differ. Keep local server versions separate from Web API versions. [Official full-text contract](https://www.zotero.org/support/dev/web_api/v3/fulltext_content).

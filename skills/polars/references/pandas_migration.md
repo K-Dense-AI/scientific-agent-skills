@@ -1,6 +1,7 @@
 # Pandas to Polars Migration Guide
 
-This guide helps you migrate from pandas to Polars with comprehensive operation mappings and key differences.
+Migration patterns reviewed with Polars 1.44.2 and pandas 3.0.6. Fragments require
+matching input columns; see [review.md](review.md) for tested behavior and limits.
 
 ## Core Conceptual Differences
 
@@ -17,22 +18,19 @@ df.set_index("id")
 ```python
 df[0, "column"]  # Row position, column name
 df[0:5]  # Row slice
-# No set_index equivalent - use group_by instead
+# Preserve former index labels as explicit columns; group_by is an aggregation
 ```
 
 ### 2. Memory Format
 
-**Pandas:** Row-oriented NumPy arrays
-**Polars:** Columnar Apache Arrow format
-
-**Implications:**
-- Polars is faster for column operations
-- Polars uses less memory
-- Polars has better data sharing capabilities
+Both systems store data by column. pandas supports NumPy-backed and extension
+arrays, including Arrow; Polars uses columnar typed buffers with Arrow interchange.
+Performance, memory, and zero-copy behavior depend on types, chunking, and workload;
+benchmark the actual conversion and query.
 
 ### 3. Parallelization
 
-**Pandas:** Primarily single-threaded (requires Dask for parallelism)
+**Pandas:** Parallel behavior depends on the operation and backend
 **Polars:** Parallel by default using Rust's concurrency
 
 ### 4. Lazy Evaluation
@@ -43,11 +41,11 @@ df[0:5]  # Row slice
 ### 5. Type Strictness
 
 **Pandas:** Allows silent type conversions
-**Polars:** Strict typing, explicit casts required
+**Polars:** Typed columns with inference and common-supertype coercion; validate dtypes
 
 **Example:**
 ```python
-# Pandas: Silently converts to float
+# pandas may infer float here; nullable Int64/Arrow dtypes can preserve integers
 pd_df["int_col"] = [1, 2, None, 4]  # dtype: float64
 
 # Polars: Keeps as integer with null
@@ -73,8 +71,8 @@ pl_df = pl.DataFrame({"int_col": [1, 2, None, 4]})  # dtype: Int64
 | Multiple conditions | `df[(df["age"] > 25) & (df["city"] == "NY")]` | `df.filter(pl.col("age") > 25, pl.col("city") == "NY")` |
 | Query method | `df.query("age > 25")` | `df.filter(pl.col("age") > 25)` |
 | isin | `df[df["city"].isin(["NY", "LA"])]` | `df.filter(pl.col("city").is_in(["NY", "LA"]))` |
-| isna | `df[df["value"].isna()]` | `df.filter(pl.col("value").is_null())` |
-| notna | `df[df["value"].notna()]` | `df.filter(pl.col("value").is_not_null())` |
+| isna (float) | `df[df["value"].isna()]` | `df.filter(pl.col("value").is_null() | pl.col("value").is_nan())` |
+| notna (float) | `df[df["value"].notna()]` | `df.filter(pl.col("value").is_not_null() & pl.col("value").is_not_nan())` |
 
 ### Adding/Modifying Columns
 
@@ -106,9 +104,9 @@ df.with_columns(
 |-----------|--------|--------|
 | Group by | `df.groupby("col")` | `df.group_by("col")` |
 | Agg single | `df.groupby("col")["val"].mean()` | `df.group_by("col").agg(pl.col("val").mean())` |
-| Agg multiple | `df.groupby("col").agg({"val": ["mean", "sum"]})` | `df.group_by("col").agg(pl.col("val").mean(), pl.col("val").sum())` |
+| Agg multiple | `df.groupby("col").agg({"val": ["mean", "sum"]})` | `df.group_by("col").agg(pl.col("val").mean().alias("mean"), pl.col("val").sum().alias("sum"))` |
 | Size | `df.groupby("col").size()` | `df.group_by("col").agg(pl.len())` |
-| Count | `df.groupby("col").count()` | `df.group_by("col").agg(pl.col("*").count())` |
+| Count | `df.groupby("col").count()` | `df.group_by("col").agg(pl.exclude("col").count())` |
 
 ### Window Functions
 
@@ -132,7 +130,7 @@ df.with_columns(
 | Operation | Pandas | Polars |
 |-----------|--------|--------|
 | Vertical | `pd.concat([df1, df2], axis=0)` | `pl.concat([df1, df2], how="vertical")` |
-| Horizontal | `pd.concat([df1, df2], axis=1)` | `pl.concat([df1, df2], how="horizontal")` |
+| Horizontal | `pd.concat([df1, df2], axis=1)` | `pl.concat([df1, df2], how="horizontal_extend")` |
 
 ### Sorting
 
@@ -153,7 +151,7 @@ df.with_columns(
 
 | Operation | Pandas | Polars |
 |-----------|--------|--------|
-| Read CSV | `pd.read_csv("file.csv")` | `pl.read_csv("file.csv")` or `pl.scan_csv()` |
+| Read CSV | `pd.read_csv("file.csv")` | `pl.read_csv("file.csv")` or `pl.scan_csv("file.csv")` |
 | Write CSV | `df.to_csv("file.csv")` | `df.write_csv("file.csv")` |
 | Read Parquet | `pd.read_parquet("file.parquet")` | `pl.read_parquet("file.parquet")` |
 | Write Parquet | `df.to_parquet("file.parquet")` | `df.write_parquet("file.parquet")` |
@@ -185,7 +183,12 @@ df.with_columns(
 | Drop nulls | `df.dropna()` | `df.drop_nulls()` |
 | Fill nulls | `df.fillna(0)` | `df.fill_null(0)` |
 | Check null | `df["col"].isna()` | `df.select(pl.col("col").is_null())` |
-| Forward fill | `df.fillna(method="ffill")` | `df.select(pl.col("col").fill_null(strategy="forward"))` |
+| Forward fill | `df.ffill()` | `df.select(pl.col("col").fill_null(strategy="forward"))` |
+
+These missing-data mappings only match pandas after deciding how floating NaNs
+should be treated: Polars `drop_nulls`, `fill_null`, and `is_null` do not include
+NaNs. For float measurements, `fill_nan(None)` can normalize NaN to null before
+those operations; retain counts and a declared exclusion/imputation rule.
 
 ### Other Operations
 
@@ -239,7 +242,7 @@ df = df.with_columns(result=pl.col("value") * 2)
 
 # If custom function needed
 df = df.with_columns(
-    result=pl.col("value").map_elements(lambda x: x * 2, return_dtype=pl.Float64)
+    result=pl.col("value").map_elements(lambda x: float(x) * 2, return_dtype=pl.Float64)
 )
 ```
 
@@ -302,20 +305,16 @@ result = df.group_by("category").agg(
 
 ## Performance Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Sequential Pipe Operations
+### Pattern 1: Lazy Pipeline Helpers
 
-**Bad (disables parallelization):**
-```python
-df = df.pipe(function1).pipe(function2).pipe(function3)
-```
+`pipe` does not disable parallelism. A helper returning a native LazyFrame keeps
+its plan optimizable; collecting inside the helper creates a materialization boundary.
 
-**Good (enables parallelization):**
 ```python
-df = df.with_columns(
-    function1_result(),
-    function2_result(),
-    function3_result()
-)
+def add_double(lf: pl.LazyFrame) -> pl.LazyFrame:
+    return lf.with_columns(doubled=pl.col("value") * 2)
+
+result = df.lazy().pipe(add_double).filter(pl.col("doubled") > 10).collect()
 ```
 
 ### Anti-Pattern 2: Python Functions in Hot Paths
@@ -367,12 +366,12 @@ df = df.with_columns(
 
 When migrating from pandas to Polars:
 
-1. **Remove index operations** - Use integer positions or group_by
+1. **Preserve index labels** - Move them into named columns before conversion
 2. **Replace apply/map with expressions** - Use Polars native operations
 3. **Update column assignment** - Use `with_columns()` instead of direct assignment
 4. **Change groupby.transform to .over()** - Window functions work differently
 5. **Update string operations** - Use `.str.to_uppercase()` instead of `.str.upper()`
-6. **Add explicit type casts** - Polars won't silently convert types
+6. **Validate inferred/coerced types** - Cast deliberately, checking overflow and null counts
 7. **Consider lazy evaluation** - Use `scan_*` instead of `read_*` for large data
 8. **Update aggregation syntax** - More explicit in Polars
 9. **Remove reset_index calls** - Not needed in Polars
@@ -392,17 +391,25 @@ pl_df = pl.from_pandas(pd_df)
 # Convert Polars to pandas
 pd_df = pl_df.to_pandas()
 
-# Use Arrow for zero-copy (when possible)
-pl_df = pl.from_arrow(pd_df)
-pd_df = pl_df.to_arrow().to_pandas()
+# Arrow interchange; conversion may copy depending on dtype/chunk layout.
+import pyarrow as pa
+pl_df = pl.from_arrow(pa.Table.from_pandas(pd_df, preserve_index=False))
+pd_df = pl_df.to_pandas(use_pyarrow_extension_array=True)
 ```
+
+`pl.from_pandas` defaults to `nan_to_null=True` and excludes ordinary pandas
+index labels unless requested; use `reset_index` deliberately for meaningful labels.
+Horizontal concatenation aligns by position in Polars, not by pandas index.
+Polars joins do not match null keys by default, while pandas merge does.
+Polars group-by retains null groups; pandas default group-by drops NA keys.
+`n_unique` includes null in Polars; pandas `nunique` excludes NA by default.
 
 ## When to Stick with Pandas
 
 Consider staying with pandas when:
 - Working with time series requiring complex index operations
 - Need extensive ecosystem support (some libraries only support pandas)
-- Team lacks Rust/Polars expertise
+- Existing code depends on pandas semantics and has not been validated after migration
 - Data is small and performance isn't critical
 - Using advanced pandas features without Polars equivalents
 

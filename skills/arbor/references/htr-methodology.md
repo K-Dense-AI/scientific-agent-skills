@@ -2,7 +2,9 @@
 
 Background reference for the `arbor` skill. Source: *Toward Generalist
 Autonomous Research via Hypothesis-Tree Refinement* (Jin et al., 2026,
-arXiv:2606.11926; code: github.com/RUC-NLPIR/Arbor). Read this when you want
+[arXiv:2606.11926](https://arxiv.org/abs/2606.11926);
+[code](https://github.com/RUC-NLPIR/Arbor)). Reviewed against v1, the current
+paper version on 2026-09-30. Read this when you want
 the reasoning behind a design choice in the main loop.
 
 ## The problem: Autonomous Optimization (AO)
@@ -148,7 +150,7 @@ engineering, data synthesis) plus MLE-Bench Lite:
 
 - **Insight feedback is the dominant component.** Ablating insight propagation
   while *keeping* the tree caused a larger drop than removing the tree entirely
-  (on MLE-Bench Lite: full 81.82% any-medal vs. 54.54% w/o insight feedback vs.
+  (on MLE-Bench Lite with Claude Opus 4.6: full 81.82% any-medal vs. 54.54% w/o insight feedback vs.
   63.64% w/o tree). Hierarchy alone is not enough — a tree without propagated
   lessons organizes experiments syntactically but provides no semantic memory.
   **Invest your judgment in the abstraction at Backpropagate**, not just in
@@ -168,10 +170,18 @@ engineering, data synthesis) plus MLE-Bench Lite:
   failures, not fresh guesses.
 - **Lessons transfer.** A harness optimized only on one task's dev feedback
   improved unrelated held-out tasks, indicating HTR discovers generally useful
-  design changes rather than fitting the source benchmark — when, and only when,
-  the merge gate is enforced.
+  design changes rather than fitting the source benchmark — in the reported experiment. This does not establish that the gate is
+  sufficient for generalization on arbitrary tasks.
 - **What HTR does *not* fix.** Arbor is strongest at a sequence of concrete
   refinements once a runnable solution exists. It is weaker when progress
   requires a genuinely new high-level formulation only weakly connected to the
   current tree — that still leans on good human task design (the choice of
   `M_0`, evaluator, metric, and interface).
+
+## Interpretation boundary
+
+Repeated gate scores are selection feedback. Worktree isolation prevents file
+contamination but does not make an adaptively queried holdout independent.
+Reserve a separate final assessment, or disclose repeated-gate selection.
+The bundled helper implements bookkeeping, not upstream runtime enforcement;
+its strict score comparison is not a significance test.

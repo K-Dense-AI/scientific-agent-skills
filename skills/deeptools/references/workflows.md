@@ -1,6 +1,6 @@
 # deepTools Common Workflows
 
-This document provides complete workflow examples for common deepTools analyses.
+These deepTools 4.0.0 commands are templates. The four generated workflows and selected numeric contracts were exercised on tiny synthetic inputs; arbitrary data/plot variants remain illustrative. GC correction is illustrative and requires a matching 2bit genome. Inputs must be coordinate-sorted/indexed and duplicate-marked before `--samFlagExclude 1024`. The 200 bp extension is an example, not a measured fragment length. TSS requires strand-aware BED6/GTF; use matching assemblies and an effective genome size derived for the actual reference.
 
 ## ChIP-seq Quality Control Workflow
 
@@ -22,7 +22,7 @@ multiBamSummary bins \
 plotCorrelation \
     -in readCounts.npz \
     --corMethod pearson \
-    --whatToShow heatmap \
+    --whatToPlot heatmap \
     --plotFile correlation_heatmap.png \
     --plotNumbers
 
@@ -47,7 +47,7 @@ plotCoverage \
     --bamfiles Input1.bam ChIP1.bam ChIP2.bam \
     --labels Input ChIP_rep1 ChIP_rep2 \
     --plotFile coverage.png \
-    --ignoreDuplicates \
+    --samFlagExclude 1024 \
     --numberOfProcessors 8
 ```
 
@@ -79,7 +79,7 @@ computeGCBias \
     --genome genome.2bit \
     --fragmentLength 200 \
     --biasPlot GCbias.png \
-    --frequenciesFile freq.txt
+    --GCbiasFrequenciesFile freq.txt
 
 # If bias detected, correct it
 correctGCBias \
@@ -90,7 +90,7 @@ correctGCBias \
     --correctedFile ChIP1_GCcorrected.bam
 ```
 
-**Note:** Only correct if significant bias is observed. Do NOT use `--ignoreDuplicates` with GC-corrected files.
+**Note:** Only correct if significant bias is observed. Do NOT use `--samFlagExclude 1024` with GC-corrected files.
 
 ---
 
@@ -103,7 +103,7 @@ plotFingerprint \
     --labels Input ChIP_rep1 ChIP_rep2 \
     --plotFile fingerprint.png \
     --extendReads 200 \
-    --ignoreDuplicates \
+    --samFlagExclude 1024 \
     --numberOfProcessors 8 \
     --outQualityMetrics fingerprint_metrics.txt
 ```
@@ -129,7 +129,7 @@ bamCoverage \
     --effectiveGenomeSize 2913022398 \
     --binSize 10 \
     --extendReads 200 \
-    --ignoreDuplicates \
+    --samFlagExclude 1024 \
     --numberOfProcessors 8
 
 # ChIP sample
@@ -140,7 +140,7 @@ bamCoverage \
     --effectiveGenomeSize 2913022398 \
     --binSize 10 \
     --extendReads 200 \
-    --ignoreDuplicates \
+    --samFlagExclude 1024 \
     --numberOfProcessors 8
 ```
 
@@ -158,7 +158,7 @@ bamCompare \
     --scaleFactorsMethod readCount \
     --binSize 10 \
     --extendReads 200 \
-    --ignoreDuplicates \
+    --samFlagExclude 1024 \
     --numberOfProcessors 8
 ```
 
@@ -193,9 +193,8 @@ computeMatrix reference-point \
 plotHeatmap \
     --matrixFile matrix_TSS.gz \
     --outFileName heatmap_TSS.png \
-    --colorMap RdBu \
+    --colorMap YlOrRd \
     --whatToShow 'plot, heatmap and colorbar' \
-    --zMin -3 --zMax 3 \
     --yAxisLabel "Genes" \
     --xAxisLabel "Distance from TSS (bp)" \
     --refPointLabel "TSS" \
@@ -217,7 +216,6 @@ plotProfile \
     --colors blue \
     --plotTitle "ChIP-seq signal around TSS" \
     --yAxisLabel "Average signal" \
-    --xAxisLabel "Distance from TSS (bp)" \
     --refPointLabel "TSS"
 ```
 
@@ -234,7 +232,7 @@ plotEnrichment \
     --plotFile enrichment.png \
     --outRawCounts enrichment_counts.tab \
     --extendReads 200 \
-    --ignoreDuplicates
+    --samFlagExclude 1024
 ```
 
 ---
@@ -287,7 +285,7 @@ for sample in Control_ChIP Treated_ChIP; do
         --effectiveGenomeSize 2913022398 \
         --binSize 10 \
         --extendReads 200 \
-        --ignoreDuplicates \
+        --samFlagExclude 1024 \
         --numberOfProcessors 8
 done
 ```
@@ -358,10 +356,17 @@ alignmentSieve \
     --ATACshift \
     --minFragmentLength 38 \
     --maxFragmentLength 2000 \
-    --ignoreDuplicates
+    --samFlagExclude 1024
 ```
 
-**Note:** `--ATACshift` is equivalent to `--shift 4 -5 5 -4` and uses only properly paired fragments.
+**Note:** `--ATACshift` is equivalent to `--shift 4 -5 5 -4` and uses only properly paired fragments. Do not shift twice. Sort and index before the next step, since shifted positions can invalidate coordinate order:
+
+```bash
+samtools sort -o atacseq_shifted.sorted.bam atacseq_shifted.bam
+samtools index atacseq_shifted.sorted.bam
+```
+
+The coverage below covers shifted alignments, not single-base Tn5 insertions; an insertion-count analysis needs its own explicit endpoint definition.
 
 ---
 
@@ -369,10 +374,9 @@ alignmentSieve \
 
 ```bash
 bamCoverage \
-    --bam atacseq_shifted.bam \
+    --bam atacseq_shifted.sorted.bam \
     --outFileName atacseq_coverage.bw \
-    --normalizeUsing RPGC \
-    --effectiveGenomeSize 2913022398 \
+    --normalizeUsing CPM \
     --binSize 1 \
     --numberOfProcessors 8
 ```
@@ -388,7 +392,7 @@ bamPEFragmentSize \
     --maxFragmentLength 1000
 ```
 
-**Expected Pattern:** Nucleosome ladder with peaks at ~50bp (nucleosome-free), ~200bp (mono-nucleosome), ~400bp (di-nucleosome).
+**Interpretation:** Examine the unshifted fragment distribution for subnucleosomal and nucleosomal modes. Approximate 50/200/400 bp modes are illustrative, not universal QC thresholds.
 
 ---
 
@@ -457,7 +461,7 @@ samtools index input.bam
 
 ## Performance Tips
 
-1. **Use multiple processors:** Always set `--numberOfProcessors` to available cores
+1. **Use multiple processors:** Set `--numberOfProcessors` within the scheduler allocation
 2. **Process regions:** Use `--region` for testing or memory-limited environments
 3. **Adjust bin size:** Larger bins = faster processing and smaller files
 4. **Pre-filter BAM files:** Use `alignmentSieve` to create filtered BAM files once, then reuse
@@ -472,5 +476,5 @@ samtools index input.bam
 3. **Use consistent normalization:** Apply same normalization method across samples in a comparison
 4. **Verify reference genome match:** Ensure BAM files and region files use same genome build
 5. **Check strand orientation:** For RNA-seq, verify correct strand orientation
-6. **Test on small regions first:** Use `--region chr1:1-1000000` for testing parameters
+6. **Test on small regions first:** Use `--region chr1:1:1000000` for testing parameters
 7. **Keep intermediate files:** Save matrices for regenerating plots with different settings

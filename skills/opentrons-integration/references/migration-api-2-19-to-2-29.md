@@ -1,11 +1,11 @@
 # Migrating API 2.19 Protocols to the Current Baseline
 
 This guide updates protocols written around robot software 7.3.1 and Protocol
-API 2.19 to the 2026-07-23 baseline:
+API 2.19 to the 2026-10-01 baseline:
 
-- Flex: Protocol API 2.29.
+- Flex: documented maximum Protocol API 2.30; bundled templates retain 2.29.
 - OT-2: Protocol API 2.28.
-- Flex local simulator: `opentrons==9.1.1`.
+- Flex local simulator: `opentrons==10.0.0`.
 - OT-2 local compatibility simulator: `opentrons==9.0.0`, followed by analysis
   in the current OT-2 App.
 
@@ -14,7 +14,7 @@ validation and behavior.
 
 ## 1. Identify the Target Robot
 
-API 2.29 is not supported on OT-2 at this baseline.
+API 2.29 and later are not supported on OT-2 at this baseline.
 
 ```python
 # Flex
@@ -284,6 +284,14 @@ supported options for standard and liquid-class commands are not identical.
 - Step grouping in source and protocol visualization.
 - Flex-only at this migration baseline.
 
+### API 2.30
+
+- Aspirating at `well.meniscus(target="start")` without an `end_location` is
+  supported. Older API levels reject that pattern.
+- The 10.0.0 package exposes `MAX_SUPPORTED_VERSION=2.31`, while the official
+  robot support table stops at 2.30. Check the target robot; do not adopt 2.31
+  from the local constant.
+
 ## 10. Revisit Module and Deck Assumptions
 
 Check for:
@@ -316,7 +324,7 @@ Do not assume newer pipetting behavior produces assay-equivalent results.
 1. Preserve the original protocol and expected run log.
 2. Update declarations and load names.
 3. Replace deprecated or invalid calls.
-4. Simulate with the robot-specific pin: `opentrons==9.1.1` for Flex or
+4. Simulate with the robot-specific pin: `opentrons==10.0.0` for Flex or
    `opentrons==9.0.0` for OT-2.
 5. Compare command order, tip use, source/destination mapping, and module states.
 6. Test every runtime parameter branch.

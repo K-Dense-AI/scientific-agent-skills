@@ -2,9 +2,11 @@
 name: cirq
 description: Google quantum computing framework. Use when targeting Google Quantum AI hardware, designing noise-aware circuits, or running quantum characterization experiments. Best for Google hardware, noise modeling, and low-level circuit design. For IBM hardware use qiskit; for quantum ML with autodiff use pennylane; for physics simulations use qutip.
 license: Apache-2.0 license
+compatibility: Requires Python 3.11+ and Cirq 1.7.0 for local examples. Cloud execution requires provider credentials, network access, and assigned targets. Azure uses a separate Cirq 1.6.1 environment.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -24,31 +26,39 @@ For IBM hardware use **qiskit**; for quantum ML with autodiff use **pennylane**;
 
 ## Installation
 
-Examples target **Cirq 1.6.1** on Python 3.11+. Keep Cirq vendor packages on the matching release; independently versioned integrations such as Azure Quantum need their own compatibility check.
+Examples target **Cirq 1.7.0** on Python 3.11+. Keep Cirq vendor packages on the matching release; independently versioned integrations such as Azure Quantum need their own compatibility check.
 
 ```bash
-uv pip install "cirq==1.6.1"
+uv pip install "cirq-core==1.7.0"
+# Optional OpenQASM import dependency
+uv pip install ply
 ```
 
 For hardware integration (pin matching versions for reproducibility):
 ```bash
 # Google Quantum Engine (requires approved GCP project access)
-uv pip install "cirq-google==1.6.1"
+uv pip install "cirq-google==1.7.0"
 
 # IonQ
-uv pip install "cirq-ionq==1.6.1"
+uv pip install "cirq-ionq==1.7.0"
 
 # AQT (Alpine Quantum Technologies)
-uv pip install "cirq-aqt==1.6.1"
+uv pip install "cirq-aqt==1.7.0"
 
 # Pasqal
-uv pip install "cirq-pasqal==1.6.1"
+uv pip install "cirq-pasqal==1.7.0"
 
-# Azure Quantum (IonQ, Honeywell/Quantinuum backends)
-uv pip install "azure-quantum[cirq]"
+# Azure: use a SEPARATE environment; its current extras require Cirq <1.7.
+uv pip install "qdk[azure,cirq]==1.32.3" "azure-quantum==3.13.0"
 ```
 
-For latest features during development, omit version pins; for production or hardware runs, pin all packages to the same Cirq release.
+Pin all `cirq-*` packages in an environment to the same release. The Azure
+example targets its supported Cirq 1.6.1 stack separately; do not force Cirq 1.7.0
+into it. Cirq 1.7.0 updates the IonQ adapter to API v0.4.
+
+Local examples were checked with synthetic circuits. Hardware examples are
+illustrative and were checked against released source and provider documentation,
+without submitting cloud jobs. See [review evidence](references/review.md).
 
 ## Quick Start
 
@@ -71,7 +81,7 @@ circuit = cirq.Circuit(
 print(circuit)
 
 # Simulate
-simulator = cirq.Simulator()
+simulator = cirq.Simulator(seed=42)
 result = simulator.run(circuit, repetitions=1000)
 
 # Display results
@@ -151,11 +161,11 @@ For information about running circuits on real quantum hardware from various pro
 - **[references/hardware.md](references/hardware.md)** - Complete guide to hardware integration
 
 Supported providers:
-- **Google Quantum AI** (`cirq-google`) — Sycamore, Weber, Willow processors via Quantum Engine (restricted access; requires approved GCP project)
+- **Google Quantum AI** (`cirq-google`) — assigned processors via Quantum Engine; discover IDs from your approved project. Bundled virtual processor names are not proof of live access.
 - **IonQ** (`cirq-ionq`) — trapped-ion QPUs and simulators
-- **Azure Quantum** (`azure-quantum[cirq]`) — IonQ and Honeywell/Quantinuum backends
+- **Azure Quantum** (`qdk[azure,cirq]`) — discover Cirq-compatible targets in your workspace, in its separate supported environment
 - **AQT** (`cirq-aqt`) — Alpine Quantum Technologies
-- **Pasqal** (`cirq-pasqal`) — neutral-atom devices
+- **Pasqal** (`cirq-pasqal`) — local device modeling; the legacy remote sampler is not a verified current Pasqal Cloud integration
 
 Topics include device representation, qubit selection, authentication, job management, and circuit optimization for hardware. See [Access and authentication](https://quantumai.google/cirq/google/access) for Google Cloud setup.
 
@@ -234,41 +244,17 @@ Illustrative: requires provider credentials, assigned processor IDs, and current
 provider target names. The local simulation examples do not validate QPU access.
 
 ```python
-import os
+import cirq
 
-def run_on_hardware(circuit, provider='google', processor_id=None, repetitions=1000):
-    """Template for running on quantum hardware."""
-
-    if provider == 'google':
-        import cirq_google as cg
-
-        project_id = os.environ['GOOGLE_CLOUD_PROJECT']
-        engine = cg.Engine(project_id=project_id)
-
-        # List available processors: engine.list_processors()
-        processor_id = processor_id or 'weber'  # use your assigned processor_id
-        sampler = engine.get_sampler(processor_id=processor_id)
-        return sampler.run(circuit, repetitions=repetitions)
-
-    elif provider == 'ionq':
-        import cirq_ionq as ionq
-
-        # Requires IONQ_API_KEY in environment
-        service = ionq.Service()
-        return service.run(circuit, repetitions=repetitions, target='qpu')
-
-    elif provider == 'azure':
-        from azure.quantum.cirq import AzureQuantumService
-
-        service = AzureQuantumService(
-            resource_id=os.environ['AZURE_QUANTUM_RESOURCE_ID'],
-            location=os.environ['AZURE_QUANTUM_LOCATION'],
-        )
-        return service.run(circuit, repetitions=repetitions, target='ionq.qpu')
-
-    else:
-        raise ValueError(f"Unknown provider: {provider}")
+def run_on_hardware(circuit, sampler, device, repetitions=1000):
+    """Submit an already routed/compiled circuit to an explicitly chosen sampler."""
+    device.validate_circuit(circuit)
+    return sampler.run(circuit, repetitions=repetitions)
 ```
+
+Configure a provider-specific sampler using [hardware.md](references/hardware.md).
+Select the target explicitly; compilation does not itself route disconnected
+qubits or guarantee hardware access.
 
 ### Noise Study Template
 
@@ -323,7 +309,7 @@ results = noise_comparison_study(circuit, noise_levels)
    - Always test on simulators first
    - Select best qubits using calibration data
    - Optimize circuits for target hardware gateset
-   - Implement error mitigation for production runs
+   - Validate any mitigation against held-out calibration and uncertainty
    - Store expensive hardware results immediately
 
 4. **Circuit Optimization**
@@ -334,7 +320,7 @@ results = noise_comparison_study(circuit, noise_levels)
 
 5. **Noise Modeling**
    - Use realistic noise models from calibration data
-   - Include all error sources (gate, decoherence, readout)
+   - State which gate, idle, decoherence, and readout effects the model includes
    - Characterize before mitigating
    - Keep circuits shallow to minimize noise accumulation
 
@@ -361,7 +347,7 @@ results = noise_comparison_study(circuit, noise_levels)
 - See `transformation.md` for optimization techniques
 
 **Memory issues with simulation:**
-- Switch from density matrix to state vector simulator
+- For suitable channels, use state-vector trajectories and average enough independent runs; a single trajectory is not the mixed-state density matrix
 - Reduce number of qubits or use stabilizer simulator for Clifford circuits
 
 **Device validation errors:**

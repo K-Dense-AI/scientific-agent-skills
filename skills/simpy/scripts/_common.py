@@ -47,6 +47,11 @@ def load_simpy(*, required: bool = True) -> Any | None:
             f"SimPy {SIMPY_VERSION} is required for simulation execution; "
             f"install it with `{PINNED_INSTALL}`"
         ) from exc
+    if required and simpy.__version__ != SIMPY_VERSION:
+        raise CliError(
+            f"SimPy {SIMPY_VERSION} is required for pinned scheduler instrumentation; "
+            f"found {simpy.__version__}; install it with `{PINNED_INSTALL}`"
+        )
     return simpy
 
 

@@ -30,13 +30,13 @@ token from OpenCitations and send `Authorization: <token>`. Do not add a new
 
 ## Rate Limits
 
-No published per-second cap. Serialize requests. Call `/citation-count` before
+The Index API documents **180 requests/minute per IP**. Serialize requests. Call `/citation-count` before
 `/citations` — the list endpoint returns **every** incoming citation in one
 body, with no page parameter.
 
 ## Identifier prefix (required)
 
-Index v2 IDs must be `doi:`, `pmid:`, or `omid:`. A bare DOI is HTTP 400:
+Index v2 accepts `doi:`, `pmid:`, `omid:`, `issn:`, and `isbn:`; for papers prefer the first three. A bare DOI is HTTP 400:
 
 ```
 GET /index/v2/citation-count/10.1038/nature12373
@@ -136,3 +136,8 @@ when you have an edge from Index and need a human-readable label.
 | Parsed `citing` as one DOI | You store `omid:br/… doi:10.… pmid:…` | Split on spaces; keep the `doi:` value |
 | `/citations` on a highly cited work | Multi-megabyte JSON, no pagination | Count first; bound the pull |
 | `meta/v2/...` | HTTP 404 HTML | Use `meta/v1` |
+
+## Official sources reviewed 2026-09-30
+
+- https://api.opencitations.net/index/v2
+- https://api.opencitations.net/meta/v1

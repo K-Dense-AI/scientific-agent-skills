@@ -1,91 +1,116 @@
-# Running the standalone Arbor CLI (upstream tool)
+# Running the upstream Arbor CLI
 
-This skill normally runs HTR **natively** — Claude is the coordinator and
-subagents are executors. That's the recommended path: no extra install, no
-separate API keys, and you stay in the loop to read evidence between cycles.
+This skill's bundled `tree.py` is a standard-library bookkeeping helper driven
+by the current host agent. The separate upstream runtime supplies its own
+coordinator, executors, checkpoints, dashboard and Git/evaluation tools.
+Their state files are **not interchangeable**.
 
-But the paper's authors also ship a full implementation as a CLI. Use it instead
-when the user explicitly wants to run *the published system* (e.g. to reproduce
-paper results), wants Arbor to run fully unattended for many hours via its own
-live dashboard, or wants its built-in report/web-UI tooling.
-
-Source: https://github.com/RUC-NLPIR/Arbor
+Reviewed on 2026-09-30 against [arbor-agent 0.1.4](https://pypi.org/project/arbor-agent/0.1.4/)
+and [upstream commit 7cdaf1fa](https://github.com/RUC-NLPIR/Arbor/tree/7cdaf1fa6d779b3d5e340052357bf3fe55dfed93).
+The Python distribution is `arbor-agent`; `arbor` on PyPI is an unrelated
+neuroscience simulator. Both use the import name `arbor`, so keep them in
+separate environments.
 
 ## Install
 
-Requires Python ≥ 3.10 and Git.
+Python 3.10+ and Git are required. The built-in alphaXiv search dependency
+requires Python 3.12+, so use 3.12+ when that feature is needed. The native
+runtime requires model access; the bundled helper requires no provider key.
 
 ```bash
-git clone https://github.com/RUC-NLPIR/Arbor.git
-cd Arbor
-python -m venv .venv && source .venv/bin/activate
-uv pip install -e .
-arbor doctor      # verify install, PATH, git, API keys
+uv tool install arbor-agent==0.1.4
+arbor version
+arbor doctor
 ```
 
-## Configure provider/model/keys
+The equivalent isolated verification command is
+`uv run --isolated --no-project --with arbor-agent==0.1.4 arbor version`.
+For source development, clone [RUC-NLPIR/Arbor](https://github.com/RUC-NLPIR/Arbor),
+record the commit, and install it into a dedicated virtual environment.
+
+`doctor` checks local installation, Git and credential/config presence. It does
+not authenticate a key or probe model availability; even a missing-key warning
+can accompany exit code 0. See its [implementation](https://github.com/RUC-NLPIR/Arbor/blob/7cdaf1fa6d779b3d5e340052357bf3fe55dfed93/src/cli/commands/doctor_cmd.py).
+
+## Configure a native run
 
 ```bash
-arbor setup       # writes ~/.arbor/config.yaml (provider, model, base URL, keys)
+arbor setup
 ```
 
-Supported backends: Anthropic, OpenAI / OpenAI-compatible Responses API, and
-LiteLLM (DeepSeek, Gemini, Qwen, vLLM, Ollama, local gateways). Keys can also be
-set via environment variables.
+This writes `~/.arbor/config.yaml`. Current setup choices include `auto`,
+`openai-responses`, `openai-chat` and `anthropic`; `auto` may probe an endpoint
+and make a model request. Use the provider's configured environment credential
+(such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`) or the setup flow, without
+committing credentials. Compatibility with a proxy depends on its supported
+protocol; a base URL alone does not establish Responses/tool support.
 
-## Run
+The upstream prose configuration guide still lists legacy names such as
+`openai` and `litellm`. For this release, prefer the current
+[setup implementation](https://github.com/RUC-NLPIR/Arbor/blob/7cdaf1fa6d779b3d5e340052357bf3fe55dfed93/src/cli/commands/setup_cmd.py)
+and [example configuration](https://github.com/RUC-NLPIR/Arbor/blob/7cdaf1fa6d779b3d5e340052357bf3fe55dfed93/examples/research_config.example.yaml).
+No provider endpoint was exercised during this skill review.
 
-1. Prepare a benchmark directory: an initial artifact under a **clean git repo**
-   plus an evaluation script (your `E_dev` / `E_test`).
-2. Author a project `research_config.yaml` (task description, coordinator
-   settings — max cycles, depth, merge thresholds — executor max turns, UI mode).
-   See `examples/research_config.example.yaml` in the repo.
-3. Start the interactive session:
-   ```bash
-   arbor
-   ```
-   Arbor runs an intake conversation, forms a Research Contract, then a live
-   dashboard takes over. Each experiment runs in an isolated git worktree;
-   verified improvements merge into a per-run trunk.
-4. Outputs land in `.arbor/sessions/` with `REPORT.md`, the event log, and
-   results. Re-render a past session's report with `arbor report <session>`.
+Prepare a clean Git project with a runnable evaluator and explicit development,
+gate and final-assessment protocols. A small project `research_config.yaml`
+can use the following shape (parsed locally with 0.1.4; the actual experiment
+and evaluator are supplied through intake):
 
-## Key CLI commands
+```yaml
+max_cycles: 3
+executor_max_turns: 10
+ui:
+  interaction_mode: review
+```
 
-| Command | Purpose |
+`max_cycles` limits completed/skipped/failed experiments in the upstream CLI;
+it is different from the bundled helper's coordinator-cycle counter.
+`--max-turns` caps coordinator turns, while `executor_max_turns` controls an
+executor. Do not interpret `merge_threshold: 5.0` as an enforced 5% held-out
+gain: the current config describes it as an LLM guideline, and the paper's
+Table 6 describes a development-gain threshold for invoking the gate.
+Verify the actual candidate/baseline gate evidence before reporting admission.
+
+```bash
+arbor --cwd ./benchmark --config ./research_config.yaml --max-cycles 3
+```
+
+This starts intake and can launch a real, paid research run after the native
+runtime's contract flow; it is **not** a dry run. Set evaluator, protected
+files, metric direction, resource limits and Git destination in the contract.
+The runtime keeps per-experiment worktrees and a per-run trunk. Promotion of
+that trunk into the project's main branch is a separate Git operation.
+
+## Commands and outputs
+
+| Command | Contract |
 |---|---|
-| `arbor` | Start an interactive research session |
-| `arbor setup` | Configure provider / model / keys |
-| `arbor doctor` | Diagnose install, PATH, git, API keys |
-| `arbor report <session>` | Re-render reports for a past session |
-| `arbor version` | Print installed version |
+| `arbor` / `arbor run` | Begin intake and a native research session |
+| `arbor setup` | Configure model/provider access |
+| `arbor doctor` | Local diagnostics; not an authenticated service test |
+| `arbor version` | Print the installed distribution version |
+| `arbor report <session> --cwd <project>` | Rebuild `REPORT.md` from a path or session name |
+| `arbor replay --demo --html --out demo.html` | Export a bundled recorded run without calling a model |
+| `arbor install` | Install upstream's separate `arbor-*` skill suite |
+| `arbor mcp` | Run keyless deterministic tools; needs the `arbor-agent[mcp]` extra |
+| `arbor web <session>` | Serve a read-only session monitor |
 
-## Codebase map (for the curious / for debugging)
+Default native outputs are under `<project>/.arbor/sessions/<run_name>/`:
+`REPORT.md`, `events.jsonl`, checkpoint/tree data, and a redacted resolved
+configuration at `.coordinator/config_snapshot.yaml`. See the
+[output documentation](https://github.com/RUC-NLPIR/Arbor/blob/7cdaf1fa6d779b3d5e340052357bf3fe55dfed93/docs/outputs-and-resume.md).
+A report can render from incomplete or empty session data; its existence is
+not evidence that any experiment succeeded.
 
-The implementation lives under `src/` (a src-layout; the CLI installs as
-`arbor`). The package directories are:
-- `core/` — ReAct loop, tools, LLM providers, context management
-- `coordinator/` — coordinator agent, the tree, orchestrator, coordinator tools
-- `executor/` — executor agent and CLI
-- `cli/` — intake, live dashboard, setup, doctor, config
-- `events/` — typed event bus and payloads
-- `report/`, `webui/` — report generation and read-only run monitor
-- `search_agent/` — the minimal ReAct search harness (the `M_0` for the
-  BrowseComp / search-agent tasks)
-- `plugins/` — domain plugins (e.g. `mle_kaggle.yaml`)
-- `skills/` — on-demand markdown playbooks
+Upstream also offers a keyless host integration (`arbor install` plus optional
+`arbor mcp`) that uses the host agent's model rather than making its own model
+calls. Installing that suite changes the host's skill inventory; it is optional
+and does not replace this collection's helper automatically.
 
-(top-level `src/` also has `dashboard.py`, `run.py`, `review.py`.)
+## Verification boundaries
 
-**Naming note:** the paper and this skill call the persistent state the
-**hypothesis tree**; the tool's code and dashboard call the same structure the
-**Idea Tree**. They are the same thing. The depth convention also matches the
-native skill: root/depth 0 = objective + global insights, depth 1 = research
-directions, depth 2+ = concrete tested methods.
-
-## Native vs. upstream — quick guide
-
-- **Native (this skill)**: best default. Lower setup, transparent, you read and
-  steer between cycles, reuses your existing Claude Code session and worktrees.
-- **Upstream CLI**: choose for paper reproduction, long unattended runs with the
-  official dashboard, or when the user specifically asks for the `arbor` tool.
+The isolated installed release passed command help/version checks, parsed the
+configuration above, rendered a synthetic partial report, and exported the
+bundled replay to HTML. Model setup, autonomous experiment dispatch, live
+provider requests, MCP registration and runtime Git merges were source-reviewed
+only, not executed. This skill does not claim reproduction of the paper.

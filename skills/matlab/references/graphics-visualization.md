@@ -64,8 +64,10 @@ R2026a-supported output includes:
 - interactive HTML web canvas (new in R2026a).
 
 SVG support was added in R2025a. `Append=true` is supported for PDF and GIF,
-not every format. `ContentType="vector"` applies where supported, but some plot
-content can still be rasterized. `Resolution` is for raster output. R2025a
+not every format. `ContentType` selects vector/image content for PDF, EPS,
+and EMF; choose SVG by its extension without relying on this option.
+Inspect export artifacts and any embedded images. `Resolution` has no effect
+on vector output or HTML. R2025a
 added dimensions/padding controls; verify exact option and unit support in the
 target release.
 
@@ -169,7 +171,7 @@ rasterization or produce platform-specific output. For large data:
 - [ ] Batch mode and display requirements are compatible.
 - [ ] Accessibility and final-size readability were reviewed.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [`tiledlayout`](https://www.mathworks.com/help/matlab/ref/tiledlayout.html)
 - [`exportgraphics`](https://www.mathworks.com/help/matlab/ref/exportgraphics.html)
@@ -177,5 +179,5 @@ rasterization or produce platform-specific output. For large data:
 - [`copygraphics`](https://www.mathworks.com/help/matlab/ref/copygraphics.html)
 - [`exportapp`](https://www.mathworks.com/help/matlab/ref/exportapp.html)
 - [MATLAB Graphics](https://www.mathworks.com/help/matlab/graphics.html)
-- [R2026a release notes](https://www.mathworks.com/help/matlab/release-notes.html)
+- [MATLAB release notes](https://www.mathworks.com/help/matlab/release-notes.html)
 - [`matlab -batch` behavior on Linux](https://www.mathworks.com/help/matlab/ref/matlablinux.html)

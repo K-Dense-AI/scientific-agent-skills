@@ -1,33 +1,32 @@
-import os
-import sys
-
-from pdf2image import convert_from_path
-
-
+"""Render one page at a time with Poppler, keeping preview dimensions bounded."""
+import argparse
+from pathlib import Path
+from pdf2image import convert_from_path, pdfinfo_from_path
 
 
 def convert(pdf_path, output_dir, max_dim=1000):
-    images = convert_from_path(pdf_path, dpi=200)
-
-    for i, image in enumerate(images):
-        width, height = image.size
-        if width > max_dim or height > max_dim:
-            scale_factor = min(max_dim / width, max_dim / height)
-            new_width = int(width * scale_factor)
-            new_height = int(height * scale_factor)
-            image = image.resize((new_width, new_height))
-        
-        image_path = os.path.join(output_dir, f"page_{i+1}.png")
-        image.save(image_path)
-        print(f"Saved page {i+1} as {image_path} (size: {image.size})")
-
-    print(f"Converted {len(images)} pages to PNG images")
+    if max_dim <= 0:
+        raise ValueError("max_dim must be positive")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    page_count = int(pdfinfo_from_path(pdf_path, timeout=60)["Pages"])
+    for number in range(1, page_count + 1):
+        images = convert_from_path(pdf_path, dpi=200, first_page=number,
+                                   last_page=number, size=max_dim, timeout=120)
+        image = images[0]
+        try:
+            path = output_dir / f"page_{number}.png"
+            image.save(path)
+            print(f"Saved page {number} as {path} (size: {image.size})")
+        finally:
+            image.close()
+    print(f"Converted {page_count} pages to PNG images")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: convert_pdf_to_images.py [input pdf] [output directory]")
-        sys.exit(1)
-    pdf_path = sys.argv[1]
-    output_directory = sys.argv[2]
-    convert(pdf_path, output_directory)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input_pdf")
+    parser.add_argument("output_directory")
+    parser.add_argument("--max-dim", type=int, default=1000)
+    args = parser.parse_args()
+    convert(args.input_pdf, args.output_directory, args.max_dim)

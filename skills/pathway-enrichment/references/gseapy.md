@@ -1,189 +1,195 @@
-# gseapy Reference
+# GSEApy reference (tested 1.3.1)
 
-gseapy (v1.1.x, Python/Rust) wraps GSEA, preranked GSEA, ssGSEA, GSVA, and the
-Enrichr API behind a pandas-friendly interface. License: BSD-3-Clause.
+Python/Rust implementation, BSD-3-Clause. These patterns require your own validated
+inputs; offline numerical/plotting APIs were exercised with synthetic data. See
+[verified-api.md](verified-api.md) for online verification and service limitations.
 
-## Contents
-- [Module map](#module-map)
-- [ORA: enrichr (online) and enrich (offline)](#ora)
-- [Preranked GSEA](#preranked-gsea)
-- [Standard GSEA (matrix + classes)](#standard-gsea)
-- [ssGSEA and GSVA](#ssgsea-and-gsva)
-- [Gene sets: libraries, MSigDB, GMT](#gene-sets)
-- [Gene-ID mapping with Biomart](#biomart)
-- [Plotting](#plotting)
-- [Result columns](#result-columns)
-- [Troubleshooting](#troubleshooting)
-
-## Module map
+## ORA: online and local
 
 ```python
 import gseapy as gp
-gp.enrichr      # online ORA via Enrichr API
-gp.enrich       # offline ORA against a local GMT / dict
-gp.prerank      # preranked GSEA (per-gene score)
-gp.gsea         # standard GSEA (expression matrix + class labels)
-gp.ssgsea       # single-sample GSEA (per-sample scores)
-gp.gsva         # GSVA (per-sample scores)
-gp.Msigdb       # download MSigDB collections
-gp.Biomart      # gene/ID conversion
-gp.get_library_name(organism="human")  # list Enrichr libraries
-gp.get_library("KEGG_2021_Human")      # fetch a library as a dict
-gp.read_gmt("sets.gmt")                 # load a local GMT as a dict
-# plots: gp.dotplot, gp.barplot, gp.ringplot, gp.enrichment_map,
-#        gp.gseaplot, gp.gseaplot2, gp.heatmap
-```
-
-## ORA
-
-### enrichr (online)
-```python
+# genes and tested_genes must already use the library's namespace/species.
 enr = gp.enrichr(
-    gene_list=genes,                 # list, Series, DataFrame, or txt path (symbols)
-    gene_sets=["MSigDB_Hallmark_2020", "KEGG_2021_Human"],  # names, GMT, or dict
-    organism="human",                # human|mouse|fly|yeast|worm|fish
-    background=None,                  # list or count; default is the library background
-    outdir=None,                      # None = in-memory only
+    gene_list=genes, gene_sets=["MSigDB_Hallmark_2020"], organism="human",
+    background=tested_genes, outdir=None,
 )
-enr.results        # DataFrame: all terms across all libraries (Gene_set column)
+results = enr.results                  # all submitted libraries
 ```
-Key result columns: `Gene_set`, `Term`, `Overlap` (k/K), `P-value`,
-`Adjusted P-value` (BH within library), `Odds Ratio`, `Combined Score`, `Genes`.
 
-`background` note: Enrichr's online API largely ignores arbitrary custom
-backgrounds (it has fixed per-library backgrounds). For a true custom background
-use `gp.enrich()` (below) or g:Profiler. See `interpretation.md`.
+In 1.3.1, named libraries with a nonempty iterable background use **Speedrichr**.
+Without that background, the standard Enrichr service supplies its default.
+The public wrapper docstring still says online backgrounds are ignored; released
+`enrich_online()` code contradicts that and was tested with mocked transport.
+A numeric background count does not select the custom-background route.
+Speedrichr's base URL is not organism-specific; use local GMT for custom
+backgrounds with fly/fish/worm/yeast rather than assuming the routing is correct.
 
-### enrich (offline, custom background)
+For offline analysis, pass a GMT/dict **and explicit gene universe**:
+
 ```python
-gene_sets = gp.read_gmt("c2.cp.reactome.v2024.1.Hs.symbols.gmt")  # dict
-enr = gp.enrich(
-    gene_list=genes,
-    gene_sets=gene_sets,
-    background=expressed_genes,       # REQUIRED here; the tested/expressed universe
-    outdir=None,
-)
+sets = gp.read_gmt("pathways.symbols.gmt")
+assert set(genes) <= set(tested_genes)
+enr = gp.enrich(gene_list=genes, gene_sets=sets,
+                background=tested_genes, outdir=None)
 ```
-Use this when reviewers will ask about the background, or when offline.
+
+The local one-sided hypergeometric test intersects each set and query with the
+background. `Overlap` is hits / set size after intersection. It returns only
+terms with at least one hit and applies BH over those returned terms, not every
+zero-hit term in the GMT. If the planned testing family includes all eligible
+terms, retain zero-hit tests with p=1 and recompute BH over that full family.
+Its `Odds Ratio` includes a 0.5 continuity correction in all four cells; this
+need not equal the online service's odds ratio. `Combined Score` is a ranking
+heuristic, not an adjusted p-value or biological effect size.
+
+`enr.results` can remain a list when no terms match. Check that it is a DataFrame
+before filtering. Standard export, Speedrichr and local results have different
+columns: Speedrichr JSON does not include `Overlap`; do not require it universally.
+`outdir=None` suppresses result files, but online library downloads may still cache.
 
 ## Preranked GSEA
 
 ```python
 pre = gp.prerank(
-    rnk=rnk,                          # Series indexed by gene, or 2-col DataFrame/.rnk path
-    gene_sets=["MSigDB_Hallmark_2020"],
-    min_size=15, max_size=500,        # filter sets by size
-    permutation_num=1000,             # >=1000 for publication
-    weight=1.0,                       # weighted KS (classic = 0)
+    rnk=rnk,                          # unique IDs, finite signed scores, all tested genes
+    gene_sets="pathways.symbols.gmt",
+    organism="human",                # only routes named Enrichr libraries
+    min_size=15, max_size=500,        # matched size after intersection with rank
+    method="permutation", permutation_num=1000,
+    weight=1.0, seed=123, threads=4, ascending=None, outdir=None,
+)
+results = pre.res2d
+```
+
+Sort `rnk` descending first; `ascending=None` preserves that order, including ties.
+The helper uses a stable sort and reports ties. GSEApy itself can uppercase
+inputs when sampled gene sets are uppercase; this heuristic is not orthology.
+Verify matching IDs beforehand and inspect matched/leading genes afterward. A seed cannot make ambiguous
+identifier mapping or arbitrary tied ranks scientifically valid. Check sensitivity
+when many ranks tie. Never let upstream duplicate renaming (`GENE_1`) stand in for
+resolving multiple probes/transcripts. Do not feed an unsigned DESeq2 LRT statistic
+when interpreting positive/negative enrichment; use the signed contrast statistic.
+
+Classic permutation results include `ES`, `NES`, `NOM p-val`, `FDR q-val`,
+`FWER p-val`, `Tag %`, `Gene %`, `Lead_genes`. FDR is based on NES nulls and is
+scoped by the prefix before `__` in 1.3.1. GSEApy prefixes combined libraries;
+avoid `__` inside custom term names unless that grouping is intentional. A single
+dict without such prefixes defines one family. The hosted API prose describing
+pooled FDR across all named libraries is stale relative to the 1.2.1+ source.
+
+`method="multilevel"` is a separate, optional backend in 1.3.x: supports one
+ranked list, `sample_size=101`, `eps=1e-50`, plus `permutation_num` for simple-null
+normalization. It estimates smaller tail p-values, uses fgsea-style NES, applies
+**BH across all tested terms**, reports `log2err`, and omits `FWER p-val`.
+Do not mix its q-values/NES with the classic method without identifying the
+backend. The bundled helper deliberately uses `method="permutation"`. In a 1.3.1 native
+smoke, extreme sets still returned nominal p=0 despite release notes describing
+a p-value floor. Interpret zero as no observed exceedances at the chosen
+permutation resolution, never as a mathematically zero probability.
+
+## Standard GSEA (matrix and independent class labels)
+
+```python
+result = gp.gsea(
+    data=expr_df, gene_sets="pathways.symbols.gmt",  # genes x samples
+    cls=["A"] * 7 + ["B"] * 7,                   # aligned with columns
+    permutation_type="phenotype", method="signal_to_noise",
+    min_size=15, max_size=500, permutation_num=1000,
     seed=123, threads=4, outdir=None,
 )
-pre.res2d        # DataFrame of results (see Result columns)
-pre.results      # dict keyed by term with ES curve, lead genes, etc.
 ```
-`rnk` must be sorted high→low and have no duplicate gene IDs. Rank by the DESeq2
-`stat`, or `sign(log2FoldChange) * -log10(pvalue)`; avoid log2FC alone.
 
-## Standard GSEA
-
-When you have the expression matrix and class labels (rather than a precomputed
-rank), GSEA computes the ranking internally per the chosen metric.
-```python
-gsea = gp.gsea(
-    data=expr_df,                     # genes x samples (DataFrame or GCT path)
-    gene_sets="MSigDB_Hallmark_2020",
-    cls=["A","A","B","B"],            # class vector or .cls path
-    permutation_type="phenotype",     # or "gene_set" for few samples
-    method="signal_to_noise",         # ranking metric
-    permutation_num=1000, seed=123, threads=4, outdir=None,
-)
-gsea.res2d
-```
-With < ~7 samples per group, use `permutation_type="gene_set"`.
+Phenotype permutation requires exchangeable independent biological samples;
+paired/block/confounded designs need a design-aware analysis upstream, not
+unrestricted label shuffling. Signal-to-noise and t-test metrics need at least
+three samples per phenotype; the GSEA guide recommends at least seven for
+phenotype permutation. For smaller groups, gene-set permutations change the
+null and fail to preserve gene correlation; disclose that limitation. Do not
+pretend thousands of cells are independent biological replicates.
 
 ## ssGSEA and GSVA
 
-Per-sample pathway scores (no class labels) — useful as features for ML or for
-heatmaps of pathway activity across samples/cells.
 ```python
-ss = gp.ssgsea(data=expr_df, gene_sets="MSigDB_Hallmark_2020",
-               sample_norm_method="rank", outdir=None, threads=4)
-ss.res2d                              # long-form NES per (Term, Name)
-scores = ss.res2d.pivot(index="Term", columns="Name", values="NES")  # terms x samples
-
-gsva = gp.gsva(data=expr_df, gene_sets="MSigDB_Hallmark_2020", outdir=None)
+ss = gp.ssgsea(data=expr_df, gene_sets="pathways.symbols.gmt",
+               sample_norm_method="rank", min_size=15, max_size=500,
+               permutation_num=0, outdir=None, threads=4)
+scores = ss.res2d.pivot(index="Term", columns="Name", values="NES")
+gsva = gp.gsva(data=expr_df, gene_sets="pathways.symbols.gmt",
+               kcdf="Gaussian", min_size=15, max_size=500, outdir=None)
 ```
 
-## Gene sets
+These are sample-level scores, not differential-enrichment p-values. ssGSEA NES
+normalization depends on the submitted score range, so separately processed
+cohorts need not be comparable. Choose GSVA `kcdf` for the supplied scale:
+Gaussian for continuous/log expression, Poisson for nonnegative counts, or None
+for direct ECDF. Do not call pathway-membership scores evidence of activation;
+use signed responsive signatures and a study design when that is the question.
 
-### List / fetch Enrichr libraries
-```python
-gp.get_library_name(organism="human")     # names drift; check, don't hardcode
-lib = gp.get_library("Reactome_2022")     # dict: {term: [genes]}
-```
-Common human libraries: `MSigDB_Hallmark_2020`, `GO_Biological_Process_2023`,
-`GO_Molecular_Function_2023`, `GO_Cellular_Component_2023`, `KEGG_2021_Human`,
-`Reactome_2022`, `WikiPathway_2023_Human`, `MSigDB_Oncogenic_Signatures`.
+## Library discovery and GMTs
 
-### MSigDB collections
 ```python
-msig = gp.Msigdb()
-print(msig.list_dbver())                   # available MSigDB versions
-cats = msig.list_category(dbver="2024.1.Hs")
-hallmark = msig.get_gmt(category="h.all", dbver="2024.1.Hs")  # dict for prerank/gsea
-```
-Useful categories: `h.all` (Hallmark), `c2.cp.kegg_medicus`, `c2.cp.reactome`,
-`c2.cp.wikipathways`, `c5.go.bp`, `c7.immunesigdb`.
-
-### Local GMT
-```python
-gene_sets = gp.read_gmt("my_sets.gmt")     # then pass to enrich/prerank/gsea
+names = gp.get_library_name(organism="human")
+lib = gp.get_library("MSigDB_Hallmark_2020", organism="human")
+sets = gp.read_gmt("pathways.symbols.gmt")
 ```
 
-## Biomart
+`get_library` defaults to `min_size=0, max_size=2000`, so it can omit large terms;
+choose and record these limits deliberately. The 2026-10-01 human catalog included
+`GO_Biological_Process_2026`, `KEGG_2026`, `Reactome_Pathways_2024`,
+`WikiPathways_2024_Human`, plus older versioned names. Names with a year do not
+replace storing a downloaded GMT and its hash. Discovery verifies availability,
+not species compatibility or curation quality.
+
+```python
+# lxml is needed by pandas.read_html used for the MSigDB directory listings.
+versions = gp.Msigdb.list_dbver()           # DataFrame, not a plain list
+categories = gp.Msigdb.list_category(dbver="2026.1.Hs")
+hallmark = gp.Msigdb.get_gmt(category="h.all", dbver="2026.1.Hs")
+assert hallmark and len(hallmark) == 50
+# Mouse collection codes differ: use mh.all / m* categories from its own catalog.
+```
+
+`entrez=True` fetches Entrez rather than symbols. Directory listings can contain
+non-release entries (currently `msigdb_releases.json`); inspect `Name` values,
+not just the last row. MSigDB's website requests registration and license
+compliance; public SDK-accessible GMTs do not waive those terms.
+
+## BioMart identifiers
 
 ```python
 bm = gp.Biomart()
-# Ensembl gene IDs -> HGNC symbols
-conv = bm.query(dataset="hsapiens_gene_ensembl",
-                attributes=["ensembl_gene_id", "external_gene_name"],
+attrs = ["ensembl_gene_id", "external_gene_name"]
+conv = bm.query(dataset="hsapiens_gene_ensembl", attributes=attrs,
                 filters={"ensembl_gene_id": ensembl_ids})
+if conv is None or list(conv.columns) != attrs:
+    raise RuntimeError("BioMart did not return the requested mapping schema")
+# Inspect empty symbols, duplicate source IDs, and one-to-many mappings here.
 ```
-For mouse→human ortholog mapping or many IDs, g:Profiler `g:Convert`/`g:Orth`
-or the `mygene` package are often easier (see `databases-and-gene-sets.md`).
 
-## Plotting
+The default host returned service-unavailable HTML parsed as a one-column table
+during review. HTTP success/nonempty output alone is insufficient. Pin an archive
+host and release when available; do not accept a different species/assembly just
+to obtain a response. g:Profiler/MyGene are alternatives with different mapping
+semantics, described in [databases-and-gene-sets.md](databases-and-gene-sets.md).
+
+## Plotting and outputs
 
 ```python
-gp.dotplot(enr.results, column="Adjusted P-value", size=5, top_term=15,
-           title="ORA", cmap="viridis_r", ofname="dot.png")
-gp.barplot(enr.results, column="Adjusted P-value", top_term=15, ofname="bar.png")
-gp.dotplot(pre.res2d, column="FDR q-val", title="GSEA", ofname="gsea_dot.png")  # GSEA
-gp.gseaplot(term=pre.res2d.Term.iloc[0], ofname="running.png",
-            **pre.results[pre.res2d.Term.iloc[0]])                    # running-ES curve
-gp.enrichment_map(pre.res2d)          # nodes=terms, edges=gene overlap (returns graph)
+ax = gp.dotplot(enr.results, column="Adjusted P-value", top_term=15, cutoff=0.05)
+ax.get_figure().savefig("ora.png", dpi=200, bbox_inches="tight")
+gp.barplot(enr.results, column="Adjusted P-value", ofname="bar.png")
+gp.dotplot(pre.res2d, column="FDR q-val", ofname="gsea.png")
+term = pre.res2d.Term.iloc[0]
+gp.gseaplot(term=term, rank_metric=pre.ranking, ofname="running.png",
+            **pre.results[term])
+nodes, edges = gp.enrichment_map(pre.res2d, column="FDR q-val", cutoff=0.05)
 ```
-`dotplot`/`barplot` return a Matplotlib `Axes`; `get_figure().savefig(...)` to save.
 
-## Result columns
-
-Enrichr (ORA): `Gene_set`, `Term`, `Overlap`, `P-value`, `Adjusted P-value`,
-`Old P-value`, `Old Adjusted P-value`, `Odds Ratio`, `Combined Score`, `Genes`.
-
-GSEA/prerank (`res2d`): `Name`, `Term`, `ES` (enrichment score), `NES`
-(normalized ES — compare across sets), `NOM p-val`, `FDR q-val`, `FWER p-val`,
-`Tag %`, `Gene %`, `Lead_genes` (leading-edge genes driving the signal).
-
-Rank by `NES` for direction/magnitude; filter by `FDR q-val`. Positive NES =
-enriched at the top of the rank (e.g., up in your test condition).
-
-## Troubleshooting
-
-- **Empty / near-empty results** → almost always a gene-ID or organism mismatch.
-  Check overlap: `set(genes) & set(gp.get_library(lib).keys()...)`; confirm symbols
-  and `organism`.
-- **HTTP errors / timeouts from Enrichr or MSigDB** → transient; retry, reduce the
-  number of libraries, or switch to offline `gp.enrich()` with a local GMT.
-- **`prerank` complains about duplicates / non-numeric** → dedupe the index and
-  coerce scores to float; drop NaN before sorting.
-- **Too few genes match a set** → raise `min_size` caution; tiny overlaps are noise.
-- **Different results between runs (GSEA)** → set `seed` and report `permutation_num`.
+`enrichment_map` returns **two DataFrames**, not a NetworkX graph. Use
+`networkx.from_pandas_edgelist(edges, source="src_idx", target="targ_idx", edge_attr=True)`
+and attach term labels from `nodes`. Without `ofname`, dotplot/barplot return
+Axes; with `ofname` they save and may return None. Use `dotplot(show_ring=True)`;
+there is no top-level `gp.ringplot` in 1.3.1. `gseaplot2` takes lists of terms,
+hit-index lists and running-score vectors; `heatmap` takes a numeric DataFrame.
+A cutoff with no matching terms can raise; report no significant result instead
+of silently plotting nonsignificant terms as discoveries.

@@ -1,5 +1,13 @@
 # Common Query Patterns and Best Practices
 
+Reviewed against Census 1.18.0, TileDB-SOMA 2.3.0, and the 2025-11-08 LTS.
+Snippets share an open `census` context unless shown otherwise. Large cohort,
+model-training, and downstream analysis blocks are illustrative: first inspect
+metadata and size, restrict datasets/genes, and supply the named callbacks/model.
+API and sparse-statistics contracts were exercised on a small local SOMA fixture;
+a 10-cell/3-gene slice and metadata were also read from the public LTS.
+
+
 ## Query Pattern Categories
 
 ### 1. Exploratory Queries (Metadata Only)
@@ -10,7 +18,7 @@ Use when exploring available data without loading expression matrices.
 ```python
 import cellxgene_census
 
-with cellxgene_census.open_soma() as census:
+with cellxgene_census.open_soma(census_version="2025-11-08") as census:
     cell_metadata = cellxgene_census.get_obs(
         census,
         "homo_sapiens",
@@ -37,13 +45,13 @@ counts = cell_metadata.groupby(["disease", "tissue_general"]).size()
 # Access datasets table
 datasets = census["census_info"]["datasets"].read().concat().to_pandas()
 
-# Filter for specific criteria
-covid_datasets = datasets[datasets["disease"].str.contains("COVID", na=False)]
+# Title search is discovery only; disease labels are on obs, not datasets.
+candidates = datasets[datasets["dataset_title"].str.contains("COVID", case=False, na=False)]
 ```
 
 ### 2. Small-to-Medium Queries (AnnData)
 
-Use `get_anndata()` when results fit in memory (typically < 100k cells).
+Use `get_anndata()` when results fit in memory. There is no safe universal cell-count threshold; include gene count, sparsity, embeddings, and downstream copies in the estimate.
 
 **Pattern: Tissue-specific cell type query**
 ```python
@@ -66,6 +74,9 @@ gene_metadata = cellxgene_census.get_var(
     column_names=["feature_id", "feature_name"]
 )
 gene_ids = gene_metadata["feature_id"].tolist()
+if not gene_ids:
+    raise ValueError("No requested marker genes found")
+# Inspect duplicate symbols; retain feature_id rather than collapsing matches.
 
 # Query with gene filter
 adata = cellxgene_census.get_anndata(
@@ -95,6 +106,29 @@ adata = cellxgene_census.get_anndata(
 )
 ```
 
+**Pattern: Include compound disease labels**
+
+Schema 2.4.0 stores multiple disease labels/IDs in one string separated by ` || `.
+Use summary rows to discover the actual strings and token membership to choose
+whole values; substring matching can confuse distinct disease names. This
+includes co-diagnoses rather than only the exact single-label cohort.
+
+```python
+summary = census["census_info"]["summary_cell_counts"].read().concat().to_pandas()
+disease_values = summary.loc[
+    summary["organism"].eq("homo_sapiens") & summary["category"].eq("disease"),
+    "label",
+].unique()
+matching = [value for value in disease_values if "COVID-19" in value.split(" || ")]
+if not matching:
+    raise ValueError("Requested disease not present in this release")
+disease_filter = f"disease in {matching!r} and is_primary_data == True"
+# Add dataset/tissue restrictions after inspecting cohort size.
+```
+
+For precise ontology-based cohorts, inspect `disease_ontology_term_id` as well;
+matching one ontology term does not automatically include all descendants.
+
 ### 3. Large Queries (Out-of-Core Processing)
 
 Use `axis_query()` for queries that exceed available RAM.
@@ -116,48 +150,66 @@ with census["census_data"]["homo_sapiens"].axis_query(
     # Iterate through X matrix in chunks
     iterator = query.X("raw").tables()
     for batch in iterator:
-        # Process batch (a pyarrow.Table)
+        # Process batch (a pyarrow.Table); soma_dim_0 = cells, soma_dim_1 = genes
         # batch has columns: soma_data, soma_dim_0, soma_dim_1
         process_batch(batch)
 ```
 
-**Pattern: Incremental statistics (mean/variance)**
-```python
-import tiledbsoma as soma
+**Pattern: Per-gene mean and variance including measured zeros**
 
-# Using Welford's online algorithm
-n = 0
-mean = 0
-M2 = 0
+Restrict to datasets that measured every requested feature before computing the
+statistics. This example selects CD4 by its unique Ensembl ID. It includes sparse
+zeros, returns one row per gene, and rejects empty or one-cell selections rather
+than returning an undefined sample variance.
+
+```python
+from cellxgene_census.experimental.pp import mean_variance
+
+# Assumes census and soma are imported/open as above.
+genes = cellxgene_census.get_var(
+    census, "homo_sapiens", value_filter="feature_id == 'ENSG00000010610'",
+    column_names=["soma_joinid", "feature_id"],
+)
+if len(genes) != 1:
+    raise ValueError("Expected one CD4 feature")
+datasets = census["census_info"]["datasets"].read().concat().to_pandas()
+presence = cellxgene_census.get_presence_matrix(census, "homo_sapiens")
+covered = presence[datasets["soma_joinid"].to_numpy(), :][:, genes["soma_joinid"].to_numpy()]
+eligible_ids = datasets.loc[covered.toarray().all(axis=1), "dataset_id"].tolist()
+if not eligible_ids:
+    raise ValueError("No datasets measured CD4")
 
 with census["census_data"]["homo_sapiens"].axis_query(
     measurement_name="RNA",
-    obs_query=soma.AxisQuery(value_filter="tissue_general == 'brain' and is_primary_data == True"),
-    var_query=soma.AxisQuery(value_filter="feature_name in ['FOXP2', 'TBR1', 'SATB2']"),
+    obs_query=soma.AxisQuery(value_filter=(
+        f"dataset_id in {eligible_ids!r} and tissue_general == 'brain' "
+        "and is_primary_data == True"
+    )),
+    var_query=soma.AxisQuery(coords=(genes["soma_joinid"].to_numpy(),)),
 ) as query:
-    iterator = query.X("raw").tables()
-    for batch in iterator:
-        values = batch["soma_data"].to_numpy()
-        for x in values:
-            n += 1
-            delta = x - mean
-            mean += delta / n
-            delta2 = x - mean
-            M2 += delta * delta2
-
-variance = M2 / (n - 1) if n > 1 else 0
+    if query.n_obs < 2:
+        raise ValueError("At least two selected cells are required")
+    stats = mean_variance(
+        query, layer="raw", axis=0, calculate_mean=True,
+        calculate_variance=True, ddof=1, nnz_only=False,
+    )
 ```
+
+These describe raw count distributions, not normalized differential expression.
+For genes with different measurement coverage, either use a common measured
+subset or compute each gene with its own valid denominator. `nnz_only=True` is a
+different estimand: the distribution of explicitly stored entries.
 
 ### 4. PyTorch Integration (Machine Learning)
 
-Use TileDB-SOMA-ML for training models. The former `cellxgene_census.experimental.ml` loaders are deprecated and scheduled for removal.
+Use TileDB-SOMA-ML for training models. The former `cellxgene_census.experimental.ml` loaders are absent from 1.18.0.
 
 **Pattern: Create training dataloader**
 ```python
 import tiledbsoma as soma
 from tiledbsoma_ml import ExperimentDataset, experiment_dataloader
 
-with cellxgene_census.open_soma() as census:
+with cellxgene_census.open_soma(census_version="2025-11-08") as census:
     experiment = census["census_data"]["homo_sapiens"]
     with experiment.axis_query(
         measurement_name="RNA",
@@ -187,11 +239,13 @@ with cellxgene_census.open_soma() as census:
 train_dataset, test_dataset = dataset.random_split(0.8, 0.2, seed=42)
 
 # Create loaders
-train_loader = experiment_dataloader(train_dataset, num_workers=2)
-test_loader = experiment_dataloader(test_dataset, num_workers=2)
+train_loader = experiment_dataloader(train_dataset, num_workers=0)
+test_loader = experiment_dataloader(test_dataset, num_workers=0)
 ```
 
-Set `batch_size` and `shuffle` on `ExperimentDataset`, not on the PyTorch `DataLoader`.
+Set `batch_size` and `shuffle` on `ExperimentDataset`, not on the PyTorch `DataLoader`. On macOS, enable multiple workers only from an importable script under `if __name__ == "__main__":`. Keep iteration within the open Census/query context.
+
+A random cell split measures within-cohort interpolation; hold out donors or studies to test generalization. Keep one vocabulary fitted on the training data and define how unseen labels are handled. `X` is NumPy (or SciPy sparse), and `obs` is pandas, so convert inputs to tensors and string labels to stable integer IDs before computing a PyTorch loss.
 
 ### 5. Spatial Census Data
 
@@ -248,9 +302,21 @@ for dataset_id in datasets_to_integrate:
     )
     adatas.append(adata)
 
-# Integrate using scanorama, harmony, or other tools
+# Scanpy's wrapper expects ONE AnnData with contiguous batches and X_pca.
+# Install scanorama separately for this illustrative integration workflow.
+import anndata as ad
+import scanpy as sc
 import scanpy.external as sce
-sce.pp.scanorama_integrate(adatas)
+for item in adatas:
+    item.var_names = item.var["feature_id"].astype(str)
+combined = ad.concat(adatas, label="batch", keys=datasets_to_integrate, join="inner")
+combined.layers["counts"] = combined.X.copy()
+sc.pp.normalize_total(combined, target_sum=1e4)
+sc.pp.log1p(combined)
+sc.pp.highly_variable_genes(combined, n_top_genes=2000, batch_key="batch")
+sc.pp.pca(combined)
+sce.pp.scanorama_integrate(combined, key="batch")
+sc.pp.neighbors(combined, use_rep="X_scanorama")
 ```
 
 ## Best Practices
@@ -270,8 +336,8 @@ census = cellxgene_census.open_soma(census_version="2025-11-08")
 ### 3. Use Context Manager
 Always use the context manager to ensure proper cleanup:
 ```python
-with cellxgene_census.open_soma() as census:
-    # Your code here
+with cellxgene_census.open_soma(census_version="2025-11-08") as census:
+    print(list(census["census_data"]))
 ```
 
 ### 4. Select Only Needed Columns
@@ -300,7 +366,7 @@ gene_presence = presence[:, genes["soma_joinid"].to_numpy()]
 obs_value_filter="tissue_general == 'immune system'"
 
 # Use specific tissue when needed
-obs_value_filter="tissue == 'peripheral blood mononuclear cell'"
+obs_value_filter="tissue == 'venous blood'"
 ```
 
 ### 7. Combine Metadata Exploration with Expression Queries

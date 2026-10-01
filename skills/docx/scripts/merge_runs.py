@@ -67,8 +67,7 @@ def merge_runs(input_dir: str) -> tuple[int, str]:
 
 
 def _is_element(node, tag: str) -> bool:
-    name = node.localName or node.tagName
-    return name == tag or name.endswith(f":{tag}")
+    return node.namespaceURI == WORDML_NS and node.localName == tag
 
 
 def _run_tag_names(root) -> set[str]:
@@ -136,7 +135,7 @@ def _remove_elements(root, tag: str):
 def _strip_rsid_attrs(runs: list):
     for run in runs:
         for attr in list(run.attributes.values()):
-            if "rsid" in attr.name.lower():
+            if attr.namespaceURI == WORDML_NS and attr.localName.startswith("rsid"):
                 run.removeAttribute(attr.name)
 
 
@@ -189,10 +188,14 @@ def _next_sibling_run(node, run_names: set[str]):
 
 
 def _is_run(node, run_names: set[str]) -> bool:
-    return node.tagName in run_names
+    return node.namespaceURI == WORDML_NS and node.localName == "r"
 
 
 def _can_merge(run1, run2) -> bool:
+    def attributes(run):
+        return {(a.namespaceURI, a.localName): a.value for a in run.attributes.values()}
+    if attributes(run1) != attributes(run2):
+        return False
     rpr1 = _get_child(run1, "rPr")
     rpr2 = _get_child(run2, "rPr")
 

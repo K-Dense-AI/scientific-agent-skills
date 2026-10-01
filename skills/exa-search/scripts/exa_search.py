@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["exa-py>=1.14.0"]
+# dependencies = ["exa-py>=2.23.0,<3"]
 # ///
 """Run an Exa web search and write results to JSON.
 
@@ -9,7 +9,7 @@ Uses the Exa Python SDK. Auth via the EXA_API_KEY environment variable.
 
 Example:
     uv run exa_search.py "transformer architectures" \\
-        --category "research paper" \\
+        --category publication \\
         --text --highlights \\
         -o results.json
 """
@@ -83,6 +83,15 @@ def _result_to_typed(item: Any) -> SearchResult:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if not args.query.strip():
+        raise ValueError("The query must not be empty.")
+    if not 1 <= args.num_results <= 100:
+        raise ValueError("--num-results must be between 1 and 100.")
+    category = "publication" if args.category == "research paper" else args.category
+    if category in {"company", "people"} and (
+        args.exclude_domains or args.start_published_date or args.end_published_date
+    ):
+        raise ValueError("company/people do not support exclude-domains or publication-date filters.")
     api_key = os.environ.get("EXA_API_KEY")
     if not api_key:
         print("EXA_API_KEY environment variable is not set.", file=sys.stderr)
@@ -99,8 +108,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "num_results": args.num_results,
         "type": args.type,
     }
-    if args.category:
-        kwargs["category"] = args.category
+    if category:
+        kwargs["category"] = category
     if include := _split_csv(args.include_domains):
         kwargs["include_domains"] = include
     if exclude := _split_csv(args.exclude_domains):
@@ -112,10 +121,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.user_location:
         kwargs["user_location"] = args.user_location
 
-    if contents is not None:
-        response = client.search_and_contents(**kwargs, **contents)
-    else:
-        response = client.search(**kwargs)
+    # SDK 2.x retrieves text by default; preserve this CLI's explicit content flags.
+    response = client.search(**kwargs, contents=contents if contents is not None else False)
 
     typed = [_result_to_typed(item) for item in getattr(response, "results", []) or []]
     return {
@@ -133,28 +140,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--type",
         default="auto",
-        choices=["auto", "fast", "deep"],
-        help="Search type. 'auto' is Exa's general-purpose search; 'fast' is lowest latency; 'deep' is highest quality at higher latency.",
+        choices=["auto", "fast", "instant", "deep-lite", "deep", "deep-reasoning"],
+        help="Search mode: auto balances speed/quality; instant minimizes latency; deep variants perform multi-step research.",
     )
     parser.add_argument("--num-results", type=int, default=10, help="Number of results (1-100).")
     parser.add_argument(
         "--category",
         default=None,
-        choices=[
-            "company",
-            "research paper",
-            "news",
-            "github",
-            "personal site",
-            "financial report",
-            "people",
-        ],
-        help="Bias results toward a content category.",
+        help="Category (publication, company, news, personal site, financial report, people) or custom hint. Legacy 'research paper' maps to publication.",
     )
     parser.add_argument("--include-domains", default=None, help="Comma-separated allowlist.")
     parser.add_argument("--exclude-domains", default=None, help="Comma-separated blocklist.")
-    parser.add_argument("--start-published-date", default=None, help="ISO date, e.g. 2024-01-01.")
-    parser.add_argument("--end-published-date", default=None, help="ISO date, e.g. 2024-12-31.")
+    parser.add_argument("--start-published-date", default=None, help="ISO 8601 timestamp, e.g. 2026-01-01T00:00:00Z.")
+    parser.add_argument("--end-published-date", default=None, help="ISO 8601 timestamp, e.g. 2026-10-01T00:00:00Z.")
     parser.add_argument("--user-location", default=None, help="Two-letter ISO country code.")
     parser.add_argument("--text", action="store_true", help="Return full-text content per result.")
     parser.add_argument("--highlights", action="store_true", help="Return extracted highlight snippets.")
@@ -163,8 +161,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    payload = run(args)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        payload = run(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     text = json.dumps(payload, indent=2, ensure_ascii=False)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:

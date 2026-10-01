@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 SCHEMA_VERSION = "1.0"
-PYLABROBOT_VERSION = "0.2.1"
+PYLABROBOT_VERSION = "0.2.2"
 MAX_FILE_BYTES = 2_000_000
+MAX_JSON_DEPTH = 64
 MAX_RESOURCES = 256
 MAX_TRANSFERS = 10_000
 MAX_DIMENSION_MM = 5_000.0
@@ -113,8 +114,21 @@ def load_json(raw_path: str) -> dict[str, Any]:
     )
   except json.JSONDecodeError as exc:
     raise ValidationError(f"invalid JSON at line {exc.lineno}, column {exc.colno}") from exc
+  except (RecursionError, ValueError) as exc:
+    if isinstance(exc, ValidationError):
+      raise
+    raise ValidationError("JSON nesting or numeric representation exceeds supported limits") from exc
   if not isinstance(data, dict):
     raise ValidationError("JSON root must be an object")
+  pending = [(data, 1)]
+  while pending:
+    value, depth = pending.pop()
+    if depth > MAX_JSON_DEPTH:
+      raise ValidationError(f"JSON nesting exceeds {MAX_JSON_DEPTH} levels")
+    if isinstance(value, dict):
+      pending.extend((item, depth + 1) for item in value.values())
+    elif isinstance(value, list):
+      pending.extend((item, depth + 1) for item in value)
   return data
 
 
@@ -139,6 +153,8 @@ def load_csv(raw_path: str) -> list[dict[str, str]]:
           raise ValidationError(f"CSV exceeds {MAX_TRANSFERS} transfer rows")
   except UnicodeDecodeError as exc:
     raise ValidationError("CSV input must be UTF-8") from exc
+  except csv.Error as exc:
+    raise ValidationError("CSV structure or field length exceeds supported limits") from exc
   if not rows:
     raise ValidationError("CSV must contain at least one transfer row")
   return rows
@@ -179,7 +195,10 @@ def _number(
 ) -> float:
   if isinstance(value, bool) or not isinstance(value, (int, float)):
     raise ValidationError(f"{where} must be a number")
-  result = float(value)
+  try:
+    result = float(value)
+  except OverflowError as exc:
+    raise ValidationError(f"{where} must be a finite bounded number") from exc
   if not math.isfinite(result):
     raise ValidationError(f"{where} must be finite")
   too_small = result < minimum if minimum_inclusive else result <= minimum
@@ -334,7 +353,7 @@ def validate_manifest(data: dict[str, Any]) -> dict[str, Any]:
       raise ValidationError(f"duplicate resource name: {name}")
     resource_names.add(name)
     kind = base["kind"]
-    if kind not in RESOURCE_KINDS:
+    if not isinstance(kind, str) or kind not in RESOURCE_KINDS:
       raise ValidationError(f"{where}.kind must be one of {sorted(RESOURCE_KINDS)}")
     normalized: dict[str, Any] = {
         "name": name,
@@ -465,7 +484,10 @@ def _parse_float_text(
 def _parse_int_text(value: str, where: str, minimum: int, maximum: int) -> int:
   if INT_TEXT_RE.fullmatch(value) is None:
     raise ValidationError(f"{where} must be an unsigned base-10 integer")
-  parsed = int(value)
+  try:
+    parsed = int(value)
+  except ValueError as exc:
+    raise ValidationError(f"{where} integer exceeds supported limits") from exc
   if parsed < minimum or parsed > maximum:
     raise ValidationError(f"{where} must be in [{minimum}, {maximum}]")
   return parsed
@@ -633,7 +655,9 @@ def plan_transfers(
     if source_key == destination_key:
       raise ValidationError(f"{where} source and destination must differ")
     if source_key not in known_liquid_state:
-      raise ValidationError(f"{where}.source requires declared or previously transferred volume")
+      raise ValidationError(f"{where}.source requires declared starting volume")
+    if destination_key not in known_liquid_state:
+      raise ValidationError(f"{where}.destination requires declared starting volume, including zero")
 
     volume = transfer["volume_uL"]
     if volume > constraints["max_transfer_uL"]:
@@ -657,7 +681,7 @@ def plan_transfers(
     remaining = ledger[source_key] - volume
     if remaining < source_resource["grid"]["dead_volume_uL"]:
       raise ValidationError(f"{where} would aspirate below source dead volume")
-    destination_volume = ledger.get(destination_key, 0.0) + volume
+    destination_volume = ledger[destination_key] + volume
     if destination_volume > destination_resource["grid"]["well_capacity_uL"]:
       raise ValidationError(f"{where} would exceed destination well capacity")
 

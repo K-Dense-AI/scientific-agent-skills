@@ -1,7 +1,12 @@
 **CRITICAL: You MUST complete these steps in order. Do not skip ahead to writing code.**
 
 If you need to fill out a PDF form, first check to see if the PDF has fillable form fields. Run this script from this file's directory:
- `python scripts/check_fillable_fields <file.pdf>`, and depending on the result go to either the "Fillable fields" or "Non-fillable fields" and follow those instructions.
+ `python scripts/check_fillable_fields.py <file.pdf>`, and depending on the result go to either the "Fillable fields" or "Non-fillable fields" and follow those instructions.
+
+The helpers target ordinary AcroForms and static pages. XFA forms are detected
+and rejected; signature fields and pushbuttons are not filled. Editing a signed
+PDF may invalidate its signatures. These scripts do not perform digital signing.
+Use synthetic or authorized local documents; no external API is involved.
 
 # Fillable fields
 If the PDF has fillable form fields:
@@ -50,6 +55,14 @@ If the PDF has fillable form fields:
   }
 ]
 ```
+The inventory also includes `widgets` (all one-based page/rectangle locations)
+and `read_only`. The top-level `page` and `rect` identify the first widget. For a
+repeated field, supply one value and any page on which it occurs; every widget is
+updated. Radio options include their own page. Choice options distinguish export
+`value` from visible `text`; `multi_select` lists accept a JSON list of export
+values, while single choices accept a string. Hidden fields have no widget and
+are excluded. Do not mistake a pushbutton or signature for a checkbox.
+
 - Convert the PDF to PNGs (one image for each page) with this script (run from this file's directory):
 `python scripts/convert_pdf_to_images.py <file.pdf> <output_directory>`
 Then analyze the images to determine the purpose of each form field (make sure to convert the bounding box PDF coordinates to image coordinates).
@@ -73,20 +86,29 @@ Then analyze the images to determine the purpose of each form field (make sure t
 ```
 - Run the `fill_fillable_fields.py` script from this file's directory to create a filled-in PDF:
 `python scripts/fill_fillable_fields.py <input pdf> <field_values.json> <output pdf>`
-This script will verify that the field IDs and values you provide are valid; if it prints error messages, correct the appropriate fields and try again.
+This script validates field IDs, pages, types, read-only flags, and choice values.
+It rejects conflicting values for a shared field before writing. pypdf's
+`auto_regenerate=False` keeps saved appearances; do not subsequently set
+`NeedAppearances=True`. For pypdf 6.19.0 choice fields with export/display pairs,
+the helper temporarily uses display labels during appearance generation, then
+restores the original options and export values; it does not patch library globals.
+
+Reopen the output with `PdfReader(output).get_fields()` to check `/V`, then render
+**every affected page** and compare visible values, fonts, check/radio states, and
+clipping against the requested values. A successful write is not visual proof.
 
 # Non-fillable fields
-If the PDF doesn't have fillable form fields, you'll add text annotations. First try to extract coordinates from the PDF structure (more accurate), then fall back to visual estimation if needed.
+If the PDF doesn't have fillable form fields, the helper adds FreeText annotations. These remain annotations, not AcroForm values or flattened page text; viewer rendering and printing can differ. The synthetic FreeText output rendered in Poppler, but PDF.js 6.3.289 under Node.js omitted its text without OffscreenCanvas because no appearance stream was embedded. Do not infer cross-viewer visibility from the `/Contents` value. For a flattened deliverable, use a ReportLab text overlay merged with pypdf and verify the resulting page images. First try to extract coordinates from the PDF structure (more accurate), then fall back to visual estimation if needed.
 
 ## Step 1: Try Structure Extraction First
 
-Run this script to extract text labels, lines, and checkboxes with their exact PDF coordinates:
+Run this script to extract text labels, lines, and checkboxes with coordinates derived from PDF objects (rounded to 0.1 point):
 `python scripts/extract_form_structure.py <input.pdf> form_structure.json`
 
 This creates a JSON file containing:
-- **labels**: Every text element with exact coordinates (x0, top, x1, bottom in PDF points)
+- **labels**: Extracted words with coordinates (x0, top, x1, bottom in PDF points)
 - **lines**: Horizontal lines that define row boundaries
-- **checkboxes**: Small square rectangles that are checkboxes (with center coordinates)
+- **checkboxes**: Small square rectangle candidates; verify which are checkboxes (with center coordinates)
 - **row_boundaries**: Row top/bottom positions calculated from horizontal lines
 
 **Check the results**: If `form_structure.json` has meaningful labels (text elements that correspond to form fields), use **Approach A: Structure-Based Coordinates**. If the PDF is scanned/image-based and has few or no labels, use **Approach B: Visual Estimation**.
@@ -106,7 +128,12 @@ Read form_structure.json and identify:
 3. **Field columns**: Entry areas start after label ends (x0 = label.x1 + gap)
 4. **Checkboxes**: Use the checkbox coordinates directly from the structure
 
-**Coordinate system**: PDF coordinates where y=0 is at TOP of page, y increases downward.
+**Coordinate system**: `pdfplumber`-style point coordinates with y=0 at the
+TOP and y increasing downward. These differ from AcroForm `rect` coordinates,
+which use the bottom-left origin. The annotation helper accepts only unrotated,
+zero-origin pages whose CropBox equals MediaBox and UserUnit is 1. It rejects
+other geometry rather than silently misplacing entries. Normalize a copy with a
+suitable PDF tool and remeasure it before using these helpers.
 
 ### A.2: Check for Missing Elements
 
@@ -152,7 +179,7 @@ Create fields.json using `pdf_width` and `pdf_height` (signals PDF coordinates):
       "field_label": "Yes",
       "label_bounding_box": [260, 200, 280, 210],
       "entry_bounding_box": [285, 197, 292, 205],
-      "entry_text": {"text": "X"}
+      "entry_text": {"text": "X", "font_size": 6}
     }
   ]
 }
@@ -201,10 +228,11 @@ Where:
 
 **Example:** To refine a "Name" field estimated around (100, 150):
 ```bash
+mkdir -p crops
 magick images_dir/page_1.png -crop 300x80+50+120 +repage crops/name_field.png
 ```
 
-(Note: if the `magick` command isn't available, try `convert` with the same arguments).
+(The command uses ImageMagick 7. ImageMagick 6 used `convert`.)
 
 **Examine the cropped image** to determine precise coordinates:
 1. Identify the exact pixel where the entry area begins (after the label)
@@ -227,7 +255,7 @@ Create fields.json using `image_width` and `image_height` (signals image coordin
 ```json
 {
   "pages": [
-    {"page_number": 1, "image_width": 1700, "image_height": 2200}
+    {"page_number": 1, "image_width": 1700, "image_height": 2200, "pdf_width": 612, "pdf_height": 792}
   ],
   "form_fields": [
     {
@@ -242,7 +270,14 @@ Create fields.json using `image_width` and `image_height` (signals image coordin
 }
 ```
 
-**Important**: Use `image_width`/`image_height` and the refined pixel coordinates from the zoom analysis.
+**Important**: Use actual full-page image dimensions and refined pixel coordinates.
+The presence of `image_width` selects pixel coordinates even when PDF dimensions
+are also present. Include `pdf_width`/`pdf_height` so the standalone box validator
+can convert pixel height to points when checking `font_size` (always in points).
+Without `pdf_height`, it warns that font fit was deferred to the fill script.
+The default converter produces previews at most 1000 pixels across; use
+`--max-dim 2200` if refinement needs more pixels. Never reuse coordinates from a
+differently sized render.
 
 ### B.5: Validate Bounding Boxes
 
@@ -263,7 +298,7 @@ Use this when structure extraction works for most fields but misses some element
 4. **Combine coordinates**: For fields from structure extraction, use `pdf_width`/`pdf_height`. For visually-estimated fields, you must convert image coordinates to PDF coordinates:
    - pdf_x = image_x * (pdf_width / image_width)
    - pdf_y = image_y * (pdf_height / image_height)
-5. **Use a single coordinate system** in fields.json - convert all to PDF coordinates with `pdf_width`/`pdf_height`
+5. **Use a single coordinate system per page** in fields.json - convert all to point coordinates with `pdf_width`/`pdf_height` and remove `image_width`/`image_height` for that page.
 
 ---
 
@@ -278,9 +313,18 @@ This checks for:
 
 Fix any reported errors in fields.json before proceeding.
 
+For a visual box check in either point or pixel coordinates:
+`python scripts/create_validation_image.py 1 fields.json images_dir/page_1.png validation.png`
+
+Inspect red entry boxes and blue label boxes. The checker detects overlaps,
+invalid rectangles and simple height errors; it cannot prove text width, font
+glyph coverage, multiline layout, or the semantic meaning of a field.
+It exits nonzero for a detected failure. Font size and rendering still need visual QA.
+
 ## Step 3: Fill the Form
 
-The fill script auto-detects the coordinate system and handles conversion:
+The fill script detects the coordinate system, checks supported page geometry and
+entry height in points, then handles the y-axis conversion:
 `python scripts/fill_pdf_form_with_annotations.py <input.pdf> fields.json <output.pdf>`
 
 ## Step 4: Verify Output
@@ -292,3 +336,10 @@ If text is mispositioned:
 - **Approach A**: Check that you're using PDF coordinates from form_structure.json with `pdf_width`/`pdf_height`
 - **Approach B**: Check that image dimensions match and coordinates are accurate pixels
 - **Hybrid**: Ensure coordinate conversions are correct for visually-estimated fields
+
+
+Official contracts reviewed: [pypdf forms](https://pypdf.readthedocs.io/en/stable/user/forms.html),
+[writer](https://pypdf.readthedocs.io/en/stable/modules/PdfWriter.html),
+[annotations](https://pypdf.readthedocs.io/en/stable/user/adding-pdf-annotations.html),
+[pdfplumber](https://github.com/jsvine/pdfplumber), and
+[pdf2image](https://pdf2image.readthedocs.io/en/latest/reference.html).

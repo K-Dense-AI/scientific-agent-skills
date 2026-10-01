@@ -1,112 +1,75 @@
-# Datamol I/O Module Reference
+# Datamol I/O (0.13.0)
 
-The `datamol.io` module provides comprehensive file handling for molecular data across multiple formats.
+Verified against the [I/O API](https://docs.datamol.io/stable/api/datamol.io.html) and
+released source. File examples below are templates: supply actual paths and schemas.
 
-## Reading Molecular Files
+## Read contracts
 
-### `dm.read_sdf(filename, sanitize=True, remove_hs=True, as_df=True, mol_column='mol', ...)`
-Read Structure-Data File (SDF) format.
-- **Parameters**:
-  - `filename`: Path to SDF file (supports local and remote paths via fsspec)
-  - `sanitize`: Apply sanitization to molecules
-  - `remove_hs`: Remove explicit hydrogens
-  - `as_df`: Return as DataFrame (True) or list of molecules (False)
-  - `mol_column`: Name of molecule column in DataFrame
-  - `n_jobs`: Enable parallel processing
-- **Returns**: DataFrame or list of molecules
-- **Example**: `df = dm.read_sdf("compounds.sdf")`
+| Function | Return/default and parameters |
+|---|---|
+| `dm.read_sdf(path)` | List of Mol by default (`as_df=False`); invalid records discarded by default. |
+| `dm.read_sdf(path, as_df=True, mol_column="mol", discard_invalid=False)` | DataFrame including molecules; preserve invalid records for a rejection log. `smiles_column="smiles"`, `sanitize=True`, `remove_hs=True`, `strict_parsing=True`, `n_jobs=1`. |
+| `dm.read_smi(path)` | List of valid molecules; no `as_df`, `smiles_column` or `mol_column` arguments. For a named/tabular SMILES file prefer explicit CSV parsing. |
+| `dm.read_csv(path, smiles_column="SMILES", mol_column="mol")` | DataFrame with molecules; without `smiles_column` it does not create molecules. Other kwargs go to pandas. |
+| `dm.read_excel(path, sheet_name=0, smiles_column="smiles", mol_column="mol")` | DataFrame for a single sheet; use one selected sheet when creating molecules. |
+| `dm.read_molblock(text, sanitize=True, remove_hs=True, strict_parsing=True)` | Mol or `None`; `fail_if_invalid=True` raises for invalid molecules. |
+| `dm.read_mol2file(path, cleanup_substructures=True, remove_hs=True)` | List of Mol, not one molecule; inspect each parsed record. |
+| `dm.read_pdbfile(path, proximity_bonding=True)` / `dm.read_pdbblock(text, proximity_bonding=True)` | Mol; coordinate proximity can infer bonds and is not a validated chemical topology. |
 
-### `dm.read_smi(filename, smiles_column='smiles', mol_column='mol', as_df=True, ...)`
-Read SMILES file (space-delimited by default).
-- **Common format**: SMILES followed by molecule ID/name
-- **Example**: `df = dm.read_smi("molecules.smi")`
+For SMILES plus IDs, define the delimiter/header rather than silently dropping records:
 
-### `dm.read_csv(filename, smiles_column='smiles', mol_column=None, ...)`
-Read CSV file with optional automatic SMILES-to-molecule conversion.
-- **Parameters**:
-  - `smiles_column`: Column containing SMILES strings
-  - `mol_column`: If specified, creates molecule objects from SMILES column
-- **Example**: `df = dm.read_csv("data.csv", smiles_column="SMILES", mol_column="mol")`
+```python
+import datamol as dm
+# Illustrative: two-column, headerless whitespace-delimited file.
+df = dm.read_csv("molecules.smi", sep=r"\s+", header=None,
+                 names=["smiles", "id"], smiles_column="smiles", mol_column="mol")
+rejected = df.loc[df["mol"].isna()].copy()
+accepted = df.loc[df["mol"].notna()].copy()
+```
 
-### `dm.read_excel(filename, sheet_name=0, smiles_column='smiles', mol_column=None, ...)`
-Read Excel files with molecule handling.
-- **Parameters**:
-  - `sheet_name`: Sheet to read (index or name)
-  - Other parameters similar to `read_csv`
-- **Example**: `df = dm.read_excel("compounds.xlsx", sheet_name="Sheet1")`
+## Write contracts
 
-### `dm.read_molblock(molblock, sanitize=True, remove_hs=True)`
-Parse MOL block string (molecular structure text representation).
+- `dm.to_sdf(mols, path)` or `dm.to_sdf(df, path, mol_column="mol")` writes SDF.
+  Invalid molecules are skipped: check counts before/after export. Retain original record IDs.
+- `dm.to_smi(mols, path, error_if_empty=True)` writes a molecule sequence; no `mol_column`
+  parameter. Use a tabular file when IDs and rejection provenance must survive.
+- `dm.to_xlsx(df, path, mol_column="mol")` renders one molecule column (singular), with
+  `mol_size=(300, 300)` by default.
+- `dm.to_molblock(mol, conf_id=-1)` and `dm.to_pdbblock(mol, conf_id=-1)` return strings.
+  An SDF write exports one conformer per molecule; explicitly enumerate conformers if all are needed.
 
-### `dm.read_mol2file(filename, sanitize=True, remove_hs=True, cleanupSubstructures=True)`
-Read Mol2 format files.
+## Universal tables and serialization
 
-### `dm.read_pdbfile(filename, sanitize=True, remove_hs=True, proximityBonding=True)`
-Read Protein Data Bank (PDB) format files.
+`dm.open_df(path, **kwargs)` dispatches by extension among CSV, Excel, Parquet, JSON and
+SDF; SDF defaults to a DataFrame here, but include `mol_column="mol"` to retain molecules.
+`dm.save_df(df, path, **kwargs)` supports the same formats, including SDF. Compression
+support depends on format/extension and the delegated reader, not every suffix combination.
+CSV/Excel/JSON/Parquet are not portable storage for Python Mol objects: export canonical
+SMILES and scalar columns, then reconstruct molecules when reading.
 
-### `dm.read_pdbblock(pdbblock, sanitize=True, remove_hs=True, proximityBonding=True)`
-Parse PDB block string.
+```python
+# Continue with accepted rows from the parsing example, retaining source IDs.
+portable = accepted.drop(columns=["mol"]).copy()
+portable["smiles"] = [dm.to_smiles(m) for m in accepted["mol"]]
+dm.save_df(portable, "compounds.parquet")
+restored = dm.open_df("compounds.parquet")
+restored["mol"] = [dm.to_mol(s) for s in restored["smiles"]]
+```
 
-### `dm.open_df(filename, ...)`
-Universal DataFrame reader - automatically detects format.
-- **Supported formats**: CSV, Excel, Parquet, JSON, SDF (including compressed files such as `.gz`)
-- **Example**: `df = dm.open_df("data.csv")` or `df = dm.open_df("molecules.sdf.gz")`
+## Remote I/O
 
-## Writing Molecular Files
+Path-based readers/writers commonly delegate to fsspec or pandas. Mol/PDB block functions
+consume/return text, not remote URLs. Current Datamol bundles S3/GCS backends; additional
+protocols such as Azure require their own compatible backend. Authentication follows the
+chosen provider/backend (environment, config, or workload identity); it is not restricted
+to environment variables. Use only the requested destinations and avoid logging credentials.
+HTTPS is a useful read source, not a promise of writable HTTP storage.
 
-### `dm.to_sdf(mols, filename, mol_column=None, ...)`
-Write molecules to SDF file.
-- **Input types**:
-  - List of molecules
-  - DataFrame with molecule column
-  - Sequence of molecules
-- **Parameters**:
-  - `mol_column`: Column name if input is DataFrame
-- **Example**:
-  ```python
-  dm.to_sdf(mols, "output.sdf")
-  # or from DataFrame
-  dm.to_sdf(df, "output.sdf", mol_column="mol")
-  ```
+```python
+# Illustrative provider-dependent paths; not exercised in this review.
+df = dm.read_sdf("s3://bucket/compounds.sdf", as_df=True, mol_column="mol")
+dm.to_sdf(df, "gs://bucket/results.sdf", mol_column="mol")
+```
 
-### `dm.to_smi(mols, filename, mol_column=None, ...)`
-Write molecules to SMILES file with optional validation.
-- **Format**: SMILES strings with optional molecule names/IDs
-
-### `dm.to_xlsx(df, filename, mol_columns=None, ...)`
-Export DataFrame to Excel with rendered molecular images.
-- **Parameters**:
-  - `mol_columns`: Columns containing molecules to render as images
-- **Special feature**: Automatically renders molecules as images in Excel cells
-- **Example**: `dm.to_xlsx(df, "molecules.xlsx", mol_columns=["mol"])`
-
-### `dm.to_molblock(mol, ...)`
-Convert molecule to MOL block string.
-
-### `dm.to_pdbblock(mol, ...)`
-Convert molecule to PDB block string.
-
-### `dm.save_df(df, filename, ...)`
-Save DataFrame in multiple formats (CSV, Excel, Parquet, JSON). Auto-detects format from the file extension; supports compression (added in datamol 0.10.0).
-
-## Remote File Support
-
-All I/O functions support remote file paths through fsspec integration:
-- **Supported protocols**: S3 (AWS), GCS (Google Cloud), Azure, HTTP/HTTPS
-- **Optional backends**: `uv pip install s3fs` (S3), `uv pip install gcsfs` (GCS)
-- **Credentials**: Standard provider environment variables only (`AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`, etc.). Datamol uses fsspec locally; confirm remote write paths with the user before saving.
-- **Example**:
-  ```python
-  dm.read_sdf("s3://bucket/compounds.sdf")
-  dm.read_csv("https://example.com/data.csv")
-  dm.save_df(df, "s3://bucket/output.parquet")  # confirm destination first
-  ```
-
-## Key Parameters Across Functions
-
-- **`sanitize`**: Apply molecule sanitization (default: True)
-- **`remove_hs`**: Remove explicit hydrogens (default: True)
-- **`as_df`**: Return DataFrame vs list (default: True for most functions)
-- **`n_jobs`**: Enable parallel processing (None = all cores, 1 = sequential)
-- **`mol_column`**: Name of molecule column in DataFrames
-- **`smiles_column`**: Name of SMILES column in DataFrames
+For `n_jobs`, use `1` for serial and `-1` for all available cores; do not assume `None`
+means all cores. Review remote access, sizes and output counts independently of local tests.

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import math
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -58,24 +60,35 @@ def load_tree(path: Path, parser: ParserSpec) -> Tree:
         raise UserInputError(f"input tree does not exist or is not a file: {path}")
     try:
         with path.open(encoding="utf-8") as handle:
-            return Tree(handle, parser=parser)
+            tree = Tree(handle, parser=parser)
+        for node in tree.traverse():
+            for prop in ("dist", "support"):
+                value = node.props.get(prop)
+                if value is not None and not math.isfinite(float(value)):
+                    raise ValueError(f"nonfinite {prop} on node {node.name!r}")
+        return tree
     except (OSError, ValueError, TypeError, NewickError) as exc:
         raise UserInputError(
             f"could not parse {path} with Newick parser {parser!r}: {exc}"
         ) from exc
 
 
-def support_fraction(value: float | None) -> float | None:
-    """Normalize common 0–1 and 0–100 support conventions."""
+def support_fraction(value: float | None, scale: str) -> float | None:
+    """Normalize a declared support convention; never guess per node."""
     if value is None:
         return None
+    if scale not in {"fraction", "percent"}:
+        raise UserInputError("support coloring requires --support-scale fraction or percent")
     numeric = float(value)
-    return numeric / 100 if numeric > 1 else numeric
+    maximum = 1 if scale == "fraction" else 100
+    if not math.isfinite(numeric) or not 0 <= numeric <= maximum:
+        raise UserInputError(f"support {value!r} is outside the {scale} range 0..{maximum}")
+    return numeric / maximum
 
 
 def support_color(node: Tree, args: argparse.Namespace) -> str:
     """Map support to a color after normalization."""
-    support = support_fraction(node.support)
+    support = support_fraction(node.support, args.support_scale)
     if support is None:
         return args.missing_support_color
     if support >= args.high_support:
@@ -227,17 +240,24 @@ def render_smartview(
         raise UserInputError(f"output directory does not exist: {output.parent}")
 
     try:
-        tree.render_sm(
-            str(output),
-            layouts=[layout],
-            w=args.width,
-            h=args.height,
-        )
+        # ETE 4.4 warns and returns without output when selenium is absent.
+        from selenium import webdriver  # noqa: F401
     except (ImportError, ModuleNotFoundError) as exc:
         raise UserInputError(
             "SmartView static rendering needs the render-sm extra: "
             'uv pip install "ete4[render-sm]==4.4.0"'
         ) from exc
+    with tempfile.TemporaryDirectory(prefix="ete-render-", dir=output.parent) as temp:
+        temporary_output = Path(temp) / "tree.png"
+        tree.render_sm(
+            str(temporary_output), layouts=[layout], w=args.width, h=args.height,
+        )
+        if not temporary_output.is_file():
+            raise UserInputError("SmartView did not create a PNG output")
+        with temporary_output.open("rb") as handle:
+            if handle.read(8) != b"\x89PNG\r\n\x1a\n":
+                raise UserInputError("SmartView output is not a PNG image")
+        temporary_output.replace(output)
     print(f"Wrote SmartView PNG: {output}")
 
 
@@ -366,6 +386,10 @@ def build_parser() -> argparse.ArgumentParser:
     display.add_argument("--internal-color", default="#777777")
 
     support = parser.add_argument_group("support colors")
+    support.add_argument(
+        "--support-scale", choices=["fraction", "percent"],
+        help="source support units; required with --color-by-support",
+    )
     support.add_argument("--high-support", type=float, default=0.9)
     support.add_argument("--moderate-support", type=float, default=0.7)
     support.add_argument("--high-support-color", default="#1b7837")
@@ -401,6 +425,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise UserInputError(
             "support thresholds must satisfy 0 <= moderate-support <= high-support <= 1"
         )
+    if args.color_by_support and args.support_scale is None:
+        raise UserInputError("--color-by-support requires --support-scale fraction or percent")
     for name in (
         "label_size",
         "leaf_size",
@@ -427,6 +453,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         validate_args(args)
         tree = load_tree(args.input, args.parser)
+        if args.color_by_support:
+            for node in tree.traverse():
+                if not node.is_leaf:
+                    support_fraction(node.support, args.support_scale)
         engine = choose_engine(args)
 
         if engine == "smartview":

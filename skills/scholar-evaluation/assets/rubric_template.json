@@ -36,7 +36,7 @@
     ]
   },
   "provenance": {
-    "rubric_version": "1.0",
+    "rubric_version": "1.1",
     "owner_role": "qualified accountable assessment-methods owner",
     "source_ids": [
       "SOURCE-DORA-DECLARATION",
@@ -49,7 +49,7 @@
     ],
     "content_validity_status": "not_established",
     "content_validity_evidence_ref": "",
-    "last_reviewed_date": "2026-07-23"
+    "last_reviewed_date": "2026-10-01"
   },
   "scale": {
     "minimum": 0,
@@ -58,8 +58,8 @@
     "anchors": [
       {
         "score": 0,
-        "label": "No assessable evidence",
-        "description": "Required evidence is absent, inaccessible, or too unclear to assess."
+        "label": "Observed lack of support",
+        "description": "Inspected, traceable evidence demonstrates that the criterion is unsupported or contradicted; unavailable evidence is missing, not zero."
       },
       {
         "score": 1,
@@ -93,7 +93,7 @@
       "anchors": [
         {
           "score": 0,
-          "description": "No assessable question, scope, assumptions, or success conditions are provided."
+          "description": "Inspected question and scope records demonstrate incoherent or incompatible objectives and boundaries."
         },
         {
           "score": 1,
@@ -130,7 +130,7 @@
       "anchors": [
         {
           "score": 0,
-          "description": "No assessable literature grounding or comparison-based contribution claim is provided."
+          "description": "Inspected comparisons contradict the claimed contribution or provide no support for it."
         },
         {
           "score": 1,
@@ -168,7 +168,7 @@
       "anchors": [
         {
           "score": 0,
-          "description": "Methods are absent or cannot address the stated question."
+          "description": "The inspected methods cannot address the stated question."
         },
         {
           "score": 1,
@@ -205,7 +205,7 @@
       "anchors": [
         {
           "score": 0,
-          "description": "Analysis is absent, uninterpretable, or disconnected from the claims."
+          "description": "The inspected analysis is incompatible with or contradicts the stated claims."
         },
         {
           "score": 1,
@@ -242,7 +242,7 @@
       "anchors": [
         {
           "score": 0,
-          "description": "Key procedures, provenance, limitations, or integrity safeguards are not assessable."
+          "description": "Inspected records demonstrate failed traceability or reporting safeguards for this work."
         },
         {
           "score": 1,

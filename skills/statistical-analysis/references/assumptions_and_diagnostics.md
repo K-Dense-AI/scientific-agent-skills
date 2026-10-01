@@ -35,9 +35,8 @@ This document provides comprehensive guidance on checking and validating statist
 **What it means**: Data or residuals follow a normal (Gaussian) distribution.
 
 **When required**:
-- t-tests (for small samples; robust for n > 30 per group)
-- ANOVA (for small samples; robust for n > 30 per group)
-- Linear regression (for residuals)
+- Small-sample normal-theory t/ANOVA inference: the relevant errors (paired differences for paired tests), not arbitrary pooled data
+- Linear regression: normal errors support exact finite-sample t/F inference; coefficient estimation itself does not require normal outcomes or predictors
 - Some correlation tests (Pearson)
 
 **How to check**:
@@ -65,14 +64,11 @@ stats.probplot(data, dist="norm", plot=plt)
 ```
 
 **Interpretation guidance**:
-- For n < 30: Both visual and formal tests important
-- For 30 ≤ n < 100: Visual inspection primary, formal tests secondary
-- For n ≥ 100: Formal tests overly sensitive; rely on visual inspection
+- Assess plots, tail behavior, sample balance, dependence and the estimand at every sample size. Formal tests have low power in small samples and detect tiny departures in large samples; non-rejection does not validate a model.
 - Look for severe skewness, outliers, or bimodality
 
 **What to do if violated**:
-- **Mild violations** (slight skewness): Proceed if n > 30 per group (this CLT heuristic assumes mild skewness; severely skewed or heavy-tailed data can require much larger samples)
-- **Moderate violations**: Use non-parametric alternatives (Mann-Whitney, Kruskal-Wallis, Wilcoxon)
+- **Departures**: Evaluate robustness for the target effect and design; there is no universal n=30 threshold. Prespecify robust inference or simulation-based sensitivity. Rank methods change the target and retain assumptions; they are not automatic replacements.
 - **Severe violations**:
   - Transform data (log, square root, Box-Cox)
   - Use non-parametric methods
@@ -88,9 +84,8 @@ stats.probplot(data, dist="norm", plot=plt)
 **What it means**: Variances are equal across groups or across the range of predictors.
 
 **When required**:
-- Independent samples t-test
-- ANOVA
-- Linear regression (constant variance of residuals)
+- Pooled Student's t-test and classical equal-variance ANOVA (not Welch tests)
+- Usual homoscedastic OLS standard errors; HC3 addresses independent heteroscedastic errors, not clusters
 
 **How to check**:
 
@@ -110,8 +105,8 @@ stats.probplot(data, dist="norm", plot=plt)
 from scipy import stats
 import pingouin as pg
 
-# Levene's test
-statistic, p_value = stats.levene(group1, group2, group3)
+# Median-centered Levene is the Brown-Forsythe variance test
+statistic, p_value = stats.levene(group1, group2, group3, center='median')
 
 # For regression
 # Breusch-Pagan test
@@ -122,8 +117,8 @@ _, p_value, _, _ = het_breuschpagan(residuals, exog)
 ```
 
 **Interpretation guidance**:
-- Variance ratio (max/min) < 2-3: Generally acceptable
-- For ANOVA: Test is robust if groups have equal sizes
+- No variance-ratio cutoff certifies validity. Balanced designs can help robustness but do not remove tail, dependence or variance concerns.
+- Do not choose pooled versus Welch inference based only on a preliminary variance p-value.
 - For regression: Look for funnel patterns in residual plots
 
 **What to do if violated**:
@@ -146,7 +141,7 @@ _, p_value, _, _ = het_breuschpagan(residuals, exog)
 **Assumptions**:
 1. Independence of observations
 2. Normality (each group for independent t-test; differences for paired t-test)
-3. Homogeneity of variance (independent t-test only)
+3. Homogeneity only for pooled Student's independent t-test; Welch permits unequal variances
 
 **Diagnostic workflow**:
 ```python
@@ -160,13 +155,13 @@ stats.shapiro(group2)
 # Check homogeneity of variance
 stats.levene(group1, group2)
 
-# If assumptions violated:
+# Prespecify inference from the design/estimand rather than the screening p-values:
 # Option 1: Welch's t-test (unequal variances)
 pg.ttest(group1, group2, correction=True)  # correction=True applies Welch's
-# (correction='auto' applies Welch only when variances/group sizes are unequal;
+# (correction='auto' applies Welch only when sample sizes are unequal;
 # correction=False forces Student's t-test)
 
-# Option 2: Non-parametric alternative
+# Option 2: A separately justified rank/distribution question
 pg.mwu(group1, group2)  # Mann-Whitney U
 ```
 
@@ -197,12 +192,13 @@ for group in df['group'].unique():
 print(pg.homoscedasticity(df, dv='value', group='group'))
 
 # For repeated measures: Check sphericity
-# Automatically tested in pingouin's rm_anova
+# Pingouin 0.7 supports one/two-way sphericity diagnostics; earlier interaction
+# corrections had bugs. Specify subject IDs and complete within-subject cells.
 ```
 
 **What to do if sphericity violated** (repeated measures):
-- Greenhouse-Geisser correction (ε < 0.75)
-- Huynh-Feldt correction (ε > 0.75)
+- Prespecify a correction such as Greenhouse-Geisser; Pingouin rm_anova reports GG.
+- Do not infer Huynh-Feldt is automatically available from an epsilon threshold.
 - Use multivariate approach (MANOVA)
 
 ---
@@ -210,11 +206,12 @@ print(pg.homoscedasticity(df, dv='value', group='group'))
 ### Linear Regression
 
 **Assumptions**:
-1. **Linearity**: Relationship between X and Y is linear
+1. **Mean specification**: Conditional mean is linear in fitted coefficients (can include justified nonlinear predictor terms)
 2. **Independence**: Residuals are independent
 3. **Homoscedasticity**: Constant variance of residuals
-4. **Normality**: Residuals are normally distributed
-5. **No multicollinearity**: Predictors are not highly correlated (multiple regression)
+4. **Normality**: Normal errors for exact small-sample conventional inference; fitted residuals are correlated projections, so residual Shapiro is only a screen
+5. **Identifiability**: Full-rank design; high collinearity affects precision but is not by itself bias
+6. **Exogeneity**: The conditional error mean is zero; residual plots do not establish causal identification
 
 **Diagnostic workflow**:
 
@@ -235,7 +232,8 @@ from statsmodels.stats.stattools import durbin_watson
 
 # Durbin-Watson test (for time series)
 dw_statistic = durbin_watson(residuals)
-# Values between 1.5-2.5 suggest independence
+# Meaningful row order is required; no universal 1.5-2.5 acceptance interval.
+# This statistic cannot establish independence, particularly for clustered data.
 ```
 
 **3. Homoscedasticity**:
@@ -275,7 +273,7 @@ vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.c
 - **Non-linearity**: Add polynomial terms, use GAM, or transform variables
 - **Heteroscedasticity**: Transform Y, use WLS, use robust SE
 - **Non-normal residuals**: Transform Y, use robust methods, check for outliers
-- **Multicollinearity**: Remove correlated predictors, use PCA, ridge regression
+- **Multicollinearity**: Examine precision and identification; dropping confounders can bias estimates. Regularization changes inference and must match the purpose.
 
 ---
 
@@ -285,7 +283,7 @@ vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.c
 1. **Independence**: Observations are independent
 2. **Linearity**: Linear relationship between log-odds and continuous predictors
 3. **No perfect multicollinearity**: Predictors not perfectly correlated
-4. **Large sample size**: At least 10-20 events per predictor
+4. **Information and identification**: Adequate events/non-events for parameters, effect sizes and precision; check separation and convergence. No fixed events-per-variable ratio guarantees valid inference.
 
 **Diagnostic workflow**:
 
@@ -306,7 +304,8 @@ vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.c
 # Do NOT use OLSInfluence on Logit/GLM results; use get_influence(),
 # which returns MLEInfluence (Logit) or GLMInfluence (GLM)
 influence = model.get_influence()
-cooks_d, cooks_p = influence.cooks_distance  # returns a tuple: (distances, p_values)
+cooks_d, cooks_p = influence.cooks_distance  # tuple: (distances, approximate p-values)
+# Outside Gaussian linear models these F-based p-values are approximate.
 ```
 
 **4. Model fit / calibration**:
@@ -345,14 +344,9 @@ cooks_d, cooks_p = influence.cooks_distance  # returns a tuple: (distances, p_va
 
 ## Sample Size Considerations
 
-### Minimum Sample Sizes (Rules of Thumb)
+### Design-specific planning
 
-- **T-test**: n ≥ 30 per group for robustness to non-normality
-- **ANOVA**: n ≥ 30 per group
-- **Correlation**: n ≥ 30 for adequate power
-- **Simple regression**: n ≥ 50
-- **Multiple regression**: 10-15 observations per predictor (or Green's rule: n ≥ 50 + 8k for testing the overall model with k predictors)
-- **Logistic regression**: n ≥ 10-20 events per predictor
+Plan using the target effect or desired interval width, variance, prevalence, number of fitted parameters, clustering and attrition. Generic n=30/n=50 or events-per-variable thresholds do not establish power, robustness or model reliability. Simulate the actual planned estimator/design when closed-form assumptions do not apply.
 
 ### Small Sample Considerations
 
@@ -372,8 +366,12 @@ When reporting analyses, include:
 1. **Statement of assumptions checked**: List all assumptions tested
 2. **Methods used**: Describe visual and formal tests employed
 3. **Results of diagnostic tests**: Report test statistics and p-values
-4. **Assessment**: State whether assumptions were met or violated
+4. **Assessment**: State evidence of departures and limits of the screens; never equate non-rejection with verified assumptions
 5. **Actions taken**: If violated, describe remedial actions (transformations, alternative tests, robust methods)
 
 **Example reporting statement**:
-> "Normality was assessed using Shapiro-Wilk tests and Q-Q plots. Data for Group A (W = 0.97, p = .18) and Group B (W = 0.96, p = .12) showed no significant departure from normality. Homogeneity of variance was assessed using Levene's test, which was non-significant (F(1, 58) = 1.23, p = .27), indicating equal variances across groups. Therefore, assumptions for the independent samples t-test were satisfied."
+> "Normality was assessed using Shapiro-Wilk tests and Q-Q plots. Data for Group A (W = 0.97, p = .18) and Group B (W = 0.96, p = .12) showed no significant departure from normality. Homogeneity of variance was assessed using Levene's test, which was non-significant (F(1, 58) = 1.23, p = .27), providing no detected departure from equal variances at this sample size. Non-rejection does not verify equality; the prespecified Welch test and design review were retained."
+
+## Current API sources
+
+Reviewed 2026-10-01: [SciPy Shapiro](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.shapiro.html) requires at least three observations and warns that n>5000 p-values may be inaccurate; [Levene](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.levene.html) defaults to median centering. [statsmodels Breusch-Pagan](https://www.statsmodels.org/stable/generated/statsmodels.stats.diagnostic.het_breuschpagan.html) defaults to the Koenker variant (`robust=True`), needs an intercept, and also returns the finite-sample F variant; report which one is used. [Durbin-Watson](https://www.statsmodels.org/stable/generated/statsmodels.stats.stattools.durbin_watson.html) is a statistic of adjacent residuals, not an independence certificate.

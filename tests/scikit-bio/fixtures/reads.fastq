@@ -1,0 +1,8 @@
+@read1 test
+ACGT
++
+IIII
+@read2 test
+AGGT
++
+!+5?

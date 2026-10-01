@@ -49,7 +49,7 @@ flowchart LR
     end
 
     subgraph production ["✅ Production"]
-        canary[🚀 Canary **5%**] --> rollout[🚀 Full **rollout**]
+        canary[🚀 Canary 5%] --> rollout[🚀 Full rollout]
         rollout --> monitor[📊 Monitor metrics]
     end
 
@@ -131,11 +131,11 @@ erDiagram
     accTitle: Authentication Data Model
     accDescr: Five-entity schema for user authentication covering users, sessions, refresh tokens, login attempts, and MFA devices with cardinality relationships
 
-    USER ||--o{ SESSION : "has"
-    USER ||--o{ REFRESH_TOKEN : "owns"
-    USER ||--o{ LOGIN_ATTEMPT : "produces"
-    USER ||--o{ MFA_DEVICE : "registers"
-    SESSION ||--|| REFRESH_TOKEN : "paired with"
+    USER ||..o{ SESSION : "has"
+    USER ||..o{ REFRESH_TOKEN : "owns"
+    USER ||..o{ LOGIN_ATTEMPT : "produces"
+    USER ||..o{ MFA_DEVICE : "registers"
+    SESSION ||..|| REFRESH_TOKEN : "paired with"
 
     USER {
         uuid id PK "🔑 Primary key"
@@ -175,7 +175,7 @@ erDiagram
         uuid id PK "🔑 Primary key"
         uuid user_id FK "👤 Device owner"
         string device_type "📱 TOTP or WebAuthn"
-        string secret_hash "🔐 Encrypted secret"
+        string credential_reference "🔐 Credential storage reference"
         boolean verified "✅ Setup complete"
         timestamp registered_at "⏰ Registered"
     }
@@ -257,8 +257,8 @@ journey
 ### How these connect
 
 - **Same entities, different views** — "User", "Session", "MFA Device" appear in the ER diagram as tables, in the sequence as participants/operations, and in the journey as experience touchpoints
-- **Each audience gets actionable information** — the DB team sees indexes and cardinality, the backend team sees API contracts and error codes, the product team sees satisfaction scores and friction points
-- **The journey reveals what the sequence hides** — the sequence diagram shows MFA as a clean conditional branch, but the journey map shows it's actually the worst part of the UX (scores 1-2). This drives the product decision to invest in WebAuthn/passkeys
+- **Each audience gets actionable information** — the DB team sees candidate fields and cardinality, the backend team sees illustrative request/error flows, and the product team sees hypothetical experience scores; these are not verified implementations or measurements
+- **The journey reveals what the sequence hides** — the sequence diagram shows MFA as a clean conditional branch, but the invented low scores indicate where a real study might look for friction. Gather evidence before making a product decision
 
 ---
 
@@ -273,9 +273,9 @@ flowchart TB
     accTitle: Current State Monolith Architecture
     accDescr: Single Rails monolith handling all traffic through one server connected to one database showing the scaling bottleneck
 
-    client([👤 All traffic]) --> mono[🖥️ Rails **Monolith**]
+    client([👤 All traffic]) --> mono[🖥️ Rails Monolith]
     mono --> db[(💾 Single PostgreSQL)]
-    mono --> jobs[⏰ Background **jobs**]
+    mono --> jobs[⏰ Background jobs]
     jobs --> db
 
     classDef bottleneck fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
@@ -285,7 +285,7 @@ flowchart TB
     class client,jobs neutral
 ```
 
-> ⚠️ **Problem:** Single database is the bottleneck. Monolith can't scale horizontally. Deploy = full restart.
+> ⚠️ **Illustrative assumption:** This deployment has a shared database bottleneck and restarts on deployment. These are properties to measure, not inherent facts about monoliths.
 
 ### Target State — Microservices
 
@@ -294,7 +294,7 @@ flowchart TB
     accTitle: Target State Microservices Architecture
     accDescr: Decomposed microservices architecture with API gateway routing to independent services each with their own data store and a shared message queue for async communication
 
-    client([👤 All traffic]) --> gw[🌐 API **Gateway**]
+    client([👤 All traffic]) --> gw[🌐 API Gateway]
 
     subgraph services ["⚙️ Services"]
         user_svc[👤 User Service]
@@ -331,7 +331,7 @@ flowchart TB
     class mq infra
 ```
 
-> ✅ **Result:** Each service scales independently. Database-per-service eliminates the shared bottleneck. Async messaging decouples service dependencies.
+> ✅ **Proposed outcome:** Independent services and data stores may reduce the measured shared bottleneck. Verify scaling, consistency, operational cost, and failure recovery before claiming improvement.
 
 ### How these connect
 

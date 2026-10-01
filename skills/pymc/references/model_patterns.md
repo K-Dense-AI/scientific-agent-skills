@@ -1,7 +1,9 @@
 # Common Model Patterns and Comparison
 
 Reusable model structures (hierarchical, regression variants, mixtures, time series) and
-then model comparison with information criteria and cross-validation.
+then predictive model comparison. Targets PyMC 6.3.2 / ArviZ 1.3.0.
+Fragments below are illustrative and require the named data/dimensions; native
+regression and hierarchical template execution is tested separately.
 
 ## Common Model Patterns
 
@@ -36,7 +38,7 @@ with pm.Model() as logistic_model:
 
 ### Hierarchical Models
 
-For grouped data (use non-centered parameterization):
+For grouped data (non-centering is often helpful for weakly informed group effects):
 
 ```python
 with pm.Model(coords={'groups': group_names}) as hierarchical_model:
@@ -56,7 +58,8 @@ with pm.Model(coords={'groups': group_names}) as hierarchical_model:
 
 **Use template:** `assets/hierarchical_model_template.py`
 
-**Critical:** Always use non-centered parameterization for hierarchical models to avoid divergences.
+**Check geometry:** Compare centered/non-centered parameterizations when necessary;
+non-centering is not a guarantee against divergences or weak identification.
 
 ### Poisson Regression
 
@@ -90,7 +93,7 @@ with pm.Model() as ar_model:
 
 ### Comparing Models
 
-Use LOO or WAIC for model comparison:
+Use PSIS-LOO for this helper; ArviZ 1 `compare` does not accept a WAIC selector:
 
 ```python
 from scripts.model_comparison import compare_models, check_loo_reliability
@@ -109,20 +112,25 @@ comparison = compare_models(models, ic='loo')
 check_loo_reliability(models)
 ```
 
-**Interpretation** — ArviZ 1.x reports `elpd_diff` on the ELPD scale (higher is
-better, so the best model's `elpd_diff` is 0 and the others are negative):
-- **|elpd_diff| < 4**: Models are similar, choose the simpler model
-- **|elpd_diff| > 4 but within 2 `dse`**: Moderate evidence for the better model
-- **|elpd_diff| > 4 and beyond 2 `dse`**: Strong evidence for the better model
+**Interpretation:** ArviZ 1 reports `elpd_diff` relative to the best model;
+0 is best, and negative values are lower predictive scores. Interpret paired
+score differences with their uncertainty and the scientific predictive target.
+Fixed difference thresholds do not establish evidence for a causal mechanism.
 
 **Check Pareto-k values:** Use the threshold reported by the installed ArviZ version and inspect influential observations when the importance-sampling diagnostic fails. Refit problematic leave-one-out cases or use appropriately structured K-fold validation; switching to WAIC is not a repair for unreliable PSIS-LOO. Record the predictive unit (observation, patient/group, or future time block), because holding out rows can answer a different question from predicting new groups or future data.
 
 ### Model Averaging
 
-When models are similar, average predictions:
+To combine predictive distributions, sample a mixture (weights are not model probabilities):
 
 ```python
 from scripts.model_comparison import model_averaging
 
-averaged_pred, weights = model_averaging(models, var_name='y_obs')
+averaged_pred, weights = model_averaging(models, var_name='y_obs', random_seed=42)
 ```
+
+For AR models, unconstrained independent Normal coefficients do not enforce
+stationarity. Define initial conditions and the desired stationary/nonstationary
+process explicitly; future-block validation generally differs from leaving out
+individual time points. Wide Normal priors on log/logit coefficients can imply
+extreme rates/probabilities: inspect their prior predictive implications.

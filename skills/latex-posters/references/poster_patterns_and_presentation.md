@@ -1,5 +1,10 @@
 # Poster Patterns, Accessibility, and Presentation
 
+Reviewed 2026-09-30. Design numbers are starting points, not measured guarantees.
+Code fragments are illustrative; use the bundled tested templates as the executable
+starting point. Replace example names, statistics, citations, URLs, and assets with
+verified project content.
+
 Reusable content patterns per poster section, accessibility and inclusive-design
 requirements, and how to present the poster on the day.
 
@@ -44,7 +49,7 @@ Design posters that are accessible to diverse audiences:
 - Avoid red-green combinations (most common color blindness)
 - Use patterns or shapes in addition to color
 - Test with color-blindness simulators
-- Provide high contrast (WCAG AA standard: 4.5:1 minimum)
+- Use strong contrast; WCAG AA digital targets are 4.5:1 for normal text and 3:1 for large text. Print proofing remains necessary.
 
 **Visual Impairment Accommodations**:
 - Large, clear fonts (minimum 24pt body text)

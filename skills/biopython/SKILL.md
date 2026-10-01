@@ -1,11 +1,12 @@
 ---
 name: biopython
-description: Comprehensive molecular biology toolkit. Use for sequence manipulation, file parsing (FASTA/GenBank/PDB), phylogenetics, and programmatic NCBI/PubMed access (Bio.Entrez). Best for batch processing, custom bioinformatics pipelines, BLAST automation. For quick lookups use gget; for multi-service integration use bioservices.
+description: Provides Biopython workflows for sequence manipulation, file parsing (FASTA/GenBank/PDB), phylogenetics, and programmatic NCBI/PubMed access (Bio.Entrez). Supports batch processing, custom molecular-biology pipelines, BLAST automation, structure analysis, and motif analysis.
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.10+, NumPy, and Biopython. Entrez and web BLAST examples require network access; local BLAST/MUSCLE examples require those command-line tools installed separately.
+compatibility: Requires Python 3.10+, NumPy, and Biopython 1.88. Optional plotting requires Matplotlib or ReportLab. Entrez and web BLAST require network access and a contact email; local BLAST, MUSCLE 5, Clustal Omega, and DSSP require separate executables.
 license: Biopython License Agreement
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:
@@ -21,7 +22,7 @@ metadata:
 
 ## Overview
 
-Biopython is a comprehensive set of freely available Python tools for biological computation. It provides functionality for sequence manipulation, file I/O, database access, structural bioinformatics, phylogenetics, and many other bioinformatics tasks. These examples target **Biopython 1.87** (released 30 March 2026). It supports **Python 3.10-3.14** and PyPy3.10, and requires NumPy. Biopython 1.87 also addresses **CVE-2025-68463** in `Bio.Entrez.Parser` when parsing untrusted files, so prefer 1.87+ for workflows that parse externally supplied Entrez XML.
+Biopython is a comprehensive set of freely available Python tools for biological computation. It provides functionality for sequence manipulation, file I/O, database access, structural bioinformatics, phylogenetics, and many other bioinformatics tasks. These examples target **Biopython 1.88** (released 6 August 2026), tested here on Python 3.13. It requires Python 3.10+ and NumPy; Python 3.10 support is deprecated. Upgrade to 1.88 for its `Bio.Nexus` parser security fix, in addition to the Entrez XML fix in 1.87. See the [release notes](https://github.com/biopython/biopython/blob/biopython-188/NEWS.rst). Local example checks and external-service limits are recorded in `references/review.md`; examples requiring user files or external programs are illustrative unless listed there as exercised.
 
 ## When to Use This Skill
 
@@ -57,7 +58,7 @@ Biopython is organized into modular sub-packages, each addressing specific bioin
 Install the current stable Biopython release with an explicit version pin for reproducibility:
 
 ```bash
-uv pip install "biopython==1.87"
+uv pip install "biopython==1.88"
 ```
 
 For NCBI database access, always set your email address (required by NCBI). For reusable software, set a stable `Entrez.tool` value and register the tool/email with NCBI. For higher rate limits (10 req/s instead of 3 req/s), read only `NCBI_API_KEY` from the environment — do not hardcode keys or load unrelated environment variables:
@@ -162,8 +163,10 @@ Use for:
 ```python
 from Bio.Blast import NCBIWWW, NCBIXML
 
-# Run BLAST search
-result_handle = NCBIWWW.qblast("blastn", "nt", "ATCGATCGATCG")
+# Illustrative network call; configure email/tool and see BLAST rate limits.
+NCBIWWW.email = "your.email@example.com"
+NCBIWWW.tool = "your_tool_name"
+result_handle = NCBIWWW.qblast("blastn", "nt", "ATCGATCGATCG", format_type="XML2_S")
 blast_record = NCBIXML.read(result_handle)
 
 # Display top hits
@@ -228,7 +231,7 @@ print(f"Distance: {distance:.3f}")
 
 Use for:
 - **Sequence motifs** (Bio.motifs) - Finding and analyzing motif patterns
-- **Population genetics** (Bio.PopGen) - GenePop files, Fst calculations, Hardy-Weinberg tests
+- **Population genetics** (Bio.PopGen) - GenePop file parsing; external software is needed for population statistics
 - **Sequence utilities** (Bio.SeqUtils) - GC content, melting temperature, molecular weight, protein analysis
 - **Restriction analysis** (Bio.Restriction) - Finding restriction enzyme sites
 - **Clustering** (Bio.Cluster) - K-means and hierarchical clustering
@@ -303,7 +306,7 @@ Follow these principles when writing Biopython code:
 5. **Use iterators for large files** - Avoid loading everything into memory
    ```python
    for record in SeqIO.parse("large_file.fasta", "fasta"):
-       # Process one record at a time
+       print(record.id)  # Process one record at a time
    ```
 
 6. **Handle errors gracefully** - Network operations and file parsing can fail
@@ -345,8 +348,8 @@ for record in SeqIO.parse("sequences.fasta", "fasta"):
     gc = gc_fraction(record.seq)
     length = len(record.seq)
 
-    # Find ORFs, translate, etc.
-    protein = record.seq.translate()
+    # Translate only a validated coding sequence with known frame and code.
+    # For a complete CDS: protein = record.seq.translate(table=1, cds=True)
 
     print(f"{record.id}: {length} bp, GC={gc:.2%}")
 ```
@@ -360,7 +363,7 @@ from Bio import Entrez, SeqIO
 Entrez.email = "your.email@example.com"
 
 # Run BLAST
-result_handle = NCBIWWW.qblast("blastn", "nt", sequence)
+result_handle = NCBIWWW.qblast("blastn", "nt", sequence, format_type="XML2_S")
 blast_record = NCBIXML.read(result_handle)
 
 # Get top hit accessions
@@ -398,7 +401,7 @@ Phylo.draw_ascii(tree)
 ## Best Practices
 
 1. **Always read relevant reference documentation** before writing code
-2. **Use grep to search reference files** for specific functions or examples
+2. **Use rg to search reference files** for specific functions or examples
 3. **Validate file formats** before parsing
 4. **Handle missing data gracefully** - Not all records have all fields
 5. **Cache downloaded data** - Don't repeatedly download the same sequences
@@ -410,8 +413,8 @@ Phylo.draw_ascii(tree)
 
 ## Troubleshooting Common Issues
 
-### Issue: "No handlers could be found for logger 'Bio.Entrez'"
-**Solution:** This is just a warning. Set Entrez.email to suppress it.
+### Issue: Entrez warns that email is missing
+**Solution:** Set `Entrez.email` to a real contact address. A Python logging configuration warning is a separate issue.
 
 ### Issue: "HTTP Error 400" from NCBI
 **Solution:** Check that IDs/accessions are valid and properly formatted.
@@ -458,18 +461,6 @@ rg -n "example" references/sequence_io.md
 # Find all occurrences of a module
 rg -n "Bio.Seq" references/*.md
 ```
-
-## Summary
-
-Biopython provides comprehensive tools for computational molecular biology. When using this skill:
-
-1. **Identify the task domain** (sequences, alignments, databases, BLAST, structures, phylogenetics, or advanced)
-2. **Consult the appropriate reference file** in the `references/` directory
-3. **Adapt code examples** to the specific use case
-4. **Combine multiple modules** when needed for complex workflows
-5. **Follow best practices** for file handling, error checking, and data management
-
-The modular reference documentation ensures detailed, searchable information for every major Biopython capability.
 
 ## Citing Scientific Agent Skills
 

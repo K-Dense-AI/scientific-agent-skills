@@ -1,6 +1,6 @@
 # ICH Q2(R2) — Structure and Recommended Data
 
-Research basis: **2026-07-27**, read from the ICH Harmonised Guideline *Validation of Analytical
+Research basis: **2026-09-30**, read from the ICH Harmonised Guideline *Validation of Analytical
 Procedures Q2(R2)*, Final Version adopted 1 November 2023, with the error correction dated
 30 November 2023. ICH licenses its documents for reuse with acknowledgement, so requirements are
 summarised here directly. Confirm the current text and your region's implementation date at
@@ -47,7 +47,8 @@ range** (2.3) and **considerations for multivariate analytical procedures** (2.5
 
 ## Table 1 — which tests for which measured attribute
 
-Required tests follow the *measured quality attribute*, not the instrument.
+Table 1 identifies tests normally conducted by measured quality attribute. It allows justified
+alternatives; the table is not an unconditional legal requirement.
 
 | Characteristic | Identity | Impurity: quantitative | Impurity: limit test | Assay (content/potency) |
 | --- | --- | --- | --- | --- |
@@ -78,9 +79,9 @@ upper range may be more practical.
 | Assay of a product | 80% of declared content, or 80% of the lower specification limit | 120% of declared content, or 120% of the upper specification limit |
 | Potency | lowest specification limit −20% | highest specification limit +20% |
 | Content uniformity | 70% of declared content | 130% of declared content |
-| Dissolution, IR, one point | Q − 45% of the lowest strength specification | per specification |
+| Dissolution, IR, one point | Q − 45% of the lowest strength specification | 130% of declared content of the highest strength |
 | Dissolution, IR, multi-point | lower limit as justified, or QL | 130% of declared content of the highest strength |
-| Dissolution, modified release | lower limit as justified, or QL | per specification |
+| Dissolution, modified release | lower limit as justified, or QL | 130% of declared content of the highest strength |
 | Impurity | reporting threshold | 120% of the specification limit |
 | Purity (area %) | 80% of the lower specification limit | upper specification limit, or 100% |
 
@@ -207,8 +208,7 @@ Non-mandatory worked examples, useful as a starting point for the robustness par
 
 From Table 3, a detail worth carrying forward: **relative response factors.** Where the analyte
 responds differently from the reference material, calculate the RRF from the appropriate ratio of
-responses under final procedure conditions and document it. **If the RRF falls outside 0.8–1.2,
-apply a correction factor.** Where an impurity is overestimated, omitting the correction may be
+responses under final procedure conditions and document it. **The illustrative Table 3 recommends correction when RRF is outside 0.8–1.2.** Where an impurity is overestimated, omitting the correction may be
 acceptable.
 
 ## Multivariate procedures (2.5)

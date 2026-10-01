@@ -61,8 +61,8 @@ git-annex special remote together. Storage-only targets — S3 buckets, WebDAV, 
 directories, rclone-reachable services — are git-annex *special remotes* rather than Git
 remotes, and they are created with `git annex initremote` rather than `create-sibling-*`.
 That distinction is what the two-target model turns on: the Git sibling carries history,
-the storage sibling carries content, and only in the RIA and GIN cases does one target
-carry both.
+the storage sibling carries content. RIA stores, GIN, and suitable filesystem/SSH
+Git-annex repositories can serve both from one infrastructure location.
 
 GIN is worth knowing about in a neuroscience context because it hosts annexed content
 directly, which collapses the two-target model back into one target.
@@ -74,9 +74,8 @@ cluster and institutional storage where per-dataset repositories are impractical
 URLs use a `ria+` prefix and a fragment identifying the dataset:
 
 ```bash
-datalad clone ria+ssh://[user@]hostname/absolute/path/to/ria-store#<dataset-id>
-datalad clone ria+file:///home/me/myriastore#e3e70682-c209-4cac-629f-6fbed82c07cd
-datalad clone ria+file://$HOME/myriastore#~dl-101
+datalad clone "ria+ssh://user@hostname/absolute/path/to/ria-store#DATASET-UUID"
+datalad clone "ria+file://${HOME}/myriastore#~dl-101"
 ```
 
 The fragment is either the full dataset ID or an alias prefixed with `~`. Aliases exist
@@ -84,7 +83,7 @@ because dataset IDs are UUIDs and nobody remembers them.
 
 ```bash
 datalad create-sibling-ria -s ria-backup --alias dl-101 --new-store-ok \
-  "ria+file:///home/me/myriastore"
+  "ria+file://${HOME}/myriastore"
 ```
 
 - `--new-store-ok` permits creating the store when it does not already exist. Without it,
@@ -95,7 +94,10 @@ datalad create-sibling-ria -s ria-backup --alias dl-101 --new-store-ok \
 - `--shared` sets multi-user permissions using the values `git init --shared` accepts.
 
 By default the command creates both a regular sibling and a storage sibling named with a
-`-storage` suffix.
+`-storage` suffix and sets their publication dependency. RIA HTTP(S) access is read-only;
+provide an SSH/file `--push-url` for writes. Quote RIA URLs so shell `#`, `~`, and bracket
+interpretation cannot change them. Do not run ordinary git-annex commands directly
+inside a RIA store; access its special layout through the ORA remote.
 
 ## Pushing
 
@@ -110,26 +112,30 @@ datalad push [-h] [-d DATASET] [--to SIBLING] [--since SINCE] [--data
 
 | Value | Behaviour |
 |---|---|
-| `anything` | Transfer all annexed content |
+| `anything` | Transfer selected current annexed content without preferred-content filtering |
 | `nothing` | Skip `git annex copy` entirely, publishing history only |
-| `auto` | Use `git annex copy --auto`, so preferred-content settings decide |
-| `auto-if-wanted` | Default. Use auto mode only when wanted settings exist on the remote |
+| `auto` | Let wanted expressions and required copy counts select transfers |
+| `auto-if-wanted` | Default. Apply auto mode when wanted is configured; otherwise behave as `anything` |
 
-The default is the reason a push can succeed while transferring no data: with no
-preferred-content configuration on the target, `auto-if-wanted` has nothing to act on.
-When a collaborator reports that `get` fails after you pushed, check this before anything
-else, and push again with `--data anything`.
+Without a wanted expression, the default does transfer selected content; it is not a
+history-only push. All modes are bounded by selected paths/current revision and local
+content availability. A push is not an archive of every historical key. If later `get`
+fails, inspect transfer results, missing local bytes, remote access, and wanted filters.
+A tiny directory-special-remote test verifies this default behavior.
 
 `--since SINCE` limits what is considered, and `--since '^'` uses the last known state of
 the sibling's branch as the baseline. `-f/--force` accepts `gitpush` (override Git push
 safety), `checkdatapresent` (skip the git-annex copy optimisation and transfer regardless
 of what the remote is believed to hold), or `all`.
 
-A complete first publication:
+Illustrative authenticated first publication (creates GitHub/S3 resources; not run in
+this refresh). Use a bare repository name for the authenticated user; a prefix such as
+`myorg/` means an organization, not a personal account:
 
 ```bash
-datalad create-sibling-github myaccount/mydataset
-git annex initremote store type=S3 bucket=my-bucket encryption=none autoenable=true
+datalad create-sibling-github mydataset
+git annex initremote store type=S3 bucket=my-bucket protocol=https \
+  encryption=none autoenable=true
 datalad siblings configure -s github --publish-depends store
 datalad push --to github --data anything -r
 ```
@@ -137,27 +143,34 @@ datalad push --to github --data anything -r
 The Git sibling is created by `datalad create-sibling-github`, the storage sibling by
 `git annex initremote`; see the note under "Creating siblings" above for why the two
 are not the same tool. `autoenable=true` lets a fresh clone reach the storage sibling
-without a manual `enableremote` step, and `encryption=none` is the right default for a
-public bucket — turn it on when the content is not intended to be world-readable.
+without a manual `enableremote` step when its other requirements are met. It does not
+grant bucket access. `encryption=none` disables git-annex encryption; it does not make
+an S3 bucket public. Configure access policy separately. For intended anonymous
+downloads, set the special remote's `publicurl` to the reachable bucket/object URL and
+verify it from an unauthenticated clone. Do not use the deprecated S3 `public` ACL
+option for modern buckets. Private access and encryption are separate choices.
 
 Verify from the other side rather than trusting the push output:
 
 ```bash
 datalad clone https://github.com/myaccount/mydataset.git /tmp/verify
-datalad get -d /tmp/verify <a representative file>
+datalad get -d /tmp/verify path/to/representative-file
 ```
 
 ## Credentials
 
 DataLad resolves credentials in a defined order and stores interactively entered secrets
 through the `keyring` package, using whichever backend that package finds on the system.
+Configuration (including environment overrides) is checked before keyring lookup;
+interactive prompting is a fallback. Review the active backend on headless hosts.
 
 Three ways to supply them, in increasing order of automation:
 
 1. **Interactive.** DataLad prompts when a credential is needed and not available, and
    stores the answer in the active keyring backend.
-2. **Configuration.** A configuration item `datalad.credential.<name>.<component>` set at
-   any DataLad configuration level.
+2. **Local configuration.** `datalad.credential.<name>.<component>` can supply a
+   component, but keep secrets out of tracked `.datalad/config` and shared config files.
+   Prefer a suitable keyring or process environment for credentials.
 3. **Environment.** "Variable names take the form of `DATALAD_CREDENTIAL_<NAME>_<COMPONENT>`,
    and standard replacement rules into configuration variable names apply." The
    transformation replaces `__` with a hyphen, then `_` with a dot, then lowercases. Keep
@@ -176,9 +189,18 @@ datalad siblings -d . enable -s store
 git annex enableremote store
 ```
 
-A clone that can reach the Git history but reports no available source for content is
-usually a special remote that was never enabled, not a missing credential. Check
-`git annex info` for the remote's status before assuming an authentication problem.
+A clone that reads Git history but cannot get content may have a disabled remote,
+missing credentials, an inaccessible URL, or unpublished content. Check `git annex info`
+and the transfer error to distinguish them. DataLad credentials do not automatically
+configure every git-annex backend: the S3 special remote reads `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, and optionally `AWS_SESSION_TOKEN` during initialization or
+enabling. Keep `embedcreds` disabled unless its sharing/encryption behavior is intended.
+
+Official contracts: [push](https://docs.datalad.org/en/stable/generated/man/datalad-push.html),
+[GitHub sibling](https://docs.datalad.org/en/stable/generated/man/datalad-create-sibling-github.html),
+[RIA](https://docs.datalad.org/en/stable/generated/man/datalad-create-sibling-ria.html),
+[S3 special remote](https://git-annex.branchable.com/special_remotes/S3/), and
+[credentials](https://docs.datalad.org/en/stable/design/credentials.html).
 
 Never commit credentials into the dataset. The whole point of the dataset is that it gets
 published, and a secret in the history is published with it.

@@ -6,7 +6,14 @@
 >
 > **For humans:** This guide ensures every markdown document in your project is clean, scannable, well-cited, and renders beautifully on GitHub. Reference it from your `AGENTS.md` or contributing guide.
 
-**Target platform:** GitHub Markdown (Issues, PRs, Discussions, Wikis, `.md` files)
+**Target platform:** GitHub-style Markdown; verify the exact host and export pipeline.
+**Reviewed:** 2026-10-01 against [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/),
+[GFM](https://github.github.com/gfm/), and current GitHub formatting documentation.
+
+Heading counts, emoji, separators, and citation placement below are optional house style.
+They are not Markdown conformance rules and do not override a requested format or an
+existing project/journal style. Tables and task lists are GFM extensions; footnotes,
+Mermaid, HTML details, and generated heading anchors depend on the host.
 **Design goal:** Clear, professional documents that communicate effectively through consistent structure, meaningful formatting, proper citations, and strategic use of diagrams.
 
 ---
@@ -38,36 +45,15 @@
 
 ---
 
-## 🗂️ Everything is Code
+## 🗂️ Optional repository records
 
-Everything is code. PRs, issues, kanban boards — they're all markdown files in your repo, not data trapped in a platform's database.
+Markdown can preserve portable decision records and report snapshots. The issue, PR,
+and kanban templates support projects that choose file-based records; they do not change
+an existing tracker workflow or automatically synchronize with GitHub, GitLab, or another
+service. Preserve the project's actual source of truth and link to the live record when
+needed. Writing a file does not create an issue, post a comment, or update a board.
 
-### Why this matters
-
-- **Portable** — GitHub → GitLab → Gitea → anywhere. Your project management data isn't locked into any vendor. Switch platforms and your issues, PR records, and boards come with you — they're just files.
-- **AI-native** — Agents can read every issue, PR record, and kanban board with local file access. No API tokens, no rate limits, no platform-specific queries. `grep` beats `gh api` every time.
-- **Auditable** — Project management changes go through the same PR review process as code changes. Every board update, every issue status change — it's all in git history with attribution and timestamps.
-
-### How it works
-
-| What                 | Where it lives                                            | What GitHub does                                                                                                                                                   |
-| -------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Pull requests**    | `docs/project/pr/pr-NNNNNNNN-short-description.md`        | GitHub PR is a thin pointer — humans go there to comment on diffs, approve, and watch CI. The record of what changed, why, and what was learned lives in the file. |
-| **Issues**           | `docs/project/issues/issue-NNNNNNNN-short-description.md` | GitHub Issues is a notification and comment layer. Bug reports, feature requests, investigation logs, and resolutions live in the file.                            |
-| **Kanban boards**    | `docs/project/kanban/{scope}-{id}-short-description.md`   | No external board tool needed. Modify the board in your branch, merge it with your PR. The board evolves with the codebase.                                        |
-| **Decision records** | `docs/decisions/NNN-{slug}.md`                            | Not tracked in GitHub at all — purely repo-native.                                                                                                                 |
-
-### The rule
-
-> 📌 **Don't capture information in GitHub's UI that should be captured in a file.** Approve PRs in GitHub. Watch CI in GitHub. Comment in GitHub. But the actual content — the description, the investigation, the decision — lives in a committed file. If it's worth writing down, it's worth committing.
-
-### Templates for tracked documents
-
-- [Pull request record](../templates/pull_request.md) — the PR description IS this file
-- [Issue record](../templates/issue.md) — bug reports and feature requests as repo files
-- [Kanban board](../templates/kanban.md) — sprint/project boards that merge with your code
-
-See [File conventions](#file-conventions-for-tracked-documents) for directory structure and naming.
+See [File conventions](#file-conventions-for-tracked-documents) for suggested names.
 
 ---
 
@@ -164,7 +150,7 @@ For warnings and callouts:
 
 ### Formatting rules
 
-- **Consistent indentation** — 2 spaces for sub-items (some renderers use 4; pick one, stick with it)
+- **Indent nested items under the parent item text** — commonly 2 spaces after `- ` and 3 after `1. `. Marker width matters; a universal 2-space rule breaks ordered lists
 - **Parallel structure** — every item in a list should have the same grammatical form
 - **No period at end** unless items are full sentences
 - **Keep items concise** — if a bullet needs a paragraph, it should be a sub-section instead
@@ -195,12 +181,15 @@ See the [Mermaid Style Guide](mermaid_style_guide.md) for diagram conventions.
 ```
 
 - **Meaningful link text** — `[Mermaid Style Guide]` not `[click here]` or `[link]`
-- **Relative paths** for internal links — `[Guide](./README.md)` not absolute URLs
+- **Relative paths** for internal links — resolve them from the containing Markdown file, including copied templates
 - **Full URLs** for external links — always `https://`
 
 ### Footnote citations
 
-**Every claim, statistic, or reference to external work MUST have a footnote citation.** This is non-negotiable for credibility.
+Cite external factual claims with sources that support them. Use footnotes if the
+destination supports them; otherwise use inline/reference links or the required citation
+style. A citation must support the claim, not merely point to a related page. Explicitly
+label synthetic data and distinguish it from measurements; never invent references.
 
 ```markdown
 Markdown was created by John Gruber in 2004 as a lightweight
@@ -280,7 +269,7 @@ If the content could be expressed as a **Mermaid diagram**, prefer that over a s
 | Timeline                   | Mermaid `timeline` or `gantt`              |
 | Screenshot of UI           | Image (Mermaid can't do this)              |
 | Photo / real-world image   | Image                                      |
-| Complex data visualization | Image or Mermaid `xychart-beta`            |
+| Complex data visualization | Scientific plotting with source data/code            |
 
 See the [Mermaid Style Guide](mermaid_style_guide.md) for diagram type selection and styling.
 
@@ -376,8 +365,8 @@ Use HTML `<details>` for supplementary content that shouldn't clutter the main f
 - **Collapsed by default** — the `<details>` tag collapses automatically
 - **Descriptive summary** — `<strong>💬 Speaker Notes</strong>` or `<strong>📋 Implementation Details</strong>`
 - **Blank line after `<summary>` tag** — required for markdown to render inside the block
-- **ALWAYS follow with `---`** — horizontal rule after every `</details>` for visual separation
-- **Any markdown works inside** — bullets, bold, links, code blocks, tables
+- **Optional house style:** follow with `---` if the extra separator improves clarity
+- **GitHub supports Markdown inside details** with blank lines around the Markdown content. Other renderers may sanitize HTML or leave it unparsed; preview the exported result
 
 ### Common collapsible patterns
 
@@ -479,11 +468,11 @@ One emoji per H2 heading, at the start. Use sparingly in body text for callouts 
 
 ## Mermaid Diagram Integration
 
-**Whenever content describes flow, structure, relationships, or processes, consider whether a Mermaid diagram would communicate it better than prose alone.** Diagrams and text together are more effective than either alone.
+Use Mermaid for structural relationships when it improves understanding. Use data-driven plotting for quantitative figures that need exact geometry, uncertainty, or a journal-specific format.
 
 ### When to add a diagram
 
-**Any time your text describes flow, structure, relationships, timing, or comparisons, there's a Mermaid diagram that communicates it better.** Scan the table below to identify the right type, then follow this workflow:
+If a diagram helps the reader, use the table to select a type and verify host support:
 
 1. **Read the [Mermaid Style Guide](mermaid_style_guide.md) first** — emoji, color palette, accessibility, complexity management
 2. **Then open the specific type file** — exemplar, tips, template, complex example
@@ -513,7 +502,7 @@ One emoji per H2 heading, at the start. Use sparingly in body text for callouts 
 | Multi-dimensional comparison, skills, radar analysis | **Radar chart**          | [radar.md](diagrams/radar.md)               |
 | Hierarchical proportions, budget breakdown           | **Treemap**              | [treemap.md](diagrams/treemap.md)           |
 
-> 💡 **Pick the right type, not the easy type.** Don't default to flowcharts for everything — a timeline is better than a flowchart for chronological events, a sequence diagram is better for service interactions, an ER diagram is better for data models. Scan the table above and match your content to the most specific type. **If you catch yourself writing a paragraph that describes a visual concept, stop and diagram it.**
+> 💡 **Pick the right type, not the easy type.** Don't default to flowcharts for everything — a timeline is better than a flowchart for chronological events, a sequence diagram is better for service interactions, an ER diagram is better for data models. Scan the table above and match your content to the most specific type. A short paragraph or data table can be clearer for a small amount of information.
 
 ### How to integrate
 
@@ -526,7 +515,7 @@ The login process validates credentials, checks MFA status,
 and issues session tokens. Failed attempts are logged for
 security monitoring.
 
-‎```mermaid
+```mermaid
 sequenceDiagram
 accTitle: Login Authentication Flow
 accDescr: User login sequence through API and auth service
@@ -540,7 +529,7 @@ accDescr: User login sequence through API and auth service
     S-->>A: ✅ Token issued
     A-->>U: 200 OK + session
 
-‎```
+```
 
 The token expires after 24 hours. See [Authentication flow](#authentication-flow)
 for refresh token details.
@@ -666,15 +655,15 @@ Some templates produce documents that accumulate over time. Use these directory 
 ### ❌ Missing citations
 
 ```markdown
-Studies show 73% of developers prefer Markdown. ← Where's the source?
+The renderer supports every diagram type. ← Which renderer/version?
 ```
 
 ✅ Fix: Add footnote
 
 ```markdown
-Studies show 73% of developers prefer Markdown[^1].
+GitHub documents Mermaid code blocks and an `info` diagram for checking its Mermaid version[^1].
 
-[^1]: Stack Overflow. (2024). "Developer Survey Results." https://survey.stackoverflow.co/2024
+[^1]: GitHub Docs. "Creating diagrams." https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams
 ```
 
 ### ❌ Wall of text without structure

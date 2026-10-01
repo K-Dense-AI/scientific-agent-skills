@@ -143,7 +143,7 @@ def check_process(record: dict[str, Any]) -> dict[str, Any]:
             "schema_version": _common.SCHEMA_VERSION,
             "report_type": "bias_and_process_check",
             "status": "invalid",
-            "process_id": record.get("process_id"),
+            "process_id": record.get("process_id") if isinstance(record, dict) else None,
             "issues": [issue.as_dict() for issue in schema_issues],
         }
     blockers: list[str] = []

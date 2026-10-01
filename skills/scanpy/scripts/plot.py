@@ -41,7 +41,9 @@ def main():
     adata = load_anndata(args.input)
     # scanpy prepends the plot-function name, so ".png" yields e.g. "umap.png".
     save = args.save or ".png"
-    use_raw = args.use_raw and adata.raw is not None
+    if args.use_raw and adata.raw is None:
+        die("--use-raw requested but .raw is missing")
+    use_raw = args.use_raw
 
     var_names = adata.raw.var_names if use_raw else adata.var_names
     genes = [g for g in (args.genes or []) if g in var_names]

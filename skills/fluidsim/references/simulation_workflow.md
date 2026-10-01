@@ -46,6 +46,13 @@ python3 scripts/grid_resource_estimator.py --config config.json
 python3 scripts/simulation_dry_run.py --config config.json --output run.py
 ```
 
+The resource estimator reports an approximate allocation/storage model, not
+measured peaks or enforced quotas. Save records are counted independently of
+the declared file limit; exceeding a limit is a failure, never a truncated
+estimate. Enabled diagnostics outside physical fields, spectra, spectral budget,
+and spatial means require a separate estimate. Iteration-only termination does
+not provide the time horizon this storage model needs.
+
 The generator does not import FluidSim or run anything. The generated script
 prints a JSON dry run by default. Execution requires both `--execute` and the
 exact reviewed config ID. An MPI plan is only a command preview; the tool never
@@ -64,9 +71,10 @@ assert version("fluidfft") == "0.4.5"
 print(sorted(get_methods()))
 ```
 
-Record the actual FFT methods. A documented method that is absent from
-`get_methods()` is not installed. Importing a package is not enough: construct
-the selected solver's defaults.
+Record registered FFT methods, then load and exercise the chosen method.
+`get_methods()` lists entry points even when an optional dependency is absent
+(for example Dask). Importing a package is not enough: construct the selected
+solver's defaults and run its tiny transform/solver smoke.
 
 ## 4. Tiny no-output serial smoke
 
@@ -150,6 +158,12 @@ python3 run.py
 python3 run.py --execute --acknowledge-config-id REVIEWED_CONFIG_ID
 ```
 
+At execution, it verifies the installed FluidSim/FluidFFT versions, assigns
+reviewed thread limits before NumPy import, and checks the actual MPI size.
+Restart paths are anchored to the script directory and rehashed before loading;
+use a matching `provenance.restart.path` and `init_fields.from_file.path`.
+These are preflight checks, not RAM/disk/CPU quota enforcement.
+
 The first command is dry-run only. The second is a real simulation and must be
 issued by the user or approved operator after reviewing limits and output
 destination.
@@ -170,6 +184,10 @@ sim = load_sim_for_plot(
     hide_stdout=True,
 )
 ```
+
+Use native loaders only on trusted run metadata: they import the recorded
+solver/extension modules. For untrusted files, start with the bounded metadata
+helpers instead.
 
 Official 0.9 source shows that it:
 
@@ -211,6 +229,16 @@ python3 scripts/restart_compatibility.py \
   --source state_phys_t001.000.nc \
   --target-config restart-config.json
 ```
+
+The checker uses required state keys and dataset shapes/dtypes, not just a
+nonempty `/state_phys` group. It requires grid/domain metadata and finite state
+time. For a directory it examines at most 256 entries in that run, selecting by
+stored time/iteration rather than filename ordering; ambiguous latest states
+require an explicit file. Soft/external links are rejected. For time-correlated
+forcing, `/state_params/forcing` must contain `seed0`, `seed1`, and
+`t_last_change`. A JSON manifest must provide `state.dataset_metadata` entries
+with `shape` and `numeric: true` for each required field; its digest is a
+declaration, unlike a digest computed from the checkpoint.
 
 Then, after approval:
 
@@ -317,11 +345,11 @@ Do not extrapolate their wall times or fastest backend to another cluster.
 - Re-run the compatibility checker before every continuation.
 - Explain any budget discontinuity at the restart boundary.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [FluidSim user tutorial](https://fluidsim.readthedocs.io/en/latest/ipynb/tuto_user.html).
 - [Restart and resolution change](https://fluidsim.readthedocs.io/en/latest/ipynb/restart_modif_resol.html).
-- [FluidSim load/restart source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/util/util.py).
+- [FluidSim load/restart source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/util/util.py).
 - [Restart CLI source](https://fluidsim.readthedocs.io/en/latest/_modules/fluidsim_core/scripts/restart.html).
 - [FluidSim 0.9 release notes](https://fluidsim.readthedocs.io/en/latest/changes.html).
 - Mohanan et al., [FluidSim primary paper](https://doi.org/10.5334/jors.239),

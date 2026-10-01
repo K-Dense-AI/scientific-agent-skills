@@ -1,357 +1,186 @@
 ---
 name: glycoengineering
-description: Analyze and engineer protein glycosylation. Scan sequences for N-glycosylation sequons (N-X-S/T), predict O-glycosylation hotspots, and access curated glycoengineering tools (NetOGlyc, GlycoShield, GlycoWorkbench). For glycoprotein engineering, therapeutic antibody optimization, and vaccine design.
+description: Analyzes and engineers protein glycosylation by scanning canonical N-glycosylation sequons, describing S/T-rich regions, checking curated glycan evidence, and preparing NetNGlyc, NetOGlyc and GlycoSHIELD workflows. Use for glycoprotein engineering, antibody Fc glycosylation, glycan shielding, and site-specific glycoproteomics interpretation.
 license: Unknown
+compatibility: Local sequence helpers require Python 3.10+. Public GlyTouCan lookup requires requests and network access. DTU predictors use a browser; optional GlycoSHIELD needs a separate source installation, glycan libraries, and GROMACS for SASA analysis.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: Kuan-lin Huang
+  last-reviewed: "2026-10-01"
 ---
 
 # Glycoengineering
 
-## Overview
+## When to use
 
-Glycosylation is the most common and complex post-translational modification (PTM) of proteins, affecting over 50% of all human proteins. Glycans regulate protein folding, stability, immune recognition, receptor interactions, and pharmacokinetics of therapeutic proteins. Glycoengineering involves rational modification of glycosylation patterns for improved therapeutic efficacy, stability, or immune evasion.
+Use for canonical N-glycosylation candidate analysis, O-GalNAc candidate triage,
+antibody glycoform comparison, or structural glycan shielding. Keep four kinds of
+result separate: sequence motif, prediction, experimentally supported occupancy,
+and glycan structure/composition. None alone establishes all the others.
 
-**Two major glycosylation types:**
-- **N-glycosylation**: Attached to asparagine (N) in the sequon N-X-[S/T] where X ≠ Proline; occurs in the ER/Golgi
-- **O-glycosylation**: Attached to serine (S) or threonine (T); no strict consensus motif; primarily GalNAc initiation
+This workflow focuses on eukaryotic secretory-pathway N-glycosylation and mucin-type
+O-GalNAc. O-GlcNAc, O-mannose, O-fucose and other O-linked modifications require
+appropriate evidence and predictors; S/T enrichment does not identify the type.
 
-## When to Use This Skill
+## Workflow
 
-Use this skill when:
+1. Record the protein accession, isoform/version, exact sequence, expression host,
+   signal peptide/transmembrane topology and construct boundaries. Preserve a
+   mapping from submitted sequence coordinates to mature protein, PDB chain/residue
+   identifiers and antibody numbering where relevant.
+2. Scan canonical N-X-[S/T] candidates with X not Pro. Retain overlaps: `NNST`
+   has candidates starting at 1 and 2. A missing canonical motif does not rule out
+   unusual N-glycosylation; a present motif does not establish occupancy.
+3. Prioritize secreted/luminal/extracellular regions using topology and curated
+   evidence. Sequence-only results in a cytoplasmic region are not evidence of
+   secretory-pathway glycosylation.
+4. For O-GalNAc, use S/T density only as a descriptive feature, then inspect a
+   suitable predictor and cell/transferase context. **Do not exclude SP/TP motifs**:
+   adjacent Pro can be favorable, depending on the GalNAc-transferase and context.
+   See [the GalNAc-T substrate study](https://doi.org/10.1093/glycob/cwu089).
+5. Propose explicitly numbered mutations, list every changed residue and rescan
+   the full product for lost/created overlapping motifs. Evaluate structural and
+   expression effects independently of glycosylation.
+6. Validate occupancy and glycoforms experimentally, with localization evidence,
+   glycan composition/structure confidence, and the biological assay required by
+   the engineering objective. For biosimilar comparisons, match sample handling,
+   analytical coverage and quantification before comparing glycan percentages.
 
-- **Antibody engineering**: Optimize Fc glycosylation for enhanced ADCC, CDC, or reduced immunogenicity
-- **Therapeutic protein design**: Identify glycosylation sites that affect half-life, stability, or immunogenicity
-- **Vaccine antigen design**: Engineer glycan shields to focus immune responses on conserved epitopes
-- **Biosimilar characterization**: Compare glycan patterns between reference and biosimilar
-- **Drug target analysis**: Does glycosylation affect target engagement for a receptor?
-- **Protein stability**: N-glycans often stabilize proteins; identify sites for stabilizing mutations
+## Local sequence analysis
 
-## N-Glycosylation Sequon Analysis
-
-### Scanning for N-Glycosylation Sites
-
-Canonical N-glycosylation candidates follow **N-X-[S/T]** where X ≠ Proline.
-Scan every residue: `NNST` contains candidates at positions 1 and 2. These are
-sequence motifs, not proof of occupancy; [NetNGlyc](https://services.healthtech.dtu.dk/services/NetNGlyc-1.0/)
-also warns that cellular topology and sequence context affect interpretation.
-
-```python
-import re
-from typing import List, Tuple
-
-def find_n_glycosylation_sequons(sequence: str) -> List[dict]:
-    """
-    Scan a protein sequence for canonical N-linked glycosylation sequons.
-    Motif: N-X-[S/T], where X ≠ Proline.
-
-    Args:
-        sequence: Single-letter amino acid sequence
-
-    Returns:
-        List of dicts with position (1-based), motif, and context
-    """
-    seq = sequence.upper()
-    results = []
-    i = 0
-    while i <= len(seq) - 3:
-        triplet = seq[i:i+3]
-        if triplet[0] == 'N' and triplet[1] != 'P' and triplet[2] in {'S', 'T'}:
-            context = seq[max(0, i-3):i+6]  # ±3 residue context
-            results.append({
-                'position': i + 1,   # 1-based
-                'motif': triplet,
-                'context': context,
-                'sequon_type': 'NXS' if triplet[2] == 'S' else 'NXT'
-            })
-        # Advance one residue so overlapping sequons (NNST) are retained.
-        i += 1
-    return results
-
-def summarize_glycosylation_sites(sequence: str, protein_name: str = "") -> str:
-    """Generate a research log summary of N-glycosylation sites."""
-    sequons = find_n_glycosylation_sequons(sequence)
-
-    lines = [f"# N-Glycosylation Sequon Analysis: {protein_name or 'Protein'}"]
-    lines.append(f"Sequence length: {len(sequence)}")
-    lines.append(f"Total N-glycosylation sequons: {len(sequons)}")
-
-    if sequons:
-        lines.append(f"\nN-X-S sites: {sum(1 for s in sequons if s['sequon_type'] == 'NXS')}")
-        lines.append(f"N-X-T sites: {sum(1 for s in sequons if s['sequon_type'] == 'NXT')}")
-        lines.append(f"\nSite details:")
-        for s in sequons:
-            lines.append(f"  Position {s['position']}: {s['motif']} (context: ...{s['context']}...)")
-    else:
-        lines.append("No canonical N-glycosylation sequons detected.")
-
-    return "\n".join(lines)
-
-# Example: IgG1 Fc region
-fc_sequence = "APELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSREEMTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
-print(summarize_glycosylation_sites(fc_sequence, "IgG1 Fc"))
-```
-
-### Mutating N-Glycosylation Sites
+The standard-library helper [scripts/glycoengineering_tools.py](scripts/glycoengineering_tools.py)
+replaces copied snippets. Import it with this skill's `scripts/` directory on
+`PYTHONPATH`, or run Python from that directory. It accepts raw canonical
+20-amino-acid sequences, normalizes whitespace/case, and rejects FASTA headers,
+gaps, unknown residues and empty input. Parse FASTA records first; do not remove
+unknown residues because that changes coordinates. Coordinates are 1-based in the
+normalized submitted sequence.
 
 ```python
-def eliminate_glycosite(sequence: str, position: int, replacement: str = "Q") -> str:
-    """
-    Eliminate an N-glycosylation site by substituting Asn → Gln (conservative).
+from glycoengineering_tools import (
+    normalize_sequence, find_n_glycosylation_sequons,
+    eliminate_glycosite, add_glycosite, find_st_rich_sites,
+)
 
-    Args:
-        sequence: Protein sequence
-        position: 1-based position of the Asn to mutate
-        replacement: Amino acid to substitute (default Q = Gln; similar size, not glycosylated)
+sequence = normalize_sequence("NNST")
+sites = find_n_glycosylation_sequons(sequence)
+assert [site["position"] for site in sites] == [1, 2]
 
-    Returns:
-        Mutated sequence
-    """
-    seq = list(sequence.upper())
-    idx = position - 1
-    assert seq[idx] == 'N', f"Position {position} is '{seq[idx]}', not 'N'"
-    seq[idx] = replacement.upper()
-    return ''.join(seq)
+mutant = eliminate_glycosite(sequence, 1, "Q")
+assert mutant == "QNST"  # the overlapping sequon at position 2 remains
+assert [site["position"] for site in find_n_glycosylation_sequons(mutant)] == [2]
 
-def add_glycosite(sequence: str, position: int, flanking_context: str = "S") -> str:
-    """
-    Introduce an N-glycosylation site by mutating a residue to Asn,
-    and ensuring X ≠ Pro and +2 = S/T.
+# Three intended changes: A1N, P2A, A3T. P->A must be explicit.
+parent = "APA"
+product = add_glycosite(parent, 1, "T", allow_proline_substitution=True)
+changes = [(i, before, after) for i, (before, after) in
+           enumerate(zip(parent, product), 1) if before != after]
+assert product == "NAT" and len(changes) == 3
 
-    Args:
-        position: 1-based position to introduce Asn
-        flanking_context: 'S' or 'T' at position+2 (if modification needed)
-    """
-    seq = list(sequence.upper())
-    idx = position - 1
-
-    # Mutate to Asn
-    seq[idx] = 'N'
-
-    # Ensure X+1 != Pro (mutate to Ala if needed)
-    if idx + 1 < len(seq) and seq[idx + 1] == 'P':
-        seq[idx + 1] = 'A'
-
-    # Ensure X+2 = S or T
-    if idx + 2 < len(seq) and seq[idx + 2] not in ('S', 'T'):
-        seq[idx + 2] = flanking_context
-
-    return ''.join(seq)
+# Density is a fraction of residues, not an O-glycosylation probability.
+o_candidates = find_st_rich_sites("STPST", window=7, min_st_fraction=0.4)
+assert [site["position"] for site in o_candidates] == [1, 2, 4, 5]
 ```
 
-## O-Glycosylation Analysis
+`eliminate_glycosite` requires a complete canonical sequon and a one-residue
+replacement other than N. `add_glycosite` can alter up to three residues; it retains
+an existing S/T at +2. Neither function predicts a mutant's fold, glycan occupancy,
+function or tolerability. An N-to-Q substitution can change protein behavior even
+without a glycan effect.
 
-### Heuristic O-Glycosylation Hotspot Prediction
+The S/T density window must be a positive odd integer. Terminal windows shorten,
+and their denominator is the actual window length. Dense regions may help triage
+mucin-like sequence; isolated real O-GalNAc sites can be missed.
+
+For batch analysis, keep identifiers and normalized sequence lengths:
 
 ```python
-def predict_o_glycosylation_hotspots(
-    sequence: str,
-    window: int = 7,
-    min_st_fraction: float = 0.4,
-    disallow_proline_next: bool = True
-) -> List[dict]:
-    """
-    Heuristic O-glycosylation hotspot scoring based on local S/T density.
-    Not a substitute for NetOGlyc; use as fast baseline.
-
-    Rules:
-    - O-GalNAc glycosylation clusters on Ser/Thr-rich segments
-    - Flag Ser/Thr residues in windows enriched for S/T
-    - Avoid S/T immediately followed by Pro (TP/SP motifs inhibit GalNAc-T)
-
-    Args:
-        window: Odd window size for local S/T density
-        min_st_fraction: Minimum fraction of S/T in window to flag site
-    """
-    if window % 2 == 0:
-        window = 7
-    seq = sequence.upper()
-    half = window // 2
-    candidates = []
-
-    for i, aa in enumerate(seq):
-        if aa not in ('S', 'T'):
-            continue
-        if disallow_proline_next and i + 1 < len(seq) and seq[i+1] == 'P':
-            continue
-
-        start = max(0, i - half)
-        end = min(len(seq), i + half + 1)
-        segment = seq[start:end]
-        st_count = sum(1 for c in segment if c in ('S', 'T'))
-        frac = st_count / len(segment)
-
-        if frac >= min_st_fraction:
-            candidates.append({
-                'position': i + 1,
-                'residue': aa,
-                'st_fraction': round(frac, 3),
-                'window': f"{start+1}-{end}",
-                'segment': segment
-            })
-
-    return candidates
+sequences = {"overlap": "NNST", "control": "APAA", "mucin_like": "STPST"}
+rows = []
+for name, raw_sequence in sequences.items():
+    seq = normalize_sequence(raw_sequence)
+    positions = [site["position"] for site in find_n_glycosylation_sequons(seq)]
+    rows.append({"protein": name, "length": len(seq),
+                 "n_sequon_positions": positions,
+                 "n_sequons_per_100_residues": 100 * len(positions) / len(seq),
+                 "st_rich_positions": [site["position"] for site in find_st_rich_sites(seq)]})
 ```
 
-## External Glycoengineering Tools
+## Prediction services
 
-### 1. NetOGlyc 4.0 (O-glycosylation prediction)
+Use the official forms, which accept FASTA and return web results; this skill does
+not provide a stable submission API or job-polling endpoint. Saving a CGI URL is
+not a submitted job. Preserve the output, input and service version together.
 
-Web service for high-accuracy O-GalNAc site prediction:
-- **URL**: https://services.healthtech.dtu.dk/services/NetOGlyc-4.0/
-- **Input**: FASTA protein sequence
-- **Output**: Per-residue O-glycosylation probability scores
-- **Method**: Neural network trained on experimentally verified O-GalNAc sites
+| Service | Current documented scope and interpretation |
+| --- | --- |
+| [NetNGlyc 1.0](https://services.healthtech.dtu.dk/services/NetNGlyc-1.0/) | Human N-glycosylation; reports network potential and jury agreement. Default threshold 0.5; not a calibrated occupancy probability. Up to 2,000 sequences / 200,000 residues total / 4,000 per sequence. SignalP runs, but extracellular topology is not checked. The server may score N-P-S/T; exclude these from the canonical candidate set unless independent evidence warrants review. |
+| [NetOGlyc 4.0](https://services.healthtech.dtu.dk/services/NetOGlyc-4.0/) | Mammalian mucin-type O-GalNAc; outputs GFF2 confidence scores, with scores **greater than** 0.5 marked positive. Up to 50 sequences / 200,000 residues total / 4,000 per sequence. Prefer full sequence including signal peptide; isolated sites need 15 residues of flanking context on both sides. A positive supports regional likelihood, not guaranteed site occupancy or glycan type beyond this model's O-GalNAc scope. |
 
-```python
-import requests
+The service documentation and sample output were reviewed; new prediction jobs
+were not submitted during this refresh.
 
-def submit_netoglycv4(fasta_sequence: str) -> str:
-    """
-    Submit sequence to NetOGlyc 4.0 web service.
-    Returns the job URL for result retrieval.
+## Structural shielding with GlycoSHIELD
 
-    Note: This uses the DTU Health Tech web service. Results take ~1-5 min.
-    """
-    url = "https://services.healthtech.dtu.dk/cgi-bin/webface2.cgi"
-    # NetOGlyc submission (parameters may vary with web service version)
-    # Recommend using the web interface directly for most use cases
-    print("Submit sequence at: https://services.healthtech.dtu.dk/services/NetOGlyc-4.0/")
-    return url
+[GlycoSHIELD](https://gitlab.mpcdf.mpg.de/dioscuri-biophysics/glycoshield-md/)
+grafts pre-simulated glycan conformers onto protein structures and filters steric
+clashes. It does not predict which sequons are occupied or run fresh molecular
+dynamics for each query. See [Tsai et al., 2024](https://doi.org/10.1016/j.cell.2024.01.034).
 
-# Also: NetNGlyc for N-glycosylation prediction
-# URL: https://services.healthtech.dtu.dk/services/NetNGlyc-1.0/
-```
+Read [references/glycoshield.md](references/glycoshield.md) for the pinned source,
+installation, direct Python API, input mapping and SASA analysis. **The reviewed
+upstream CLI silently ignores several parsed options, including `--mode`,
+`--threshold` and `--dryrun`; use the documented direct API workaround.** Outputs
+include per-site PDB/XTC ensembles and shielding encoded in a PDB B-factor column;
+those values are not crystallographic temperature factors.
 
-### 2. GlycoSHIELD (Glycan Shielding Analysis)
+## Database evidence and glycan notation
 
-GlycoSHIELD grafts libraries of pre-simulated glycan conformers onto a static protein structure and
-scores how much of the protein surface the glycans shield, without running new MD
-(Tsai et al., *Cell* 2024, doi:10.1016/j.cell.2024.01.034):
-- **URL**: https://gitlab.mpcdf.mpg.de/dioscuri-biophysics/glycoshield-md/ (web app: https://glycoshield.eu)
-- **Use**: Model the glycan shield on a glycoprotein and map per-residue shielding
-- **Output**: Glycosylated PDB/XTC ensembles per site, per-residue shielding plot, PDB with shielding in the B-factor column
+Read [references/glycan_databases.md](references/glycan_databases.md) for the live
+GlyTouCan SPARQL lookup, GlyConnect access limitations, curated resources and
+notation. Query exact accessions and preserve dataset/source dates, species,
+tissue/cell context and supporting publications. Missing records or service errors
+cannot establish that a protein is unglycosylated.
 
-GlycoSHIELD is **not on PyPI** — `uv pip install glycoshield` fails. It ships as three scripts on top
-of a small `glycoshield` package (needs numpy, scipy, matplotlib, MDAnalysis; `GlycoSASA.py` also needs
-`gmx` from GROMACS on `PATH`). Install from the checkout:
+A monosaccharide composition such as `Hex:5 HexNAc:4 dHex:1` does not resolve
+linkages, branch positions, or distinguish GlcNAc from GalNAc. A cartoon without
+linkages is schematic, not IUPAC condensed notation. Use an actual sequence
+(WURCS/GlycoCT/IUPAC with its uncertainty retained) and accession when available.
+Core fucose attaches to the innermost GlcNAc of an N-glycan, not to core mannose.
 
-```bash
-# Installation (GPL-3.0). Glycan conformer libraries are downloaded separately —
-# see glycan_library_downloader.py and GLYCAN_LIBRARY/ in the repository.
-git clone https://gitlab.mpcdf.mpg.de/dioscuri-biophysics/glycoshield-md.git
-cd glycoshield-md
-uv pip install -e .
+## Antibody engineering decisions
 
-# 1. Graft glycan conformers onto each sequon listed in the input file.
-#    One line per site: <chain> <res-1,res,res+1> <1,2,3> <glycan.pdb> <glycan.xtc> <out.pdb> <out.xtc>
-python GlycoSHIELD.py --protpdb protein.pdb --inputfile sequons_input \
-    --threshold 3.5 --mode CG --shuffle-sugar
+Number Fc mutations in an explicit scheme (commonly EU), then map them to the
+actual construct. EU N297 is not residue 297 of an isolated Fc FASTA. Fc glycans
+and any Fab glycans must be distinguished analytically.
 
-# 2. Per-residue shielding score across the grafted ensembles (probe radii in nm)
-python GlycoSASA.py --pdblist A_463.pdb,A_492.pdb --xtclist A_463.xtc,A_492.xtc \
-    --probelist 0.14,0.25 --plottrace
-```
+| Objective | Candidate strategy | Required interpretation |
+| --- | --- | --- |
+| Increase FcγRIIIa engagement / ADCC | Reduce Fc core fucosylation while preserving the glycan | Effect size depends on antibody, receptor and assay; do not assume a universal fold gain. [Structural evidence](https://pubmed.ncbi.nlm.nih.gov/22023369/). |
+| Remove canonical Fc N-glycosylation | N297Q/A/D or disrupt the +2 residue with T299A | Sequon disruption; not a guarantee of otherwise unchanged structure or effector function. Verify the actual product. |
+| Alter serum persistence | Characterize glycoform-specific clearance with the relevant protein | IgG high-mannose clearance can increase; sialylation is not a universal IgG half-life recipe. [Human PK study](https://pubmed.ncbi.nlm.nih.gov/21421994/). |
+| Investigate anti-inflammatory Fc activity | Compare defined sialylated glycoforms | Linkage, preparation and biological model matter. Positive results in particular models do not establish a universal IVIG mechanism. [Defined Fc study](https://pubmed.ncbi.nlm.nih.gov/18420934/). |
+| Reduce non-human glycan epitopes | Measure α-Gal and Neu5Gc and select compatible production conditions | Sequence editing alone does not control the host's glycan processing. |
+| Study epitope accessibility | Introduce or remove a mapped surface sequon | Confirm occupancy, folding, binding and antigenicity; shielding calculations are geometric hypotheses. |
 
-Illustrative: the flags come from the scripts' argparse definitions and the upstream tutorial
-(N-cadherin EC5 with Man5 glycans); they were not run here. `--mode CG` checks clashes against
-Cα atoms only and pairs with `--threshold 3.5`; `--mode All` with `--threshold 0.7` is the all-atom
-setting.
+Fc sequence variants such as S298A/E333A/K334A or F243L-containing combinations
+can alter both receptor interaction and host-dependent glycan processing. Do not
+label F243L alone as a deterministic defucosylation switch. See the
+[2026 Fc-variant glycan study](https://pubmed.ncbi.nlm.nih.gov/41873859/).
 
-### 3. GlycoWorkbench (Glycan Structure Drawing/Analysis)
+## Experimental interpretation and verification boundary
 
-- **URL**: https://www.eurocarbdb.org/project/glycoworkbench
-- **Use**: Draw glycan structures, calculate masses, annotate MS spectra
-- **Format**: GlycoCT, IUPAC condensed glycan notation
+Glycopeptide searches can support peptide identity, composition and sometimes
+site localization, without resolving a full glycan structure. Review localization
+fragments, competing assignments, search-space choices and error control. In
+[Byonic](https://support.proteinmetrics.com/hc/en-us/articles/18139992247060-Byonic-O-Linked-Glycopeptide-Analysis),
+composition does not determine topology; O-glycosite ambiguity may remain even
+with an identified glycopeptide. Relative signal among detected glycoforms is not
+automatically absolute site occupancy; occupancy needs the appropriate modified
+and unmodified denominator and analytical response considerations.
 
-### 4. GlyConnect (Glycan-Protein Database)
-
-- **URL**: https://glyconnect.expasy.org/
-- **Use**: Find experimentally verified glycoproteins and glycosylation sites
-- **Query**: By protein (UniProt ID), glycan structure, or tissue
-
-```python
-import requests
-
-def query_glyconnect(uniprot_id: str) -> dict:
-    """Query GlyConnect for glycosylation data for a protein."""
-    url = f"https://glyconnect.expasy.org/api/proteins/uniprot/{uniprot_id}"
-    response = requests.get(url, headers={"Accept": "application/json"})
-    if response.status_code == 200:
-        return response.json()
-    return {}
-
-# Example: query EGFR glycosylation
-egfr_glyco = query_glyconnect("P00533")
-```
-
-### 5. UniCarbKB (Glycan Structure Database)
-
-- **URL**: https://unicarbkb.org/
-- **Use**: Browse glycan structures, search by mass or composition
-- **Format**: GlycoCT or IUPAC notation
-
-## Key Glycoengineering Strategies
-
-### For Therapeutic Antibodies
-
-| Goal | Strategy | Notes |
-|------|----------|-------|
-| Enhance ADCC | Defucosylation at Fc Asn297 | Afucosylated IgG1 has ~50× better FcγRIIIa binding |
-| Reduce immunogenicity | Remove non-human glycans | Eliminate α-Gal, NGNA epitopes |
-| Improve PK half-life | Sialylation | Sialylated glycans extend half-life |
-| Reduce inflammation | Hypersialylation | IVIG anti-inflammatory mechanism |
-| Create glycan shield | Add N-glycosites to surface | Masks vulnerable epitopes (vaccine design) |
-
-### Common Mutations Used
-
-| Mutation | Effect |
-|----------|--------|
-| N297A/Q (IgG1) | Removes Fc glycosylation (aglycosyl) |
-| N297D (IgG1) | Removes Fc glycosylation |
-| S298A/E333A/K334A | Increases FcγRIIIa binding |
-| F243L (IgG1) | Increases defucosylation |
-| T299A | Removes Fc glycosylation |
-
-## Glycan Notation
-
-### IUPAC Condensed Notation (Monosaccharide abbreviations)
-
-| Symbol | Full Name | Type |
-|--------|-----------|------|
-| Glc | Glucose | Hexose |
-| GlcNAc | N-Acetylglucosamine | HexNAc |
-| Man | Mannose | Hexose |
-| Gal | Galactose | Hexose |
-| Fuc | Fucose | Deoxyhexose |
-| Neu5Ac | N-Acetylneuraminic acid (Sialic acid) | Sialic acid |
-| GalNAc | N-Acetylgalactosamine | HexNAc |
-
-### Complex N-Glycan Structure
-
-```
-Typical complex biantennary N-glycan:
-Neu5Ac-Gal-GlcNAc-Man\
-                       Man-GlcNAc-GlcNAc-[Asn]
-Neu5Ac-Gal-GlcNAc-Man/
-(±Core Fuc at innermost GlcNAc)
-```
-
-## Best Practices
-
-- **Start with NetNGlyc/NetOGlyc** for computational prediction before experimental validation
-- **Verify with mass spectrometry**: Glycoproteomics (Byonic, Mascot) for site-specific glycan profiling
-- **Consider site context**: Not all predicted sequons are actually glycosylated (accessibility, cell type, protein conformation)
-- **For antibodies**: Fc N297 glycan is critical — always characterize this site first
-- **Use GlyConnect** to check if your protein of interest has experimentally verified glycosylation data
-
-## Additional Resources
-
-- **GlyTouCan** (glycan structure repository): https://glytoucan.org/
-- **GlyConnect**: https://glyconnect.expasy.org/
-- **CFG Functional Glycomics**: http://www.functionalglycomics.org/
-- **DTU Health Tech servers** (NetNGlyc, NetOGlyc): https://services.healthtech.dtu.dk/
-- **GlycoWorkbench**: https://glycoworkbench.software.informer.com/
-- **Review**: Apweiler R et al. (1999) Biochim Biophys Acta. PMID: 10564035
-- **Therapeutic glycoengineering review**: Jefferis R (2009) Nature Reviews Drug Discovery. PMID: 19448661
+Local sequence behavior is covered by synthetic tests. Public accession lookup
+was executed; API error handling was mocked. GlycoSHIELD source/argument handling
+was checked, but full conformer grafting, GROMACS SASA, DTU jobs, commercial MS
+software and biological performance were not executed. Supporting references
+record the service/source review date and unresolved access gaps.

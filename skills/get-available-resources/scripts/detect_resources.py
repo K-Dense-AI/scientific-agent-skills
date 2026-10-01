@@ -52,7 +52,7 @@ NVIDIA_QUERY_FALLBACK = (
     "--query-gpu=index,name,memory.total,memory.free,driver_version",
     "--format=csv,noheader,nounits",
 )
-AMD_SMI_QUERY = ("amd-smi", "static", "--json")
+AMD_SMI_QUERY = ("amd-smi", "static", "--asic", "--vram", "--json")
 ROCM_SMI_QUERY = (
     "rocm-smi",
     "--showproductname",
@@ -87,6 +87,7 @@ SLURM_ENV_KEYS = (
     "SLURM_NTASKS",
     "SLURM_NTASKS_PER_NODE",
     "SLURM_TASKS_PER_NODE",
+    "SLURM_NODEID",
     "SLURM_GPUS",
     "SLURM_GPUS_ON_NODE",
     "SLURM_GPUS_PER_TASK",
@@ -374,7 +375,32 @@ def _detect_cpu_inventory(
     warnings: list[dict[str, str]],
     provenance: list[dict[str, str]],
 ) -> dict[str, int | None]:
-    host_logical = os.cpu_count()
+    host_logical = None
+    logical_source = "os.cpu_count"
+    if psutil_module is not None:
+        try:
+            host_logical = psutil_module.cpu_count(logical=True)
+            logical_source = "psutil.cpu_count"
+        except (AttributeError, OSError, RuntimeError, ValueError,
+                getattr(psutil_module, "Error", OSError)):
+            pass
+    if host_logical is None and system == "Darwin":
+        host_logical = mac_sysctl.get("logical")
+        logical_source = "sysctl"
+    if host_logical is None:
+        try:
+            candidate = os.sysconf("SC_NPROCESSORS_ONLN")
+            if candidate > 0:
+                host_logical = candidate
+                logical_source = "os.sysconf"
+        except (AttributeError, OSError, ValueError):
+            pass
+    if host_logical is None:
+        host_logical = os.cpu_count()
+        logical_source = "os.cpu_count"
+        _warning(warnings, "PYTHON_CPU_COUNT_FALLBACK", "cpu",
+                 "Host CPU fallback can reflect Python's configured CPU-count override.",
+                 severity="info")
     if (
         not isinstance(host_logical, int)
         or isinstance(host_logical, bool)
@@ -387,9 +413,9 @@ def _detect_cpu_inventory(
             "cpu",
             "Host logical CPU count could not be determined.",
         )
-        _provenance(provenance, "cpu.host.logical", "os.cpu_count", "unavailable")
+        _provenance(provenance, "cpu.host.logical", logical_source, "unavailable")
     else:
-        _provenance(provenance, "cpu.host.logical", "os.cpu_count", "ok")
+        _provenance(provenance, "cpu.host.logical", logical_source, "ok")
 
     host_physical: int | None = None
     if psutil_module is not None:
@@ -404,7 +430,8 @@ def _detect_cpu_inventory(
                 _provenance(
                     provenance, "cpu.host.physical", "psutil.cpu_count", "ok"
                 )
-        except (AttributeError, OSError, RuntimeError, ValueError):
+        except (AttributeError, OSError, RuntimeError, ValueError,
+                getattr(psutil_module, "Error", OSError)):
             pass
     if host_physical is None and system == "Darwin":
         candidate = mac_sysctl.get("physical")
@@ -450,7 +477,8 @@ def _detect_process_cpu_count(
             if affinity and len(affinity) <= MAX_CPU_ID + 1:
                 affinity_count = len(affinity)
                 affinity_source = "psutil.Process.cpu_affinity"
-        except (AttributeError, OSError, RuntimeError, ValueError):
+        except (AttributeError, OSError, RuntimeError, ValueError,
+                getattr(psutil_module, "Error", OSError)):
             pass
     if affinity_count is not None:
         _provenance(provenance, "cpu.process.affinity_logical", affinity_source or "", "ok")
@@ -497,6 +525,8 @@ def _cgroup_relative_path(payload: str) -> tuple[str, ...] | None:
         fields = line.split(":", 2)
         if len(fields) == 3 and fields[0] == "0" and fields[1] == "":
             raw = PurePosixPath(fields[2])
+            if not raw.is_absolute():
+                return None
             parts = tuple(part for part in raw.parts if part not in {"/", ""})
             if any(part in {".", ".."} for part in parts):
                 return None
@@ -504,34 +534,68 @@ def _cgroup_relative_path(payload: str) -> tuple[str, ...] | None:
     return None
 
 
+def _resolve_cgroup_mount(
+    payload: str, parts: tuple[str, ...]
+) -> tuple[Path, tuple[str, ...]] | None:
+    """Map namespace membership through a cgroup2 mount's root and mountpoint."""
+    matches = []
+    for line in payload.splitlines():
+        fields = line.split()
+        try:
+            separator = fields.index("-")
+        except ValueError:
+            continue
+        if len(fields) <= separator + 1 or fields[separator + 1] != "cgroup2" or separator < 6:
+            continue
+        decoded = [re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), field)
+                   for field in fields[3:5]]
+        mount_root, mountpoint = map(PurePosixPath, decoded)
+        if any(not p.is_absolute() or ".." in p.parts for p in (mount_root, mountpoint)):
+            continue
+        prefix = mount_root.parts[1:]
+        if parts[:len(prefix)] == prefix:
+            matches.append((len(prefix), Path(str(mountpoint)), parts[len(prefix):]))
+    if not matches:
+        return None
+    # A broader visible mount retains ancestors that a nested bind mount hides.
+    _, mountpoint, relative = min(matches, key=lambda item: item[0])
+    return mountpoint, relative
+
+
 def detect_cgroup_v2(
     *,
     read_text: Callable[[Path], str] = _read_bounded_text,
     root: Path = Path("/sys/fs/cgroup"),
     proc_self_cgroup: Path = Path("/proc/self/cgroup"),
+    proc_self_mountinfo: Path = Path("/proc/self/mountinfo"),
     warnings: list[dict[str, str]] | None = None,
     provenance: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Read current and ancestor cgroup v2 limits without exposing paths."""
     warning_records = warnings if warnings is not None else []
     provenance_records = provenance if provenance is not None else []
+    membership = _try_read(read_text, proc_self_cgroup)
+    parts = _cgroup_relative_path(membership or "")
+    mountinfo = _try_read(read_text, proc_self_mountinfo)
+    if parts is not None and mountinfo is not None:
+        resolved = _resolve_cgroup_mount(mountinfo, parts)
+        if resolved is not None:
+            root, parts = resolved
+        else:
+            parts = None
+    empty = {
+        "detected": False, "cpu_quota_cores": None, "cpuset_logical": None,
+        "memory_available_bytes": None, "memory_current_bytes": None,
+        "memory_high_bytes": None, "memory_max_bytes": None, "scope": "unknown",
+    }
     if _try_read(read_text, root / "cgroup.controllers") is None:
         _provenance(
             provenance_records, "cgroup_v2", "cgroup.controllers", "unavailable"
         )
-        return {
-            "detected": False,
-            "cpu_quota_cores": None,
-            "cpuset_logical": None,
-            "memory_available_bytes": None,
-            "memory_current_bytes": None,
-            "memory_high_bytes": None,
-            "memory_max_bytes": None,
-            "scope": "unknown",
-        }
+        _warning(warning_records, "CGROUP_V2_UNAVAILABLE", "cgroup",
+                 "cgroup v2 limits are unavailable; cgroup v1 and hidden limits are not measured.")
+        return empty
 
-    membership = _try_read(read_text, proc_self_cgroup)
-    parts = _cgroup_relative_path(membership or "")
     if parts is None:
         _warning(
             warning_records,
@@ -539,8 +603,12 @@ def detect_cgroup_v2(
             "cgroup",
             "cgroup v2 was detected but current membership could not be parsed.",
         )
-        parts = ()
+        return {**empty, "detected": True}
     current = root.joinpath(*parts)
+    if _try_read(read_text, current / "cgroup.controllers") is None:
+        _warning(warning_records, "CGROUP_CURRENT_UNAVAILABLE", "cgroup",
+                 "Current cgroup could not be read; visible root limits were not substituted.")
+        return {**empty, "detected": True}
     chain: list[Path] = []
     cursor = current
     for _ in range(MAX_CGROUP_LEVELS):
@@ -571,6 +639,9 @@ def detect_cgroup_v2(
             quota = _parse_cpu_max(cpu_max_text)
             if quota is not None:
                 quota_candidates.append(quota)
+            elif not re.fullmatch(r"max\s+[1-9][0-9]*", cpu_max_text.strip()):
+                _warning(warning_records, "CGROUP_CPU_MAX_INVALID", "cgroup",
+                         "A cgroup CPU quota could not be interpreted.")
 
         memory_max_text = _try_read(read_text, directory / "memory.max")
         memory_current_text = _try_read(read_text, directory / "memory.current")
@@ -594,6 +665,13 @@ def detect_cgroup_v2(
                 memory_available_candidates.append(max(0, memory_max - memory_current))
         if memory_high is not None:
             memory_high_candidates.append(memory_high)
+        for text, parsed in ((memory_max_text, memory_max), (memory_high_text, memory_high)):
+            if text is not None and text.strip() != "max" and parsed is None:
+                _warning(warning_records, "CGROUP_MEMORY_LIMIT_INVALID", "cgroup",
+                         "A cgroup memory boundary could not be interpreted.")
+        if memory_max is not None and memory_current is None:
+            _warning(warning_records, "CGROUP_MEMORY_USAGE_UNKNOWN", "cgroup",
+                     "A finite memory limit has unknown usage; remaining memory is only an upper bound.")
 
     cpuset_text = _try_read(read_text, current / "cpuset.cpus.effective")
     cpuset_count = parse_cpu_list(cpuset_text) if cpuset_text else None
@@ -656,13 +734,30 @@ def _parse_slurm_memory(value: str | None) -> int | None:
 
 
 def _parse_first_repeated_count(value: str | None) -> int | None:
-    if value is None or len(value) > 4096:
+    return _parse_node_count(value, 0)
+
+
+def _parse_node_count(value: str | None, node_index: int | None) -> int | None:
+    """Resolve compressed Slurm node counts without expanding the list."""
+    if value is None or not value or len(value) > 4096:
         return None
-    match = re.match(r"\s*(\d+)(?:\(x\d+\))?", value)
-    if not match:
-        return None
-    count = int(match.group(1))
-    return count if count <= 1_000_000 else None
+    groups = []
+    for token in value.split(","):
+        match = re.fullmatch(r"\s*(\d+)(?:\(x(\d+)\))?\s*", token)
+        if not match:
+            return None
+        count, repeats = int(match.group(1)), int(match.group(2) or 1)
+        if count > 1_000_000 or not 1 <= repeats <= 1_000_000:
+            return None
+        groups.append((count, repeats))
+    if node_index is None:
+        counts = {count for count, _ in groups}
+        return next(iter(counts)) if len(counts) == 1 else None
+    for count, repeats in groups:
+        if node_index < repeats:
+            return count
+        node_index -= repeats
+    return None
 
 
 def detect_scheduler(
@@ -701,11 +796,10 @@ def detect_scheduler(
     cpus_per_task = _parse_slurm_count(present.get("SLURM_CPUS_PER_TASK"))
     cpus_on_node = _parse_slurm_count(present.get("SLURM_CPUS_ON_NODE"))
     tasks = _parse_slurm_count(present.get("SLURM_NTASKS"))
-    tasks_per_node = _parse_slurm_count(present.get("SLURM_NTASKS_PER_NODE"))
-    if tasks_per_node is None:
-        tasks_per_node = _parse_first_repeated_count(
-            present.get("SLURM_TASKS_PER_NODE")
-        )
+    node_index = _parse_slurm_count(present.get("SLURM_NODEID"))
+    tasks_per_node = _parse_node_count(present.get("SLURM_TASKS_PER_NODE"), node_index)
+    if "SLURM_TASKS_PER_NODE" not in present:
+        tasks_per_node = _parse_slurm_count(present.get("SLURM_NTASKS_PER_NODE"))
     first_job_cpus = _parse_first_repeated_count(
         present.get("SLURM_JOB_CPUS_PER_NODE")
     )
@@ -845,14 +939,16 @@ def _detect_memory(
             host_total = _bounded_nonnegative(memory.total)
             host_available = _bounded_nonnegative(memory.available)
             _provenance(provenance, "memory.host", "psutil.virtual_memory", "ok")
-        except (AttributeError, OSError, RuntimeError, ValueError):
+        except (AttributeError, OSError, RuntimeError, ValueError,
+                getattr(psutil_module, "Error", OSError)):
             pass
         try:
             swap = psutil_module.swap_memory()
             swap_total = _bounded_nonnegative(swap.total)
             swap_free = _bounded_nonnegative(swap.free)
             _provenance(provenance, "memory.swap", "psutil.swap_memory", "ok")
-        except (AttributeError, OSError, RuntimeError, ValueError):
+        except (AttributeError, OSError, RuntimeError, ValueError,
+                getattr(psutil_module, "Error", OSError)):
             pass
 
     if system == "Linux" and (host_total is None or host_available is None):
@@ -955,7 +1051,10 @@ def _detect_memory(
         if effective_available is not None
         else []
     )
-    unified = system == "Darwin" and machine.lower() in {"arm64", "aarch64"}
+    unified = system == "Darwin" and (
+        machine.lower() in {"arm64", "aarch64"}
+        or str(mac_sysctl.get("brand", "")).startswith("Apple ")
+    )
     return {
         "cgroup_v2": {
             "available_bytes": cgroup.get("memory_available_bytes"),
@@ -1014,12 +1113,15 @@ def _detect_disk(
             candidate = _bounded_nonnegative(
                 statvfs.f_bavail * statvfs.f_frsize
             )
+            filesystem_free = _bounded_nonnegative(statvfs.f_bfree * statvfs.f_frsize)
+            if filesystem_free is not None and filesystem_free <= total:
+                free = filesystem_free
             if candidate is not None:
                 user_available = candidate
                 _provenance(
                     provenance, "disk.user_available", "os.statvfs", "ok"
                 )
-        except (OSError, TypeError, ValueError):
+        except (AttributeError, OSError, TypeError, ValueError):
             pass
     writable = os.access(Path.cwd(), os.W_OK)
     if not writable:
@@ -1044,7 +1146,7 @@ def _mib_to_bytes(value: str) -> int | None:
         amount = float(value)
     except ValueError:
         return None
-    if not math.isfinite(amount) or amount < 0:
+    if not math.isfinite(amount) or not 0 <= amount <= MAX_BYTES / MIB:
         return None
     result = round(amount * MIB)
     return result if result <= MAX_BYTES else None
@@ -1149,30 +1251,43 @@ def _amd_entries(data: Any) -> list[tuple[int, dict[str, Any]]]:
     return sorted(deduplicated.items())
 
 
-def _amd_memory_bytes(entry: Mapping[str, Any]) -> int | None:
+def _amd_memory_bytes(entry: Mapping[str, Any], *, in_vram: bool = False) -> int | None:
     for key, value in entry.items():
         normalized = re.sub(r"[^a-z0-9]+", "_", str(key).lower()).strip("_")
         if (
-            "vram" in normalized
+            ("vram" in normalized or in_vram)
             and ("total" in normalized or "size" in normalized)
-            and isinstance(value, (str, int, float))
         ):
-            match = re.search(r"(\d+(?:\.\d+)?)", str(value))
+            # AMD SMI JSON uses SIZE: {value: ..., unit: MB}; legacy ROCm
+            # SMI reports a flat "VRAM Total Memory (B)" integer string.
+            if isinstance(value, dict):
+                fields = {str(key).lower(): item for key, item in value.items()}
+                raw = fields.get("value")
+                unit_context = str(fields.get("unit", "")).lower()
+            else:
+                raw = value
+                unit_context = f"{normalized} {str(value).lower()}"
+            match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(?:[A-Za-z]+)?\s*", str(raw))
             if not match:
                 continue
             amount = float(match.group(1))
-            unit_context = f"{normalized} {str(value).lower()}"
+            if not math.isfinite(amount):
+                continue
             if "gib" in unit_context or "gb" in unit_context:
                 multiplier = GIB
             elif "mib" in unit_context or "mb" in unit_context:
                 multiplier = MIB
-            else:
+            elif "byte" in unit_context or unit_context == "b" or normalized.endswith("_b"):
                 multiplier = 1
+            else:
+                continue
+            if amount > MAX_BYTES / multiplier:
+                continue
             result = round(amount * multiplier)
             if 0 <= result <= MAX_BYTES:
                 return result
         if isinstance(value, dict):
-            nested = _amd_memory_bytes(value)
+            nested = _amd_memory_bytes(value, in_vram=in_vram or normalized == "vram")
             if nested is not None:
                 return nested
     return None
@@ -1210,8 +1325,9 @@ def parse_amd_json(payload: str) -> list[dict[str, Any]]:
                 "management_query": "visible",
                 "memory": {
                     "dedicated_free_bytes": None,
-                    "dedicated_total_bytes": total_memory,
-                    "model": "dedicated_or_hbm",
+                    "dedicated_total_bytes": None,
+                    "reported_total_bytes": total_memory,
+                    "model": "device_reported_pool",
                 },
                 "name": name or "AMD GPU",
                 "runtime_compatibility": "not_tested",
@@ -1233,12 +1349,17 @@ def parse_apple_profiler_json(
     entries = data.get("SPDisplaysDataType") if isinstance(data, dict) else None
     if not isinstance(entries, list):
         return []
-    unified = machine.lower() in {"arm64", "aarch64"}
     devices: list[dict[str, Any]] = []
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             continue
         name = _safe_text(entry.get("sppci_model") or entry.get("_name"))
+        vendor_text = f"{entry.get('spdisplays_vendor', '')} {name or ''}".lower()
+        vendor = next((item for item in ("apple", "amd", "nvidia", "intel")
+                       if item in vendor_text), "unknown")
+        unified = vendor == "apple" and (
+            machine.lower() in {"arm64", "aarch64"} or (name or "").startswith("Apple M")
+        )
         core_value = (
             entry.get("sppci_cores")
             or entry.get("spdisplays_gpu_cores")
@@ -1261,7 +1382,7 @@ def parse_apple_profiler_json(
                 },
                 "name": name or "Apple display accelerator",
                 "runtime_compatibility": "not_tested",
-                "vendor": "apple",
+                "vendor": vendor,
             }
         )
     return devices

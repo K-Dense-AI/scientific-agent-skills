@@ -120,10 +120,11 @@ math.ST  # Mathematics - Statistics
 
 **Base URL**: `https://api.crossref.org/works/`
 
-**No API key required**, but polite pool recommended:
-- Add email to User-Agent
-- Gets better service
-- No rate limits
+**No API key required**. Identify your application with `User-Agent`; add your
+own contact email as `mailto` for the polite pool. Single-record requests are
+limited to 5/s public or 10/s polite; list queries to 1/s or 3/s respectively.
+Read response rate/concurrency headers and back off on 429. See the current
+[Crossref limits](https://community.crossref.org/t/refining-rest-api-limits-for-improved-stability-and-reliability/16137).
 
 #### Basic DOI Lookup
 
@@ -156,15 +157,15 @@ GET https://api.crossref.org/works/10.1038/s41586-021-03819-2
 
 #### Fields Available
 
-**Always present**:
+**Identity/type fields**:
 - `DOI`: Digital Object Identifier
-- `title`: Article title (array)
+- `title`: Article title (array; may be absent or empty)
 - `type`: Content type (journal-article, book-chapter, etc.)
 
 **Usually present**:
 - `author`: Array of author objects
 - `container-title`: Journal/book title
-- `published-print` or `published-online`: Publication date
+- `published-print`, `published-online`, `published`, or `issued`: Publication date (do not substitute registration/deposit dates)
 - `volume`, `issue`, `page`: Publication details
 - `publisher`: Publisher name
 
@@ -279,7 +280,7 @@ Key fields:
 
 **Preprints in physics, math, CS, q-bio** - Free, open access.
 
-**Base URL**: `http://export.arxiv.org/api/query`
+**Base URL**: `https://export.arxiv.org/api/query`
 
 **No API key required**
 
@@ -287,23 +288,21 @@ Key fields:
 
 **Request**:
 ```
-GET http://export.arxiv.org/api/query?id_list=2103.14030
+GET https://export.arxiv.org/api/query?id_list=1706.03762
 ```
 
 **Response**: Atom XML
 
 ```xml
+<!-- Illustrative response shape; namespaces are declared on the feed. -->
 <entry>
-  <id>http://arxiv.org/abs/2103.14030v2</id>
-  <title>Highly accurate protein structure prediction with AlphaFold</title>
-  <author><name>John Jumper</name></author>
-  <author><name>Richard Evans</name></author>
-  <published>2021-03-26T17:47:17Z</published>
-  <updated>2021-07-01T16:51:46Z</updated>
-  <summary>Abstract text here...</summary>
-  <arxiv:doi>10.1038/s41586-021-03819-2</arxiv:doi>
-  <category term="q-bio.BM" scheme="http://arxiv.org/schemas/atom"/>
-  <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+  <id>http://arxiv.org/abs/1706.03762v7</id>
+  <title>Attention Is All You Need</title>
+  <author><name>Ashish Vaswani</name></author>
+  <!-- Additional authors omitted in this schematic, never omit them in a citation. -->
+  <published>2017-06-12T17:57:34Z</published>
+  <summary>Abstract text...</summary>
+  <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
 </entry>
 ```
 
@@ -315,7 +314,7 @@ GET http://export.arxiv.org/api/query?id_list=2103.14030
 - `published`: First version date
 - `updated`: Latest version date
 - `summary`: Abstract
-- `arxiv:doi`: DOI if published
+- `arxiv:doi`: Optional DOI; verify its registration metadata before calling it a journal version
 - `arxiv:journal_ref`: Journal reference if published
 - `category`: arXiv categories
 
@@ -325,7 +324,12 @@ arXiv tracks versions:
 - `v1`: Initial submission
 - `v2`, `v3`, etc.: Revisions
 
-**Always check** if preprint has been published in journal (use DOI if available).
+**Always check** for a journal version using publisher metadata and `arxiv:journal_ref`.
+A DOI alone does not prove peer review. The script preserves an explicit `vN`
+identifier; an unversioned request retrieves the current version. Make at most
+one request every three seconds over one connection across all your workers.
+The script enforces this interval within one extractor instance and rejects
+Atom error entries even when the transport returns HTTP 200.
 
 ### DataCite API
 
@@ -340,7 +344,27 @@ arXiv tracks versions:
 GET https://api.datacite.org/dois/10.5281/zenodo.1234567
 ```
 
-**Response**: JSON with metadata for dataset/software
+**Response**: JSON:API object at `data.attributes`, including `titles`, `creators`,
+`publicationYear`, and `types`; this is not Crossref's `message` schema. A public
+GET needs no credentials and retrieves findable records. A missing DataCite or
+Crossref record does not prove a DOI is invalid: other agencies register DOIs.
+
+`extract_metadata.py --doi` currently reads Crossref records only. For DataCite
+DOIs use `doi_to_bibtex.py` (DOI content negotiation); `validate_citations.py`
+also checks DataCite after a Crossref 404. See the
+[DataCite singleton guide](https://support.datacite.org/docs/api-get-doi).
+
+### PMC ID conversion
+
+`extract_metadata.py --pmcid PMC7611378` uses
+`GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/` with `ids`,
+`format=json`, `tool`, and optional `email`. It reads `records[0].pmid` (which
+may be numeric), then uses PubMed; if no PMID exists, it tries the returned DOI.
+Only articles present in PMC can be mapped. The service accepts up to 200 IDs
+of the same type per call, without pagination; this helper sends one ID.
+
+This active [ID converter](https://pmc.ncbi.nlm.nih.gov/tools/id-converter-api/)
+is separate from the retired PMC OA Web Service.
 
 ## Required BibTeX Fields
 
@@ -562,7 +586,7 @@ python scripts/extract_metadata.py \
 **Process**:
 1. Query PubMed EFetch with PMID
 2. Parse XML response
-3. Extract metadata including MeSH terms
+3. Extract citation fields (the bundled extractor does not retain MeSH terms)
 4. Check for DOI in response
 5. If DOI exists, optionally query CrossRef for additional metadata
 6. Format as BibTeX
@@ -578,8 +602,8 @@ python scripts/extract_metadata.py --arxiv 2103.14030
 **Process**:
 1. Query arXiv API with ID
 2. Parse Atom XML response
-3. Check for published version (DOI in response)
-4. If published: Use DOI and CrossRef
+3. Inspect journal reference and DOI for a possible published version
+4. If verified as published: explicitly re-extract publisher metadata by DOI
 5. If not published: Use preprint metadata
 6. Format as @misc with preprint note
 
@@ -648,13 +672,13 @@ python scripts/extract_metadata.py \
 
 **Solution**:
 1. Check arXiv metadata for DOI field
-2. If DOI present, use published version
+2. Verify the DOI points to a published version before replacing the preprint
 3. Update citation to journal article
 4. Note preprint version in comments if needed
 
 **Example**:
 ```bibtex
-% Originally: arXiv:2103.14030
+% Example publisher citation; do not infer an arXiv-to-DOI mapping from this template.
 % Published as:
 @article{Jumper2021,
   author  = {Jumper, John and Evans, Richard and others},
@@ -672,9 +696,8 @@ python scripts/extract_metadata.py \
 **Issue**: Many authors (10+).
 
 **BibTeX practice**:
-- Include all authors if <10
-- Use "and others" for 10+
-- Or list all (journals vary)
+- Preserve the complete author list from the verified source.
+- Let the bibliography style truncate display names; use `and others` only when the source or style requires it.
 
 **Example**:
 ```bibtex
@@ -836,7 +859,7 @@ Johnson2024cancer
 
 ### 5. Include DOI for Modern Papers
 
-All papers published after ~2000 should have DOI:
+Include a DOI when one has been assigned; publication year does not guarantee one:
 ```bibtex
 doi = {10.1038/nature12345}
 ```

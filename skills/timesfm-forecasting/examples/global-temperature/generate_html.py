@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate a self-contained HTML file with embedded animation data.
+Generate a data-embedded HTML file with embedded animation data.
 
 This creates a single HTML file that can be opened directly in any browser
 without needing a server or external JSON file (CORS-safe).
@@ -8,6 +8,7 @@ without needing a server or external JSON file (CORS-safe).
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -22,7 +23,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TimesFM Interactive Forecast Animation</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
@@ -147,7 +148,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="container">
         <header>
             <h1>TimesFM Forecast Evolution</h1>
-            <p class="subtitle">Watch the forecast evolve as more data is added — forecasts extend to 2025-12</p>
+            <p class="subtitle">Watch the forecast evolve as more data is added — successive historical origins; illustrative input, uncalibrated bands</p>
         </header>
         
         <div class="chart-container">
@@ -194,7 +195,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="legend">
                 <div class="legend-item">
                     <div class="legend-color" style="background: #9ca3af;"></div>
-                    <span>All Observed Data</span>
+                    <span>Full history (retrospective reference)</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: #fca5a5;"></div>
@@ -210,13 +211,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: rgba(239, 68, 68, 0.25);"></div>
-                    <span>80% CI</span>
+                    <span>Nominal 80% and 60% PI</span>
                 </div>
             </div>
         </div>
         
         <footer>
-            <p>TimesFM 1.0 (200M) PyTorch • <a href="https://github.com/google-research/timesfm">Google Research</a></p>
+            <p>TimesFM 2.5 (200M) PyTorch • <a href="https://github.com/google-research/timesfm">Google Research</a></p>
         </footer>
     </div>
 
@@ -247,9 +248,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             // Y extent from all values
             const allValues = [
                 ...animationData.actual_data.values,
-                ...finalStep.point_forecast,
-                ...finalStep.q10,
-                ...finalStep.q90
+                ...animationData.animation_steps.flatMap(step => [...step.point_forecast, ...step.q10, ...step.q90])
             ];
             yMin = Math.min(...allValues) - 0.05;
             yMax = Math.max(...allValues) + 0.05;
@@ -267,7 +266,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             pointRadius: 2,
                             pointBackgroundColor: '#9ca3af',
                             fill: false,
-                            tension: 0.1,
+                            tension: 0,
                             order: 1,
                         }},
                         {{
@@ -279,7 +278,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             pointRadius: 2,
                             pointBackgroundColor: '#fca5a5',
                             fill: false,
-                            tension: 0.1,
+                            tension: 0,
                             order: 2,
                         }},
                         {{
@@ -291,47 +290,47 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             pointRadius: 4,
                             pointBackgroundColor: '#3b82f6',
                             fill: false,
-                            tension: 0.1,
+                            tension: 0,
                             order: 10,
                         }},
                         {{
-                            label: '90% CI Lower',
+                            label: 'Nominal 80% PI Lower',
                             data: [],
                             borderColor: 'transparent',
                             backgroundColor: 'rgba(239, 68, 68, 0.08)',
                             fill: '+1',
                             pointRadius: 0,
-                            tension: 0.1,
+                            tension: 0,
                             order: 5,
                         }},
                         {{
-                            label: '90% CI Upper',
+                            label: 'Nominal 80% PI Upper',
                             data: [],
                             borderColor: 'transparent',
                             backgroundColor: 'rgba(239, 68, 68, 0.08)',
                             fill: false,
                             pointRadius: 0,
-                            tension: 0.1,
+                            tension: 0,
                             order: 5,
                         }},
                         {{
-                            label: '80% CI Lower',
+                            label: 'Nominal 60% PI Lower',
                             data: [],
                             borderColor: 'transparent',
                             backgroundColor: 'rgba(239, 68, 68, 0.2)',
                             fill: '+1',
                             pointRadius: 0,
-                            tension: 0.1,
+                            tension: 0,
                             order: 6,
                         }},
                         {{
-                            label: '80% CI Upper',
+                            label: 'Nominal 60% PI Upper',
                             data: [],
                             borderColor: 'transparent',
                             backgroundColor: 'rgba(239, 68, 68, 0.2)',
                             fill: false,
                             pointRadius: 0,
-                            tension: 0.1,
+                            tension: 0,
                             order: 6,
                         }},
                         {{
@@ -343,7 +342,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             pointRadius: 4,
                             pointBackgroundColor: '#ef4444',
                             fill: false,
-                            tension: 0.1,
+                            tension: 0,
                             order: 7,
                         }},
                     ]
@@ -416,7 +415,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             chart.data.datasets[2].data = dataUsed;
             
             // Datasets 3-6: CIs (forecast only)
-            const forecastOffset = nActual;
+            const forecastOffset = nHist;
             const q90Lower = [];
             const q90Upper = [];
             const q80Lower = [];
@@ -457,7 +456,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             
             // Update UI
             document.getElementById('slider').value = stepIndex;
-            document.getElementById('points-value').textContent = `${{step.n_points}} / 36`;
+            document.getElementById('points-value').textContent = `${{step.n_points}} / ${{actual.dates.length}}`;
             document.getElementById('date-end').textContent = `Using data through ${{step.last_historical_date}}`;
             
             // Stats
@@ -510,6 +509,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }});
 
         // Initialize on load
+        document.getElementById("slider").max = animationData.animation_steps.length - 1;
         initChart();
         updateChart(0);
     </script>
@@ -519,16 +519,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 def main() -> None:
+    global DATA_FILE, OUTPUT_FILE
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    DATA_FILE = args.output_dir / "animation_data.json"
+    OUTPUT_FILE = args.output_dir / "interactive_forecast.html"
     print("=" * 60)
-    print("  GENERATING SELF-CONTAINED HTML")
+    print("  GENERATING DATA-EMBEDDED HTML")
     print("=" * 60)
 
     # Load animation data
     with open(DATA_FILE) as f:
         data = json.load(f)
+    if data.get("schema_version") != "2.5-deciles-v1":
+        raise ValueError("Regenerate legacy animation data with corrected quantile mapping")
 
     # Generate HTML with embedded data
-    html_content = HTML_TEMPLATE.format(data_json=json.dumps(data, indent=2))
+    html_content = HTML_TEMPLATE.format(data_json=json.dumps(data, indent=2, allow_nan=False).replace("<", "\\u003c"))
 
     # Write output
     with open(OUTPUT_FILE, "w") as f:
@@ -537,7 +545,7 @@ def main() -> None:
     size_kb = OUTPUT_FILE.stat().st_size / 1024
     print(f"\n[OK] Generated: {OUTPUT_FILE}")
     print(f"   File size: {size_kb:.1f} KB")
-    print(f"   Fully self-contained — no external dependencies")
+    print(f"   Embedded data; requires network for pinned Chart.js CDN")
 
 
 if __name__ == "__main__":

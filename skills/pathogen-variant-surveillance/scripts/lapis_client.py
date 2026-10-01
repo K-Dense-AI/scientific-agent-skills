@@ -10,33 +10,15 @@ instances (cov-spectrum.org, genspectrum.org, pathoplexus.org) is required for
 the request functions; every helper below the ``--- pure helpers ---`` mark is
 offline and independently testable.
 
-Design notes that matter for correctness (all verified against the live API on
-2026-07-27, and the reason this skill ships scripts rather than a recipe):
-
-* **Field names are per-instance, not universal.** ``dateFrom=`` is the
-  collection-date filter on the SARS-CoV-2 instance and a hard 400 on H5N1,
-  whose collection date is ``sampleCollectionDateRangeLower``. Nothing here
-  hardcodes a field name; ``describe_instance()`` reads ``/sample/databaseConfig``
-  and the pickers below choose from what the instance actually declares.
-
-* **A trailing ``*`` means opposite things on different instances.** It expands
-  to "this lineage and its descendants" only where the field carries a lineage
-  index. ``pangoLineage=XFG`` returns 4 sequences and ``pangoLineage=XFG*``
-  returns 640; on H5N1, which has no lineage index, ``clade=2.3.4.4b`` returns
-  62413 and ``clade=2.3.4.4b*`` returns **0**. Silently wrong in both
-  directions, so ``lineage_filter()`` refuses to build the query that lies.
-
-* **Only ``date``-typed fields accept range filters.** H5N1 types
-  ``sampleCollectionDate`` as a string, so it has no ``...From``/``...To`` keys
-  at all. ``supports_range()`` checks the declared type instead of guessing.
-
-* **LAPIS reports errors in the body, and the body is worth reading.** A 400
-  lists every valid filter key for that instance. ``_request()`` surfaces that
-  ``detail`` string rather than letting urllib raise a bare HTTPError.
+The registry and live contracts were reviewed on 2026-10-01. Field names and
+lineage indexes are per-instance. Numeric/date fields support ranges, but date
+analyses require date-typed columns. Actual response versions are checked before
+combining counts. See references/lapis-api.md for deployment-specific behavior.
 """
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import re
 import time
@@ -46,7 +28,7 @@ import urllib.request
 from datetime import date, timedelta
 from typing import Any, Iterable, Sequence
 
-# Instances verified reachable on 2026-07-27. The registry is a convenience,
+# Instances verified reachable on 2026-10-01. The registry is a convenience,
 # not an authority: any LAPIS deployment works via --base-url, and every script
 # introspects the schema at runtime rather than trusting this table.
 INSTANCES: dict[str, str] = {
@@ -79,7 +61,7 @@ PANGO_NOTES_URL = (
     "lineage_notes.txt"
 )
 
-USER_AGENT = "scientific-agent-skills-pathogen-variant-surveillance/1.0"
+USER_AGENT = "scientific-agent-skills-pathogen-variant-surveillance/1.3"
 TIMEOUT = 60
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}
@@ -96,6 +78,7 @@ COLLECTION_DATE_FIELDS = (
 )
 SUBMISSION_DATE_FIELDS = (
     "dateSubmitted",
+    "earliestReleaseDate",
     "ncbiReleaseDate",
     "releasedDate",
     "submittedDate",
@@ -120,6 +103,29 @@ Z_95 = 1.959964
 
 class LapisError(RuntimeError):
     """A LAPIS request failed in a way the caller cannot paper over."""
+
+
+class SnapshotChanged(LapisError):
+    """Responses used in one analysis came from different database versions."""
+
+
+_DATA_VERSIONS: dict[str, str] = {}
+
+
+def record_version(base_url: str, payload: Any, headers: Any, path: str) -> None:
+    """Compare actual response versions; /sample/info alone cannot pin a query."""
+    version = headers.get("lapis-data-version")
+    if isinstance(payload, dict):
+        info = payload.get("info") or {}
+        version = version or info.get("dataVersion") or payload.get("dataVersion")
+    if version is None:
+        if path in {"sample/aggregated", "sample/aminoAcidMutations", "sample/nucleotideMutations"}:
+            raise LapisError("data response has no dataVersion; cannot verify snapshot consistency")
+        return
+    version = str(version)
+    previous = _DATA_VERSIONS.setdefault(base_url, version)
+    if version != previous:
+        raise SnapshotChanged(f"database changed from {previous} to {version}; rerun the entire analysis")
 
 
 # --- network ----------------------------------------------------------------
@@ -170,7 +176,9 @@ def request(base_url: str, path: str, params: dict[str, Any] | None = None) -> A
     for attempt in range(MAX_ATTEMPTS):
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
-                return json.load(response)
+                payload = json.load(response)
+                record_version(base_url, payload, response.headers, path)
+                return payload
         except urllib.error.HTTPError as exc:
             detail = _error_detail(exc.read())
             last = f"HTTP {exc.code}: {detail}"
@@ -185,6 +193,8 @@ def request(base_url: str, path: str, params: dict[str, Any] | None = None) -> A
 
 def resolve_base_url(instance: str | None, base_url: str | None) -> str:
     """Turn ``--instance`` / ``--base-url`` into a URL, or explain the options."""
+    # Each CLI invocation starts a fresh consistency check, even in one interpreter.
+    _DATA_VERSIONS.clear()
     if base_url:
         return base_url.rstrip("/")
     if not instance:
@@ -228,7 +238,21 @@ def describe_instance(base_url: str) -> dict:
 
 def data_version(base_url: str) -> str:
     """The instance's current data version, for stamping any result you keep."""
+    if base_url in _DATA_VERSIONS:
+        return _DATA_VERSIONS[base_url]
     return str(request(base_url, "sample/info").get("dataVersion", ""))
+
+
+def surveillance_filters(schema: dict, filters: dict) -> dict:
+    """Avoid counting multiple versions or revoked records when those fields exist."""
+    defaults = {}
+    if "versionStatus" in schema["types"]:
+        defaults["versionStatus"] = "LATEST_VERSION"
+    if "isRevocation" in schema["types"]:
+        defaults["isRevocation"] = "false"
+    if "dataUseTerms" in schema["types"]:
+        defaults["dataUseTerms"] = "OPEN"
+    return {**defaults, **filters}
 
 
 def aggregated(
@@ -236,8 +260,8 @@ def aggregated(
 ) -> list[dict]:
     """Grouped counts. ``fields`` is the group-by, not a projection.
 
-    ``limit``/``offset``/``orderBy`` are rejected on this endpoint because the
-    result has no inherent ordering; sort client-side.
+    These helpers retrieve every group and sort client-side for compatibility.
+    Modern deployments also support ordered limit/offset queries.
     """
     params = dict(filters)
     if fields:
@@ -280,9 +304,8 @@ def lineage_definition(base_url: str, column: str) -> dict:
     return request(base_url, f"sample/lineageDefinition/{column}")
 
 
-# Blob hashes of the pango-designation files most recently fetched, keyed by
-# URL. raw.githubusercontent returns the git blob SHA as the ETag, so exact
-# provenance costs no extra request.
+# SHA-256 digests of the fetched bytes, keyed by URL. HTTP ETags are opaque
+# validators, not Git object IDs; retaining the files is required for replay.
 PANGO_BLOBS: dict[str, str] = {}
 
 
@@ -290,24 +313,17 @@ def _fetch_text(url: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
-            etag = (response.headers.get("ETag") or "").strip('"W/ ')
-            if etag:
-                PANGO_BLOBS[url] = etag
-            return response.read().decode("utf-8", "replace")
+            content = response.read()
+            PANGO_BLOBS[url] = hashlib.sha256(content).hexdigest()
+            return content.decode("utf-8", "replace")
     except (urllib.error.URLError, TimeoutError) as exc:
         raise LapisError(f"could not fetch {url}: {exc}") from exc
 
 
 def pango_provenance() -> str:
-    """Blob hashes of the pango-designation files fetched this run.
-
-    The fetch is deliberately unpinned — freezing it to a tag would make
-    lineage resolution reproducible and wrong, since withdrawals and
-    redesignations are exactly what this skill exists to catch. Recording the
-    hash of what was actually read gives auditability without staleness.
-    """
+    """Content digests of the pango-designation files fetched this run."""
     return " ".join(
-        f"{url.rsplit('/', 1)[-1]}@{sha[:12]}" for url, sha in sorted(PANGO_BLOBS.items())
+        f"{url.rsplit('/', 1)[-1]}@sha256:{sha}" for url, sha in sorted(PANGO_BLOBS.items())
     )
 
 
@@ -319,7 +335,10 @@ def fetch_pango_aliases() -> dict[str, Any]:
     parentage — its lineage tree roots every X* lineage — so this file is the
     only place ``XFG -> [LF.7, LP.8.1.2]`` is recorded.
     """
-    return json.loads(_fetch_text(PANGO_ALIAS_URL))
+    try:
+        return json.loads(_fetch_text(PANGO_ALIAS_URL))
+    except (ValueError, TypeError) as exc:
+        raise LapisError("invalid Pango alias JSON") from exc
 
 
 def fetch_lineage_notes() -> dict[str, dict[str, str]]:
@@ -372,16 +391,16 @@ def pick_date_field(schema: dict, role: str = "collection", preferred: str | Non
     if preferred:
         if preferred not in types:
             raise LapisError(f"{preferred!r} is not a field on this instance")
-        if not supports_range(schema, preferred):
+        if types[preferred] != "date":
             raise LapisError(
                 f"{preferred!r} is typed {types[preferred]!r} on this instance, so LAPIS "
-                f"offers no {preferred}From/{preferred}To range filter"
+                f"cannot use it as a date range filter"
             )
         return preferred
 
     ordered = COLLECTION_DATE_FIELDS if role == "collection" else SUBMISSION_DATE_FIELDS
     for name in ordered:
-        if name in types and supports_range(schema, name):
+        if types.get(name) == "date":
             return name
     needles = ("collect",) if role == "collection" else ("submit", "release")
     for name, kind in sorted(types.items()):
@@ -533,15 +552,7 @@ def week_range(start: str, end: str) -> list[str]:
 
 
 def flag_low_coverage(weekly_totals: dict[str, int], fraction: float = 0.4) -> dict[str, bool]:
-    """Mark weeks whose denominator has not filled in yet.
-
-    A collection week keeps accruing sequences for months: on the SARS-CoV-2
-    open instance only 14% of a month's sequences had been submitted by the end
-    of that month, and 89% by two months later. Recent weeks therefore look
-    thin, and a proportion computed from them is dominated by whichever labs
-    report fastest. The reference is the median of the older half of the
-    window, which is the settled part of the same series.
-    """
+    """Flag low counts relative to the older half; this is not completeness."""
     if not weekly_totals:
         return {}
     ordered = sorted(weekly_totals)
@@ -550,7 +561,7 @@ def flag_low_coverage(weekly_totals: dict[str, int], fraction: float = 0.4) -> d
     mid = len(counts) // 2
     median = counts[mid] if len(counts) % 2 else (counts[mid - 1] + counts[mid]) / 2
     threshold = median * fraction
-    return {week: weekly_totals[week] < threshold for week in ordered}
+    return {week: weekly_totals[week] <= 0 or weekly_totals[week] < threshold for week in ordered}
 
 
 def logit_slope(
@@ -681,7 +692,7 @@ def children_map(definition: dict) -> dict[str, list[str]]:
     """Invert a lineage definition into parent -> children.
 
     Worth building once and passing around: the SARS-CoV-2 definition holds
-    ~5,500 entries, so rebuilding it per lineage turns a list of names into
+    thousands of entries, so rebuilding it per lineage turns a list of names into
     quadratic work.
     """
     children: dict[str, list[str]] = {}

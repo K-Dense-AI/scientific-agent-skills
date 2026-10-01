@@ -4,7 +4,6 @@
 SEC's Electronic Data Gathering, Analysis, and Retrieval system. Provides free access to corporate filings, company data, and XBRL financial data. No API key required, but a User-Agent header identifying you is mandatory.
 
 ## Base URLs
-- **EFTS (Full-Text Search):** `https://efts.sec.gov/LATEST`
 - **Company/Filings Data:** `https://data.sec.gov`
 - **EDGAR Website/Archives:** `https://www.sec.gov`
 - **XBRL API:** `https://data.sec.gov/api/xbrl`
@@ -20,69 +19,15 @@ SEC's Electronic Data Gathering, Analysis, and Retrieval system. Provides free a
 ## Rate Limits
 - **10 requests per second** per source IP.
 - Exceeding this results in temporary IP-based throttling (HTTP 429).
-- SEC asks users to make requests outside market hours (9:00 PM - 6:00 AM ET) when possible for bulk downloads.
+- Use the official bulk ZIP archives for large jobs instead of querying every company separately.
 
 ---
 
 ## Key Endpoints
 
-### 1. Full-Text Search (EFTS)
+### Full-text discovery
 
-#### `GET https://efts.sec.gov/LATEST/search-index`
-Search across the full text of all EDGAR filings.
-
-**Parameters:**
-| Parameter    | Type   | Required | Description |
-|-------------|--------|----------|-------------|
-| `q`         | string | Yes      | Search query text. Supports boolean operators (`AND`, `OR`, `NOT`), exact phrases in quotes. |
-| `dateRange` | string | No       | `custom` to enable date filtering. |
-| `startdt`   | string | No       | Start date `YYYY-MM-DD`. |
-| `enddt`     | string | No       | End date `YYYY-MM-DD`. |
-| `forms`     | string | No       | Comma-separated form types, e.g. `10-K,10-Q,8-K`. |
-| `from`      | int    | No       | Pagination offset (default 0). |
-| `size`      | int    | No       | Results per page (default 10, max varies). |
-
-**Example:**
-```
-https://efts.sec.gov/LATEST/search-index?q=%22artificial+intelligence%22&forms=10-K&startdt=2024-01-01&enddt=2024-12-31
-```
-
-**Response:**
-```json
-{
-  "hits": {
-    "hits": [
-      {
-        "_id": "0001234567-24-000123:filing.htm",
-        "_source": {
-          "file_date": "2024-03-15",
-          "display_date_filed": "2024-03-15",
-          "entity_name": "EXAMPLE CORP",
-          "file_num": "001-12345",
-          "form_type": "10-K",
-          "file_description": "Annual report",
-          "period_of_report": "2023-12-31"
-        }
-      }
-    ],
-    "total": { "value": 150 }
-  }
-}
-```
-
-### 2. EDGAR Full-Text Search (Preferred newer endpoint)
-
-#### `GET https://efts.sec.gov/LATEST/search-index` (also accessible as below)
-
-#### `GET https://efts.sec.gov/LATEST/search-index?q=...`
-
-Note: The EDGAR full-text search has also been exposed under a simpler URL:
-
-#### `GET https://efts.sec.gov/LATEST/search-index`
-
-The above is the canonical endpoint. Some documentation also references the EDGAR search UI which hits the same backend.
-
----
+Use [EDGAR full-text search](https://www.sec.gov/edgar/search/) for interactive discovery. Its `efts.sec.gov` backend is not one of the documented `data.sec.gov` public APIs; do not treat inferred UI routes, filters, or response fields as a stable retrieval contract. Use the documented submissions and XBRL routes below for reproducible API retrieval.
 
 ### 3. Company Tickers & CIK Lookup
 
@@ -159,7 +104,7 @@ https://data.sec.gov/submissions/CIK0000320193.json
 }
 ```
 
-The `filings.recent` object contains the most recent ~1000 filings. Older filings are in separate paginated files referenced by `filings.files`.
+`filings.recent` contains at least one year or 1,000 filings, whichever is larger. Retrieve older filenames from `filings.files` under the same `/submissions/` base; keep the parallel arrays aligned by index.
 
 ---
 
@@ -173,11 +118,11 @@ Returns all values reported by a company for a specific XBRL tag across all fili
 |------------|-------------|
 | `cik`      | Zero-padded CIK (10 digits). |
 | `taxonomy` | XBRL taxonomy: `us-gaap`, `ifrs-full`, `dei`, `srt`. |
-| `tag`      | XBRL concept tag, e.g., `Revenue`, `Assets`, `AccountsPayableCurrent`. |
+| `tag`      | XBRL concept tag, e.g., `RevenueFromContractWithCustomerExcludingAssessedTax`, `Assets`, `AccountsPayableCurrent`. |
 
 **Example:**
 ```
-https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenue.json
+https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax.json
 ```
 
 **Response:**
@@ -185,7 +130,7 @@ https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenue.json
 {
   "cik": 320193,
   "taxonomy": "us-gaap",
-  "tag": "Revenue",
+  "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
   "label": "Revenue",
   "description": "Amount of revenue recognized...",
   "entityName": "Apple Inc.",
@@ -211,7 +156,7 @@ https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenue.json
 ### 6. Company Facts (All XBRL for one company)
 
 #### `GET https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json`
-Returns ALL XBRL concepts reported by a company across all filings.
+Returns aggregated company concepts from non-custom taxonomies applying to the entire entity. Custom tags and dimensional/segment facts require inspecting the filing itself.
 
 **Example:**
 ```
@@ -229,7 +174,7 @@ https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
       "EntityCommonStockSharesOutstanding": { "units": { "shares": [...] } }
     },
     "us-gaap": {
-      "Revenue": { "units": { "USD": [...] } },
+      "RevenueFromContractWithCustomerExcludingAssessedTax": { "units": { "USD": [...] } },
       "Assets": { "units": { "USD": [...] } }
     }
   }
@@ -241,7 +186,7 @@ https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
 ### 7. Frames (Cross-Company XBRL for a period)
 
 #### `GET https://data.sec.gov/api/xbrl/frames/{taxonomy}/{tag}/{unit}/{period}.json`
-Returns a specific XBRL concept value for ALL companies for a given reporting period.
+Returns the last-filed fact per reporting entity that best matches the requested calendar period. Reporting start/end dates can differ between entities; inspect them before comparing values.
 
 **Path Parameters:**
 | Parameter   | Description |
@@ -296,7 +241,7 @@ The accession number format in the URL is stripped of dashes: `0000320193-24-000
 ## Common XBRL Tags Reference
 | Tag | Description |
 |-----|-------------|
-| `Revenue` / `Revenues` | Total revenue |
+| `RevenueFromContractWithCustomerExcludingAssessedTax` / `Revenues` | Revenue concepts; choose from the company's actual facts |
 | `NetIncomeLoss` | Net income |
 | `Assets` | Total assets |
 | `Liabilities` | Total liabilities |
@@ -310,6 +255,6 @@ The accession number format in the URL is stripped of dashes: `0000320193-24-000
 
 ## Notes
 - CIK numbers must be zero-padded to 10 digits in `data.sec.gov` URLs.
-- The EFTS full-text search indexes the text content of filings, not XBRL data.
+- Response excerpts and accession numbers here illustrate structure; obtain actual document names and accession numbers from submissions before constructing archive URLs.
 - For bulk downloads, SEC provides index files at `https://www.sec.gov/Archives/edgar/full-index/`.
 - All responses are JSON unless otherwise noted. Filing documents can be HTML, XML, or plain text.

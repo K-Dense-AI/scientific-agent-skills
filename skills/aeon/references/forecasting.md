@@ -1,109 +1,68 @@
 # Time Series Forecasting
 
-The `aeon.forecasting` module provides forecasters for univariate and multivariate series. In aeon **1.x**, forecasting was rebuilt on array-native `BaseForecaster` estimators (replacing the old sktime-style `fh` API). The module is marked **experimental** — expect API evolution between releases.
+The experimental `aeon.forecasting` module uses array-native estimators, not sktime's `fh` or `ForecastingHorizon` API. This reference targets aeon 1.6. Check capability tags before supplying multivariate data or exogenous variables; the statistical examples here are univariate.
 
-Import paths (aeon 1.4+):
+## Imports and model families
 
 - `from aeon.forecasting import NaiveForecaster, RegressionForecaster`
 - `from aeon.forecasting.stats import ARIMA, AutoARIMA, ETS, AutoETS, Theta, TAR, AutoTAR, TVP`
 - `from aeon.forecasting.deep_learning import TCNForecaster, DeepARForecaster`
 
-List all forecasters: `aeon.utils.discovery.all_estimators(type_filter="forecaster")`.
+`NaiveForecaster` offers `"last"`, `"mean"`, `"seasonal_last"`, and (new in 1.6) `"drift"`. Supply a positive `seasonal_period` with enough historical observations for `seasonal_last`. `RegressionForecaster` requires a `window` and learns an h-step target with a sklearn/aeon regressor. ARIMA takes `p`, `d`, `q`, not `order=`. ETS/AutoETS are native aeon implementations; automatic selection has documented stability/efficiency limitations and should be checked against a baseline.
 
-## Naive and Baseline Methods
+Deep forecasters require **TensorFlow**, not PyTorch. `DeepARNetwork` still exists as the underlying architecture; it is not a former name of `DeepARForecaster`. A DeepAR architecture alone does not establish calibrated predictive uncertainty. Optional deep-training examples are illustrative and were not executed in this review.
 
-- `NaiveForecaster` — `strategy` in `"last"`, `"mean"`, `"seasonal_last"`; set `horizon` and `seasonal_period` in the constructor
-  - **Use when**: Establishing baselines or simple patterns
+## Single horizon versus a forecast path
 
-## Statistical Models
-
-- `ARIMA` / `AutoARIMA` — `p`, `d`, `q` orders (not `order=(p,d,q)`); supports exogenous variables via `exog`
-- `ETS` / `AutoETS` — exponential smoothing (native implementations in aeon 1.4+)
-- `Theta` — classical Theta method
-- `TAR` / `AutoTAR` — threshold autoregressive models for regime switching
-- `TVP` — time-varying parameter (Kalman-style) models
-
-## Deep Learning Forecasters
-
-Requires `aeon[all_extras]` (PyTorch stack):
-
-- `TCNForecaster` — temporal convolutional network
-- `DeepARForecaster` — probabilistic RNN forecaster (replaces legacy `DeepARNetwork` naming)
-
-## Regression-Based Forecasting
-
-- `RegressionForecaster` — sliding `window` over history, `horizon` steps ahead, any sklearn/aeon regressor
-
-## Quick Start
+For models that expose `horizon`, `predict(history)` produces **one value** h steps beyond the history. `horizon=3` does not mean return the next three values. `last` and `mean` return their constant baseline regardless of horizon; drift and seasonal-last use the horizon.
 
 ```python
 import numpy as np
 from aeon.forecasting import NaiveForecaster
 from aeon.forecasting.stats import ARIMA, AutoETS
 
-y = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
-
-# Naive — horizon is a constructor argument; predict(y) forecasts from series y
-naive = NaiveForecaster(strategy="last", horizon=3)
+y = np.arange(1.0, 31.0)
+naive = NaiveForecaster(strategy="drift", horizon=3)
 naive.fit(y)
-pred_naive = naive.predict(y)
+y_at_3 = naive.predict(y)
+assert y_at_3 == 33.0
 
-# ARIMA — one-step by default; multi-step via iterative_forecast
-arima = ARIMA(p=1, d=1, q=1)
-arima.fit(y)
-pred_arima = arima.iterative_forecast(y, prediction_horizon=3)
+# iterative_forecast fits once internally and returns a vector.
+# The estimator must have horizon=1 (the default).
+path = NaiveForecaster(strategy="last").iterative_forecast(y, 3)
+assert np.array_equal(path, [30.0, 30.0, 30.0])
+arima_path = ARIMA(p=1, d=1, q=1).iterative_forecast(y, 3)
 
-# Auto model selection
-auto_ets = AutoETS(horizon=3)
-auto_ets.fit(y)
-pred_ets = auto_ets.predict(y)
+# AutoETS does not accept horizon=; use the multi-step helper.
+ets_path = AutoETS().iterative_forecast(y, 3)
 ```
 
-## Forecasting Horizon
+`direct_forecast(y, prediction_horizon)` fits separate models for each horizon, using estimators with `capability:horizon=True`, such as `RegressionForecaster`. `iterative_forecast` feeds earlier predictions back into the history and accumulates error. Do not call `fit` immediately before this helper expecting it to preserve a pre-fitted model: the helper fits internally.
 
-In aeon 1.x, set `horizon` on the estimator (number of steps ahead). `predict(y)` returns the forecast `horizon` steps beyond the end of `y`.
+## Exogenous variables without target leakage
 
-Multi-step strategies:
-
-- **`iterative_forecast(y, prediction_horizon)`** — reuse one fitted model, feed predictions back (ARIMA, many stats models)
-- **`direct_forecast(y, prediction_horizon)`** — refit per horizon (requires `capability:horizon` tag; e.g. `RegressionForecaster`)
-- **`NaiveForecaster`** — set `horizon>1` directly when `strategy` supports it
-
-There is no `ForecastingHorizon` / `fh=[1,2,3]` API in aeon 1.x.
-
-## Model Selection
-
-- **Baseline**: `NaiveForecaster(strategy="seasonal_last", seasonal_period=12, horizon=h)`
-- **Linear / stationary**: `ARIMA`, `AutoARIMA`
-- **Trend + seasonality**: `ETS`, `AutoETS`
-- **Regime changes**: `TAR`, `AutoTAR`
-- **Complex patterns**: `TCNForecaster`, `RegressionForecaster` with aeon regressors
-- **Probabilistic**: `DeepARForecaster`
-
-## Evaluation Metrics
-
-Use scikit-learn or standard numpy metrics on hold-out forecasts:
+ARIMA supports target-time regressors: training rows align with observed `y`, and prediction needs the covariates for the future target time. Historical exogenous effects require explicit lagged features. Use only covariates known at forecast issuance, or model their uncertainty separately.
 
 ```python
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+import numpy as np
+from aeon.forecasting.stats import ARIMA
 
-mae = mean_absolute_error(y_true, y_pred)
-mse = mean_squared_error(y_true, y_pred)
-```
-
-## Exogenous Variables
-
-Pass aligned exogenous arrays as `exog` (not `X`):
-
-```python
+exog_train = np.arange(30.0)[:, None]
+y_train = 2.0 + 3.0 * exog_train[:, 0]
+future_exog = np.arange(30.0, 33.0)[:, None]
+forecaster = ARIMA(p=0, d=0, q=0)
 forecaster.fit(y_train, exog=exog_train)
-y_pred = forecaster.predict(y_test, exog=exog_test)
+y_next = forecaster.predict(y_train, exog=future_exog[:1])
+path = forecaster.iterative_forecast(
+    y_train, prediction_horizon=3,
+    exog=exog_train, future_exog=future_exog,
+)
 ```
 
-## Base Classes
+Keep observed history in `predict(y_train, ...)`; passing held-out target values as that history leaks future information. In aeon 1.6 the recursive helper requires both historical `exog` and `future_exog` when either is supplied.
 
-- `BaseForecaster` — `horizon`, `axis`, `fit`, `predict`, `forecast`
-- `DirectForecastingMixin` / `IterativeForecastingMixin` — multi-step helpers
-- `BaseDeepForecaster` — deep learning forecasters
+## Evaluation
 
-Extend `BaseForecaster` for custom forecasters.
+Use rolling-origin or chronological holdouts. Compare against naive and seasonal-naive baselines, keeping the same forecast horizons and available covariates. Report errors per horizon before aggregating. Align arrays explicitly, then use sklearn `mean_absolute_error`, `mean_squared_error`, or `root_mean_squared_error`. Avoid random shuffling of overlapping forecasting windows.
+
+Sources: [forecasting API](https://www.aeon-toolkit.org/en/stable/api_reference/forecasting.html), [1.6 source and helper contracts](https://github.com/aeon-toolkit/aeon/blob/v1.6.0/aeon/forecasting/base.py), [ARIMA source](https://github.com/aeon-toolkit/aeon/blob/v1.6.0/aeon/forecasting/stats/_arima.py). Synthetic checks exercised all non-deep examples above.

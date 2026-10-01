@@ -29,6 +29,9 @@ from office.helpers import SLIDE_REL_TYPE, opc_target
 from office.soffice import run_soffice
 from PIL import Image, ImageDraw, ImageFont
 
+PRESENTATION_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 THUMBNAIL_WIDTH = 300
 CONVERSION_DPI = 100
@@ -45,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Create thumbnail grids from PowerPoint slides."
     )
-    parser.add_argument("input", help="Input PowerPoint file (.pptx)")
+    parser.add_argument("input", help="Input PowerPoint file (.pptx or .potx)")
     parser.add_argument(
         "output_prefix",
         nargs="?",
@@ -61,12 +64,14 @@ def main():
 
     args = parser.parse_args()
 
+    if args.cols < 1:
+        parser.error("--cols must be at least 1")
     cols = min(args.cols, MAX_COLS)
     if args.cols > MAX_COLS:
         print(f"Warning: Columns limited to {MAX_COLS}")
 
     input_path = Path(args.input)
-    if not input_path.exists() or input_path.suffix.lower() != ".pptx":
+    if not input_path.exists() or input_path.suffix.lower() not in (".pptx", ".potx"):
         print(f"Error: Invalid PowerPoint file: {args.input}", file=sys.stderr)
         sys.exit(1)
 
@@ -100,9 +105,9 @@ def _is_hidden(zf: zipfile.ZipFile, part: str) -> bool:
     try:
         with zf.open(part) as f:
             for _, root in ElementTree.iterparse(f, events=("start",)):
-                return root.get("show") in ("0", "false")  
-    except (KeyError, ElementTree.ParseError):
-        return False
+                return root.get("show") in ("0", "false")
+    except (KeyError, ElementTree.ParseError) as exc:
+        raise ValueError(f"cannot read slide {part}: {exc}") from exc
     return False
 
 
@@ -112,7 +117,7 @@ def get_slide_info(pptx_path: Path) -> list[dict]:
         rels_dom = defusedxml.minidom.parseString(rels_content)
 
         rid_to_part = {}
-        for rel in rels_dom.getElementsByTagName("Relationship"):
+        for rel in rels_dom.getElementsByTagNameNS(PACKAGE_REL_NS, "Relationship"):
             if rel.getAttribute("Type") != SLIDE_REL_TYPE:
                 continue
             part = opc_target(
@@ -121,20 +126,27 @@ def get_slide_info(pptx_path: Path) -> list[dict]:
                 rel.getAttribute("TargetMode"),
             )
             if part is not None:
-                rid_to_part[rel.getAttribute("Id")] = part
+                rid = rel.getAttribute("Id")
+                if not rid or rid in rid_to_part:
+                    raise ValueError("missing or duplicate slide relationship Id")
+                rid_to_part[rid] = part
 
         pres_content = zf.read("ppt/presentation.xml").decode("utf-8")
         pres_dom = defusedxml.minidom.parseString(pres_content)
+        if pres_dom.documentElement.namespaceURI != PRESENTATION_NS:
+            raise ValueError("unsupported presentation namespace")
 
         present = set(zf.namelist())
 
         slides = []
-        for sld_id in pres_dom.getElementsByTagName("p:sldId"):
-            part = rid_to_part.get(sld_id.getAttribute("r:id"))
-            if part is not None and part in present:
-                slides.append(
-                    {"name": posixpath.basename(part), "hidden": _is_hidden(zf, part)}
-                )
+        for sld_id in pres_dom.getElementsByTagNameNS(PRESENTATION_NS, "sldId"):
+            rid = sld_id.getAttributeNS(OFFICE_REL_NS, "id")
+            part = rid_to_part.get(rid)
+            if part is None or part not in present:
+                raise ValueError(f"listed slide {rid!r} has no existing internal slide target")
+            slides.append(
+                {"name": posixpath.basename(part), "hidden": _is_hidden(zf, part)}
+            )
 
         return slides
 
@@ -221,6 +233,8 @@ def create_grids(
     width: int,
     output_path: Path,
 ) -> list[str]:
+    if cols < 1 or width < 1:
+        raise ValueError("columns and thumbnail width must be positive")
     max_per_grid = cols * (cols + 1)
     grid_files = []
 

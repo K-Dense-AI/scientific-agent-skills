@@ -1,12 +1,15 @@
 # cuxfilter Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 cuxfilter is a GPU-accelerated cross-filtering dashboard library from the NVIDIA RAPIDS ecosystem. It enables interactive, multi-chart exploratory data analysis dashboards from Jupyter notebooks in just a few lines of Python. All filtering, groupby, and aggregation operations happen on the GPU via cuDF, with only the visualization results sent to the browser.
 
 > **Full documentation:** https://docs.rapids.ai/api/cuxfilter/stable/
 > **Version (stable):** 26.06.00 (final release)
 > **Repository:** https://github.com/rapidsai/cuxfilter
 
-> **⚠️ Project status: sunset.** cuxfilter has been sunset — **v26.06 is the final release** and no packages will be published for later RAPIDS releases (see [RSN 60](https://docs.rapids.ai/notices/rsn0060/)). Everything below still works with the 26.06 packages, but for new projects RAPIDS recommends composing dashboards directly from maintained libraries instead: **cuDF** for GPU data loading/aggregation plus **HoloViews / hvPlot / Datashader** for linked cross-filtering visualizations, served with **Panel**, Plotly Dash, Streamlit, or Bokeh.
+> **⚠️ Project status: sunset.** cuxfilter has been sunset — **v26.06 is the final release** and no packages will be published for later RAPIDS releases (see [RSN 60](https://docs.rapids.ai/notices/rsn0060/)). The examples below target the isolated 26.06 API and are not a guarantee of compatibility with current dependencies; for new projects RAPIDS recommends composing dashboards directly from maintained libraries instead: **cuDF** for GPU data loading/aggregation plus **HoloViews / hvPlot / Datashader** for linked cross-filtering visualizations, served with **Panel**, Plotly Dash, Streamlit, or Bokeh.
 
 ## Table of Contents
 
@@ -37,7 +40,7 @@ uv add --extra-index-url=https://pypi.nvidia.com "cuxfilter-cu12==26.6.*"   # Fo
 uv add --extra-index-url=https://pypi.nvidia.com "cuxfilter-cu13==26.6.*"   # For CUDA 13.x
 ```
 
-Both install the final 26.06 release — no further updates will be published. cuxfilter wheels are also on PyPI directly, so the extra index is optional. cuxfilter depends on cuDF, so `cudf-cu12` (or `cudf-cu13`) will be pulled in automatically.
+Both install the final 26.06 release — no further updates will be published. cuxfilter wheels are also on PyPI directly, so the extra index is optional. cuxfilter depends on matching cuDF 26.06. Keep the entire legacy stack isolated from RAPIDS 26.08 and pandas 3.
 
 **Platform:** Linux and WSL2 only (no native macOS or Windows).
 **Requires:** NVIDIA GPU with CUDA 12.x or 13.x support, Python 3.11+.
@@ -97,7 +100,8 @@ import cugraph
 edges = cudf.DataFrame({"source": [0, 1, 2], "target": [1, 2, 3], "weight": [1.0, 2.0, 3.0]})
 G = cugraph.Graph()
 G.from_cudf_edgelist(edges, source="source", destination="target", edge_attr="weight")
-cux_df = cuxfilter.DataFrame.load_graph((G.nodes(), G.edges()))
+positions = cugraph.force_atlas2(G)
+cux_df = cuxfilter.DataFrame.load_graph((positions, edges))
 ```
 
 Or directly from cuDF DataFrames:
@@ -336,7 +340,7 @@ d.add_charts(sidebar=[cuxfilter.charts.card(pn.pane.Markdown("# Note"))])
 Use `layout_array` for full control. It's a list-of-lists where each inner list is a row, and numbers refer to chart indices (1-based):
 
 ```python
-# Chart 1 takes top-left 2x2 area, charts 2 and 3 on the right
+# Chart 1 spans the left two columns; chart2 spans upper-right; charts3/4 are below
 d = cux_df.dashboard(
     charts_list,
     layout_array=[[1, 1, 2, 2], [1, 1, 3, 4]],
@@ -428,7 +432,7 @@ G.from_cudf_edgelist(edges, source="source", destination="target")
 positions = cugraph.force_atlas2(G)
 nodes = positions.rename(columns={"vertex": "vertex", "x": "x", "y": "y"})
 
-cux_df = cuxfilter.DataFrame.load_graph((nodes, G.edges()))
+cux_df = cuxfilter.DataFrame.load_graph((nodes, edges))
 
 # Create graph chart
 chart = cuxfilter.charts.datashader.graph(
@@ -493,10 +497,11 @@ df = df.dropna().reset_index(drop=True)
 
 # Run ML with cuML (e.g., UMAP for dimensionality reduction)
 from cuml.manifold import UMAP
-umap = UMAP(n_components=2)
+umap = UMAP(n_components=2, output_type="cupy")
 embedding = umap.fit_transform(df[["feature1", "feature2", "feature3"]])
 df["umap_x"] = embedding[:, 0]
 df["umap_y"] = embedding[:, 1]
+# This illustrative input must also contain a cluster_label column for the charts below.
 
 # Visualize with cuxfilter
 cux_df = cuxfilter.DataFrame.from_dataframe(df)
@@ -566,8 +571,8 @@ d.app()
 ### Geospatial dashboard with scatter on map tiles
 ```python
 chart = cuxfilter.charts.scatter(
-    x="longitude",
-    y="latitude",
+    x="x_mercator",  # Preproject longitude/latitude to EPSG:3857 meters
+    y="y_mercator",
     aggregate_col="value",
     aggregate_fn="mean",
     color_palette=["#3182bd", "#6baed6", "#ff0068"],

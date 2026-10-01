@@ -1,9 +1,11 @@
 ---
 name: infographics
-description: "Create professional infographics using Nano Banana Pro AI with smart iterative refinement. Uses Gemini 3.6 Flash for quality review. Integrates research-lookup and web search for accurate data. Supports 10 infographic types, 8 industry styles, and colorblind-safe palettes."
+description: "Creates and reviews infographics with Nano Banana 2 via OpenRouter. Use for statistical summaries, timelines, comparisons, processes, and visual explanations with supplied data or optional Sonar research. Supports ten layouts, eight style presets, reference images, and accessible palette starting points."
+compatibility: Requires Python 3.10+ with requests installed, network access, and OPENROUTER_API_KEY for generation, review, or research.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.9"
+  version: "1.10"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -17,16 +19,15 @@ metadata:
 
 ## Overview
 
-Infographics are visual representations of information, data, or knowledge designed to present complex content quickly and clearly. **This skill uses Nano Banana Pro AI for infographic generation with Gemini 3.6 Flash quality review and Perplexity Sonar for research.**
+Infographics are visual representations of information, data, or knowledge designed to present complex content quickly and clearly. **This skill uses Nano Banana 2 AI for infographic generation with Gemini 3.7 Flash quality review and Perplexity Sonar for research.**
 
 **How it works:**
-- (Optional) **Research phase**: Gather accurate facts and statistics using Perplexity Sonar
+- (Optional) **Research phase**: Gather candidate facts and source records using Perplexity Sonar Pro
 - Describe your infographic in natural language
-- Nano Banana Pro generates publication-quality infographics automatically
-- **Gemini 3.6 Flash reviews quality** against document-type thresholds
-- **Smart iteration**: Only regenerates if quality is below threshold
-- Professional-ready output in minutes
-- No design skills required
+- Nano Banana 2 generates raster drafts from your content
+- **Gemini 3.7 Flash reviews quality** against document-type thresholds
+- **Smart iteration**: Regenerates when review requests improvements, within the iteration budget
+- Inspect every final image at its intended display size and check claims against sources
 
 **Quality Thresholds by Document Type:**
 | Document Type | Threshold | Description |
@@ -39,11 +40,15 @@ Infographics are visual representations of information, data, or knowledge desig
 | draft | 6.5/10 | Working drafts |
 | default | 7.5/10 | General purpose |
 
-**Simply describe what you want, and Nano Banana Pro creates it.**
+**Simply describe what you want, and Nano Banana 2 creates it.**
 
 ## Quick Start
 
-Generate any infographic by simply describing it:
+Install the only runtime dependency in your chosen Python environment (`python -m pip install requests`),
+then set `OPENROUTER_API_KEY`. Examples below illustrate CLI usage; paid generation was not
+executed during this review. Scripts accept PNG output paths only.
+
+Generate a draft by describing it:
 
 ```bash
 # Generate a list infographic (default threshold 7.5/10)
@@ -73,12 +78,12 @@ python skills/infographics/scripts/generate_infographic.py \
 ```
 
 **What happens behind the scenes:**
-1. **(Optional) Research**: Perplexity Sonar gathers accurate facts, statistics, and data
-2. **Generation 1**: Nano Banana Pro creates initial infographic following design best practices
-3. **Review 1**: **Gemini 3.6 Flash** evaluates quality against document-type threshold
-4. **Decision**: If quality >= threshold → **DONE** (no more iterations needed!)
-5. **If below threshold**: Improved prompt based on critique, regenerate
-6. **Repeat**: Until quality meets threshold OR max iterations reached
+1. **(Optional) Research**: Perplexity Sonar Pro gathers candidate facts with source annotations
+2. **Generation 1**: Nano Banana 2 creates initial infographic following design best practices
+3. **Review 1**: **Gemini 3.7 Flash** evaluates quality against document-type threshold
+4. **Decision**: Stop when the scored review meets threshold and requests no further changes
+5. **If improvements are requested**: Retain content and source context, refine the prompt, regenerate
+6. **Repeat**: Until quality meets threshold or the iteration budget is reached; stop on API failure and keep the latest saved draft
 
 **Smart Iteration Benefits:**
 - ✅ Saves API calls if first generation is good enough
@@ -86,7 +91,7 @@ python skills/infographics/scripts/generate_infographic.py \
 - ✅ Faster turnaround for drafts/internal use
 - ✅ Appropriate quality for each use case
 
-**Output**: Versioned images plus a detailed review log with quality scores, critiques, and early-stop information.
+**Output**: Versioned PNGs plus a review log with models, scores, `quality_met`, and `termination_reason`. A saved image (`success: true`) can still be unreviewed or below threshold. Human factual and visual checks remain required.
 
 ## When to Use This Skill
 
@@ -112,7 +117,7 @@ Use the **infographics** skill when:
 
 ### Automatic Data Gathering (`--research`)
 
-When creating infographics that require accurate, up-to-date data, use the `--research` flag to automatically gather facts and statistics using **Perplexity Sonar Pro**.
+When creating infographics that require accurate, up-to-date data, use the `--research` flag to gather candidate facts and statistics using **Perplexity Sonar Pro**. The script preserves source annotations; it does not independently verify claims or source relevance. For scientific or medical publication, verify primary sources before including the resulting numbers.
 
 ```bash
 # Research and generate statistical infographic
@@ -137,9 +142,9 @@ The research phase automatically:
 
 1. **Gathers Key Facts**: 5-8 relevant facts and statistics about the topic
 2. **Provides Context**: Background information for accurate representation
-3. **Finds Data Points**: Specific numbers, percentages, and dates
-4. **Cites Sources**: Mentions major studies or sources
-5. **Prioritizes Recency**: Focuses on 2023-2026 information
+3. **Requests Data Points**: Numbers with units, populations, denominators, and dates
+4. **Preserves Sources**: OpenRouter URL-citation annotations, plus optional provider citation fields
+5. **Dates the Request**: Uses the current date while preserving historical event dates
 
 ### When to Use Research
 
@@ -159,8 +164,9 @@ The research phase automatically:
 ### Research Output
 
 When research is enabled, additional files are created:
-- `{name}_research.json` - Raw research data and sources
-- Research content is automatically incorporated into the infographic prompt
+- `{name}_research.json` - Research answer and returned source records (when research succeeds)
+- Research content and source records remain in generation, review, and refinement prompts
+- Failed research is recorded in the review log; generation continues with the supplied prompt
 
 ---
 
@@ -205,9 +211,9 @@ python skills/infographics/scripts/generate_infographic.py \
 
 | Palette | Colors | Description |
 |---------|--------|-------------|
-| `wong` | Orange, sky blue, green, blue, vermillion | Most widely recommended |
-| `ibm` | Ultramarine, indigo, magenta, orange, gold | IBM's accessible palette |
-| `tol` | 12-color extended palette | For many categories |
+| `wong` | Seven chromatic colors plus black | Okabe-Ito palette popularized by Wong |
+| `ibm` | Ultramarine, indigo, magenta, orange, gold | Legacy five-color preset |
+| `tol` | Nine-color muted palette | Categorical data; pale gray reserved for missing data |
 
 ```bash
 # Wong's colorblind-safe palette
@@ -241,7 +247,7 @@ better sleep, lower blood pressure, emotional balance"
 
 ✓ **Good**:
 ```
-"Market growth from $10B (2020) to $45B (2025), CAGR 35%"
+"Synthetic example: market grows from USD 10B (2020) to USD 45B (2025), CAGR 35.1%; label illustrative"
 ```
 
 ✗ **Vague**:
@@ -257,6 +263,32 @@ better sleep, lower blood pressure, emotional balance"
 ```
 
 ---
+
+## API and model contract
+
+Reviewed against OpenRouter documentation and its public model catalogs on 2026-10-01:
+
+- Generation: `google/gemini-3.1-flash-image` (Nano Banana 2), `POST /api/v1/images`,
+  `prompt`, `n: 1`, optional `input_references`; reads `data[0].b64_json` and validates
+  `media_type`/PNG signature. Gemini endpoints do not advertise `output_format`, so
+  the script checks the returned format rather than sending that option.
+- Review: `google/gemini-3.7-flash`, `POST /api/v1/chat/completions`, text followed by
+  an `image_url` data URL; reads `choices[0].message.content`.
+- Research and the Python `web_search()` helper: `perplexity/sonar-pro`, same chat
+  endpoint; uses `web_search_options.search_context_size` and preserves
+  `message.annotations[].url_citation`. No separate search API or academic-mode
+  guarantee is implied.
+- All paid calls use bearer authentication with `OPENROUTER_API_KEY`; no automatic
+  retries or pagination. Public discovery uses `GET /api/v1/models`,
+  `GET /api/v1/images/models`, and each image model's `/endpoints` records.
+
+See the [Image API guide](https://openrouter.ai/docs/guides/overview/multimodal/image-generation),
+[image input contract](https://openrouter.ai/docs/guides/overview/multimodal/image-understanding),
+[web-search options and citations](https://openrouter.ai/docs/guides/features/plugins/web-search),
+and [authentication guide](https://openrouter.ai/docs/api_reference/authentication).
+Offline tests cover these payloads and failure paths; catalog availability is not proof of
+an authenticated generation or of factual accuracy. Use code-based plotting or GIS when
+exact numerical geometry, reproducibility, or map boundaries are essential.
 
 ## Reference Files
 
@@ -279,7 +311,7 @@ For detailed guidance, load these reference files:
 - **Solution**: Use `--palette wong` for colorblind-safe colors
 
 **Problem**: Quality score too low
-- **Solution**: Increase iterations with `--iterations 3`; use more specific prompt
+- **Solution**: Inspect the critique and retained draft; improve the prompt, then explicitly choose an iteration budget with `--iterations N` (default 3)
 
 **Problem**: Wrong infographic type generated
 - **Solution**: Always specify `--type` flag for consistent results
@@ -318,7 +350,7 @@ After generating:
 
 ---
 
-Use this skill to create professional, accessible, and visually compelling infographics using the power of Nano Banana Pro AI with intelligent quality review.
+Use this skill to create professional, accessible, and visually compelling infographics using the power of Nano Banana 2 AI with intelligent quality review.
 
 ## Citing Scientific Agent Skills
 

@@ -51,7 +51,7 @@ def validate_plan(document: dict[str, Any]) -> IssueLog:
             raise InputError("metadata must be an object")
         for field in ("plan_id", "title", "version", "status", "purpose", "data_cut_date"):
             require_nonempty_text(metadata.get(field), f"metadata.{field}")
-        if metadata.get("data_level") not in {"aggregate", "synthetic", "plan_only"}:
+        if not isinstance(metadata.get("data_level"), str) or metadata.get("data_level") not in {"aggregate", "synthetic", "plan_only"}:
             log.errors.append("metadata.data_level must be aggregate, synthetic, or plan_only")
         if metadata.get("raw_rows_supplied") is not False:
             log.errors.append("metadata.raw_rows_supplied must be false")

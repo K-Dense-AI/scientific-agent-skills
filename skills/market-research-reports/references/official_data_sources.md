@@ -1,8 +1,10 @@
 # Official Data and Filing Sources
 
-Verified against first-party guidance on 2026-07-23. API rules can change:
+Reviewed against first-party guidance on 2026-10-01. API rules can change:
 recheck the linked terms and limits before automated or high-volume use. The
 bundled scripts do not call these services and do not require API keys.
+This is a routing and metadata guide, not an executed API client: documentation
+review does not establish authenticated retrieval or current service availability.
 
 ## Routing by claim
 
@@ -46,8 +48,9 @@ reproduces the same underlying series.
   [query-limits page](https://www.census.gov/data/developers/guidance/api-user-guide.Query_Limits.html)
   permits up to 50 variables per query and requires a key for all data queries.
   The [key page](https://www.census.gov/data/developers/guidance/api-user-guide.API_Key.html)
-  describes free registration. Never place a key in a report, source ledger, or
-  bundled script.
+  describes free registration. The key travels in the query URL; redact `key`
+  before storing source URLs, logs, or request provenance. Never place a key in a
+  report, source ledger, or bundled script.
 - Use program-specific methodology, margins of error, universe, geography, and
   vintage. ACS estimates, Population Estimates, and decennial counts are not
   interchangeable.
@@ -72,6 +75,8 @@ The [BLS API FAQ](https://www.bls.gov/developers/api_faqs.htm), last modified
 Record series ID, survey/program, seasonal adjustment, units, frequency,
 footnotes, publication date, and revision status. Consult the program's
 methodology and release calendar rather than relying on the API response alone.
+Inspect `message` and each series' observations even when the response says
+`REQUEST_SUCCEEDED`: the FAQ shows invalid-series messages with that status.
 
 ### Bureau of Economic Analysis
 
@@ -89,6 +94,8 @@ dimensions, and avoid broad `ALL` requests. Record current versus chained
 dollars, reference year, table/line code, frequency, seasonality, and release
 vintage. Chained-dollar components may not be additive; use published
 contributions or current-dollar shares where appropriate.
+Check `BEAAPI.Results.Error` as well as HTTP status; request parameters may be
+echoed in the response, so redact `UserID` before archiving it.
 
 ### Federal Reserve and FRED/ALFRED
 
@@ -124,6 +131,10 @@ that IMF data are available through SDMX 2.1 and SDMX 3.0 APIs. Use the
 dataset's data structure, codelists, unit, scale, frequency, observation status,
 and methodological metadata. Do not assume similarly named indicators across
 IMF datasets have identical definitions.
+Use the current API portal linked on that page (its Swagger explorer requires
+portal sign-in) to select a data service and verify its access requirements.
+The separate SDMX Central guide concerns structure, validation, conversion, and
+registration services; it does not establish a data-download endpoint contract.
 
 ### OECD
 

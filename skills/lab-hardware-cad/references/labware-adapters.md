@@ -14,12 +14,13 @@ python scripts/check.py standards --show slas-microplate-footprint
 
 ## Microplates (ANSI/SLAS 1-4)
 
-Four documents split the plate geometry. All are ANSI-approved and were reaffirmed in 2012.
+The four dimensions references below are the R2012 PDFs currently linked by SLAS.
+They are subsets of the specification; read the relevant section and drawing for datum rules.
 
 | Document | Governs | Key numbers |
 | --- | --- | --- |
-| ANSI/SLAS 1-2004 | Footprint | 127.76 x 85.48 mm ±0.25; corner radius 3.18 ±1.6 mm |
-| ANSI/SLAS 2-2004 | Height | 14.35 ±0.25 mm, resting plane to top of perimeter wells |
+| ANSI/SLAS 1-2004 | Footprint | 127.76 x 85.48 mm ±0.50 overall, ±0.25 near corners; corner radius 3.18 ±1.6 mm |
+| ANSI/SLAS 2-2004 | Height | 14.35 ±0.25 mm at perimeter wells; ±0.76 mm overall |
 | ANSI/SLAS 3-2004 | Bottom outside flange | Short 2.41, medium 6.10, tall 7.62 mm, each ±0.38 |
 | ANSI/SLAS 4-2004 | Well positions | 96-well: 9.0 mm pitch, A1 at 14.38 mm from left, 11.24 mm from top |
 
@@ -27,15 +28,17 @@ Four documents split the plate geometry. All are ANSI-approved and were reaffirm
 
 Three traps, in the order people fall into them.
 
-**1. Design to maximum material, not to nominal.** A plate at the top of tolerance is
-127.76 + 0.25 = 128.01 mm. A pocket cut at 127.76 + clearance will jam on roughly half the plates
-you try. Compute:
+**1. Use the tolerance for the full interface.** The ±0.25 mm band applies only
+within 12.7 mm of the corners. A continuous pocket needs the ±0.50 mm overall band.
+The standard covers the base footprint; obtain the vendor body/draft envelope for a deep pocket.
+Size to the maximum envelope, then add clearance and your process allowance. A plate at the top of tolerance is
+127.76 + 0.50 = 128.26 mm. A pocket cut at 127.76 + clearance can bind on conforming plates. Compute:
 
 ```python
 plate_l_mm = 127.76      # ANSI/SLAS 1-2004 nominal
-plate_tol_mm = 0.25      # ANSI/SLAS 1-2004
+plate_tol_mm = 0.50      # ANSI/SLAS 1-2004
 fit_clearance_mm = 0.40  # per side; FDM, see fabrication-limits.md
-pocket_l_mm = plate_l_mm + plate_tol_mm + 2 * fit_clearance_mm   # 128.81
+pocket_l_mm = plate_l_mm + plate_tol_mm + 2 * fit_clearance_mm   # 129.06
 ```
 
 **2. The corner radius tolerance is enormous — and it bounds the pocket radius from above,
@@ -64,8 +67,8 @@ with BuildPart() as pocket:
         Hole(radius=2.0)
 ```
 
-**3. Height depends on the flange, not just the plate.** ANSI/SLAS 3 standardises three flange
-heights. A carrier that grips the flange must be told which one. Ask; do not assume medium.
+**3. Height depends on the flange, not just the plate.** ANSI/SLAS 3 includes three uniform flange
+heights, plus interrupted short flanges and dual-height variants. A carrier that grips the flange must be told which one. Ask; do not assume medium.
 
 ### Well grid
 
@@ -84,9 +87,11 @@ The standard's positional tolerance is a **0.70 mm diameter zone** around each n
 a ±0.70 mm band. A feature that must clear every well needs at least 0.35 mm of radial margin on
 top of your own process tolerance.
 
-384-well pitch is 4.5 mm and 1536-well pitch is 2.25 mm. **The A1 offsets for those formats in
-`standards.json` are marked unverified** — they were derived, not read from the document. Read
-ANSI/SLAS 4-2004 before relying on them.
+Directly verified in ANSI/SLAS 4 sections 4.2 and 4.3: 384-well pitch is 4.5 mm,
+A1 offsets (12.13, 8.99) mm, position zone diameter 0.70 mm; 1536-well pitch is
+2.25 mm, A1 offsets (11.005, 7.865) mm, position zone diameter 0.50 mm. Datum edges
+are the near-corner zones, not a bowed side midpoint. These basic coordinates do
+not imply zero manufacturing tolerance.
 
 ### What the standards do not fix
 
@@ -96,16 +101,18 @@ If the part touches any of these, get the vendor drawing or measure it.
 
 ## Cuvettes
 
-The standard macro cuvette is a convention rather than a published standard, but it is close to
-universal: **12.5 x 12.5 mm external, 45 mm tall, 1.25 mm wall, 10 mm optical path**.
+A common 10 mm path-length rectangular cuvette has a **12.5 x 12.5 mm external
+footprint and 45 mm body height**, as illustrated by Hellma's catalogue. This is not
+a universal standard. No shared ±0.1 mm envelope tolerance or uniform wall thickness
+is established here; the database marks those nominal dimensions unverified for fit.
 
 Design notes:
 
 - Holders should be generous or compliant. Because no document fixes the tolerance, a 0.1 mm
   interference fit designed against nominal will fail on some suppliers' cuvettes.
 - Semi-micro and micro cuvettes keep the 12.5 mm external footprint but change internal geometry
-  and often height. A holder designed for the external footprint accommodates all of them; one
-  designed around the sample volume does not.
+  and often height. Confirm the exact external envelope, cap and optical-window height; a common
+  footprint alone does not establish interchangeability.
 - Cuvettes are usually held with a spring or leaf on one face so the two optical faces register
   against fixed datums. Copy that: locate on two adjacent faces, preload from the opposite corner.
   A four-sided pocket with clearance lets the cuvette rotate and shifts the path length.
@@ -135,9 +142,12 @@ that catches the rim, so the tube hangs rather than bottoms out.
 
 ## Microscope slides and coverslips
 
-Standard slide: **75 x 25 mm, 1.0 mm thick** (ISO 8037-1 covers slide dimensions; thickness classes
-vary, and 1.0-1.2 mm is typical). Coverslips are specified by thickness number, not dimension:
-#1 is roughly 0.13-0.17 mm and #1.5 roughly 0.16-0.19 mm.
+Slide sizes include approximately **75 x 25 mm and 76 x 26 mm**, with thickness
+near 1 mm. ISO 8037-1:1986 is the slide dimensions reference; do not equate the two
+commercial sizes. For example, BRAND labels its ISO 8037-1 slides approximately
+76 x 26 mm. Use the actual product drawing. Coverslips also need both lateral size
+and thickness: common #1 and #1.5 ranges are about 0.13-0.17 and 0.16-0.19 mm,
+but use the manufacturer's specified range and the objective's correction setting.
 
 Objective working distance is unforgiving. A holder that adds even 0.2 mm under the slide can put
 the sample outside a high-NA objective's working distance. Design slide holders so the slide
@@ -172,7 +182,7 @@ To check the number by hand instead:
 
 ```bash
 python scripts/check.py fit --standard slas-microplate-footprint \
-  --intent envelope --clearance 0.8 --value footprint_length=128.81
+  --intent envelope --clearance 0.8 --value footprint_length=129.06
 ```
 
 `--intent envelope` checks one-sided against maximum material condition, and `--clearance` is the
@@ -188,3 +198,7 @@ Then always run `snapshot.py` and confirm the pocket is on the face you meant.
 - ANSI/SLAS 3-2004 (R2012) Bottom Outside Flange Dimensions — <https://www.slas.org/SLAS/assets/File/public/standards/ANSI_SLAS_3-2004_BottomOutsideFlangeDimensions.pdf>
 - ANSI/SLAS 4-2004 (R2012) Well Positions — <https://www.slas.org/SLAS/assets/File/public/standards/ANSI_SLAS_4-2004_WellPositions.pdf>
 - SLAS microplate standards overview — <https://www.slas.org/education/ansi-slas-microplate-standards/>
+
+- Hellma 2025 cuvette catalogue — <https://www.hellma.com/fileadmin/fos/Website/Broschueren_Flyer_Handhabung/Hellma_Analytics/Englisch/Hellma_Kuevettenkatalog_EN_2025_gross.pdf>
+- BRAND slide dimensions — <https://shop.brand.de/en/microscope-slides-white-height-1-mm-p162.html>
+- ISO 8037-1:1986 catalogue — <https://www.iso.org/standard/15048.html>

@@ -23,7 +23,7 @@ Use SmartView when:
 Use Qt treeview when:
 
 - Programmatic or headless output must be PDF or SVG
-- Exact physical dimensions or DPI matter
+- Physical drawing dimensions or raster DPI matter
 - Maintaining an existing ETE treeview layout
 
 ## Installation
@@ -171,20 +171,24 @@ tree.explore(layouts=[layout])
 
 ### Conditional node styling
 
-Support values may be fractions or percentages. Normalize only after checking
-the source's convention:
+Support values may be fractions or percentages. Set one explicit convention
+for the entire source; a value of 1 cannot disambiguate them:
 
 ```python
+import math
 from ete4 import Tree
 from ete4.smartview import Layout, PropFace
 
 tree = Tree("((A:1,B:1)95:0.2,C:1);", parser="support")
+SUPPORT_MAX = 100  # use 1 only for a verified fractional source
 
 
 def support_fraction(value):
     if value is None:
         return None
-    return value / 100 if value > 1 else value
+    if not math.isfinite(value) or not 0 <= value <= SUPPORT_MAX:
+        raise ValueError("Support is outside the declared source range")
+    return value / SUPPORT_MAX
 
 
 def draw_node(node):
@@ -331,6 +335,14 @@ In ETE 4.4.0, `render_sm()` captures PNG screenshot data. Give the output a
 `.png` suffix. Supplying `.svg` or `.pdf` does not convert the screenshot to a
 vector format.
 
+ETE 4.4.0 warns and returns without creating a file when Selenium is absent;
+that return is not successful rendering. The bundled helper checks the
+dependency and requires a PNG signature before replacing the destination.
+
+SmartView header faces occupy the aligned panel; a long title at a narrow
+viewport can be clipped. Shorten the title or increase the width, then inspect
+the image at its final size.
+
 Static SmartView rendering needs a browser usable by Selenium. If browser
 discovery fails, install a compatible Chrome/Chromium browser or use Qt
 treeview.
@@ -385,6 +397,11 @@ tree.render(
 )
 ```
 
+ETE 4.4.0's Qt PDF path selects A4 paper. Width/height control the drawing;
+they do not set a tightly cropped PDF page. Inspect the PDF page bounds and
+crop in a separate graphics/PDF tool if needed, or use SVG for a tight vector
+canvas. The local PDF smoke confirmed the A4 page and its surrounding whitespace.
+
 Qt treeview still uses `TreeStyle`, `NodeStyle`, and Qt face classes, but ETE 4
 predicates remain properties:
 
@@ -426,32 +443,36 @@ SmartView PNG, a container with the Qt runtime, or render on a workstation.
 Interactive SmartView:
 
 ```bash
-uv run --with "ete4==4.4.0" python scripts/quick_visualize.py \
+uv run --no-project --isolated --with "ete4==4.4.0" python scripts/quick_visualize.py \
   tree.nw --parser 1
 ```
 
 SmartView PNG:
 
 ```bash
-uv run --with "ete4[render-sm]==4.4.0" python scripts/quick_visualize.py \
+uv run --no-project --isolated --with "ete4[render-sm]==4.4.0" python scripts/quick_visualize.py \
   tree.nw tree.png \
   --parser support \
   --mode circular \
   --show-support \
-  --color-by-support \
+  --color-by-support --support-scale percent \
   --title "Maximum-likelihood tree"
 ```
 
 Qt SVG or PDF:
 
 ```bash
-uv run --with "ete4[treeview]==4.4.0" python scripts/quick_visualize.py \
+uv run --no-project --isolated --with "ete4[treeview]==4.4.0" python scripts/quick_visualize.py \
   tree.nw tree.svg \
   --parser 1 \
   --engine treeview \
   --mode rectangular \
   --title "Species tree"
 ```
+
+Support coloring requires `--support-scale percent` (0–100) or `fraction`
+(0–1). Thresholds remain fractions in both cases. Invalid or nonfinite support
+values fail before rendering.
 
 The script's `auto` engine chooses SmartView for interactive use and PNG,
 and Qt treeview for PDF/SVG.

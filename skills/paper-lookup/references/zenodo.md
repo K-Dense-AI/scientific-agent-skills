@@ -27,7 +27,7 @@ flow from a literature lookup.
 
 ## Rate Limits
 
-No published per-second cap. Be polite; serialize long walks.
+Public search is limited to **30 requests/minute**. Guest global limits are 60/minute and 2,000/hour; authenticated global limits are 100/minute and 5,000/hour. Inspect `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`; serialize long walks.
 
 ## Key Endpoints
 
@@ -63,13 +63,13 @@ Response shape:
 }
 ```
 
-Page with `page` (1-based) and `size`. Follow `links.next` when present.
+Page with `page` (1-based) and `size`. Follow `links.next` when present. The documented `size` maximum is 25 anonymously or 100 authenticated. Use metadata exports/OAI-PMH for bulk retrieval rather than assuming unlimited search paging.
 
 ### 2. One record by id or DOI
 
 ```
 GET /api/records/{id}
-GET /api/records?q=doi:10.5281/zenodo.{id}
+GET /api/records?q=doi:%2210.5281/zenodo.{id}%22
 ```
 
 **Follow redirects.** A concept (parent) record id 302s to the latest version:
@@ -107,3 +107,7 @@ A record can be published and still have no downloadable file.
 | `GET /records/{conceptrecid}` without `-L` | HTTP 302 + HTML | Follow redirects; record both DOIs |
 | Treated deposit docs as required auth | You ask the user for a token to *search* | Search is public |
 | Cited `10.5281/zenodo.{concept}` as the file you downloaded | Concept DOI is all versions | Use the version DOI in provenance |
+
+## Official sources reviewed 2026-09-30
+
+- https://developers.zenodo.org/

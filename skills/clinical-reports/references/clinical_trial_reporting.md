@@ -69,7 +69,7 @@ The guideline:
 - requires attention to data governance, records, security, quality management, provenance, and traceability;
 - expects the sponsor to describe the trial quality-management approach in the CSR.
 
-Step 4 adoption does not prove regional implementation. A qualified regulatory professional must verify the applicable adopted version and transition rules.
+Step 4 adoption does not prove regional implementation. FDA’s dedicated E6(R3) page lists final guidance from September 2025, while its general ICH index still describes E6(R2). Use the dedicated current regional document and verify Annex 2 status separately; do not infer that the June 2026 ICH consolidated text automatically replaced a regional version. A qualified regulatory professional must verify the applicable adopted version and transition rules.
 
 ## Data integrity and provenance
 

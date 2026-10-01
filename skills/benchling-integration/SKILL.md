@@ -3,9 +3,10 @@ name: benchling-integration
 description: Benchling Python SDK and REST API integration for registry entities, inventory, ELN entries, workflows, Benchling Apps, and Data Warehouse queries. Use when automating lab data with benchling-sdk or the v2 API.
 license: MIT
 allowed-tools: Read Write Edit Bash
-compatibility: Requires a Benchling account, tenant URL, and API key or OAuth app credentials. Install benchling-sdk with uv pip install.
+compatibility: Requires Python 3.9+, benchling-sdk 1.25.0, network access, a Benchling tenant with API access, and API key or OAuth app credentials.
 metadata:
-  version: "1.6"
+  version: "1.7"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: BENCHLING_API_KEY
@@ -38,195 +39,141 @@ metadata:
 
 # Benchling Integration
 
-## Overview
+## When to use
 
-Benchling is a cloud platform for life sciences R&D. Access registry entities (DNA, RNA, proteins), inventory, electronic lab notebooks, and workflows programmatically via the Python SDK and REST API.
+Use this skill for Benchling registry entities, sequence imports, inventory, ELN entries,
+workflow tasks, apps, event-driven integrations, and warehouse analytics.
 
-**Version note:** Examples target **benchling-sdk 1.25.0** (the targeted SDK version). Docs: [benchling.com/sdk-docs](https://benchling.com/sdk-docs/). Platform guide: [docs.benchling.com](https://docs.benchling.com/).
+**Reviewed 2026-09-30:** examples target the released **benchling-sdk 1.25.0** and its
+stable **v2** API models. The [current authentication guide](https://docs.benchling.com/docs/authentication)
+recommends V3 for new development, while the [V3 guide](https://docs.benchling.com/docs/v3-api-overview)
+still describes endpoint-specific early access. Confirm your tenant's V3 availability and
+stability before migrating; these v2 SDK examples must not be mechanically rewritten to V3.
 
-## When to Use This Skill
+SDK imports, model serialization, and request construction were checked locally against
+1.25.0. Tenant-dependent examples are **illustrative**: no authenticated requests,
+mutations, AWS deployment, or warehouse connection were run.
 
-This skill should be used when:
-- Working with Benchling's Python SDK or REST API
-- Managing biological sequences (DNA, RNA, proteins) and registry entities
-- Automating inventory operations (samples, containers, locations, transfers)
-- Creating or querying electronic lab notebook entries
-- Building workflow automations or Benchling Apps
-- Syncing data between Benchling and external systems
-- Querying the Benchling Data Warehouse for analytics
-- Setting up event-driven integrations with AWS EventBridge
+## Workflow
 
-## Core Capabilities
+1. Identify the tenant, API version, identity, and permissions. Use OAuth app credentials
+   for background integrations; use delegated authorization when acting as an individual
+   user. See [authentication](references/authentication.md).
+2. Read the relevant schema and resolve actual folder, registry, status, and dropdown IDs.
+   Preserve sequence alphabet/topology and sample units. A valid Python model does not
+   establish biological correctness or satisfaction of a tenant's required fields.
+3. Read a small filtered page before writing. Use typed SDK methods and check their
+   actual parameter names; not all services share the same CRUD naming convention.
+4. Construct and serialize a representative payload. For imports, retain external IDs
+   and returned Benchling IDs so a retry can reconcile a partial run without duplicates.
+5. Perform the requested operation and read back the result. Check terminal async status;
+   completed polling can still mean `FAILED`.
 
-Seven capability areas, each with code, are in
-[references/core_capabilities.md](references/core_capabilities.md):
+## Setup and a read-only query
 
-1. **Authentication and setup** — API key and OAuth app auth; see
-   [references/authentication.md](references/authentication.md).
-2. **Registry and entity management** — DNA and AA sequences, custom entities, schemas,
-   and registration.
-3. **Inventory management** — containers, boxes, plates, locations, and transfers.
-4. **Notebook and documentation** — entries, day-to-day notes, and structured tables.
-5. **Workflows and automation** — tasks, flowcharts, and assay runs.
-6. **Events and integration** — EventBridge subscriptions; see
-   [references/eventbridge.md](references/eventbridge.md).
-7. **Data warehouse and analytics** — SQL access to the warehouse.
+```bash
+uv pip install "benchling-sdk==1.25.0"
+```
 
-Endpoint and SDK detail is in
-[references/api_endpoints.md](references/api_endpoints.md) and
-[references/sdk_reference.md](references/sdk_reference.md).
-
-## Best Practices
-
-### Error Handling
-
-The SDK automatically retries failed requests:
 ```python
-# Automatic retry for 429, 502, 503, 504 status codes
-# Up to 5 retries with exponential backoff
-# Customize retry behavior if needed
-from benchling_sdk.retry import RetryStrategy
+import os
+from benchling_sdk.benchling import Benchling
+from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
 
+tenant_url = os.environ["BENCHLING_TENANT_URL"].rstrip("/")
 benchling = Benchling(
     url=tenant_url,
-    auth_method=ApiKeyAuth(api_key),
-    retry_strategy=RetryStrategy(max_retries=3),
+    auth_method=ClientCredentialsOAuth2(
+        client_id=os.environ["BENCHLING_CLIENT_ID"],
+        client_secret=os.environ["BENCHLING_CLIENT_SECRET"],
+        token_url=f"{tenant_url}/oauth/token",
+    ),
 )
-```
-
-### Pagination Efficiency
-
-Use generators for memory-efficient pagination:
-```python
-# Generator-based iteration
-for page in benchling.dna_sequences.list():
+for page in benchling.dna_sequences.list(page_size=10, name_includes="plasmid"):
     for sequence in page:
-        process(sequence)
-
-# Check estimated count without loading all pages
-total = benchling.dna_sequences.list().estimated_count  # property; may be unavailable
+        print(sequence.id, sequence.name)
+    break  # deliberate first-page connectivity/permission check
 ```
 
-### Schema Fields Helper
+A successful empty page is a valid connectivity result. It does not imply access to
+all projects. There is no documented v2 `users/me` route or SDK `users.get_me()`.
 
-Use the `fields()` helper for custom schema fields:
+## Important SDK conventions
+
+- Import `fields` from `benchling_sdk.helpers.serialization_helpers`. Its input is
+  `{"field_name": {"value": value}}`, including the inner `value` mapping.
+- Use `dna_sequence_id` for DNA updates and `workflow_task_id` for workflow updates.
+  Workflow task creation requires a `workflow_task_group_id`.
+- Entry methods are `create_entry`, `get_entry_by_id`, `list_entries`, and `update_entry`.
+- `list()` usually returns pages; iterate twice to reach the objects. `estimated_count`
+  is a property that can raise `NotImplementedError`, not a method or guaranteed count.
+- Moving a tube uses `ContainerUpdate(parent_storage_id=...)`. Material transfer is a
+  separate operation; it changes contents and quantities.
+- Register on creation with `registry_id` plus **either** `entity_registry_id` (a human
+  registry identifier) **or** `naming_strategy`. Do not confuse those with the registry's ID.
+
+## Common use cases
+
+### Import FASTA sequences
+
+Install Biopython separately (`uv pip install biopython`). This illustrative import
+creates unregistered linear DNA; choose topology and resolve collisions before running.
+
 ```python
-# Convert dict to Fields object
-custom_fields = benchling.models.fields({
-    "concentration": "100 ng/μL",
-    "date_prepared": "2025-10-20",
-    "notes": "High quality prep"
-})
-```
-
-### Forward Compatibility
-
-The SDK handles unknown enum values and types gracefully:
-- Unknown enum values are preserved
-- Unrecognized polymorphic types return `UnknownType`
-- Allows working with newer API versions
-
-### Security Considerations
-
-- Never commit API keys or OAuth secrets to version control
-- Read only named environment variables (`BENCHLING_TENANT_URL`, `BENCHLING_API_KEY`, etc.)
-- Route network calls exclusively to your tenant URL
-- Rotate keys if compromised; use OAuth for multi-user production apps
-- Grant minimal necessary permissions for apps in the Developer Console
-
-## Resources
-
-### references/
-
-Detailed reference documentation for in-depth information:
-
-- **authentication.md** - Comprehensive authentication guide including OIDC, security best practices, and credential management
-- **sdk_reference.md** - Detailed Python SDK reference with advanced patterns, examples, and all entity types
-- **api_endpoints.md** - REST API endpoint reference for direct HTTP calls without the SDK
-- **eventbridge.md** - EventBridge setup, event payload schema, rule examples, Lambda handler, validation, and recovery
-
-Load these references as needed for specific integration requirements.
-
-## Common Use Cases
-
-**1. Bulk Entity Import:**
-```python
-# Import multiple sequences from FASTA file
 from Bio import SeqIO
+from benchling_sdk.models import DnaSequenceCreate
 
 for record in SeqIO.parse("sequences.fasta", "fasta"):
-    benchling.dna_sequences.create(
-        DnaSequenceCreate(
-            name=record.id,
-            bases=str(record.seq),
-            is_circular=False,
-            folder_id="fld_abc123"
-        )
+    payload = DnaSequenceCreate(
+        name=record.id,
+        bases=str(record.seq),
+        is_circular=False,
+        folder_id="lib_example",
     )
+    created = benchling.dna_sequences.create(payload)
+    print(record.id, created.id)  # persist this mapping for restart/reconciliation
 ```
 
-**2. Inventory Audit:**
-```python
-# List all containers in a specific location
-containers = benchling.containers.list(
-    parent_storage_id="box_abc123"
-)
+### Audit inventory under a location
 
-for page in containers:
+```python
+for page in benchling.containers.list(ancestor_storage_id="box_example"):
     for container in page:
-        print(f"{container.name}: {container.barcode}")
+        print(container.id, container.name, container.barcode)
 ```
 
-**3. Workflow Automation:**
+`ancestor_storage_id` includes descendants. For immediate children only, inspect the
+returned parent storage or use the documented storage-contents service.
+
+### Export sequences for one schema
+
 ```python
-# Update all pending tasks for a workflow
-tasks = benchling.workflow_tasks.list(
-    workflow_id="wf_abc123",
-    status="pending"
-)
-
-for page in tasks:
-    for task in page:
-        # Perform automated checks
-        if auto_validate(task):
-            benchling.workflow_tasks.update(
-                task_id=task.id,
-                workflow_task=WorkflowTaskUpdate(
-                    status_id="status_complete"
-                )
-            )
-```
-
-**4. Data Export:**
-```python
-# Export all sequences with specific properties
-sequences = benchling.dna_sequences.list()
-export_data = []
-
-for page in sequences:
-    for seq in page:
-        if seq.schema_id == "target_schema_id":
-            export_data.append({
-                "id": seq.id,
-                "name": seq.name,
-                "bases": seq.bases,
-                "length": len(seq.bases)
-            })
-
-# Save to CSV or database
 import csv
-with open("sequences.csv", "w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(f, fieldnames=["id", "name", "bases", "length"])
+
+with open("sequences.csv", "w", newline="", encoding="utf-8") as handle:
+    writer = csv.DictWriter(handle, fieldnames=["id", "name", "bases", "length"])
     writer.writeheader()
-    writer.writerows(export_data)
+    for page in benchling.dna_sequences.list(schema_id="ts_example"):
+        for seq in page:
+            writer.writerow({
+                "id": seq.id, "name": seq.name,
+                "bases": seq.bases, "length": len(seq.bases),
+            })
 ```
 
-## Additional Resources
+## References
 
-- **Official Documentation:** https://docs.benchling.com
-- **Python SDK Reference:** https://benchling.com/sdk-docs/
-- **API Reference:** https://benchling.com/api/reference
-- **Support:** [email protected]
+- [Core capabilities](references/core_capabilities.md): scientific workflows and boundaries.
+- [SDK reference](references/sdk_reference.md): validated constructors, updates, inventory,
+  entries, workflow tasks, retries, and async handling.
+- [REST reference](references/api_endpoints.md): endpoint paths, payloads, filters,
+  response envelopes, pagination, and rate limits.
+- [Authentication](references/authentication.md): app credentials, personal keys,
+  delegated authorization, legacy OIDC, and HTTP clients.
+- [EventBridge](references/eventbridge.md): supported event types, payloads, setup,
+  and recovery; webhook differences.
+- [Official SDK 1.25.0](https://benchling.com/sdk-docs/1.25.0/index.html)
+- [Official REST reference](https://benchling.com/api/reference)
 
 ## Citing Scientific Agent Skills
 

@@ -1,10 +1,11 @@
 ---
 name: folklore-variant-evidence
-description: "Retrieve ClinGen gene-disease validity assertions for a public gene or disease, and review source-linked public evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Use when a scientific agent must branch deterministically on resolved, ambiguous, not-found, invalid, unsupported, or unavailable variant outcomes; chain a resolved public variant into related literature or publication details; or preserve evidence provenance without accepting patient, phenotype, family, segregation, or private case data."
+description: "Retrieves ClinGen gene-disease validity assertions for a public gene or disease, and reviews source-linked public evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Used when a scientific agent must branch deterministically on resolved, ambiguous, not-found, invalid, unsupported, or unavailable variant outcomes; chain a resolved public variant into related literature or publication details; or preserve evidence provenance without accepting patient, phenotype, family, segregation, or private case data."
 license: MIT
-compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
+compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials) and a host supporting its advertised protocol, or curl for direct JSON-RPC POST requests.
 metadata:
-  version: "1.1"
+  version: "1.2"
+  last-reviewed: "2026-09-30"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
@@ -42,6 +43,12 @@ curl --silent --show-error --fail-with-body --max-time 60 \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"search_variant_evidence","arguments":{"assembly":"GRCh38","query":"rs80357914"}}}'
 ```
 
+The routing headers must match the JSON-RPC method and tool name. A successful
+HTTP response is not sufficient: inspect JSON-RPC `error`, then
+`result.structuredContent.adapter_error`, then this tool's
+`result.structuredContent.result.status`. Other tools use different response
+shapes; use the [contract table](references/mcp-contract.md).
+
 Inspect the returned outcome before continuing. This example can return
 `ambiguous` with multiple candidates: stop and request an unambiguous public
 variant notation instead of selecting a candidate automatically.
@@ -67,7 +74,9 @@ review or qualified clinical judgment.
 Before a variant tool call:
 
 1. Extract exactly one public variant identifier or notation.
-2. Require GRCh38 and a germline nuclear SNV or simple indel.
+2. Require GRCh38 and a germline nuclear SNV or simple insertion/deletion shorter
+   than 50 base pairs. An unsupported assembly may be rejected by the input
+   schema before any scientific `unsupported` status exists.
 3. Remove or refuse patient names, case identifiers, phenotypes, family history,
    segregation evidence, clinical records, uploaded files, and other private or
    patient-specific context.
@@ -104,7 +113,16 @@ calls or interpreting response states.
 
 Use `get_gene_disease_associations` for one exact gene symbol or HGNC identifier, or `search_disease_genes` for an exact MONDO identifier or public disease-name substring. Both accept `limit` (default 20, 1–50) and `offset` (default 0, 0–1000). See the reference for request examples. This is a separate source lookup and requires no variant input or assembly.
 
-Preserve each returned disease identity, inheritance, evidence assessment, source URL, date and snapshot. Do not combine distinct diseases or silently choose among name matches. Gene-disease validity does not classify a particular variant. Empty results mean no matching assertion in the available ClinGen source, not no association. No patient, phenotype, family, segregation, private case data or sequencing files may be sent. Qualified professional review remains required.
+Preserve each returned disease identity, inheritance, evidence assessment, source
+URL, date, `source.version` and `source.snapshotSha256`. This is a local ClinGen
+snapshot, not a guarantee of the latest ClinGen release. Follow
+`pagination.nextOffset` while it is present; preserve pagination-ceiling warnings.
+An empty page after the total has been passed does not mean the initial query had
+no matches. Do not combine distinct diseases or silently choose among name matches.
+Gene-disease validity does not classify a particular variant. A `not_found`
+response means no matching assertion in the available source, not no association.
+No patient, phenotype, family, segregation, private case data or sequencing files
+may be sent. Qualified professional review remains required.
 
 ## Run the variant-evidence workflow
 
@@ -123,6 +141,11 @@ usage boundary.
 
 ### 2. Branch on the returned status
 
+Read transport/JSON-RPC errors and `adapter_error` first. For
+`search_variant_evidence`, let `envelope = result.structuredContent`; only if
+`envelope.result` is non-null, branch on `envelope.result.status`. An
+`invalid_arguments` adapter error is distinct from scientific `invalid_request`.
+Preserve `isError` and any typed failure, including `resolution_unavailable`.
 Treat the status as a control-flow value, not prose:
 
 | Status | Required action |
@@ -135,8 +158,10 @@ Treat the status as a control-flow value, not prose:
 | `resolution_unavailable` | Report a temporary resolution or availability failure. Do not treat it as evidence absence. |
 
 Only a `resolved` result may proceed automatically into a variant-linked
-literature workflow. If a resolved interpretation itself reports unavailable
-evidence, preserve that separate limitation.
+literature workflow. Its canonical key is `envelope.result.identity.canonical_key`.
+If `envelope.result.interpretation.status` is `unavailable`, preserve its typed
+error; identity resolution has succeeded, but classification has not. Do not read
+or invent a classification for that outcome.
 
 ### 3. Review the evidence without overclaiming
 
@@ -186,6 +211,14 @@ OMIM concept. Treat results as source-linked candidates for professional review.
 A zero-result response means no result was returned for that bounded query, not
 that no relevant publication exists anywhere.
 
+The query is 3–200 characters, with `limit` 1–25 and `sort` set to `relevance`,
+`newest`, or `oldest`. For another page, reuse the returned opaque `next_cursor`
+with the same query and sort; do not construct an offset. Keep `match_types` and
+`article_entities` distinct from variant-literature match types. Report
+`semantic_index_used` and `semantic_degraded_reason`; a returned lexical match
+does not prove semantic retrieval worked. Preserve additional retrieval metadata
+returned by the live service.
+
 Do not place patient information into a corpus query, even if the query is not
 variant-specific.
 
@@ -215,8 +248,16 @@ result is ambiguous, list the returned candidates and stop for explicit
 selection. Do not select a candidate or call downstream literature tools.
 ```
 
-The test passes only if an ambiguous response causes the workflow to stop
-without automatic candidate selection.
+The ambiguity branch passes only if an ambiguous response causes the workflow to
+stop without automatic candidate selection. If the live response changes, record
+the actual status; a resolved response does not test ambiguity handling.
+
+On 2026-09-30, live discovery reported adapter 1.5.0 and protocol 2026-07-28.
+The rsID example returned `ambiguous`; a separate public HGVS query resolved and
+was chained through its returned key to literature and a returned PMID. Corpus
+cursor pagination and gene-disease offset pagination were exercised. These are
+dated protocol checks, not validation of clinical accuracy. See the reference
+for exact response shapes and source/live differences.
 
 ## Official references
 

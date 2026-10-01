@@ -6,9 +6,12 @@ How to choose among candidates, and what to do when the honest answer is "no ter
 
 Run it per string. Stop at the first step that gives a defensible answer.
 
-1. **Exact label match in the expected ontology, from its defining ontology.** Accept.
-2. **Exact synonym match.** Accept, but record the primary label, not the synonym. Metadata files
-   should carry the ontology's own label so they diff cleanly against the ontology release.
+1. **Exact label match in the expected ontology, from its defining ontology.** Check its
+   definition, current term detail, organism/context and target-schema constraints before accepting.
+   Multiple exact candidates require disambiguation; a bounded top-hit list is not exhaustive.
+2. **Exact synonym match with an exact synonym annotation.** Apply the same context checks and
+   record the primary label. A related/broad/narrow or unscoped synonym is a curation candidate,
+   even when its spelling exactly matches the input.
 3. **Exact match, wrong ontology.** Usually a category error in the source column, not a naming
    problem — `hepatocyte` in a tissue field means the column mixes tissue and cell type. Fix the
    column, do not force a match.
@@ -19,19 +22,20 @@ Run it per string. Stop at the first step that gives a defensible answer.
 5. **Nothing.** Mark unresolved and say so. An unresolved row is a correct output.
 
 `resolve_terms.py` implements steps 1–4's search side and labels every hit `exact_label`,
-`exact_synonym`, or `partial`. The judgement about whether a `partial` is acceptable is yours;
+`exact_synonym`, scoped/unscoped synonym matches, or `partial`. The judgement about a match is yours;
 the tool will not make it for you.
 
 ## Normalisations worth retrying
 
 Cheap rewrites that convert a `partial` into an `exact_label`, in rough order of yield:
 
-- Drop qualifiers the source added: `liver (donor)`, `Liver - left lobe [FFPE]`.
+- Separate preparation and donor notes from anatomy, preserving them in other fields. Do not
+  reduce `Liver - left lobe [FFPE]` to `liver`: the left-lobe qualifier carries anatomy.
 - Expand lab shorthand: `PBMC` → `peripheral blood mononuclear cell`, `WT` → the actual genotype,
-  `M`/`F` → `male`/`female`.
+  `M`/`F` → `male`/`female` only with an explicit source codebook.
 - Reverse an inverted phrase: `ventricle, left` → `left ventricle`, `cortex, kidney` → `kidney
   cortex`.
-- Singularise: `hepatocytes` → `hepatocyte`. Ontology labels are singular.
+- Singularise: `hepatocytes` → `hepatocyte`. Check the actual label; labels are not universally singular.
 - Anglicise or Americanise: ontology labels vary; try both `oesophagus` and `esophagus`.
 - Strip species prefixes: `human liver` → `liver` (species belongs in a separate NCBITaxon field).
 
@@ -40,8 +44,8 @@ and `alpha-beta T cell` mean what they say, and `normalize_label()` deliberately
 whitespace.
 
 When plain search keeps failing on lab shorthand, run `map_terms.py` with `--ontology` set
-(see `companion-apis.md`). ZOOMA matches against how curators previously mapped that exact
-string, which is a different and often better signal than lexical search. Every HIGH/GOOD
+(see `companion-apis.md`). ZOOMA can combine curated, lexical and embedding evidence. Inspect underlying provenance;
+its v2 wrapper can call non-curated matches `ZOOMA_INFERRED_FROM_CURATED`. Every HIGH/GOOD
 CURIE still goes through `validate_terms.py` before it is written down.
 
 ## What "unresolved" should look like
@@ -60,7 +64,7 @@ The high-yield checks, in order:
 
 1. **Every ID exists.** `validate_terms.py --input table.tsv`.
 2. **No obsolete IDs.** Obsolete terms carry `term_replaced_by` often enough that the fix is
-   mechanical — but apply replacements deliberately, since a replacement can be broader or
+   straightforward — but apply replacements deliberately, since a replacement can be broader or
    narrower than the original.
 3. **Labels match IDs.** Supply the label column. Mismatches are where copy-paste drift and
    hallucinated IDs surface: the ID is real, the label is real, and they describe different things.
@@ -69,8 +73,7 @@ The high-yield checks, in order:
    anatomy (`ontology-registry.md`).
 
 `--strict` turns warnings into failures, which is the right setting for a CI gate. Warnings are
-`matched_synonym` (label is a synonym rather than the primary label), `imported_only` (the home
-ontology no longer asserts this ID), and `not_a_class`.
+`matched_synonym` (label is a synonym rather than the primary label), `imported_only` (no defining copy verified by this lookup), and `not_a_class`.
 
 ## Obsolete terms
 
@@ -86,10 +89,11 @@ term must be re-curated by hand; there is no automatic answer.
 
 ## Cross-ontology mapping
 
-OxO is retired and returns HTML with HTTP 200. Two workable routes:
+[OxO2](https://github.com/EBISPOT/oxo2) is live with compatibility APIs. The bundled scripts
+do not perform cross-ontology mapping; two source-grounded routes are:
 
 - **Term cross-references.** `term_detail(curie)["annotation"]["database_cross_reference"]` lists
-  equivalents — `UBERON:0002107` carries `MESH:D008099`, `NCIT:C12392`, `FMA:7197`, `UMLS:C0023884`,
+  cross-reference candidates — `UBERON:0002107` carries `MESH:D008099`, `NCIT:C12392`, `FMA:7197`, `UMLS:C0023884`,
   and more.
 - **SSSOM mapping sets** published by Monarch and the OBO community, when provenance and mapping
   predicates (`skos:exactMatch` vs `closeMatch`) matter.

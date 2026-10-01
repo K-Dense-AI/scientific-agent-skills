@@ -1,6 +1,6 @@
 # Resources, decks, state, and serialization
 
-Verified against **PyLabRobot 0.2.1** on **2026-07-23**.
+Verified against **PyLabRobot 0.2.2** on **2026-10-01**.
 
 ## Resource model
 
@@ -35,12 +35,12 @@ Do not copy coordinates across robots, carriers, adapters, or labware revisions.
 
 ## Use stable built-in definitions
 
-Stable 0.2.1 exports vendor/model resource factories. The Hamilton getting
+Stable 0.2.2 exports vendor/model resource factories. The Hamilton getting
 started tutorial uses:
 
 ```python
 from pylabrobot.resources import (
-    Cor_96_wellplate_360ul_Fb,
+    cor_96_wellplate_360uL_Fb,
     PLT_CAR_L5AC_A00,
     TIP_CAR_480_A00,
     hamilton_96_tiprack_1000uL_filter,
@@ -49,7 +49,7 @@ from pylabrobot.resources.hamilton import STARLetDeck
 ```
 
 Names are case-sensitive. Old examples such as `Cos_96_DW_1mL` may not identify
-the intended current factory. Search the installed 0.2.1 resource namespace or
+the intended current factory. Search the installed 0.2.2 resource namespace or
 stable resource docs and verify manufacturer, catalog number, dimensions,
 bottom geometry, capacity, lid/adapter, and revision.
 
@@ -60,7 +60,7 @@ tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
 tip_carrier[0] = tips = hamilton_96_tiprack_1000uL_filter(name="tips")
 
 plate_carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
-plate_carrier[0] = plate = Cor_96_wellplate_360ul_Fb(name="plate")
+plate_carrier[0] = plate = cor_96_wellplate_360uL_Fb(name="plate")
 
 deck = STARLetDeck()
 deck.assign_child_resource(tip_carrier, rails=3)
@@ -115,6 +115,8 @@ Hamilton deck assignment performs collision checks and exposes an
 `ignore_collision` escape hatch. Do not set `ignore_collision=True` to make a
 layout pass. Resolve the definition or placement and repeat physical review.
 Generic resource assignment alone is not a complete collision or motion check.
+Released 0.2.2 takes `rails=`; the newer documentation may use `track=`, which
+is not a keyword in this release.
 
 The bundled checker provides an independent deterministic screen:
 
@@ -159,7 +161,7 @@ Keep these separate:
 
 ## Definition and state serialization
 
-Verified 0.2.1 methods include:
+Verified 0.2.2 methods include:
 
 ```python
 resource.save("deck.json", indent=2)
@@ -170,6 +172,11 @@ resource.load_all_state(state)
 resource.save_state_to_file("state.json", indent=2)
 resource.load_state_from_file("state.json")
 ```
+
+Only deserialize an allowlisted **resource-only** tree. Machine serialization
+also contains a backend and may reconstruct it; `allow_marshal=False` is not a
+ban on hardware backend construction. Never load an unreviewed `LiquidHandler`
+or device node while claiming an offline resource import.
 
 `Resource.serialize()` stores a definition; `serialize_state()` and
 `serialize_all_state()` store tracker/resource state. Keep definition and state
@@ -201,7 +208,10 @@ python3 skills/pylabrobot/scripts/validate_manifest.py \
 ```
 
 Inputs must remain under the current working directory, be regular non-symlink
-files, use the expected extension, and stay under 2 MB.
+files, use the expected extension, stay under 2 MB, and have at most 64 JSON
+nesting levels. Every transferred-to well needs an explicit starting volume,
+including `0.0` for an intentionally empty destination. The validator never
+assumes an undeclared destination is empty.
 
 ## Custom labware
 
@@ -220,19 +230,19 @@ custom definitions versioned and independently reviewed before commissioning.
 
 ## Sources
 
-Checked **2026-07-23**:
+Checked **2026-10-01**:
 
-- [Stable resource management](https://docs.pylabrobot.org/stable/resources/introduction.html)
-  and [stable resources API](https://docs.pylabrobot.org/stable/api/pylabrobot.resources.html)
-  — resource tree and current 0.2.1 classes.
-- [Stable Hamilton tutorial](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/basic.html)
-  — verified factories, carrier sites, rails, and deck summary (page metadata
-  surfaced 2025-01-01).
-- [Stable tracker guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-trackers.html)
-  — tip/volume state and errors (page metadata surfaced 2025-01-01).
-- [`v0.2.1` resources source](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/resources)
-  — constructor, serialization, tracker, and collision signatures; tag dated
-  2026-03-23.
-- [Changelog](https://github.com/PyLabRobot/pylabrobot/blob/main/CHANGELOG.md)
-  — 0.2.1 added `height_volume_data`; plate `stacking_z_height` is listed under
-  `Unreleased` and is not assumed stable.
+- [Hosted resource management](https://docs.pylabrobot.org/stable/resources/introduction.html)
+  and [hosted resources API](https://docs.pylabrobot.org/stable/api/pylabrobot.resources.html)
+  — development resource guide; release signatures verified from the wheel.
+- [Hosted Hamilton tutorial](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/basic.html)
+  — verified factories, carrier sites, rails, and deck summary.
+- [Hosted tracker guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-trackers.html)
+  — tip/volume state and errors.
+- [released 0.2.2 resources source](https://pypi.org/project/PyLabRobot/0.2.2/#files)
+  — constructor, serialization, tracker, and collision signatures; released
+  2026-07-30.
+- [Release review](review.md) — `height_volume_data` remains supported;
+  `Plate.stacking_z_height` and `plate_type` round-trip in 0.2.2 even though the
+  changelog lists stacking under `Unreleased`. Native tests confirm bare-plate
+  stacking height and resource/state round trips.

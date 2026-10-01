@@ -1,6 +1,6 @@
 # Real-time simulation
 
-Verified 2026-07-23 against SimPy 4.1.2.
+Reviewed 2026-10-01 against SimPy 4.1.2.
 
 `simpy.rt.RealtimeEnvironment` retains the Event/Process API but delays event
 processing so simulation time tracks wall-clock time.
@@ -18,7 +18,8 @@ env = RealtimeEnvironment(
 ## Parameters
 
 - `initial_time`: starting simulation clock.
-- `factor`: wall-clock seconds per simulation time unit; must be positive.
+- `factor`: wall-clock seconds per simulation time unit; validate it as finite and
+  strictly positive in model code (4.1.2 does not enforce this in its constructor).
   - `1.0`: one simulation unit takes one second;
   - `0.1`: one simulation unit takes 0.1 seconds;
   - `60.0`: one simulation unit takes one minute.
@@ -27,6 +28,11 @@ env = RealtimeEnvironment(
 
 `strict=False` suppresses deadline failure. It permits drift; it does not make an
 overloaded simulation accurately synchronized.
+
+If initialization takes a long time between construction and the first `run()`,
+call `env.sync()` immediately before that first run. It resets the real-time origin
+without changing simulation time. It is not a general checkpoint/resume mechanism:
+the mapping still uses the original `initial_time`.
 
 ## Minimal bounded example
 

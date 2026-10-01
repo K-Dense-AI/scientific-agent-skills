@@ -48,12 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional local Parquet token corpus to fingerprint (not parsed).",
     )
     parser.add_argument("--geniml-version", default="0.8.4")
-    parser.add_argument("--gtars-version", default="0.9.2")
+    parser.add_argument("--gtars-version", default="0.10.0")
     parser.add_argument(
         "--special-token-count",
         type=int_type(minimum=0, maximum=100, label="special-token-count"),
         default=7,
-        help="Expected Gtars special tokens (0.9.2 default: 7).",
+        help="Expected Gtars special tokens (0.10.0 default: 7).",
     )
     parser.add_argument(
         "--max-bytes",
@@ -198,16 +198,16 @@ def inspect(args: argparse.Namespace) -> tuple[dict, int]:
     if embedding_dim is None and old_embedding_dim is not None:
         embedding_dim = old_embedding_dim
         warnings["deprecated_config_key:embedding_size"] += 1
-    if not isinstance(vocab_size, int) or vocab_size <= 0:
+    if type(vocab_size) is not int or vocab_size <= 0:
         errors["config:invalid_vocab_size"] += 1
-    if not isinstance(embedding_dim, int) or embedding_dim <= 0:
+    if type(embedding_dim) is not int or embedding_dim <= 0:
         errors["config:invalid_embedding_dim"] += 1
     pooling = config.get("pooling_method")
     if pooling is not None and pooling not in {"mean", "max"}:
         errors["config:invalid_pooling_method"] += 1
 
     expected_vocab_size = universe_rows + args.special_token_count
-    vocab_match = isinstance(vocab_size, int) and vocab_size == expected_vocab_size
+    vocab_match = type(vocab_size) is int and vocab_size == expected_vocab_size
     if not vocab_match:
         errors["model_tokenizer_vocab_size_mismatch"] += 1
     checks.append(

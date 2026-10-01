@@ -8,6 +8,8 @@ covers two workflows:
 - neural inductive logic programming with NeuralLP.
 
 Both use `tasks.KnowledgeGraphCompletion`.
+Full benchmark runs are illustrative; a tiny local graph can verify batching
+and loss/ranking semantics without downloading these datasets.
 
 ## Datasets
 
@@ -99,7 +101,8 @@ task = tasks.KnowledgeGraphCompletion(
 ```
 
 `fact_ratio=0.75` reserves 75% of training facts for the background graph used
-for reasoning.
+for reasoning and uses the remaining training triples as supervised labels.
+`Engine` adopts that reduced training subset returned by `preprocess()`.
 
 ```python
 optimizer = torch.optim.Adam(task.parameters(), lr=1e-3)
@@ -153,6 +156,7 @@ Important constructor options include:
 - `strict_negative`
 - `fact_ratio`
 - `sample_weight`
+- `filtered_ranking` (default `True`)
 - `full_batch_eval`
 
 TorchDrug 0.2.1 added full-batch evaluation support. Choose it according to graph
@@ -205,8 +209,10 @@ Build model sizes from `dataset.num_entity` and `dataset.num_relation`.
 
 ### Evaluation out of memory
 
-Lower batch size or disable full-batch evaluation. Reducing negative samples
-mainly affects training, not the size of all-entity ranking.
+Lower batch size or disable full-batch evaluation. With `full_batch_eval=False`,
+`num_negative` also sets the chunk size for scoring candidate entities during
+evaluation. All entities are still ranked, and score/mask tensors scale with
+batch size times the entity count; chunking does not make this sampled evaluation.
 
 ### NeuralLP produces invalid shapes
 

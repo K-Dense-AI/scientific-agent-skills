@@ -166,7 +166,8 @@ class PortableAuditTests(unittest.TestCase):
     def test_simulation_report_audit_passes_without_qutip(self) -> None:
         document = {
             "report_type": "qutip.two_level_simulation",
-            "qutip_version": "5.3.0",
+            "schema_version": 1,
+            "qutip_version": "5.3.1",
             "configuration": {"solver": "mesolve"},
             "model": {"assumptions": ["a", "b", "c"]},
             "times": [0.0, 1.0, 2.0],
@@ -190,7 +191,8 @@ class PortableAuditTests(unittest.TestCase):
     def test_audit_rejects_out_of_range_population(self) -> None:
         document = {
             "report_type": "qutip.two_level_simulation",
-            "qutip_version": "5.3.0",
+            "schema_version": 1,
+            "qutip_version": "5.3.1",
             "configuration": {"solver": "mesolve"},
             "model": {"assumptions": ["a", "b", "c"]},
             "times": [0.0, 1.0],

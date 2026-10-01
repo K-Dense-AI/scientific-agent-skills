@@ -8,12 +8,12 @@ the prediction tracks behind a number. Positions are 1-based, intervals are
 1-based closed, and rsIDs are not accepted by the site.
 
 Examples:
-  python atlas_link.py variant chr9:128225994:G>A
-  python atlas_link.py variant chr9:128225994:G>A --biosample K562 --modalities RNA_SEQ,DNASE,CHIP_TF --tf GATA1
+  python atlas_link.py variant "chr9:128225994:G>A"
+  python atlas_link.py variant "chr9:128225994:G>A" --biosample K562 --modalities RNA_SEQ,DNASE,CHIP_TF --tf GATA1
   python atlas_link.py locus chr11:5225727-5226575 --modalities RNA_SEQ,DNASE
   python atlas_link.py gene HBB
   python atlas_link.py motifs chr11:5225727-5226575
-  python atlas_link.py variant chr9:128225994:G>A --markdown
+  python atlas_link.py variant "chr9:128225994:G>A" --markdown
 """
 
 from __future__ import annotations

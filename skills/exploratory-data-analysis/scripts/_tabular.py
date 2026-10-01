@@ -355,9 +355,9 @@ def profile_table(
             "\0".join(row).encode("utf-8", errors="surrogatepass"),
             digest_size=16,
         ).digest()
-        if len(row_hashes) < MAX_TRACKED_LEAKAGE_KEYS:
-            if fingerprint in row_hashes:
-                duplicate_rows += 1
+        if fingerprint in row_hashes:
+            duplicate_rows += 1
+        elif len(row_hashes) < MAX_TRACKED_LEAKAGE_KEYS:
             row_hashes.add(fingerprint)
         else:
             duplicate_tracking_truncated = True
@@ -751,12 +751,12 @@ def audit_missingness_and_leakage(
             return
         if entity_index is not None and not is_missing(row[entity_index], missing):
             entity_token = stable_token(row[entity_index], kind="entity")
-            if len(entity_splits) < MAX_TRACKED_LEAKAGE_KEYS:
+            if entity_token in entity_splits or len(entity_splits) < MAX_TRACKED_LEAKAGE_KEYS:
                 entity_splits.setdefault(entity_token, set()).add(split_token)
             elif entity_token not in entity_splits:
                 tracking_truncated = True
         if group_token is not None:
-            if len(group_splits) < MAX_TRACKED_LEAKAGE_KEYS:
+            if group_token in group_splits or len(group_splits) < MAX_TRACKED_LEAKAGE_KEYS:
                 group_splits.setdefault(group_token, set()).add(split_token)
             elif group_token not in group_splits:
                 tracking_truncated = True
@@ -770,7 +770,7 @@ def audit_missingness_and_leakage(
             ),
             digest_size=16,
         ).digest()
-        if len(row_splits) < MAX_TRACKED_LEAKAGE_KEYS:
+        if fingerprint in row_splits or len(row_splits) < MAX_TRACKED_LEAKAGE_KEYS:
             row_splits.setdefault(fingerprint, set()).add(split_token)
         elif fingerprint not in row_splits:
             tracking_truncated = True

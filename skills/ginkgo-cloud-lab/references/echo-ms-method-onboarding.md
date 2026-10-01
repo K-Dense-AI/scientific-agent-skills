@@ -1,6 +1,8 @@
 # Echo-MS Method Onboarding
 
 **URL:** https://cloud.ginkgo.bio/protocols/echo-ms-method-onboarding
+**Service terms:** https://cloud.ginkgo.bio/terms/echo-ms-onboarding
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $799/molecule
 **Turnaround:** up to 3 weeks
@@ -10,6 +12,10 @@
 Echo-MS is an open-access, high-throughput mass spectrometry platform that eliminates the chromatography step. An acoustic liquid handler (Labcyte/Beckman Echo) ejects nanoliter droplets directly from a source plate into an open-port sampling interface connected to a mass spectrometer. Without a column to equilibrate, cycle times drop to 1-5 seconds per sample, enabling analysis of a full 384-well plate in ~2 hours (with replicates). Best suited for relative quantitation, screening, and titer assays where throughput matters more than chromatographic resolution.
 
 This protocol onboards your analyte for future experiments: MS conditions (spray voltage, curtain gas, ion source settings) and ejection parameters (volume, interval, carrier solvent) are optimized, and a simple sample-prep protocol is established. Onboard a method here before running [echo-ms-cfps-detection.md](echo-ms-cfps-detection.md).
+
+The terms scope this to relative quantitation in the CFPS matrix, not absolute
+quantitation or analytes requiring chromatographic separation. A calibration curve
+does not establish selectivity for unresolved interferents or a different matrix.
 
 ## Input
 

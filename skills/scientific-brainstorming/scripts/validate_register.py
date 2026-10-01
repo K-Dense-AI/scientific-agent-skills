@@ -127,6 +127,20 @@ def _check_id(
         return None
 
 
+def _check_choice(
+    value: Any,
+    choices: set[str],
+    path: str,
+    errors: list[dict[str, str]],
+) -> str | None:
+    """Report malformed enums, including JSON arrays/objects, without crashing."""
+
+    if not isinstance(value, str) or value not in choices:
+        errors.append(_issue(path, f"must be one of {sorted(choices)}"))
+        return None
+    return value
+
+
 def _check_string_list(
     values: list[Any],
     path: str,
@@ -245,22 +259,10 @@ def validate_register(document: Any) -> dict[str, Any]:
                 errors.append(_issue(f"{path}.id", "duplicate assumption ID"))
             assumption_ids.add(assumption_id)
         _check_text(assumption.get("statement"), f"{path}.statement", errors)
-        category = assumption.get("category")
-        if category not in ASSUMPTION_CATEGORIES:
-            errors.append(
-                _issue(
-                    f"{path}.category",
-                    f"must be one of {sorted(ASSUMPTION_CATEGORIES)}",
-                )
-            )
-        status = assumption.get("status")
-        if status not in ASSUMPTION_STATUSES:
-            errors.append(
-                _issue(
-                    f"{path}.status",
-                    f"must be one of {sorted(ASSUMPTION_STATUSES)}",
-                )
-            )
+        _check_choice(assumption.get("category"), ASSUMPTION_CATEGORIES,
+                      f"{path}.category", errors)
+        status = _check_choice(assumption.get("status"), ASSUMPTION_STATUSES,
+                               f"{path}.status", errors)
         _check_text(
             assumption.get("test_or_check"),
             f"{path}.test_or_check",
@@ -326,24 +328,12 @@ def validate_register(document: Any) -> dict[str, Any]:
         if not isinstance(provenance, dict):
             errors.append(_issue(f"{path}.provenance", "must be an object"))
             provenance = {}
-        origin = provenance.get("origin")
-        if origin not in ORIGINS:
-            errors.append(
-                _issue(
-                    f"{path}.provenance.origin",
-                    f"must be one of {sorted(ORIGINS)}",
-                )
-            )
+        origin = _check_choice(provenance.get("origin"), ORIGINS,
+                               f"{path}.provenance.origin", errors)
         if origin in {"ai-assisted", "mixed"}:
             ai_assisted_count += 1
-        stage = provenance.get("recorded_stage")
-        if stage not in RECORDED_STAGES:
-            errors.append(
-                _issue(
-                    f"{path}.provenance.recorded_stage",
-                    f"must be one of {sorted(RECORDED_STAGES)}",
-                )
-            )
+        _check_choice(provenance.get("recorded_stage"), RECORDED_STAGES,
+                      f"{path}.provenance.recorded_stage", errors)
         contributors_raw = _list_field(
             provenance,
             "contributor_ids",
@@ -455,22 +445,9 @@ def validate_register(document: Any) -> dict[str, Any]:
                     "idea has no recorded uncertainty",
                 )
             )
-        evidence_status = idea.get("evidence_status")
-        if evidence_status not in EVIDENCE_STATUSES:
-            errors.append(
-                _issue(
-                    f"{path}.evidence_status",
-                    f"must be one of {sorted(EVIDENCE_STATUSES)}",
-                )
-            )
-        status = idea.get("status")
-        if status not in IDEA_STATUSES:
-            errors.append(
-                _issue(
-                    f"{path}.status",
-                    f"must be one of {sorted(IDEA_STATUSES)}",
-                )
-            )
+        _check_choice(idea.get("evidence_status"), EVIDENCE_STATUSES,
+                      f"{path}.evidence_status", errors)
+        _check_choice(idea.get("status"), IDEA_STATUSES, f"{path}.status", errors)
 
     for normalized, duplicate_ids in sorted(statements.items()):
         if normalized and len(duplicate_ids) > 1:
@@ -591,6 +568,11 @@ def validate_register(document: Any) -> dict[str, Any]:
             "warnings": len(warnings),
         },
         "limitations": [
+            (
+                "Checks cover session identity, ideas, assumptions, clusters, "
+                "and decision references. Literature-check, adversarial-review, "
+                "gate, workflow, and governance records are not schema-validated."
+            ),
             (
                 "Validation is structural and deterministic; it does not verify "
                 "claims, citations, novelty, feasibility, or scientific validity."

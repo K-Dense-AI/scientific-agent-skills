@@ -1,6 +1,10 @@
 # Polars Data I/O Guide
 
-Comprehensive guide to reading and writing data in various formats with Polars.
+Polars 1.44.2 I/O patterns. Local CSV, Parquet, JSON, IPC, Excel, SQLite, and
+Arrow/pandas/NumPy conversions are covered by bounded native tests. Cloud providers,
+BigQuery, ConnectorX/ADBC, and remote databases below are illustrative, documentation-
+verified integrations, not authenticated end-to-end checks. See [review.md](review.md).
+Fragments require the named files and schemas. All writes use user-chosen outputs.
 
 ## CSV Files
 
@@ -19,8 +23,8 @@ df = pl.read_csv(
     separator=",",
     has_header=True,
     columns=["col1", "col2"],  # Select specific columns
-    n_rows=1000,  # Read only first 1000 rows
-    skip_rows=10,  # Skip first 10 rows
+    n_rows=1000,  # Parser limit; multithreading may exceed it; head(1000) caps output
+    skip_rows=10,  # Skip records before parsing the header; respects CSV quoting
     schema_overrides={"col1": pl.Int64, "col2": pl.String},  # Specify types
     null_values=["NA", "null", ""],  # Define null values
     encoding="utf-8",
@@ -28,7 +32,7 @@ df = pl.read_csv(
 )
 ```
 
-**Lazy mode (scans without loading - recommended for large files):**
+**Lazy mode (builds a plan; metadata/inference can read the source):**
 ```python
 # Scan CSV (builds query plan)
 lf = pl.scan_csv("data.csv")
@@ -106,7 +110,7 @@ df.write_parquet(
     "output.parquet",
     compression="snappy",  # Options: "snappy", "gzip", "brotli", "lz4", "zstd"
     statistics=True,  # Write statistics (enables predicate pushdown)
-    use_pyarrow=False  # Use Rust writer (faster)
+    use_pyarrow=False  # Use native writer; benchmark for the workload
 )
 ```
 
@@ -119,14 +123,14 @@ df.write_parquet(
     "output_dir",
     partition_by=["year", "month"]  # Creates directory structure
 )
-# Creates: output_dir/year=2023/month=01/data.parquet
+# Creates year=.../month=... partitions; filenames and zero-padding are not fixed
 ```
 
 **Read partitioned:**
 ```python
-lf = pl.scan_parquet("output_dir/**/*.parquet")
+lf = pl.scan_parquet("output_dir/**/*.parquet", hive_partitioning=True)
 
-# Hive partitioning columns are automatically added
+# Explicitly parse Hive keys when scanning a glob; validate their inferred types
 result = lf.filter(pl.col("year") == 2023).collect()
 ```
 
@@ -147,7 +151,8 @@ lf = pl.scan_ndjson("data.ndjson")
 df = pl.read_json("data.json")
 
 # From JSON string
-df = pl.read_json('{"col1": [1, 2], "col2": ["a", "b"]}')
+from io import StringIO
+df = pl.read_json(StringIO('[{"col1": 1, "col2": "a"}, {"col1": 2, "col2": "b"}]'))
 ```
 
 ### Writing JSON
@@ -159,8 +164,11 @@ df.write_ndjson("output.ndjson")
 # Write standard JSON
 df.write_json("output.json")
 
-# Pretty printed
-df.write_json("output.json", pretty=True, row_oriented=False)
+# write_json emits row-oriented JSON; pretty/row_oriented are not current arguments.
+# To serialize a column dictionary explicitly:
+import json
+from pathlib import Path
+Path("columns.json").write_text(json.dumps(df.to_dict(as_series=False)), encoding="utf-8")
 ```
 
 ## Excel Files
@@ -173,16 +181,17 @@ df = pl.read_excel("data.xlsx")
 
 # Specific sheet
 df = pl.read_excel("data.xlsx", sheet_name="Sheet1")
-# Or by index
-df = pl.read_excel("data.xlsx", sheet_id=0)
+# Sheet IDs are 1-based; 0 returns a dictionary containing every sheet.
+df = pl.read_excel("data.xlsx", sheet_id=1)
+sheets = pl.read_excel("data.xlsx", sheet_id=0)
 
 # With options
 df = pl.read_excel(
     "data.xlsx",
     sheet_name="Sheet1",
-    columns=["A", "B", "C"],  # Excel columns
-    n_rows=100,
-    skip_rows=5,
+    columns=["sample_id", "value"],  # Header names or zero-based positions
+    engine="calamine",
+    read_options={"n_rows": 100, "skip_rows": 5},  # fastexcel options, after header
     has_header=True
 )
 ```
@@ -193,10 +202,11 @@ df = pl.read_excel(
 # Write to Excel
 df.write_excel("output.xlsx")
 
-# Multiple sheets
-with pl.ExcelWriter("output.xlsx") as writer:
-    df1.write_excel(writer, worksheet="Sheet1")
-    df2.write_excel(writer, worksheet="Sheet2")
+# Multiple sheets: reading uses fastexcel by default, writing uses xlsxwriter.
+import xlsxwriter
+with xlsxwriter.Workbook("output.xlsx") as writer:
+    df1.write_excel(workbook=writer, worksheet="Sheet1")
+    df2.write_excel(workbook=writer, worksheet="Sheet2")
 ```
 
 ## Database Connectivity
@@ -206,13 +216,21 @@ with pl.ExcelWriter("output.xlsx") as writer:
 ```python
 import polars as pl
 
-# Read entire table
-df = pl.read_database("SELECT * FROM users", connection_uri="postgresql://...")
+# A connection/cursor, not a URI keyword. Bind values through the driver.
+import sqlite3
+with sqlite3.connect("study.sqlite") as connection:
+    df = pl.read_database(
+        "SELECT * FROM observations WHERE value > ?",
+        connection=connection,
+        execute_options={"parameters": [25]},
+    )
 
-# Using connectorx for better performance
+# URI route: requires connectorx (default) or ADBC plus a suitable driver.
+import os
 df = pl.read_database_uri(
-    "SELECT * FROM users WHERE age > 25",
-    uri="postgresql://user:pass@localhost/db"
+    "SELECT * FROM observations WHERE value > 25",
+    uri=os.environ["STUDY_DATABASE_URI"],
+    engine="connectorx",
 )
 ```
 
@@ -222,14 +240,13 @@ df = pl.read_database_uri(
 # Using SQLAlchemy
 from sqlalchemy import create_engine
 
-engine = create_engine("postgresql://user:pass@localhost/db")
-df.write_database("table_name", connection=engine)
+engine = create_engine("sqlite:///study.sqlite")
 
-# With options
+# Choose the table-existence policy explicitly.
 df.write_database(
     "table_name",
     connection=engine,
-    if_exists="replace",  # or "append", "fail"
+    if_table_exists="fail",  # Explicitly choose "append" or "replace" only if intended
 )
 ```
 
@@ -237,13 +254,13 @@ df.write_database(
 
 **PostgreSQL:**
 ```python
-uri = "postgresql://username:password@localhost:5432/database"
+uri = os.environ["STUDY_POSTGRES_URI"]  # postgresql:// URI supplied by deployment
 df = pl.read_database_uri("SELECT * FROM table", uri=uri)
 ```
 
 **MySQL:**
 ```python
-uri = "mysql://username:password@localhost:3306/database"
+uri = os.environ["STUDY_MYSQL_URI"]  # mysql:// URI supplied by deployment
 df = pl.read_database_uri("SELECT * FROM table", uri=uri)
 ```
 
@@ -253,7 +270,21 @@ uri = "sqlite:///path/to/database.db"
 df = pl.read_database_uri("SELECT * FROM table", uri=uri)
 ```
 
+For large database results, `read_database(..., iter_batches=True, batch_size=...)`
+returns an iterator, but server-side cursors/batching depend on the driver; it is
+not a guarantee against a buffered full query. SQLAlchemy writes currently route
+through pandas and need pandas/PyArrow plus the database driver. Escape URI
+credentials correctly and use parameterized queries instead of string interpolation.
+
 ## Cloud Storage
+
+Native cloud Parquet/scan APIs use the provider URI scheme and credential chain;
+`fsspec` is not a universal requirement for them. Install `boto3` for the AWS
+provider, `azure-identity` for Azure, or `google-auth` for GCP when using those
+credential helpers. Provider APIs are marked unstable. Read/write permissions,
+account/region, object paths, and storage options are deployment-specific. Polars
+handles object listing and transport internally; this skill defines no REST
+endpoint, request body, or pagination protocol.
 
 ### AWS S3
 
@@ -310,19 +341,16 @@ df = pl.read_parquet("gs://bucket/path/file.parquet")
 
 ## Google BigQuery
 
-```python
-# Read from BigQuery
-df = pl.read_database(
-    "SELECT * FROM project.dataset.table",
-    connection_uri="bigquery://project"
-)
+Illustrative; install `google-cloud-bigquery`, `pyarrow`, and the applicable
+Google authentication dependencies. Queries can incur provider charges.
 
-# Or using Google Cloud SDK
+```python
+# Use the BigQuery SDK and Arrow interoperability
 from google.cloud import bigquery
 client = bigquery.Client()
 
-query = "SELECT * FROM project.dataset.table WHERE date > '2023-01-01'"
-df = pl.from_pandas(client.query(query).to_dataframe())
+query = "SELECT * FROM `project.dataset.table` LIMIT 100"
+df = pl.from_arrow(client.query(query).result().to_arrow())
 ```
 
 ## Apache Arrow
@@ -346,11 +374,9 @@ df.write_ipc("output.arrow", compression="zstd")
 ### Arrow Streaming
 
 ```python
-# Write streaming format
-df.write_ipc("output.arrows", compression="zstd")
-
-# Read streaming
-df = pl.read_ipc("output.arrows")
+# IPC stream format is distinct from the seekable IPC file format.
+df.write_ipc_stream("output.arrows", compression="zstd")
+df = pl.read_ipc_stream("output.arrows")
 ```
 
 ### From/To Arrow
@@ -389,7 +415,7 @@ import numpy as np
 
 # From NumPy
 arr = np.array([[1, 2], [3, 4], [5, 6]])
-df = pl.DataFrame(arr, schema=["col1", "col2"])
+df = pl.DataFrame(arr, schema=["col1", "col2"], orient="row")
 
 # To NumPy
 arr = df.to_numpy()
@@ -407,8 +433,8 @@ pl_df = pl.from_pandas(pd_df)
 # To Pandas
 pd_df = pl_df.to_pandas()
 
-# Zero-copy when possible
-pl_df = pl.from_arrow(pd_df)
+# Arrow-backed pandas output preserves nullable integer types.
+pd_df = pl_df.to_pandas(use_pyarrow_extension_array=True)
 ```
 
 ### Lists of Rows
@@ -426,12 +452,14 @@ rows = df.to_dicts()
 
 # From list of tuples
 data = [("Alice", 25), ("Bob", 30)]
-df = pl.DataFrame(data, schema=["name", "age"])
+df = pl.DataFrame(data, schema=["name", "age"], orient="row")
 ```
 
 ## Streaming Large Files
 
-For datasets larger than memory, use lazy mode with streaming:
+Streaming reduces intermediate memory. `collect` still materializes its full
+output in RAM; use a `sink_*` terminal directly on the LazyFrame for large output.
+Some operators maintain large state or fall back to in-memory execution:
 
 ```python
 # Streaming mode
@@ -448,7 +476,7 @@ result = lf.group_by("category").agg(pl.col("value").sum()).collect(engine="stre
 ### Format Selection
 
 **Use Parquet when:**
-- Need compression (up to 10x smaller than CSV)
+- Need compression (ratio depends on data and codec)
 - Want fast reads/writes
 - Need to preserve data types
 - Working with large datasets
@@ -479,8 +507,8 @@ lf = pl.scan_csv("large.csv")  # NOT read_csv
 # 2. Filter and select early (pushdown optimization)
 result = (
     lf
-    .select("col1", "col2", "col3")  # Only needed columns
-    .filter(pl.col("date") > "2023-01-01")  # Filter early
+    .filter(pl.col("date") > pl.date(2023, 1, 1))  # Assumes a Date column
+    .select("col1", "col2", "col3")  # Keep filter dependencies until used
     .collect()
 )
 
@@ -511,15 +539,15 @@ lf.sink_parquet("output.parquet")  # Streaming write
 # 1. Specify dtypes when reading CSV
 df = pl.read_csv(
     "data.csv",
-    schema_overrides={"id": pl.Int64, "name": pl.String}  # Avoids inference
+    schema_overrides={"id": pl.String, "name": pl.String}  # Other columns still infer
 )
 
 # 2. Use appropriate compression
 df.write_parquet("output.parquet", compression="snappy")  # Fast
 df.write_parquet("output.parquet", compression="zstd")    # Better compression
 
-# 3. Parallel reading
-df = pl.read_csv("data.csv", parallel="auto")
+# 3. CSV uses its thread pool by default; n_threads is an optional upper limit.
+df = pl.read_csv("data.csv", n_threads=2)
 
 # 4. Read multiple files in parallel
 lf = pl.scan_parquet("data/*.parquet")  # Automatic parallel read
@@ -533,8 +561,11 @@ try:
 except pl.exceptions.ComputeError as e:
     print(f"Error reading CSV: {e}")
 
-# Ignore errors during parsing
-df = pl.read_csv("messy.csv", ignore_errors=True)
+# For diagnosis, retain raw strings and inspect failed casts before deciding a policy.
+raw = pl.read_csv("messy.csv", infer_schema=False)
+parsed = raw.with_columns(value=pl.col("value").cast(pl.Float64, strict=False))
+failed = raw.filter(raw["value"].is_not_null() & parsed["value"].is_null())
+# Do not silently ignore parser failures or truncate ragged scientific records.
 
 # Handle missing files
 from pathlib import Path
@@ -545,6 +576,13 @@ else:
 ```
 
 ## Schema Management
+
+A sampled schema does not prove later rows conform. A full CSV `schema` must
+match file column order; `schema_overrides` only overrides selected inferred types.
+Keep IDs with leading zeros as String. Reject duplicate raw CSV headers before
+parsing because readers can rename them. Count parse failures, nulls, NaNs, and
+nonfinite floats; validate units, time zones, and sample-key uniqueness separately.
+For lazy inputs, use `lf.collect_schema()` (may read source metadata).
 
 ```python
 # Infer schema from sample
@@ -562,3 +600,23 @@ schema = {
 }
 df = pl.read_csv("data.csv", schema=schema)
 ```
+
+## Local SQL expressions
+
+`SQLContext` queries registered frames using Polars' local SQL dialect. This does
+not contact a database and is separate from `read_database`.
+
+```python
+observations = pl.DataFrame({"sample_id": ["A", "A", "B"], "value": [1., 3., 10.]})
+with pl.SQLContext(observations=observations.lazy(), eager=False) as ctx:
+    query = ctx.execute(
+        "SELECT sample_id, AVG(value) AS mean_value "
+        "FROM observations GROUP BY sample_id"
+    )
+result = query.collect().sort("sample_id")
+```
+
+The default result is a LazyFrame; `eager=True` collects it. Register inputs
+explicitly rather than relying on discovery of globals. Polars SQL is not an exact
+replacement for a provider's SQL dialect. Validate null, order, and aggregate
+semantics against the expression equivalent when migrating a query.

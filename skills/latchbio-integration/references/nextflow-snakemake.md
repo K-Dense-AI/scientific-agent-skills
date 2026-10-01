@@ -16,7 +16,7 @@ before generating files.
 Install:
 
 ```bash
-uv pip install "latch==2.76.8"
+uv pip install "latch==2.77.1"
 ```
 
 ### Generate metadata
@@ -67,7 +67,7 @@ Important:
 
 ### Generate an entrypoint explicitly
 
-SDK 2.76.8 also exposes:
+SDK 2.77.1 also exposes:
 
 ```bash
 latch nextflow generate-entrypoint . \
@@ -125,9 +125,9 @@ reduce process resources.
 The current docs and current stable package expose different Snakemake tracks.
 Do not mix them.
 
-### Track A: legacy flags in 2.76.8 source (documentation conflict)
+### Track A: legacy flags in 2.77.1 source (documentation conflict)
 
-The `2.76.8` wheel still exposes the `snakemake` extra, legacy metadata classes,
+The `2.77.1` wheel still exposes the `snakemake` extra, legacy metadata classes,
 `generate-metadata --snakemake`, and `register --snakefile`. However, the
 official CLI guide marks the Snakemake metadata and registration flags
 deprecated and says metadata generation no longer works for
@@ -144,7 +144,7 @@ dependency:
 ```bash
 uv venv --python 3.11
 source .venv/bin/activate
-uv pip install "latch[snakemake]==2.76.8"
+uv pip install "latch[snakemake]==2.77.1"
 ```
 
 Generate metadata from the workflow config:
@@ -198,7 +198,7 @@ latch register -y .
 ```
 
 Those v2 metadata modules and the `latch snakemake` command group are not
-present in the stable 2.76.8 source tree. The tutorial's generated Dockerfile
+present in the stable 2.77.1 source tree. The tutorial's generated Dockerfile
 also pins the workflow runtime separately to
 `latch[snakemake]==2.55.0.a6`.
 
@@ -207,7 +207,7 @@ Therefore:
 - Re-check the official tutorial's exact pin before starting.
 - Use an isolated environment.
 - Preserve and review both the local CLI pin and generated runtime pin.
-- Do not upgrade that environment to stable 2.76.8 without a migration plan.
+- Do not upgrade that environment to stable 2.77.1 without a migration plan.
 - Do not copy v2 imports into a stable-track project.
 - Treat the alpha pin as pre-release software and validate end to end.
 
@@ -254,5 +254,5 @@ Before editing a generated file:
 - Nextflow shared storage: https://wiki.latch.bio/workflows/sdk/nextflow/shared-storage
 - Snakemake v2 tutorial: https://wiki.latch.bio/workflows/sdk/snakemake-v2/tutorial
 - Snakemake v2 overview: https://wiki.latch.bio/workflows/sdk/snakemake-v2/overview
-- CLI source in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch_cli/main.py
-- Changelog in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/CHANGELOG.md
+- CLI source in the 2.77.1 release commit: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/src/latch_cli/main.py
+- Changelog in the 2.77.1 release commit: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/CHANGELOG.md

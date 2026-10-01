@@ -20,19 +20,20 @@ from _common import (
     load_chrom_sizes,
     local_path,
     print_json,
+    prefix_collision_count,
     sha256_file,
 )
 
 
 TOOL = "gtars-execution-plan"
-GTARS_CLI_VERSION = "0.9.0"
-GTARS_PYTHON_VERSION = "0.9.2"
+GTARS_CLI_VERSION = "0.10.0"
+GTARS_PYTHON_VERSION = "0.10.0"
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate local inputs and emit a fixed Gtars 0.9 execution plan. "
+            "Validate local inputs and emit a fixed Gtars 0.10 execution plan. "
             "The helper never imports gtars or runs a subprocess."
         )
     )
@@ -61,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--coverage-streaming",
         action="store_true",
-        help="Plan O(smooth-size) BED streaming; only wig/bedgraph are supported.",
+        help="Plan BED streaming; only wig/bedgraph output is supported.",
     )
     parser.add_argument(
         "--smooth-size",
@@ -166,6 +167,12 @@ def build_plan(args: argparse.Namespace) -> tuple[dict, int]:
             errors[f"{role}:{code}"] = count
         if summary["records"] == 0:
             errors[f"{role}:no_data_records"] = 1
+        if args.operation == "overlap" and summary["skipped_records"]:
+            errors[f"{role}:cli_overlap_requires_header_free_bed"] = summary[
+                "skipped_records"
+            ]
+        if args.operation == "fragment-score" and role == "consensus" and summary["duplicate_intervals"]:
+            errors["consensus:duplicate_intervals"] = summary["duplicate_intervals"]
         if sorted_required and summary["out_of_order_records"]:
             errors[f"{role}:sorting_required"] = summary["out_of_order_records"]
         inputs.append(
@@ -225,6 +232,9 @@ def build_plan(args: argparse.Namespace) -> tuple[dict, int]:
         }
         if out.exists():
             errors["output_already_exists"] = 1
+        collisions = prefix_collision_count(out)
+        if collisions:
+            errors["output_prefix_collisions"] = collisions
         if args.coverage_streaming and args.coverage_format not in {"wig", "bedgraph"}:
             raise SafetyError(
                 "streaming coverage supports only wig or bedgraph, not bw/npy"
@@ -264,6 +274,8 @@ def build_plan(args: argparse.Namespace) -> tuple[dict, int]:
     elif operation == "consensus":
         if len(args.input) < 2:
             raise SafetyError("consensus requires at least two --input BED files")
+        if args.min_count > len(args.input):
+            raise SafetyError("--min-count cannot exceed the number of input sets")
         for index, raw in enumerate(args.input, start=1):
             add_bed(raw, f"consensus_{index}")
         out = _output(args.output)
@@ -291,6 +303,10 @@ def build_plan(args: argparse.Namespace) -> tuple[dict, int]:
             ),
         }
     else:
+        if not args.barcode and args.scoring_mode == "atac":
+            # gtars-scoring 0.5.2 in the CLI 0.10.0 lockfile constructs its
+            # right-cut query with end < start. Do not green-light those counts.
+            errors["upstream_atac_right_cut_interval_invalid"] = 1
         fragment = add_bed(_require(args.query, "--query"), "fragments")
         add_bed(_require(args.universe, "--universe"), "consensus")
         fragment_summary = next(item for item in inputs if item["role"] == "fragments")
@@ -312,6 +328,9 @@ def build_plan(args: argparse.Namespace) -> tuple[dict, int]:
             "<output-or-prefix>",
         ]
         if args.barcode:
+            collisions = prefix_collision_count(out)
+            if collisions:
+                errors["output_prefix_collisions"] = collisions
             argv.append("--barcode")
         else:
             argv.extend(["--mode", args.scoring_mode])

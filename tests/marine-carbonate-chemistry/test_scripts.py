@@ -84,9 +84,11 @@ def test_every_supported_independent_pair_recovers_same_system(tmp_path, pair):
 
 @pytest.mark.parametrize("scale,key", [("total", "pH_total"), ("seawater", "pH_sws"),
                                       ("free", "pH_free"), ("nbs", "pH_nbs")])
-def test_declared_ph_scales_yield_same_dic(tmp_path, scale, key):
-    reference = direct()
-    _, rows = run(tmp_path, [{**BASE, "par2": float(reference[key])}], par2_type="ph", ph_scale=scale)
+@pytest.mark.parametrize("pressure", [0, 1000])
+def test_declared_ph_scales_yield_same_dic(tmp_path, scale, key, pressure):
+    reference = direct(pressure=pressure)
+    _, rows = run(tmp_path, [{**BASE, "pressure": pressure, "par2": float(reference[key])}],
+                  par2_type="ph", ph_scale=scale)
     assert float(rows[0]["dic"]) == pytest.approx(2000, rel=1e-8)
     assert float(rows[0]["pH_total"]) == pytest.approx(float(reference["pH_total"]), abs=1e-8)
 
@@ -142,13 +144,85 @@ def test_nutrient_and_borate_settings_change_the_solution(tmp_path):
 
 def test_range_flags_cover_input_and_output_conditions(tmp_path):
     manifest, rows = run(tmp_path, [{**BASE, "salinity": 15, "temperature_out": 1, "pressure_out": 1000}])
-    assert rows[0]["qc_flags"] == "outside_k_carbonic_input_range;outside_k_carbonic_output_range"
+    assert rows[0]["qc_flags"].split(";") == [
+        "outside_k_carbonic_input_range", "outside_k_carbonic_output_range",
+        "gas_pressure_correction_disabled_output",
+    ]
     assert manifest["warnings"][0]["sample_id"] == "reference"
 
 
 def test_only_output_range_is_flagged(tmp_path):
     _, rows = run(tmp_path, [{**BASE, "temperature_out": 1, "pressure_out": 1000}])
-    assert rows[0]["qc_flags"] == "outside_k_carbonic_output_range"
+    assert rows[0]["qc_flags"].split(";") == [
+        "outside_k_carbonic_output_range", "gas_pressure_correction_disabled_output",
+    ]
+
+
+def test_gas_convention_flags_and_pressure_effect_are_distinct(tmp_path):
+    manifest, rows = run(tmp_path, [{**BASE, "pressure": 1000,
+                                    "temperature_out": 10, "pressure_out": 2000}])
+    assert rows[0]["qc_flags"].split(";") == [
+        "gas_pressure_correction_disabled_input", "gas_pressure_correction_disabled_output",
+    ]
+    assert manifest["settings"]["opt_pressured_kCO2"] == 0
+    assert "without hydrostatic" in manifest["gas_pressure_convention"]
+    corrected = direct(pressure=1000, temperature_out=10, pressure_out=2000,
+                       opt_pressured_kCO2=1)
+    for suffix in ("", "_out"):
+        # With fixed TA/DIC, the gas convention affects gases, not acid speciation.
+        for key in ("pH_total", "carbonate", "saturation_aragonite"):
+            assert float(rows[0][key + suffix]) == pytest.approx(float(corrected[key + suffix]))
+        for key in ("pCO2", "fCO2"):
+            assert float(rows[0][key + suffix]) != pytest.approx(float(corrected[key + suffix]), rel=0.01)
+
+
+def test_revelle_factor_matches_local_dic_sensitivity(tmp_path):
+    _, rows = run(tmp_path, [{**BASE, "total_phosphate": 2, "total_silicate": 15,
+                             "temperature_out": 10, "pressure_out": 1000}])
+    step = 0.01
+    conditions = dict(total_phosphate=2, total_silicate=15, temperature_out=10, pressure_out=1000)
+    plus = direct(par2=2000 + step, **conditions)
+    minus = direct(par2=2000 - step, **conditions)
+    for suffix in ("", "_out"):
+        derivative = float(plus["pCO2" + suffix] - minus["pCO2" + suffix]) / (2 * step)
+        revelle = derivative * 2000 / float(rows[0]["pCO2" + suffix])
+        assert float(rows[0]["revelle_factor" + suffix]) == pytest.approx(revelle, rel=1e-7)
+
+
+@pytest.mark.parametrize("parameter,uncertainty,step", [
+    ("salinity", 0.01, 0.001), ("temperature", 0.02, 0.001), ("pressure", 1, 0.01),
+    ("total_phosphate", 0.1, 0.001), ("total_silicate", 0.5, 0.001),
+    ("total_ammonia", 0.1, 0.001), ("total_sulfide", 0.1, 0.001),
+    ("temperature_out", 0.02, 0.001), ("pressure_out", 1, 0.01),
+])
+def test_hydrography_and_nutrient_uncertainty_routes(tmp_path, parameter, uncertainty, step):
+    row = {**BASE, "total_phosphate": 2, "total_silicate": 15, "total_ammonia": 2,
+           "total_sulfide": 1, "pressure": 10, "temperature_out": 10, "pressure_out": 1000}
+    _, results = run(tmp_path, [{**row, "u_" + parameter: uncertainty}])
+    kwargs = {key: value for key, value in row.items() if key != "sample_id"}
+    plus = direct(**{**kwargs, parameter: row[parameter] + step})
+    minus = direct(**{**kwargs, parameter: row[parameter] - step})
+    for suffix in ("", "_out"):
+        derivative = float(plus["pH_total" + suffix] - minus["pH_total" + suffix]) / (2 * step)
+        assert float(results[0]["u_pH_total" + suffix]) == pytest.approx(
+            abs(derivative) * uncertainty, rel=0.003, abs=1e-9)
+
+
+def test_documented_shared_constant_and_covariance_extensions():
+    conditions = dict(temperature_out=10, pressure_out=1000)
+    shared = direct(**conditions, uncertainty_into=["pH_total", "pH_total_out"],
+                    uncertainty_from={"pk_carbonic_1_both": 0.0075, "total_borate__f": 0.02})
+    for suffix in ("", "_out"):
+        assert shared["u_pH_total" + suffix] > 0
+        assert shared["u_pH_total" + suffix + "__pk_carbonic_1_both"] > 0
+    gradients = direct(grads_of=["pH_total"], grads_wrt=["par1", "par2"])
+    jacobian = np.array([gradients["d_pH_total__d_par1"], gradients["d_pH_total__d_par2"]])
+    independent = direct(uncertainty_into=["pH_total"], uncertainty_from={"par1": 2, "par2": 2})
+    assert jacobian @ np.diag([4, 4]) @ jacobian.T == pytest.approx(independent["u_pH_total"] ** 2)
+    # Positively correlated TA/DIC errors partially cancel in pH because slopes oppose.
+    covariance = np.array([[4, 2], [2, 4]])
+    assert np.all(np.linalg.eigvalsh(covariance) > 0)
+    assert 0 < jacobian @ covariance @ jacobian.T < independent["u_pH_total"] ** 2
 
 
 @pytest.mark.parametrize("change,match", [
@@ -249,7 +323,7 @@ def test_documented_csv_and_cli(tmp_path):
         capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr
-    assert "Solved 2 samples; 0 with range flags" in result.stdout
+    assert "Solved 2 samples; 2 with QC flags" in result.stdout
     with (tmp_path / "cli-results/carbonate.csv").open() as handle:
         rows = list(csv.DictReader(handle))
     assert float(rows[0]["pH_total_out"]) == pytest.approx(8.241241, abs=5e-7)

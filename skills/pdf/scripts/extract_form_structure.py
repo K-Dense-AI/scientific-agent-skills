@@ -2,7 +2,7 @@
 Extract form structure from a non-fillable PDF.
 
 This script analyzes the PDF to find:
-- Text labels with their exact coordinates
+- Extracted words with rounded point coordinates
 - Horizontal lines (row boundaries)
 - Checkboxes (small rectangles)
 
@@ -46,7 +46,8 @@ def extract_form_structure(pdf_path):
                 })
 
             for line in page.lines:
-                if abs(float(line["x1"]) - float(line["x0"])) > page.width * 0.5:
+                if (abs(float(line["x1"]) - float(line["x0"])) > page.width * 0.5
+                        and abs(float(line["y1"]) - float(line["y0"])) <= 0.5):
                     structure["lines"].append({
                         "page": page_num,
                         "y": round(float(line["top"]), 1),

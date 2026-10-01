@@ -62,7 +62,8 @@ def build_export_plan(
         manual_actions.extend(
             [
                 "In PowerPoint, export a PDF using Standard/high print quality rather than Minimum size.",
-                "Verify the exported PDF page/artboard dimensions, font rendering, tags, links, and image quality independently.",
+                "Record the exporter and settings. On macOS, 'Best for electronic distribution and accessibility' uses Microsoft's online conversion service; use a local route when document transmission is not authorized, then inspect tag/link limitations.",
+                "Measure the exported PDF page size against the canvas; the physical artboard is a separate output target. Verify font rendering, tags, links, and image quality independently.",
             ]
         )
     elif delivery == "OTHER":
@@ -82,7 +83,7 @@ def build_export_plan(
         )
     if abs(print_scale - 1.0) > 1e-6:
         manual_actions.append(
-            f"Scale uniformly to {print_scale * 100.0:.4f}% at output; do not use nonuniform fit-to-page scaling."
+            f"Scale uniformly to {print_scale * 100.0:.4f}% at output; do not use nonuniform fit-to-page scaling. If delivery requires a full-size PDF, arrange an approved PDF scaling step and recheck page size, tags, fonts, and effective DPI. This plan does not resize or export a PDF."
         )
     else:
         manual_actions.append("Output at 100% with no fit-to-page rescaling.")
@@ -158,6 +159,14 @@ def build_export_plan(
                 "embeddability, or correct rendering. PowerPoint and PDF review "
                 "remain required."
             ),
+        },
+        "pdf_preflight": {
+            "exported_by_tool": False,
+            "canvas_width_pt": float(canvas["width_in"]) * 72.0,
+            "canvas_height_pt": float(canvas["height_in"]) * 72.0,
+            "final_artboard_width_pt": float(physical["artboard_width_in"]) * 72.0,
+            "final_artboard_height_pt": float(physical["artboard_height_in"]) * 72.0,
+            "full_size_pdf_requires_scaling": abs(print_scale - 1.0) > 1e-6,
         },
         "media_profile": {
             "accepted_manifest_assets": ["PNG", "JPEG"],

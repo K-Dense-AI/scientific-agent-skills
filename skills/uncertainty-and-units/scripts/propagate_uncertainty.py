@@ -3,9 +3,9 @@
 
 The GUM uncertainty framework (JCGM 100:2008) linearizes the model about the
 best estimates. A Monte Carlo run (JCGM 101:2008) propagates the distributions
-themselves. Clause 8 of JCGM 101 turns the difference between the two into a
-pass/fail check on whether the linearization was allowed to begin with. This
-CLI runs both and reports that check.
+themselves. This fixed-trial CLI reports an endpoint comparison inspired by
+JCGM 101 clause 8. It does not implement the adaptive stabilization procedure
+required for a full validation claim, or validate the measurement model.
 """
 
 from __future__ import annotations
@@ -124,6 +124,14 @@ def gum_framework(
             f"`{_common.PINNED_INSTALL}`"
         ) from exc
 
+    if correlations:
+        correlation_factor(variables, correlations)
+        if any(math.isfinite(entry["dof"]) for entry in variables):
+            raise CliError(
+                "correlated inputs with finite degrees of freedom need a justified "
+                "joint uncertainty model; this CLI cannot apply independent-input "
+                "Welch-Satterthwaite to them"
+            )
     handles = {
         entry["name"]: ufloat(entry["value"], entry["standard_uncertainty"])
         for entry in variables
@@ -153,12 +161,14 @@ def gum_framework(
             * right["standard_uncertainty"]
         )
     variance = independent + covariance_term
-    if variance < 0:
+    if not all(math.isfinite(number) for number in (value, independent, covariance_term)):
+        raise CliError("model value or linearized uncertainty is not finite")
+    if variance < -1e-12 * independent:
         raise CliError(
             "the supplied correlations give a negative combined variance; "
             "check the correlation matrix for consistency"
         )
-    combined = math.sqrt(variance)  # audit-units: ignore UNC003 -- plain float
+    combined = math.sqrt(max(variance, 0.0))  # audit-units: ignore UNC003 -- plain float
 
     # Budget percentages are taken against the sum of squared contributions,
     # not against u_c**2. With correlated inputs the covariance term can make
@@ -214,13 +224,11 @@ def _draw(rng: Any, entry: dict[str, Any], trials: int) -> Any:
     raise CliError(f"cannot sample distribution {shape!r}")
 
 
-def _draw_correlated(
-    rng: Any,
+def correlation_factor(
     variables: list[dict[str, Any]],
     correlations: dict[tuple[str, str], float],
-    trials: int,
-) -> dict[str, Any]:
-    """Sample jointly normal inputs from a correlation matrix."""
+) -> tuple[list[str], Any]:
+    """Validate a correlation matrix and factor it, including singular PSD cases."""
 
     import numpy as np
 
@@ -228,11 +236,6 @@ def _draw_correlated(
     by_name = {entry["name"]: entry for entry in variables}
     for name in involved:
         entry = by_name[name]
-        if entry["distribution"] != "normal":
-            raise CliError(
-                f"{name}: correlated Monte Carlo sampling requires a normal "
-                "distribution; declare an uncorrelated model or supply normals"
-            )
         if entry["standard_uncertainty"] <= 0:
             raise CliError(f"{name}: a correlated input needs a positive uncertainty")
 
@@ -240,15 +243,41 @@ def _draw_correlated(
     size = len(involved)
     matrix = np.eye(size)
     for (first, second), coefficient in correlations.items():
+        if first == second or not math.isfinite(coefficient) or not -1 <= coefficient <= 1:
+            raise CliError("correlations need distinct inputs and finite r in [-1, 1]")
         matrix[index[first], index[second]] = coefficient
         matrix[index[second], index[first]] = coefficient
-    try:
-        factor = np.linalg.cholesky(matrix)
-    except np.linalg.LinAlgError as exc:
+    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
+    tolerance = 1e-12 * max(size, 1)
+    if eigenvalues.min() < -tolerance:
         raise CliError(
-            "the correlation matrix is not positive definite; the supplied "
+            "the correlation matrix is not positive semidefinite; the supplied "
             "coefficients cannot come from a single joint distribution"
-        ) from exc
+        )
+    # audit-units: ignore UNC003 -- numeric eigenvalues, not uncertain variables
+    factor = eigenvectors * np.sqrt(np.maximum(eigenvalues, 0.0))
+    return involved, factor
+
+
+def _draw_correlated(
+    rng: Any,
+    variables: list[dict[str, Any]],
+    correlations: dict[tuple[str, str], float],
+    trials: int,
+) -> dict[str, Any]:
+    """Sample a jointly normal distribution, allowing perfect correlations."""
+
+    involved, factor = correlation_factor(variables, correlations)
+    by_name = {entry["name"]: entry for entry in variables}
+    for name in involved:
+        if by_name[name]["distribution"] != "normal":
+            raise CliError(
+                f"{name}: correlated Monte Carlo sampling requires normal marginals "
+                "and a jointly normal model; other joint distributions need a "
+                "separate sampler, not a change to the declared input distribution"
+            )
+    index = {name: position for position, name in enumerate(involved)}
+    size = len(involved)
 
     standard = rng.standard_normal((size, trials))
     correlated = factor @ standard
@@ -323,21 +352,23 @@ def monte_carlo(
         "coverage_probability": coverage_probability,
         "probabilistically_symmetric_interval": list(symmetric),
         "shortest_coverage_interval": list(shortest),
+        "numerical_stability_verified": False,
     }
 
 
 def validate_linearization(
     framework: dict[str, Any], sampling: dict[str, Any], significant_digits: int
 ) -> dict[str, Any]:
-    """Apply the JCGM 101:2008 clause 8 comparison of the two coverage intervals."""
+    """Compare fixed-trial endpoints; do not imply adaptive JCGM validation."""
 
-    combined = framework["combined_standard_uncertainty"]
+    combined = sampling["standard_uncertainty"]
     if combined <= 0:
         return {
             "significant_digits": significant_digits,
             "numerical_tolerance": None,
             "gum_framework_validated": None,
-            "note": "combined standard uncertainty is zero; no comparison is defined",
+            "endpoint_agreement": None,
+            "note": "Monte Carlo standard uncertainty is zero; no comparison is defined",
         }
     tolerance = _common.numerical_tolerance(combined, significant_digits)
     guf_low, guf_high = framework["coverage_interval"]
@@ -350,13 +381,14 @@ def validate_linearization(
         "numerical_tolerance": tolerance,
         "endpoint_difference_low": low_gap,
         "endpoint_difference_high": high_gap,
-        "gum_framework_validated": validated,
+        "endpoint_agreement": validated,
+        "gum_framework_validated": None,
+        "numerical_stability_verified": False,
         "note": (
-            "linearization reproduces the Monte Carlo coverage interval to within "
-            "the numerical tolerance"
-            if validated
-            else "linearization does not reproduce the Monte Carlo coverage "
-            "interval; report the Monte Carlo result"
+            ("endpoints agree" if validated else "endpoints disagree")
+            + " at this trial count; this is a fixed-trial diagnostic. Check Monte "
+            "Carlo stabilization (JCGM 101 7.9 and 8.2, tolerance delta/5), input "
+            "distributions, and model validity before selecting a reported interval"
         ),
     }
 
@@ -377,8 +409,8 @@ def collect_warnings(
         )
     if correlations:
         warnings.append(
-            "inputs are correlated, so the Welch-Satterthwaite effective degrees "
-            "of freedom (JCGM 100:2008 annex G) does not strictly apply"
+            "correlated sampling assumes a jointly normal distribution; covariance "
+            "alone does not specify a general joint distribution"
         )
     dominant = max(framework["inputs"], key=lambda item: item["variance_fraction"])
     if dominant["variance_fraction"] > 0.9 and len(framework["inputs"]) > 1:
@@ -400,16 +432,21 @@ def collect_warnings(
             if relative > 0.3:
                 warnings.append(
                     f"{item['name']} has a relative standard uncertainty of "
-                    f"{relative * 100:.0f}%; first-order expansion is unreliable "
-                    "at that width"
+                    f"{relative * 100:.0f}%; check nonlinearity and physical support "
+                    "of the input distribution (a linear model can still be exact)"
                 )
     if sampling is not None:
+        if any(item["dof"] is not None for item in framework["inputs"]):
+            warnings.append(
+                "finite input degrees of freedom affect the GUM coverage factor "
+                "but are not sampled: this CLI uses the declared fixed PDFs, not "
+                "Student-t input distributions or uncertainty in estimated variances"
+            )
         if sampling["trials"] < _common.RECOMMENDED_TRIALS:
             warnings.append(
                 f"{sampling['trials']} Monte Carlo trials is below the "
-                f"{_common.RECOMMENDED_TRIALS} JCGM 101:2008 recommends for a 95% "
-                "coverage interval; the clause 8 comparison is partly measuring "
-                "sampling noise"
+                f"{_common.RECOMMENDED_TRIALS} initial trial-count guideline; "
+                "endpoint agreement can be affected by sampling noise"
             )
         combined = framework["combined_standard_uncertainty"]
         if combined > 0:
@@ -474,11 +511,11 @@ def render_markdown(document: dict[str, Any]) -> str:
             f"{sampling['shortest_coverage_interval'][1]:.6g}]{unit}",
         ]
     validation = document.get("validation")
-    if validation and validation.get("gum_framework_validated") is not None:
-        verdict = "PASS" if validation["gum_framework_validated"] else "FAIL"
+    if validation and validation.get("endpoint_agreement") is not None:
+        verdict = "AGREE" if validation["endpoint_agreement"] else "DISAGREE"
         lines += [
             "",
-            "## Linearization check (JCGM 101:2008 clause 8)",
+            "## Fixed-trial interval comparison (not full JCGM validation)",
             "",
             f"- Numerical tolerance delta: {validation['numerical_tolerance']:.4g}",
             f"- Endpoint differences: "
@@ -598,6 +635,8 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
 
     correlations: dict[tuple[str, str], float] = {}
     for first, second, coefficient in pairs:
+        if first == second:
+            raise CliError("a variable cannot be correlated with itself")
         for name in (first, second):
             if name not in supplied:
                 raise CliError(f"correlation references unknown variable {name!r}")

@@ -1,6 +1,8 @@
 # RPC Mode
 
-Source: https://pi.dev/docs/latest/rpc
+Sources: https://pi.dev/docs/latest/rpc, https://pi.dev/docs/latest/rpc-commands, https://pi.dev/docs/latest/rpc-extension-ui
+
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
 
 RPC mode runs Pi headlessly over stdin/stdout JSONL. Use it for language-agnostic clients, IDE integrations, custom UIs, or subprocess isolation. For Node/TypeScript in-process apps prefer the SDK unless you want subprocess isolation.
 
@@ -20,11 +22,11 @@ Responses have the shape `{"type":"response","command":"...","success":true|fals
 
 ## Prompting Commands
 
-`prompt` — `{"id":"req-1","type":"prompt","message":"Hello"}`. Optional `images: [{"type":"image","data":"base64...","mimeType":"image/png"}]`. While streaming, `streamingBehavior` is required (`"steer"` or `"followUp"`) or the command errors. Extension commands execute immediately even during streaming; skill commands and prompt templates expand before sending or queueing. `success: true` means accepted, queued, or handled — later failures arrive as events, not a second response.
+`prompt` — `{"id":"req-1","type":"prompt","message":"Hello"}`. Optional `images: [{"type":"image","data":"base64...","mimeType":"image/png"}]`. While streaming, `streamingBehavior` is required (`"steer"` or `"followUp"`) or the command errors. Extension commands execute immediately even during streaming; skill commands and prompt templates expand before sending or queueing. `success: true` returns `data.disposition: "started" | "queued" | "handled"`; later failures arrive as events, not a second response. A handled prompt starts no run. Wait for `agent_settled` only for work that started.
 
-`steer` — queue a steering message delivered after the current assistant turn's tool calls. `follow_up` — queue a message delivered when the agent is fully done. Both accept `images` and expand skills/templates but reject extension commands.
+`steer` — queue a steering message delivered after the current assistant turn's tool calls. `follow_up` — queue a message delivered when the agent is fully done. Both accept `images`, invoke input handlers, expand skills/templates, reject extension commands, and return `{ disposition: "queued" | "handled" }`.
 
-`abort` — abort the current agent operation.
+`abort` — abort the current agent operation. `clear_queue` clears queued messages and returns the removed `{ steering, followUp }` arrays.
 
 `new_session` — optional `parentSession`; response `data: { cancelled }` (an extension may cancel via `session_before_switch`).
 
@@ -80,7 +82,7 @@ Responses have the shape `{"type":"response","command":"...","success":true|fals
 
 `usage` is the latest cumulative provider-reported usage and may stay zero until completion. Clients needing a live partial message must assemble it from `message_start` and subsequent events using `contentIndex`; treat `message_end.message` as authoritative. For tool calls, buffer `toolcall_delta.delta` — `toolcall_end.toolCall` holds the completed call.
 
-`compaction_start`/`compaction_end` carry `reason` (`"manual"`, `"threshold"`, `"overflow"`). On overflow success, `willRetry` is `true` and the prompt is retried. Aborted compaction returns `result: null, aborted: true`; failed compaction returns `result: null, aborted: false` plus `errorMessage`. `tool_execution_update.partialResult` is cumulative, so clients can replace their display each update.
+`compaction_start`/`compaction_end` carry `reason` (`"manual"`, `"threshold"`, `"overflow"`). On overflow success, `willRetry` is `true` and the prompt is retried. Aborted compaction omits `result` and sets `aborted: true`; failure omits `result`, sets `aborted: false`, and includes `errorMessage`. `tool_execution_update.partialResult` is tool-defined; do not assume every extension emits cumulative output.
 
 ## Extension UI Protocol
 
@@ -92,4 +94,4 @@ Degraded in RPC mode: `custom()` returns `undefined`; `setWorkingMessage`, `setW
 
 ## Message Types
 
-`UserMessage` (`role`, `content` string or blocks, `timestamp`, `attachments`), `AssistantMessage` (`content` with `text`/`thinking`/`toolCall` blocks, `api`, `provider`, `model`, `usage`, `stopReason` ∈ `stop`/`length`/`toolUse`/`error`/`aborted`, `timestamp`), `ToolResultMessage` (`toolCallId`, `toolName`, `content`, optional `usage` for nested LLM work, `isError`), `BashExecutionMessage` (from the `bash` command, not LLM tool calls), and `Attachment`. Full definitions in `references/session-format.md`.
+`UserMessage` (`role`, `content` string or blocks, `timestamp`, `attachments`), `AssistantMessage` (`content` with `text`/`thinking`/`toolCall` blocks, `api`, `provider`, `model`, `usage`, `stopReason` ∈ `stop`/`length`/`toolUse`/`error`/`aborted`/`deferred`, `timestamp`), `ToolResultMessage` (`toolCallId`, `toolName`, `content`, optional `usage` for nested LLM work, `isError`), `BashExecutionMessage` (from the `bash` command, not LLM tool calls), and `Attachment`. Full definitions in `references/session-format.md`.

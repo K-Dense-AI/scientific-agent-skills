@@ -1,6 +1,6 @@
 % PLOS ONE Article Template
-% For submission to PLOS ONE and other PLOS journals
-% Reviewed: 2026-07-20
+% PLOS ONE drafting scaffold; other PLOS journals have independent instructions
+% Reviewed: 2026-10-01
 % Drafting scaffold, not the official PLOS LaTeX package.
 % Check https://journals.plos.org/plosone/s/submission-guidelines
 % and the current journal-specific LaTeX package before submission.
@@ -21,6 +21,8 @@
 \usepackage[table]{xcolor}
 \usepackage{array}
 \usepackage{authblk}
+\usepackage{setspace}
+\doublespacing
 
 % Line numbering
 \linenumbers
@@ -52,7 +54,7 @@
 % Abstract
 \begin{abstract}
 \noindent
-Write a structured or unstructured abstract of 250-300 words. The abstract should be accessible to a broad readership and should clearly state: (1) background/rationale, (2) objectives, (3) methods, (4) principal findings with key data, and (5) conclusions and significance. Do not include citations in the abstract.
+Write an abstract of no more than 300 words; use the study-type structure required by the current instructions. The abstract should be accessible to a broad readership and should clearly state: (1) background/rationale, (2) objectives, (3) methods, (4) principal findings with key data, and (5) conclusions and significance. Do not include citations in the abstract.
 \end{abstract}
 
 % Introduction
@@ -103,7 +105,7 @@ Describe how data were collected, including instruments, assays, and measurement
 \subsection*{Statistical Analysis}
 Clearly describe statistical methods used:
 \begin{itemize}
-    \item Software and version (e.g., R 4.3.0, Python 3.9 with scipy 1.9.0)
+    \item Software and version actually used, including package versions
     \item Statistical tests performed (e.g., t-tests, ANOVA, regression)
     \item Significance level ($\alpha$, typically 0.05)
     \item Corrections for multiple testing
@@ -118,7 +120,7 @@ Include relevant ethical approval statements:
     \item Field studies: Permits and permissions
 \end{itemize}
 
-Example: "This study was approved by the Institutional Review Board of University Name (Protocol \#12345). All participants provided written informed consent."
+Example: "This study was approved by the Institutional Review Board of University Name (Protocol [actual approval identifier]). All participants provided written informed consent."
 
 % Results
 \section*{Results}
@@ -128,7 +130,7 @@ Present your findings in a logical sequence. Refer to figures and tables as you 
 \subsection*{First Major Finding}
 Describe your first key result. Statistical results should include effect sizes and confidence intervals in addition to p-values.
 
-As shown in Figure~\ref{fig:results1}, we observed a significant increase in [outcome variable] (mean $\pm$ SD: 45.2 $\pm$ 8.3 vs. 32.1 $\pm$ 6.9; t = 7.42, df = 48, p < 0.001).
+As shown in Figure~\ref{fig:results1}, [report the actual estimate, uncertainty, denominators, and analysis].
 
 \begin{figure}[!ht]
 \centering
@@ -149,13 +151,13 @@ Describe your second key result, referencing Table~\ref{tab:results1}.
 \hline
 \textbf{Condition} & \textbf{Measurement 1} & \textbf{Measurement 2} & \textbf{p-value} \\
 \hline
-Control & 25.3 $\pm$ 3.1 & 48.2 $\pm$ 5.4 & -- \\
-Treatment A & 32.7 $\pm$ 2.8 & 55.1 $\pm$ 4.9 & 0.003 \\
-Treatment B & 41.2 $\pm$ 3.5 & 62.8 $\pm$ 6.2 & < 0.001 \\
+Control & [estimate] & [estimate] & -- \\
+Treatment A & [estimate] & [estimate] & [result] \\
+Treatment B & [estimate] & [estimate] & [result] \\
 \hline
 \end{tabular}
 \begin{flushleft}
-Values shown as mean $\pm$ standard deviation (n = 20 per group). P-values from one-way ANOVA with Tukey's post-hoc test comparing to control.
+Define estimates, uncertainty, sample sizes, experimental units, and actual statistical comparisons. These cells are placeholders, not data.
 \end{flushleft}
 \end{table}
 
@@ -174,20 +176,20 @@ Summarize your main findings concisely.
 Interpret your findings and explain their significance. How do they advance understanding of the topic? Compare and contrast with previous studies \cite{brown2021,williams2020}.
 
 \subsection*{Strengths and Limitations}
-Discuss both strengths and limitations of your study honestly:
+Replace the prompts below with demonstrated strengths and limitations. Sample size alone does not establish adequate power, and PLOS ONE does not require a claim of novelty:
 
 \textbf{Strengths:}
 \begin{itemize}
-    \item Large sample size with adequate statistical power
-    \item Rigorous methodology with appropriate controls
-    \item Novel approach or finding
+    \item {[Actual design or precision advantage, with supporting evidence.]}
+    \item {[What the implemented controls establish.]}
+    \item {[Other supported methodological strength.]}
 \end{itemize}
 
 \textbf{Limitations:}
 \begin{itemize}
-    \item Cross-sectional design limits causal inference
-    \item Generalizability may be limited to [specific population]
-    \item Potential confounding variables not measured
+    \item {[Study-design limitations on interpretation.]}
+    \item {[Population or setting limiting generalizability.]}
+    \item {[Relevant residual confounding or other uncertainty.]}
 \end{itemize}
 
 \subsection*{Implications}
@@ -210,23 +212,25 @@ Acknowledge individuals who contributed but do not meet authorship criteria, tec
 \section*{References}
 
 % Using BibTeX
-\bibliographystyle{plos2015}
-\bibliography{references}
+% To use BibTeX, obtain the style from the current official PLOS package and
+% replace the manual placeholder bibliography below. Do not enable both.
+% \bibliographystyle{plos2015}
+% \bibliography{references}
 
 % Or manually formatted (Vancouver style, numbered):
 \begin{thebibliography}{99}
 
 \bibitem{smith2023}
-Smith JD, Johnson ML, Williams KR. Title of article. Journal Abbrev. 2023;45(3):301-318. doi:10.1371/journal.pone.1234567.
+Replace with the verified source for the cited claim.
 
 \bibitem{jones2022}
-Jones AB, Brown CD. Another article title. PLoS ONE. 2022;17(8):e0234567. doi:10.1371/journal.pone.0234567.
+Replace with the verified source for the cited claim.
 
 \bibitem{brown2021}
-Brown EF, Davis GH, Wilson IJ, Taylor JK. Comprehensive study title. Nat Commun. 2021;12:1234. doi:10.1038/s41467-021-12345-6.
+Replace with the verified source for the cited claim.
 
 \bibitem{williams2020}
-Williams LM, Anderson NO. Previous work on topic. Science. 2020;368(6489):456-460. doi:10.1126/science.abc1234.
+Replace with the verified source for the cited claim.
 
 \end{thebibliography}
 
@@ -284,8 +288,8 @@ All data are available in the [repository name] repository at [URL/DOI].
 \textbf{Option 2 (Supporting Information):}
 All relevant data are within the paper and its Supporting Information files.
 
-\textbf{Option 3 (Available on request):}
-Data cannot be shared publicly because of [reason]. Data are available from the [institution/contact] (contact via [email]) for researchers who meet the criteria for access to confidential data.
+\textbf{Option 3 (Justified restricted access):}
+For ethical or legal restrictions allowed by the PLOS data policy, state the specific reason. Data are available from the [independent institutional contact or access committee] (contact via [email]) for researchers who meet the criteria for access to confidential data.
 
 \textbf{Option 4 (Third-party):}
 Data are available from [third party] (contact: [details]) for researchers who meet criteria for access.
@@ -295,7 +299,7 @@ Data are available from [third party] (contact: [details]) for researchers who m
 
 State all funding sources including grant numbers. If no funding, state "The authors received no specific funding for this work."
 
-Example: "This work was supported by the National Science Foundation (NSF) [grant number 123456 to TA] and the National Institutes of Health (NIH) [grant number R01-234567 to TA]. The funders had no role in study design, data collection and analysis, decision to publish, or preparation of the manuscript."
+Example: "This work was supported by the National Science Foundation (NSF) [actual award number and recipient] and the National Institutes of Health (NIH) [actual award number and recipient]. The funders had no role in study design, data collection and analysis, decision to publish, or preparation of the manuscript."
 
 % Competing Interests (REQUIRED)
 \section*{Competing Interests}
@@ -309,11 +313,11 @@ If competing interests exist, declare them explicitly: "Author TA is a consultan
 % Notes for Authors:
 % 1. PLOS ONE has no length limit - be concise but thorough
 % 2. Use Vancouver style for citations [1], [2], [3]
-% 3. Figures: TIFF or EPS format, 300-600 dpi
-% 4. All data must be made available (data availability statement required)
+% 3. Check current PLOS figure instructions: https://journals.plos.org/plosone/s/figures
+% 4. A data availability statement is required; follow PLOS policy for justified access restrictions
 % 5. Include line numbers for review
 % 6. PLOS ONE focuses on scientific rigor, not novelty or impact
-% 7. Reporting guidelines encouraged (CONSORT, STROBE, PRISMA, etc.)
+% 7. Include the required reporting checklist for the actual study type
 % 8. Ethical approval required for human/animal studies
 % 9. All authors must agree to submission
 % 10. Submit via PLOS online submission system

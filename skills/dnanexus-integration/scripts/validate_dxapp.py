@@ -14,10 +14,8 @@ from typing import Any, Iterable, Optional
 
 NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 APP_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-VERSION_RE = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
-)
+# /app/new accepts freeform versions; semantic versioning is a recommendation.
+VERSION_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 SECRET_KEY_RE = re.compile(
     r"(?:^|[_-])(token|password|passwd|secret|private[_-]?key)(?:$|[_-])",
     re.IGNORECASE,
@@ -36,12 +34,11 @@ CLASSES = {
     "array:float",
     "array:string",
     "array:boolean",
-    "array:hash",
     "array:file",
     "array:record",
     "array:applet",
 }
-ACCESS_LEVELS = {"NONE", "VIEW", "UPLOAD", "CONTRIBUTE", "ADMINISTER"}
+ACCESS_LEVELS = {"VIEW", "UPLOAD", "CONTRIBUTE", "ADMINISTER"}
 INTERPRETERS = {"bash", "python3"}
 SUPPORTED_RELEASES = {"20.04", "24.04"}
 RESTARTABLE_FAILURES = {
@@ -130,6 +127,10 @@ class Validator:
                 "$.name",
                 "name may contain only letters, digits, '.', '_', and '-'",
             )
+        elif kind == "app" and name.startswith("app-"):
+            self.error(
+                "invalid-name", "$.name", "app name cannot start with 'app-'",
+            )
 
         version = self.manifest.get("version")
         if kind == "app":
@@ -143,7 +144,8 @@ class Validator:
                 self.error(
                     "invalid-version",
                     "$.version",
-                    "app version must follow semantic version syntax",
+                    "app version must be non-empty and contain only letters, "
+                    "digits, '.', '_', '+', and '-'",
                 )
         elif version is not None and not isinstance(version, str):
             self.error(
@@ -222,7 +224,7 @@ class Validator:
                 seen.add(name)
 
             class_name = parameter.get("class")
-            if class_name not in CLASSES:
+            if not isinstance(class_name, str) or class_name not in CLASSES:
                 self.error(
                     "parameter-class",
                     f"{path}.class",
@@ -271,7 +273,7 @@ class Validator:
             )
 
         interpreter = run_spec.get("interpreter")
-        if interpreter not in INTERPRETERS:
+        if not isinstance(interpreter, str) or interpreter not in INTERPRETERS:
             self.error(
                 "interpreter",
                 "$.runSpec.interpreter",
@@ -287,7 +289,7 @@ class Validator:
             )
 
         release = run_spec.get("release")
-        if release not in SUPPORTED_RELEASES:
+        if not isinstance(release, str) or release not in SUPPORTED_RELEASES:
             self.error(
                 "release",
                 "$.runSpec.release",
@@ -316,7 +318,9 @@ class Validator:
             )
 
         restartable = run_spec.get("restartableEntryPoints")
-        if restartable is not None and restartable not in {"master", "all"}:
+        if restartable is not None and (
+            not isinstance(restartable, str) or restartable not in {"master", "all"}
+        ):
             self.error(
                 "restartable-entry-points",
                 "$.runSpec.restartableEntryPoints",
@@ -486,6 +490,12 @@ class Validator:
             requirements = options.get("systemRequirements")
             if requirements is not None:
                 requirements_regions.add(region)
+                run_spec = self.manifest.get("runSpec")
+                if isinstance(run_spec, dict) and "systemRequirements" in run_spec:
+                    self.error(
+                        "conflicting-system-requirements", path,
+                        "regional systemRequirements cannot also be set in runSpec",
+                    )
                 self.validate_system_requirements(
                     requirements,
                     f"{path}.systemRequirements",
@@ -531,12 +541,12 @@ class Validator:
                 )
                 if key in request
             ]
-            if len(selectors) > 1:
+            if "instanceTypeSelector" in selectors and len(selectors) > 1:
                 self.error(
                     "resource-selector-conflict",
                     request_path,
-                    "instanceType, instanceTypeSelector, and clusterSpec are "
-                    "mutually exclusive",
+                    "instanceTypeSelector cannot be combined with instanceType "
+                    "or clusterSpec; a fixed instanceType may accompany clusterSpec",
                 )
 
             selector = request.get("instanceTypeSelector")
@@ -604,7 +614,9 @@ class Validator:
 
         for field in ("project", "allProjects"):
             value = access.get(field)
-            if value is not None and value not in ACCESS_LEVELS:
+            if value is not None and (
+                not isinstance(value, str) or value not in ACCESS_LEVELS
+            ):
                 self.error(
                     "access-level",
                     f"$.access.{field}",
@@ -617,7 +629,7 @@ class Validator:
                 "$.access.project",
                 "ADMINISTER access is rarely needed by an analysis app",
             )
-        if access.get("allProjects") not in {None, "NONE"}:
+        if isinstance(access.get("allProjects"), str) and access["allProjects"] in ACCESS_LEVELS:
             self.warning(
                 "all-projects-access",
                 "$.access.allProjects",
@@ -645,7 +657,7 @@ class Validator:
         if (
             not isinstance(ports, list)
             or not ports
-            or not all(port in {443, 8080, 8081} for port in ports)
+            or not all(isinstance(port, int) and port in {443, 8080, 8081} for port in ports)
         ):
             self.error(
                 "https-ports",

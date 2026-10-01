@@ -13,7 +13,7 @@ Techniques for training GNNs on large graphs that don't fit in GPU memory, multi
 
 ## 1. Neighbor Sampling (NeighborLoader)
 
-The primary approach for large single-graph training. Recursively samples a fixed number of neighbors per hop, bounding the computation graph.
+The primary approach for large single-graph training. Recursively samples a fixed number of neighbors per hop, bounding fan-out per seed (not a global memory limit). Requires compatible `pyg-lib` or `torch-sparse`; backend support differs for induced, disjoint and temporal sampling. Start with `num_workers=0` for debugging.
 
 ```python
 from torch_geometric.loader import NeighborLoader
@@ -37,7 +37,8 @@ loader = NeighborLoader(
 
 **Training pattern:**
 ```python
-model = GraphSAGE(in_channels, hidden_channels, out_channels, num_layers=2)
+from torch_geometric.nn import GraphSAGE
+model = GraphSAGE(in_channels, hidden_channels, num_layers=2, out_channels=out_channels)
 
 for batch in loader:
     batch = batch.to(device)
@@ -49,7 +50,7 @@ for batch in loader:
 **Important details:**
 - Nodes are sorted: first `batch.batch_size` nodes are the seed nodes
 - `batch.n_id` maps local indices back to original node IDs
-- Sampling >2-3 hops is generally infeasible (exponential neighborhood growth)
+- Multiple hops can grow neighborhoods rapidly; fan-out and overlap determine the actual cost
 - Keep `len(num_neighbors) == num_gnn_layers` for efficiency
 - PyG 2.7 adds `BidirectionalSampler` and forward+reverse edge sampling on `NeighborSampler` for undirected graphs
 
@@ -61,19 +62,19 @@ Samples subgraphs around supervision edges:
 from torch_geometric.loader import LinkNeighborLoader
 
 loader = LinkNeighborLoader(
-    data,
+    train_data,
     num_neighbors=[20, 10],
     edge_label_index=train_data.edge_label_index,
     edge_label=train_data.edge_label,
     batch_size=256,
-    neg_sampling_ratio=1.0,
+    neg_sampling=None,  # This example assumes fixed positive AND negative labels.
     shuffle=True,
 )
 ```
 
 ### HGTLoader (type-aware heterogeneous sampling)
 
-Samples a fixed number of nodes per type per hop, following HGT paper:
+Samples a node budget per type per hop following the HGT paper; requires `torch-sparse` (illustrative):
 
 ```python
 from torch_geometric.loader import HGTLoader
@@ -90,7 +91,7 @@ loader = HGTLoader(
 
 ### ClusterLoader (ClusterGCN)
 
-Partitions the graph into clusters, trains on full subgraphs. Better for deeper GNNs since messages flow freely within clusters:
+Partitions the graph into clusters using METIS (`pyg-lib` with METIS or `torch-sparse`), then trains on batches of partitions. Boundary edges can be omitted; it is not full-graph message passing (illustrative):
 
 ```python
 from torch_geometric.loader import ClusterData, ClusterLoader
@@ -99,7 +100,9 @@ cluster_data = ClusterData(data, num_parts=1500)
 loader = ClusterLoader(cluster_data, batch_size=20, shuffle=True)
 
 for batch in loader:
-    # batch is a full subgraph — no slicing needed
+    # Mask supervised nodes; do not compute an empty-mask loss.
+    if not batch.train_mask.any():
+        continue
     out = model(batch.x, batch.edge_index)
     loss = F.cross_entropy(out[batch.train_mask], batch.y[batch.train_mask])
 ```
@@ -112,9 +115,11 @@ Samples subgraphs via random walks, nodes, or edges with importance-based normal
 from torch_geometric.loader import GraphSAINTRandomWalkSampler
 
 loader = GraphSAINTRandomWalkSampler(
-    data, batch_size=6000, walk_length=2, num_steps=5,
+    data, batch_size=6000, walk_length=2, num_steps=5, sample_coverage=100,
 )
 ```
+
+`GraphSAINT` requires `torch-sparse`. With positive `sample_coverage`, use its `edge_norm` in the message operator and `node_norm` in the unreduced supervised loss as in the official GraphSAINT example; merely constructing the sampler does not apply normalization.
 
 ### ShaDowKHopSampler
 
@@ -125,9 +130,11 @@ from torch_geometric.loader import ShaDowKHopSampler
 
 loader = ShaDowKHopSampler(
     data, depth=2, num_neighbors=5, batch_size=64,
-    input_nodes=data.train_mask,
+    node_idx=data.train_mask,
 )
 ```
+
+ShaDow requires `torch-sparse`. Seed outputs are at `batch.root_n_id`, not the NeighborLoader prefix; node labels are already indexed to roots in the returned batch.
 
 ## 3. Multi-GPU / Distributed Training
 
@@ -135,79 +142,64 @@ loader = ShaDowKHopSampler(
 
 ### DistributedDataParallel (DDP)
 
-Standard PyTorch DDP works with PyG. Each GPU gets a partition of the seed nodes:
+Standard DDP replicates model parameters and synchronizes gradients; it does not automatically partition/store a giant graph. The following single-machine CUDA recipe is illustrative. Launch it with `torchrun --standalone --nproc_per_node=4 train.py`, and supply your already prepared CPU `data` and class count. The distributed sampler pads to equal per-rank counts (possibly repeating a few seeds), preventing unequal backward-call counts.
 
 ```python
+import os
+import torch
+import torch.nn.functional as F
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch_geometric.loader import NeighborLoader
+from torch_geometric.nn import GraphSAGE
 
-def run(rank, world_size, dataset):
-    # Initialize process group
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12345'
-    dist.init_process_group('nccl', rank=rank, world_size=world_size)
-
-    data = dataset[0]
-
-    # Split training nodes across GPUs
-    train_idx = data.train_mask.nonzero().view(-1)
-    train_idx = train_idx.split(train_idx.size(0) // world_size)[rank]
-
-    loader = NeighborLoader(
-        data,
-        input_nodes=train_idx,
-        num_neighbors=[25, 10],
-        batch_size=1024,
-        num_workers=4,
-        shuffle=True,
-    )
-
-    # Wrap model in DDP
-    model = GraphSAGE(...).to(rank)
-    model = DistributedDataParallel(model, device_ids=[rank])
+def run(data, num_classes):
+    local_rank = int(os.environ['LOCAL_RANK'])
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group('nccl')
+    rank, world_size = dist.get_rank(), dist.get_world_size()
+    device = torch.device('cuda', local_rank)
+    train_idx = data.train_mask.nonzero(as_tuple=False).view(-1)
+    if train_idx.numel() == 0:
+        raise ValueError('Empty training seed set')
+    seed_sampler = DistributedSampler(train_idx, num_replicas=world_size,
+                                      rank=rank, shuffle=True, drop_last=False)
+    model = GraphSAGE(data.num_features, 64, num_layers=2,
+                      out_channels=num_classes).to(device)
+    model = DistributedDataParallel(model, device_ids=[local_rank])
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
     for epoch in range(10):
+        seed_sampler.set_epoch(epoch)
+        rank_seeds = train_idx[torch.tensor(list(seed_sampler))]
+        loader = NeighborLoader(data, input_nodes=rank_seeds,
+                                num_neighbors=[25, 10], batch_size=1024,
+                                num_workers=0, shuffle=False)
         model.train()
         for batch in loader:
-            batch = batch.to(rank)
+            batch = batch.to(device)
             optimizer.zero_grad()
             out = model(batch.x, batch.edge_index)[:batch.batch_size]
             loss = F.cross_entropy(out, batch.y[:batch.batch_size])
             loss.backward()
             optimizer.step()
-
-        # Synchronize before evaluation
+        # All ranks reach both barriers. If evaluating only on rank 0,
+        # use model.module under no_grad and aggregate metrics correctly;
+        # invoking only one rank's DDP wrapper can hang its collectives.
         dist.barrier()
-
-        if rank == 0:
-            # Evaluate on rank 0 only
-            ...
-
+        dist.barrier()
     dist.destroy_process_group()
-
-# Launch
-if __name__ == '__main__':
-    dataset = Reddit('./data/Reddit')
-    world_size = torch.cuda.device_count()
-    mp.spawn(run, args=(world_size, dataset), nprocs=world_size, join=True)
 ```
 
-**Key points:**
-- Initialize dataset before `mp.spawn()` — data auto-moves to shared memory
-- Each rank creates its own NeighborLoader with a subset of seed nodes
-- Call `dist.barrier()` to synchronize before evaluation
-- Evaluate on rank 0 only for simplicity
-- Clean up with `dist.destroy_process_group()`
+For multi-node launch, use the launcher's rendezvous and global rank environment; `LOCAL_RANK` only selects a device on its own host. Avoid hardcoded localhost rendezvous or floor-sized slicing that drops remaining seeds. The graph is still replicated in this recipe; estimate host/GPU memory before launching.
 
 ### PyTorch Lightning Integration
 
-PyG provides Lightning wrappers for minimal boilerplate. PyG 2.7 supports the `lightning` package (not only legacy `pytorch-lightning`):
+PyG provides wrappers under `torch_geometric.data.lightning`. Use a real `LightningModule` implementing training/validation steps and optimizers, not a bare GNN. The neighbor/GPU Trainer example is illustrative:
 
 ```python
 import lightning as L
-from torch_geometric.data import LightningNodeData
+from torch_geometric.data.lightning import LightningNodeData
 
 datamodule = LightningNodeData(
     data,
@@ -221,18 +213,19 @@ datamodule = LightningNodeData(
 
 # Use with any Lightning Trainer
 trainer = L.Trainer(devices=4, accelerator='gpu', strategy='ddp')
-trainer.fit(model, datamodule)
+trainer.fit(lightning_model, datamodule=datamodule)
 ```
 
 Also available: `LightningLinkData` for link prediction, `LightningDataset` for graph-level tasks.
 
 ## 4. torch.compile Support
 
-PyG supports `torch.compile` for faster execution:
+PyG supports `torch.compile`; speedups depend on shapes, backend and warmup. This optimizing-compiler example is illustrative; an eager-backend capture smoke does not establish optimized CPU/CUDA performance:
 
 ```python
-model = GCN(...)
-model = torch.compile(model)
+from torch_geometric.nn import GCN
+model = GCN(in_channels, hidden_channels=64, num_layers=2, out_channels=out_channels)
+model = torch.compile(model, dynamic=True)
 
 # Works with standard training loops
 out = model(data.x, data.edge_index)
@@ -250,14 +243,15 @@ out = model(data.x, data.edge_index)
 
 ## 5. Performance Tips
 
-- **num_workers**: Set `num_workers=4` (or more) in data loaders for CPU-side parallelism
+- **num_workers**: Benchmark workers and memory use; start with zero, then increase. On spawn-based platforms use a main guard.
 - **pin_memory**: Use `pin_memory=True` in loaders for faster CPU-to-GPU transfer
-- **Sparse tensors**: Use `SparseTensor` from `torch_sparse` instead of `edge_index` for faster message passing on some layers
+- **Sparse tensors**: Some layers benefit from `torch_sparse.SparseTensor`; pass transposed adjacency (`adj_t`, target rows/source columns) and verify numerical parity.
 - **Profiling**: Use `torch_geometric.profile` to measure time and memory of individual layers
 - **Mixed precision**: Standard PyTorch AMP works with PyG:
   ```python
   from torch.amp import autocast, GradScaler
-  scaler = GradScaler()
+  scaler = GradScaler("cuda")
+  optimizer.zero_grad()
   with autocast('cuda'):
       out = model(batch.x, batch.edge_index)
       loss = F.cross_entropy(out[:batch.batch_size], batch.y[:batch.batch_size])
@@ -267,3 +261,5 @@ out = model(data.x, data.edge_index)
   ```
 - **Reduce sampling**: Fewer neighbors per hop = faster but noisier. Start with `[15, 10]` for 2-layer GNNs.
 - **Avoid unnecessary computation**: With NeighborLoader, only the first `batch_size` outputs matter — don't compute metrics on sampled-only nodes.
+
+Sources: [loaders](https://pytorch-geometric.readthedocs.io/en/latest/modules/loader.html), [DDP tutorial](https://pytorch-geometric.readthedocs.io/en/latest/tutorial/multi_gpu_vanilla.html), [compile guidance](https://pytorch-geometric.readthedocs.io/en/latest/advanced/compile.html), [LightningNodeData](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.lightning.LightningNodeData.html).

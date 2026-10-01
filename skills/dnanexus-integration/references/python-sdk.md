@@ -15,25 +15,25 @@
 
 ## Baseline
 
-This reference was verified against `dxpy==0.410.0` (released 2026-07-14).
+This reference was verified against `dxpy==0.415.0` (released 2026-09-22).
 PyPI declares Python 3.8 or newer. This repository recommends Python 3.11+.
 
 For a project:
 
 ```bash
-uv add "dxpy==0.410.0"
+uv add "dxpy==0.415.0"
 ```
 
 For an isolated script:
 
 ```bash
-uv run --with "dxpy==0.410.0" "script.py"
+uv run --with "dxpy==0.415.0" "script.py"
 ```
 
 Inspect the installed API without authenticating. From this skill's root:
 
 ```bash
-uv run --with "dxpy==0.410.0" \
+uv run --with "dxpy==0.415.0" \
   "scripts/inspect_dxpy.py" --strict
 ```
 
@@ -196,7 +196,7 @@ with dxpy.open_dxfile(
     prefix = remote_stream.read(4096)
 ```
 
-`DXFile.open_file()` does not exist in dxpy 0.410.0. Use
+`DXFile.open_file()` does not exist in dxpy 0.415.0. Use
 `dxpy.open_dxfile()`.
 
 ### Upload a string
@@ -276,6 +276,10 @@ Important:
 - `tag` is deprecated.
 - `describe=True` returns full default descriptions; a field mapping is safer.
 - Omitted `limit` means dxpy keeps paging until all matching results are read.
+- In dxpy 0.415.0, an explicit `limit` is also sent as the first API page size;
+  keep it at most 1000. To consume a larger bounded result set, use
+  `itertools.islice(dxpy.find_data_objects(...), total_limit)` with the SDK
+  `limit` omitted, so its internal page sizes remain valid.
 - Scope broad searches by project/folder/time.
 
 Timestamps accept:
@@ -418,7 +422,7 @@ analysis = dxpy.DXWorkflow(
 )
 ```
 
-Useful run arguments in dxpy 0.410.0 include:
+Useful run arguments in dxpy 0.415.0 include:
 
 - `project`, `folder`, `name`
 - `tags`, `properties`, `details`
@@ -466,7 +470,7 @@ outputs = job.describe(fields={"output": True})["output"]
 
 Defaults for `DXJob.wait_on_done()` and `DXAnalysis.wait_on_done()` are a
 two-second poll interval and a seven-day timeout. Set an explicit timeout that
-matches the caller's needs. In dxpy 0.410.0, `DXJobFailureError` represents
+matches the caller's needs. In dxpy 0.415.0, `DXJobFailureError` represents
 remote failure, termination, **or local wait timeout** despite the method
 docstring; re-describe state before classifying it.
 
@@ -493,7 +497,7 @@ Current public dxpy exception classes include:
 
 API error names such as `ResourceNotFound`, `PermissionDenied`, and
 `InvalidInput` are usually represented by `DXAPIError.name`; they are not
-top-level dxpy exception classes in 0.410.0.
+top-level dxpy exception classes in 0.415.0.
 
 ```python
 from dxpy.exceptions import DXAPIError
@@ -527,8 +531,17 @@ response = dxpy.api.system_find_data_objects(
 ```
 
 Prefer high-level search/handler methods unless a required field is unavailable
-there. Low-level methods expose API pagination, request shapes, and destructive
-options directly.
+there. For `/system/findDataObjects`, `response["results"]` is one page;
+`response["next"]` is a mapping or `null`. Pass a non-null cursor unchanged as
+`starting` in the next body. The API page `limit` is 1–1000; the high-level
+`find_data_objects(limit=...)` instead bounds the total generator output.
+It also uses that value for the initial page request, so the same 1000 ceiling
+applies to explicit SDK limits in this release.
+
+API methods use HTTPS POST to `https://api.dnanexus.com/<method>` with a JSON
+body and Bearer authorization. URL query parameters are ignored. The optional
+`DNAnexus-API: 1.0.0` header selects the documented API version; the SDK handles
+these details. Low-level methods expose destructive options directly.
 
 Never construct arbitrary API method names, hosts, or request bodies from
 untrusted input.

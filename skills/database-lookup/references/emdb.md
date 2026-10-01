@@ -31,7 +31,7 @@ https://www.ebi.ac.uk/emdb/api/entry/experiment/EMD-1234
 ```
 
 ## Response Format
-JSON. Search includes pagination and matching entry array.
+JSON. Search accepts `rows`, `page`, and `fl` (field selection); inspect its returned search envelope and pagination before iterating. Entry metadata is an object with `emdb_id`, `map`, and experimental/sample sections, not the map density file itself.
 
 ## Rate Limits
 EBI fair-use policy. Map files (MRC/CCP4) available via FTP for bulk access.

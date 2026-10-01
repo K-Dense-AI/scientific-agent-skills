@@ -1,6 +1,6 @@
 # Bundled CLI guide
 
-Verified 2026-07-23 for skill version 1.1 and SimPy 4.1.2.
+Reviewed 2026-10-01 for skill version 1.6 and SimPy 4.1.2.
 
 The scripts implement one transparent finite-horizon exponential
 arrival/exponential service multi-server queue. They are examples and diagnostics,
@@ -32,7 +32,8 @@ uv pip install "simpy==4.1.2"
 
 Commands that execute a simulation gate SimPy through a shared dependency loader.
 If it is absent, they exit without a traceback and print the pinned installation
-command above. Configuration validation and artifact summarization remain usable
+command above. They also reject a different installed version because scheduler
+instrumentation is release-specific. Configuration validation and artifact summarization remain usable
 without SimPy.
 
 ## Queue configuration schema
@@ -80,6 +81,22 @@ For `analysis_mode="terminating"`, `warm_up` must be zero. For
 `analysis_mode="steady_state"`, warm-up must be positive and less than horizon.
 This validates consistency only; it does not establish that steady state was
 reached.
+
+Report schema 1.2 separates the measurement rules:
+
+- `window_arrivals` and `window_rejected` count events in `[warm_up, horizon)`;
+  `loss_probability` is their ratio (null when there are no window arrivals).
+- `window_departures` counts **all** completions in that time window, including
+  customers arriving before warm-up; throughput divides this by `horizon - warm_up`.
+- `observed_completed` and customer means use customers arriving at/after warm-up
+  and completed before the horizon; unfinished customer paths are excluded.
+- Queue length and utilization are time-weighted over `[warm_up, horizon)`.
+- The original arrivals/admitted/rejected/completed counters span the full run.
+- `event_processing.processed` includes the step whose callback stops the run.
+
+These synthetic exponential inputs demonstrate event mechanics; they are not
+calibrated estimates of a real queue. Record the time unit and justify inputs before
+using scenario contrasts. The report records `simpy_version` and `metric_windows`.
 
 ## Basic template
 
@@ -201,7 +218,8 @@ Summarize a trace without importing or executing its originating model:
 python skills/simpy/scripts/event_trace_summary.py trace.jsonl
 ```
 
-Summarize ResourceMonitor CSV:
+Generate the separate, fixed ResourceMonitor demonstration and its CSV, then
+summarize it (`--samples` is an output path, not an input):
 
 ```bash
 python skills/simpy/scripts/resource_monitor.py \
@@ -217,9 +235,16 @@ Accepted resource CSV fields are exactly:
 
 `time`, `event`, `count`, `queue_length`, `utilization`.
 
-The summarizer checks event trace order by `(time, priority, event_id)` and computes
-resource time averages by carrying each state left-continuously to the next sample.
+The summarizer reports decreasing event times and computes resource time averages
+by carrying each post-transition state forward to the next sample. Same-time
+priority/event-ID decreases are valid when callbacks insert new urgent events;
+the processing trace alone cannot prove scheduler heap ordering.
 It does not infer queue semantics from arbitrary column names.
+
+The replication runner consumes the replication JSON configuration and runs fresh
+model instances. It does not consume `trace.jsonl` or `resource.csv`. Each run
+provides one estimate per metric; the Student-t interval is across those estimates,
+not a separate confidence interval for each run.
 
 ## Resource monitor library
 
@@ -257,8 +282,8 @@ result. Increase a cap only after diagnosing why it was reached.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 uv run --isolated --no-project \
-  --python 3.13 --with "simpy==4.1.2" \
-  python -m unittest discover -s tests/simpy -v
+  --python 3.13 --with "simpy==4.1.2" --with pytest \
+  python -m pytest tests/simpy -q
 ```
 
 Tests cover scheduler boundaries, deterministic ties, Conditions, all resource

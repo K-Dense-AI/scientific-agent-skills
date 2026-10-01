@@ -140,3 +140,91 @@ def test_nmrpipe_header_mismatch_rejected(tmp_path, key):
     config[key] *= 1.1
     with pytest.raises(ValueError, match="disagrees"):
         module.load_fid(pipe_path, config, "nmrpipe")
+
+
+@pytest.mark.parametrize("field,value,message", [
+    ("FDF2TDSIZE", 4096, "FDF2TDSIZE"),
+    ("FDF2TDSIZE", 16384, "FDF2TDSIZE"),
+    ("FDF2CENTER", 4000, "centered axis"),
+    ("FDF2ORIG", 100, "centered axis"),
+])
+def test_nmrpipe_preprocessed_or_inconsistent_axis_rejected(tmp_path, field, value, message):
+    import nmrglue as ng
+    fid, config = example()
+    pipe_path = tmp_path / "fid.pipe"
+    write_synthetic_nmrpipe(pipe_path, fid, config)
+    header, data = ng.pipe.read(str(pipe_path))
+    header[field] = value
+    ng.pipe.write(str(pipe_path), header, data, overwrite=True)
+    with pytest.raises(ValueError, match=message):
+        module.load_fid(pipe_path, config, "nmrpipe")
+
+
+@pytest.mark.parametrize("size,carrier", [(8191, 5.0), (8192, 4.998789)])
+def test_nmrpipe_canonical_odd_length_and_float32_origin_rounding(tmp_path, size, carrier):
+    fid, config = example()
+    config["carrier_ppm"] = carrier
+    path = tmp_path / "fid.pipe"
+    write_synthetic_nmrpipe(path, fid[:size], config)
+    decoded, _ = module.load_fid(path, config, "nmrpipe")
+    np.testing.assert_array_equal(decoded, fid[:size].astype(np.complex64))
+
+
+def test_empty_nmrpipe_rejected_before_axis_calculation(tmp_path):
+    import nmrglue as ng
+    fid, config = example()
+    path = tmp_path / "fid.pipe"
+    write_synthetic_nmrpipe(path, fid, config)
+    header, _ = ng.pipe.read(str(path))
+    header.update(FDSIZE=0, FDF2TDSIZE=0)
+    ng.pipe.write(str(path), header, np.empty(0, dtype=np.complex64), overwrite=True)
+    with pytest.raises(ValueError, match="at least 16"):
+        module.load_fid(path, config, "nmrpipe")
+
+
+def test_upstream_native_generated_nmrpipe_fixture():
+    import hashlib
+    pipe_path = Path(__file__).parent / "fixtures" / "nmrpipe_1d_time.fid"
+    assert hashlib.sha256(pipe_path.read_bytes()).hexdigest() == "3f88650d2135a3e4bd57ef15e0a03ba16b5788ae343e44a5e8251a9dbaa23d64"
+    _, config = example()
+    config.update(spectral_width_hz=50000.0, observation_mhz=500.0,
+                  carrier_ppm=99.0, nucleus="H1", zero_fill_points=16,
+                  first_point_scale=1.0, line_broadening_hz=0.0,
+                  integration_regions_ppm=[])
+    fid, metadata = module.load_fid(pipe_path, config, "nmrpipe")
+    np.testing.assert_array_equal(fid, np.r_[1-1j, 2-2j, np.zeros(14)])
+    assert metadata["header"]["FDF2TDSIZE"] == 16
+    result = module.process(fid, config)
+    np.testing.assert_allclose(result["ppm"], 149.0 - np.arange(16) * 6.25)
+    # Independent analytic transform of the two nonzero samples, in fftshift order.
+    k = np.arange(-8, 8)
+    expected = (1-1j) + (2-2j) * np.exp(-2j * np.pi * k / 16)
+    np.testing.assert_allclose(result["real"], expected.real, atol=1e-14)
+    np.testing.assert_allclose(result["imaginary"], expected.imag, atol=1e-14)
+
+
+def test_first_order_phase_and_sloping_baseline_recovery():
+    _, config = example()
+    size = 512
+    ppm = 10 - np.arange(size) * 10 / size
+    target = np.exp(-((ppm - 3) / 0.1)**2) + 2 * np.exp(-((ppm - 7) / 0.1)**2)
+    baseline = 0.2 * ppm - 0.7
+    phase = np.deg2rad(25 - 80 * np.arange(size) / size)
+    fid = np.fft.ifft(np.fft.ifftshift((target + baseline) * np.exp(-1j * phase)))
+    config.update(zero_fill_points=size, first_point_scale=1.0, line_broadening_hz=0.0,
+                  phase0_deg=25, phase1_deg=-80, baseline="linear",
+                  baseline_regions_ppm=[[0.2, 0.8], [9.2, 9.8]])
+    result = module.process(fid, config)
+    np.testing.assert_allclose(result["real"], target, atol=2e-15)
+    np.testing.assert_allclose(result["baseline"], baseline, atol=2e-15)
+    np.testing.assert_allclose(result["imaginary"], 0, atol=2e-15)
+
+
+def test_negative_areas_and_reversed_bounds_are_preserved():
+    fid, config = example()
+    expected = module.process(fid, config)
+    config["integration_regions_ppm"] = [region[::-1] for region in config["integration_regions_ppm"]]
+    actual = module.process(-fid, config)
+    np.testing.assert_allclose([r["area_signal_ppm"] for r in actual["integrals"]],
+                               [-r["area_signal_ppm"] for r in expected["integrals"]])
+    assert actual["peaks"] == []

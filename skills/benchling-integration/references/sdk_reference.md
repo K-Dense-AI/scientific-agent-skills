@@ -1,772 +1,329 @@
 # Benchling Python SDK Reference
 
-## Installation & Setup
+Targets **1.25.0**, the stable release verified on 2026-09-30. Python requirement:
+`>=3.9,<4`. Install with `uv pip install "benchling-sdk==1.25.0"`.
+Examples assume an initialized `benchling` client from [authentication](authentication.md).
+All IDs and schema fields are placeholders. Model serialization and request construction
+were tested offline; server behavior remains illustrative until checked in your tenant.
 
-### Installation
+Source of truth: [versioned SDK reference](https://benchling.com/sdk-docs/1.25.0/index.html)
+and the released `benchling-sdk` / `benchling-api-client` Python packages. The
+[interaction guide](https://docs.benchling.com/docs/common-sdk-interactions-and-examples)
+explains the patterns; use installed signatures when guide snippets differ.
 
-```bash
-# Stable release (recommended)
-uv pip install "benchling-sdk==1.25.0"
-
-# Preview builds — alpha functionality, not for production
-uv pip install "benchling-sdk" --prerelease allow
-```
-
-### Requirements
-- Python 3.9+ (3.12 supported since SDK 1.11.0; repo recommends 3.11+)
-- API access enabled on your Benchling tenant
-- Developer Platform access from your tenant admin (for apps and events)
-
-### Basic Initialization
+## Schemas and fields
 
 ```python
-import os
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
+from benchling_sdk.helpers.serialization_helpers import fields
 
-benchling = Benchling(
-    url=os.environ["BENCHLING_TENANT_URL"],
-    auth_method=ApiKeyAuth(os.environ["BENCHLING_API_KEY"]),
+custom_fields = fields({
+    "concentration": {"value": 100.0},
+    "notes": {"value": "QC passed"},
+})
+schema = benchling.schemas.get_entity_schema_by_id("ts_example")
+```
+
+Use actual field names, numeric types, units, multiplicity, and dropdown **option IDs**
+from the schema. `fields()` is a serializer, not schema validation. A field named
+`concentration` may be a custom number; it is not the inventory contents concentration.
+Omitting a field preserves it on a partial update; `{"value": None}` explicitly clears it
+when allowed. Do not confuse `fields` with the free-text `custom_fields` property.
+
+## Registry entities
+
+### DNA: create, register, read, update, archive
+
+```python
+from benchling_sdk.models import (
+    DnaSequenceCreate, DnaSequenceUpdate, EntityArchiveReason, NamingStrategy,
 )
-```
+from benchling_sdk.helpers.serialization_helpers import fields
 
-## SDK Architecture
-
-### Main Classes
-
-**Benchling Client:**
-The `benchling_sdk.benchling.Benchling` class is the root of all SDK interactions. It provides access to all resource endpoints:
-
-```python
-benchling.dna_sequences      # DNA sequence operations
-benchling.rna_sequences      # RNA sequence operations
-benchling.aa_sequences       # Amino acid sequence operations
-benchling.custom_entities    # Custom entity operations
-benchling.mixtures           # Mixture operations
-benchling.containers         # Container operations
-benchling.boxes              # Box operations
-benchling.locations          # Location operations
-benchling.plates             # Plate operations
-benchling.entries            # Notebook entry operations
-benchling.workflow_tasks     # Workflow task operations
-benchling.requests           # Request operations
-benchling.folders            # Folder operations
-benchling.projects           # Project operations
-benchling.users              # User operations
-benchling.teams              # Team operations
-```
-
-### Resource Pattern
-
-All resources follow a consistent CRUD pattern:
-
-```python
-# Create
-resource.create(CreateModel(...))
-
-# Read (single)
-resource.get_by_id("resource_id")
-
-# Read (list)
-resource.list(optional_filters...)
-
-# Update
-resource.update(id="resource_id", UpdateModel(...))
-
-# Archive/Delete
-resource.archive(id="resource_id")
-```
-
-## Entity Management
-
-### DNA Sequences
-
-**Create:**
-```python
-from benchling_sdk.models import DnaSequenceCreate
-
-sequence = benchling.dna_sequences.create(
-    DnaSequenceCreate(
-        name="pET28a-GFP",
-        bases="ATCGATCGATCG",
-        is_circular=True,
-        folder_id="fld_abc123",
-        schema_id="ts_abc123",
-        fields=benchling.models.fields({
-            "gene_name": "GFP",
-            "resistance": "Kanamycin",
-            "copy_number": "High"
-        })
-    )
+payload = DnaSequenceCreate(
+    name="Construct-001",
+    bases="ATCGATCG",
+    is_circular=True,
+    folder_id="lib_example",
+    schema_id="ts_example",
+    registry_id="src_example",
+    naming_strategy=NamingStrategy.NEW_IDS,
+    fields=fields({"gene_name": {"value": "GFP"}}),
 )
-```
-
-**Read:**
-```python
-# Get by ID
-seq = benchling.dna_sequences.get_by_id("seq_abc123")
-print(f"{seq.name}: {len(seq.bases)} bp")
-
-# List with filters
-sequences = benchling.dna_sequences.list(
-    folder_id="fld_abc123",
-    schema_id="ts_abc123",
-    name="pET28a"  # Filter by name
-)
-
-for page in sequences:
-    for seq in page:
-        print(f"{seq.id}: {seq.name}")
-```
-
-**Update:**
-```python
-from benchling_sdk.models import DnaSequenceUpdate
-
+sequence = benchling.dna_sequences.create(payload)
+print(sequence.id, sequence.entity_registry_id)
+sequence = benchling.dna_sequences.get_by_id(sequence.id)
 updated = benchling.dna_sequences.update(
-    sequence_id="seq_abc123",
+    dna_sequence_id=sequence.id,
     dna_sequence=DnaSequenceUpdate(
-        name="pET28a-GFP-v2",
-        fields=benchling.models.fields({
-            "gene_name": "eGFP",
-            "notes": "Codon optimized"
-        })
-    )
+        fields=fields({"gene_name": {"value": "mCherry"}}),
+    ),
 )
 ```
 
-**Archive:**
+For an unregistered entity omit `registry_id` and the naming arguments. For an explicit
+human registry ID, replace `naming_strategy` with `entity_registry_id="CONSTRUCT001"`.
+These are mutually exclusive. Required schema fields are enforced during registration.
+`sequence.id` is the API ID; `sequence.entity_registry_id` is the human registry ID.
+
+Archival is a separate requested operation, with an iterable of IDs and an enum:
+
 ```python
 benchling.dna_sequences.archive(
-    sequence_id="seq_abc123",
-    reason="Deprecated construct"
+    dna_sequence_ids=["seq_example"],
+    reason=EntityArchiveReason.RETIRED,
 )
 ```
 
-### RNA Sequences
-
-Similar pattern to DNA sequences:
+### RNA, proteins, and custom entities
 
 ```python
-from benchling_sdk.models import RnaSequenceCreate, RnaSequenceUpdate
-
-# Create
-rna = benchling.rna_sequences.create(
-    RnaSequenceCreate(
-        name="gRNA-target1",
-        bases="AUCGAUCGAUCG",
-        folder_id="fld_abc123",
-        fields=benchling.models.fields({
-            "target_gene": "TP53",
-            "off_target_score": "95"
-        })
-    )
+from benchling_sdk.models import (
+    RnaSequenceCreate, RnaSequenceUpdate, AaSequenceCreate,
+    CustomEntityCreate, CustomEntityUpdate,
 )
 
-# Update
-updated_rna = benchling.rna_sequences.update(
+rna = benchling.rna_sequences.create(RnaSequenceCreate(
+    name="gRNA-001", bases="AUCGAUCG", is_circular=False,
+    folder_id="lib_example",
+))
+benchling.rna_sequences.update(
     rna_sequence_id=rna.id,
-    rna_sequence=RnaSequenceUpdate(
-        fields=benchling.models.fields({
-            "validated": "Yes"
-        })
-    )
+    rna_sequence=RnaSequenceUpdate(name="gRNA-001-validated"),
 )
-```
-
-### Amino Acid (Protein) Sequences
-
-```python
-from benchling_sdk.models import AaSequenceCreate
-
-protein = benchling.aa_sequences.create(
-    AaSequenceCreate(
-        name="Green Fluorescent Protein",
-        amino_acids="MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKF",
-        folder_id="fld_abc123",
-        fields=benchling.models.fields({
-            "molecular_weight": "27000",
-            "extinction_coefficient": "21000"
-        })
-    )
-)
-```
-
-### Custom Entities
-
-Custom entities are defined by your tenant's schemas:
-
-```python
-from benchling_sdk.models import CustomEntityCreate, CustomEntityUpdate
-
-# Create
-cell_line = benchling.custom_entities.create(
-    CustomEntityCreate(
-        name="HEK293T-Clone5",
-        schema_id="ts_cellline_abc123",
-        folder_id="fld_abc123",
-        fields=benchling.models.fields({
-            "passage_number": "15",
-            "mycoplasma_test": "Negative",
-            "freezing_date": "2025-10-15"
-        })
-    )
-)
-
-# Update
-updated_cell_line = benchling.custom_entities.update(
+protein = benchling.aa_sequences.create(AaSequenceCreate(
+    name="Peptide-001", amino_acids="MSKGEELFTGVVPIL",
+    folder_id="lib_example",
+))
+cell_line = benchling.custom_entities.create(CustomEntityCreate(
+    name="HEK293T-Clone5", schema_id="ts_cellline", folder_id="lib_example",
+    fields=fields({"passage_number": {"value": 15}}),
+))
+benchling.custom_entities.update(
     entity_id=cell_line.id,
-    custom_entity=CustomEntityUpdate(
-        fields=benchling.models.fields({
-            "passage_number": "16",
-            "notes": "Expanded for experiment"
-        })
-    )
+    entity=CustomEntityUpdate(fields=fields({"passage_number": {"value": 16}})),
 )
 ```
 
 ### Mixtures
 
-Mixtures combine multiple components:
+`IngredientWriteParams` uses separate amount and units, with explicit nullable provenance
+fields. There is no `IngredientCreate` in this release.
 
 ```python
-from benchling_sdk.models import MixtureCreate, IngredientCreate
+from benchling_sdk.models import MixtureCreate, IngredientWriteParams, IngredientMeasurementUnits
 
-mixture = benchling.mixtures.create(
-    MixtureCreate(
-        name="LB-Amp Media",
-        folder_id="fld_abc123",
-        schema_id="ts_mixture_abc123",
-        ingredients=[
-            IngredientCreate(
-                component_entity_id="ent_lb_base",
-                amount="1000 mL"
-            ),
-            IngredientCreate(
-                component_entity_id="ent_ampicillin",
-                amount="100 mg"
-            )
-        ],
-        fields=benchling.models.fields({
-            "pH": "7.0",
-            "sterilized": "Yes"
-        })
-    )
+ingredient = IngredientWriteParams(
+    component_entity_id="bfi_component",
+    amount="100", units=IngredientMeasurementUnits.MG,
+    catalog_identifier=None, component_lot_container_id=None,
+    component_lot_entity_id=None, component_lot_text=None, notes=None,
 )
+mixture = benchling.mixtures.create(MixtureCreate(
+    name="Example formulation", schema_id="ts_mixture", folder_id="lib_example",
+    ingredients=[ingredient],
+))
 ```
 
-### Registry Operations
+Resolve ingredient identity/lot and measurement dimensions before transfer or formulation;
+serialization does not establish material balance or concentration correctness.
 
-**Direct Registry Registration:**
-```python
-# Register entity upon creation
-registered_seq = benchling.dna_sequences.create(
-    DnaSequenceCreate(
-        name="Construct-001",
-        bases="ATCG",
-        is_circular=True,
-        folder_id="fld_abc123",
-        entity_registry_id="src_abc123",
-        naming_strategy="NEW_IDS"  # or "IDS_FROM_NAMES"
-    )
-)
-print(f"Registry ID: {registered_seq.registry_id}")
-```
+## Inventory
 
-**Naming Strategies:**
-- `NEW_IDS`: Benchling generates new registry IDs
-- `IDS_FROM_NAMES`: Use entity names as registry IDs (names must be unique)
-
-## Inventory Management
-
-### Containers
+### Storage and physical movement
 
 ```python
-from benchling_sdk.models import ContainerCreate, ContainerUpdate
+from benchling_sdk.models import ContainerCreate, ContainerUpdate, BoxCreate, LocationCreate
 
-# Create
-container = benchling.containers.create(
-    ContainerCreate(
-        name="Sample-001-Tube",
-        schema_id="cont_schema_abc123",
-        barcode="CONT001",
-        parent_storage_id="box_abc123",  # Place in box
-        fields=benchling.models.fields({
-            "concentration": "100 ng/μL",
-            "volume": "50 μL",
-            "sample_type": "gDNA"
-        })
-    )
-)
-
-# Update location
-benchling.containers.transfer(
+location = benchling.locations.create(LocationCreate(
+    name="Freezer A - Shelf 2", schema_id="locsch_example",
+    parent_storage_id="loc_freezer",
+))
+box = benchling.boxes.create(BoxCreate(
+    name="Box 01", schema_id="boxsch_example", parent_storage_id=location.id,
+))
+container = benchling.containers.create(ContainerCreate(
+    name="Sample 001", schema_id="consch_example", parent_storage_id=box.id,
+))
+moved = benchling.containers.update(
     container_id=container.id,
-    destination_id="box_xyz789"
+    container=ContainerUpdate(parent_storage_id="loc_destination"),
 )
-
-# Update properties
-updated = benchling.containers.update(
-    container_id=container.id,
-    container=ContainerUpdate(
-        fields=benchling.models.fields({
-            "volume": "45 μL",
-            "notes": "Used 5 μL for PCR"
-        })
-    )
-)
-
-# Check out
-benchling.containers.check_out(
-    container_id=container.id,
-    comment="Taking to bench"
-)
-
-# Check in
-benchling.containers.check_in(
-    container_id=container.id,
-    location_id="bench_location_abc"
-)
+for page in benchling.containers.list(ancestor_storage_id=box.id):
+    for item in page:
+        print(item.id, item.name)
 ```
 
-### Boxes
+When placing a container into a box, resolve the supported box position identifier from
+the box contents/reference; don't guess coordinates or assume every box has free space.
+
+### Check out and in
 
 ```python
-from benchling_sdk.models import BoxCreate
+from benchling_sdk.models import ContainersCheckout, ContainersCheckin
 
-box = benchling.boxes.create(
-    BoxCreate(
-        name="Freezer-A-Box-01",
-        schema_id="box_schema_abc123",
-        parent_storage_id="loc_freezer_a",
-        barcode="BOX001",
-        fields=benchling.models.fields({
-            "box_type": "81-place",
-            "temperature": "-80C"
-        })
-    )
-)
-
-# List containers in box
-containers = benchling.containers.list(
-    parent_storage_id=box.id
-)
+benchling.containers.checkout(ContainersCheckout(
+    assignee_id="usr_example", container_ids=["con_example"], comment="At bench",
+))
+benchling.containers.checkin(ContainersCheckin(
+    container_ids=["con_example"], comments="Returned",
+))
 ```
 
-### Locations
+Check-in does not take a `location_id`. Change physical storage separately if needed.
+
+### Plates and material transfer
 
 ```python
-from benchling_sdk.models import LocationCreate
+from benchling_sdk.models import PlateCreate
 
-location = benchling.locations.create(
-    LocationCreate(
-        name="Freezer A - Shelf 2",
-        parent_storage_id="loc_freezer_a",
-        barcode="LOC-A-S2"
-    )
-)
+plate = benchling.plates.create(PlateCreate(
+    name="PCR plate", schema_id="pltsch_example", barcode="PLATE001",
+))
 ```
 
-### Plates
+`PlateCreate.wells`, when used, is a `PlateCreateWells` mapping of positions to well
+creation properties (for example barcodes), not a list of `WellCreate` entity assignments.
+Read back well/container IDs, then transfer contents with the container service.
 
 ```python
-from benchling_sdk.models import PlateCreate, WellCreate
+from benchling_sdk.models import MultipleContainersTransfer, ContainerQuantity, ContainerQuantityUnits
 
-# Create 96-well plate
-plate = benchling.plates.create(
-    PlateCreate(
-        name="PCR-Plate-001",
-        schema_id="plate_schema_abc123",
-        barcode="PLATE001",
-        wells=[
-            WellCreate(
-                position="A1",
-                entity_id="sample_entity_abc"
-            ),
-            WellCreate(
-                position="A2",
-                entity_id="sample_entity_xyz"
-            )
-            # ... more wells
-        ]
-    )
-)
+transfer_task = benchling.containers.transfer_into_containers([
+    MultipleContainersTransfer(
+        source_container_id="con_source",
+        destination_container_id="con_destination",
+        transfer_quantity=ContainerQuantity(units=ContainerQuantityUnits.UL, value=5.0),
+    ),
+])
+completion = transfer_task.wait_for_completion(max_wait_seconds=60)
+if not completion.success:
+    raise RuntimeError("Benchling material transfer failed; inspect completion.errors")
 ```
 
-## Notebook Operations
+This calls `POST /api/v2/transfers` and returns a `TaskHelper`. Check `completion.success` and
+`completion.errors` before consuming `completion.response`. Single-destination transfer uses
+`transfer_into_container(destination_container_id, ContainerTransfer(...))`, with
+`destination_contents`; it is a different payload. Neither method moves a tube to a box.
 
-### Entries
+## Notebook
 
 ```python
 from benchling_sdk.models import EntryCreate, EntryUpdate
 
-# Create entry
-entry = benchling.entries.create(
-    EntryCreate(
-        name="Cloning Experiment 2025-10-20",
-        folder_id="fld_abc123",
-        schema_id="entry_schema_abc123",
-        fields=benchling.models.fields({
-            "objective": "Clone GFP into pET28a",
-            "date": "2025-10-20",
-            "experiment_type": "Molecular Biology"
-        })
-    )
+entry = benchling.entries.create_entry(EntryCreate(
+    name="Cloning experiment", folder_id="lib_example",
+))
+entry = benchling.entries.get_entry_by_id(entry.id)
+updated_entry = benchling.entries.update_entry(
+    entry_id=entry.id, entry=EntryUpdate(name="Cloning experiment - reviewed"),
 )
-
-# Update entry
-updated_entry = benchling.entries.update(
-    entry_id=entry.id,
-    entry=EntryUpdate(
-        fields=benchling.models.fields({
-            "results": "Successful cloning, 10 colonies",
-            "notes": "Colony 5 shows best fluorescence"
-        })
-    )
-)
+for page in benchling.entries.list_entries(project_id="src_project", page_size=10):
+    for item in page:
+        print(item.id, item.name)
+    break
 ```
 
-### Linking Entities to Entries
+Use `entry_template_id` and `initial_tables` for supported template-based creation.
+`EntryUpdate` updates metadata/schema fields; it is not arbitrary rich-text editing.
+There is no `benchling.entry_links` service in 1.25.0. Use supported schema link fields
+or template/table mechanisms for the intended relationship. Discover actual template
+requirements with `entries.get_entry_template_by_id` and `entries.list_entry_templates`.
 
-```python
-# Link DNA sequence to entry
-link = benchling.entry_links.create(
-    entry_id="entry_abc123",
-    entity_id="seq_xyz789"
-)
-
-# List links for an entry
-links = benchling.entry_links.list(entry_id="entry_abc123")
-```
-
-## Workflow Management
-
-### Tasks
+## Workflow tasks versus async tasks
 
 ```python
 from benchling_sdk.models import WorkflowTaskCreate, WorkflowTaskUpdate
 
-# Create task
-task = benchling.workflow_tasks.create(
-    WorkflowTaskCreate(
-        name="PCR Amplification",
-        workflow_id="wf_abc123",
-        assignee_id="user_abc123",
-        schema_id="task_schema_abc123",
-        fields=benchling.models.fields({
-            "template": "seq_abc123",
-            "primers": "Forward: ATCG, Reverse: CGAT",
-            "priority": "High"
-        })
-    )
+task = benchling.workflow_tasks.create(WorkflowTaskCreate(
+    workflow_task_group_id="wtg_example", assignee_id="usr_example",
+))
+updated_task = benchling.workflow_tasks.update(
+    workflow_task_id=task.id,
+    workflow_task=WorkflowTaskUpdate(status_id="wts_complete"),
 )
-
-# Update status
-completed_task = benchling.workflow_tasks.update(
-    task_id=task.id,
-    workflow_task=WorkflowTaskUpdate(
-        status_id="status_complete_abc123",
-        fields=benchling.models.fields({
-            "completion_date": "2025-10-20",
-            "yield": "500 ng"
-        })
-    )
-)
-
-# List tasks
-tasks = benchling.workflow_tasks.list(
-    workflow_id="wf_abc123",
-    status_ids=["status_pending", "status_in_progress"]
-)
+for page in benchling.workflow_tasks.list(
+    workflow_task_group_ids=["wtg_example"], status_ids=["wts_pending"],
+):
+    for item in page:
+        print(item.id)
 ```
 
-## Advanced Features
+Resolve status IDs from the workflow task schema. There is no `workflow_id` filter or
+`name`/`schema_id` constructor field on `WorkflowTaskCreate` in this SDK. The task group
+provides workflow context. Validate scientific completion before changing a status.
 
-### Pagination
-
-The SDK uses generators for memory-efficient pagination:
-
-```python
-# Automatic pagination
-sequences = benchling.dna_sequences.list()
-
-# Get estimated total count
-total = sequences.estimated_count()
-print(f"Total sequences: {total}")
-
-# Iterate through all pages
-for page in sequences:
-    for seq in page:
-        process(seq)
-
-# Manual page size control
-sequences = benchling.dna_sequences.list(page_size=50)
-```
-
-### Async Task Handling
-
-Some operations are asynchronous and return task IDs:
+Async server jobs are a separate service and endpoint:
 
 ```python
-from benchling_sdk.helpers.tasks import wait_for_task
+from benchling_sdk.models import AsyncTaskStatus
 from benchling_sdk.errors import WaitForTaskExpiredError
 
-# Start async operation
-response = benchling.some_bulk_operation(...)
-task_id = response.task_id
-
-# Wait for completion
 try:
-    result = wait_for_task(
-        benchling,
-        task_id=task_id,
-        interval_wait_seconds=2,  # Poll every 2 seconds
-        max_wait_seconds=600       # Timeout after 10 minutes
+    finished = benchling.tasks.wait_for_task(
+        task_id="task_example", interval_wait_seconds=2, max_wait_seconds=60,
     )
-    print("Task completed successfully")
+    if finished.status != AsyncTaskStatus.SUCCEEDED:
+        raise RuntimeError(f"Benchling job ended with {finished.status}")
 except WaitForTaskExpiredError:
-    print("Task timed out")
+    # The server job can continue after the local timeout. Save its ID for later polling.
+    print("[FAIL] Polling deadline reached; inspect task_example before resubmission")
 ```
 
-### Error Handling
+The default polling deadline is 600 seconds. `wait_for_task` returns on terminal failure
+as well as success; do not treat return alone as a successful operation.
+
+## Pagination, errors, and retries
 
 ```python
-from benchling_sdk.errors import (
-    BenchlingError,
-    NotFoundError,
-    ValidationError,
-    UnauthorizedError
-)
-
+sequences = benchling.dna_sequences.list(schema_id="ts_example", page_size=50)
 try:
-    sequence = benchling.dna_sequences.get_by_id("seq_invalid")
-except NotFoundError:
-    print("Sequence not found")
-except UnauthorizedError:
-    print("Insufficient permissions")
-except ValidationError as e:
-    print(f"Invalid data: {e}")
-except BenchlingError as e:
-    print(f"General Benchling error: {e}")
-```
-
-### Retry Strategy
-
-Customize retry behavior:
-
-```python
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-from benchling_sdk.retry import RetryStrategy
-
-# Custom retry configuration
-retry_strategy = RetryStrategy(
-    max_retries=3,
-    backoff_factor=0.5,
-    status_codes_to_retry=[429, 502, 503, 504]
-)
-
-benchling = Benchling(
-    url="https://your-tenant.benchling.com",
-    auth_method=ApiKeyAuth("your_api_key"),
-    retry_strategy=retry_strategy
-)
-
-# Disable retries
-benchling = Benchling(
-    url="https://your-tenant.benchling.com",
-    auth_method=ApiKeyAuth("your_api_key"),
-    retry_strategy=RetryStrategy(max_retries=0)
-)
-```
-
-### Custom API Calls
-
-For unsupported endpoints:
-
-```python
-# GET request with model parsing
-from benchling_sdk.models import DnaSequence
-
-response = benchling.api.get_modeled(
-    path="/api/v2/dna-sequences/seq_abc123",
-    response_type=DnaSequence
-)
-
-# POST request
-from benchling_sdk.models import DnaSequenceCreate
-
-response = benchling.api.post_modeled(
-    path="/api/v2/dna-sequences",
-    request_body=DnaSequenceCreate(...),
-    response_type=DnaSequence
-)
-
-# Raw requests
-raw_response = benchling.api.get(
-    path="/api/v2/custom-endpoint",
-    params={"key": "value"}
-)
-```
-
-### Batch Operations
-
-Efficiently process multiple items:
-
-```python
-# Bulk create
-from benchling_sdk.models import DnaSequenceCreate
-
-sequences_to_create = [
-    DnaSequenceCreate(name=f"Seq-{i}", bases="ATCG", folder_id="fld_abc")
-    for i in range(100)
-]
-
-# Create in batches
-batch_size = 10
-for i in range(0, len(sequences_to_create), batch_size):
-    batch = sequences_to_create[i:i+batch_size]
-    for seq in batch:
-        benchling.dna_sequences.create(seq)
-```
-
-### Schema Fields Helper
-
-Convert dictionaries to Fields objects:
-
-```python
-# Using fields helper
-fields_dict = {
-    "concentration": "100 ng/μL",
-    "volume": "50 μL",
-    "quality_score": "8.5",
-    "date_prepared": "2025-10-20"
-}
-
-fields = benchling.models.fields(fields_dict)
-
-# Use in create/update
-container = benchling.containers.create(
-    ContainerCreate(
-        name="Sample-001",
-        schema_id="schema_abc",
-        fields=fields
-    )
-)
-```
-
-### Forward Compatibility
-
-The SDK handles unknown API values gracefully:
-
-```python
-# Unknown enum values are preserved
-entity = benchling.dna_sequences.get_by_id("seq_abc")
-# Even if API returns new enum value not in SDK, it's preserved
-
-# Unknown polymorphic types return UnknownType
-from benchling_sdk.models import UnknownType
-
-if isinstance(entity, UnknownType):
-    print(f"Unknown type: {entity.type}")
-    # Can still access raw data
-    print(entity.raw_data)
-```
-
-## Best Practices
-
-### Use Type Hints
-
-```python
-from benchling_sdk.models import DnaSequence, DnaSequenceCreate
-from typing import List
-
-def create_sequences(names: List[str], folder_id: str) -> List[DnaSequence]:
-    sequences = []
-    for name in names:
-        seq = benchling.dna_sequences.create(
-            DnaSequenceCreate(
-                name=name,
-                bases="ATCG",
-                folder_id=folder_id
-            )
-        )
-        sequences.append(seq)
-    return sequences
-```
-
-### Efficient Filtering
-
-Use API filters instead of client-side filtering:
-
-```python
-# Good - filter on server
-sequences = benchling.dna_sequences.list(
-    folder_id="fld_abc123",
-    schema_id="ts_abc123"
-)
-
-# Bad - loads everything then filters
-all_sequences = benchling.dna_sequences.list()
-filtered = [s for page in all_sequences for s in page if s.folder_id == "fld_abc123"]
-```
-
-### Resource Cleanup
-
-```python
-# Archive old entities
-cutoff_date = "2024-01-01"
-sequences = benchling.dna_sequences.list()
-
+    total = sequences.estimated_count
+except NotImplementedError:
+    total = None
 for page in sequences:
     for seq in page:
-        if seq.created_at < cutoff_date:
-            benchling.dna_sequences.archive(
-                sequence_id=seq.id,
-                reason="Archiving old sequences"
-            )
+        print(seq.id, seq.name)
 ```
 
-## Troubleshooting
+The iterator is consumable once; create another for another pass. Count access may fetch
+a page and counts are approximate. `returning` can omit model attributes; do not access
+an unrequested property as if it were a complete resource.
 
-### Common Issues
-
-**Import paths:**
 ```python
-# Preferred (documented in getting started guide)
-from benchling_sdk.benchling import Benchling
+from benchling_sdk.errors import BenchlingError
 
-# Also valid in benchling-sdk 1.25+
-from benchling_sdk import Benchling
+try:
+    sequence = benchling.dna_sequences.get_by_id("seq_example")
+except BenchlingError as error:
+    print(f"[FAIL] Benchling HTTP status {error.status_code}")
+    raise
 ```
 
-**Field Validation:**
+`BenchlingError` covers HTTP failures; transport and parsing errors can still surface
+separately. Avoid logging request headers or sensitive response bodies.
+
 ```python
-# Fields must match schema
-# Check schema field types in Benchling UI
-fields = benchling.models.fields({
-    "numeric_field": "123",    # Should be string even for numbers
-    "date_field": "2025-10-20", # Format: YYYY-MM-DD
-    "dropdown_field": "Option1" # Must match dropdown options exactly
-})
+from benchling_sdk.helpers.retry_helpers import RetryStrategy
+
+retry_strategy = RetryStrategy(max_tries=3, backoff_factor=1.0)
 ```
 
-**Pagination Exhaustion:**
+Pass this to `Benchling(..., retry_strategy=retry_strategy)`. Default `max_tries=5`
+counts total attempts; default retry codes are 429, 502, 503, and 504. Set
+`retry_strategy=None` to disable. Retrying a write after an ambiguous failure requires
+reconciliation; do not assume every create is idempotent.
+
+## Direct requests and model compatibility
+
+For a documented endpoint not wrapped by a service, use its exact path and response
+shape. `api.get_response` returns a `Response` whose `parsed` value is a dictionary:
+
 ```python
-# Generators can only be iterated once
-sequences = benchling.dna_sequences.list()
-for page in sequences:  # First iteration OK
-    pass
-for page in sequences:  # Second iteration returns nothing!
-    pass
-
-# Solution: Create new generator
-sequences = benchling.dna_sequences.list()  # New generator
+response = benchling.api.get_response(url="/api/v2/projects?pageSize=1")
+projects = response.parsed["projects"]
 ```
 
-## References
-
-- **SDK Source:** https://github.com/benchling/benchling-sdk
-- **SDK Docs:** https://benchling.com/sdk-docs/
-- **API Reference:** https://benchling.com/api/reference
-- **Common Examples:** https://docs.benchling.com/docs/common-sdk-interactions-and-examples
+`get_modeled(url, target_type)` and `post_modeled(url, target_type, body=...)` use
+SDK deserializable models. Use the endpoint's actual response model; a list envelope is not a single resource. Unknown enums/polymorphic responses are preserved where
+supported, but new values still need application handling; successful deserialization
+does not mean the integration understands their scientific meaning.

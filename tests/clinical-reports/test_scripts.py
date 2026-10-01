@@ -17,7 +17,13 @@ SCRIPTS = SKILL_ROOT / "scripts"
 ASSETS = SKILL_ROOT / "assets"
 sys.path.insert(0, str(SCRIPTS))
 
-from _common import ValidationError  # noqa: E402
+from _common import (  # noqa: E402
+    ValidationError,
+    load_json_object,
+    local_output_path,
+    parse_iso_date,
+    require_data_class,
+)
 from check_deidentification import validate_process  # noqa: E402
 from consistency_checker import validate_consistency  # noqa: E402
 from format_adverse_events import (  # noqa: E402
@@ -486,6 +492,132 @@ class AssetAndGeneratorTests(unittest.TestCase):
             data = json.loads(generated.read_text(encoding="utf-8"))
         self.assertIn("BLOCKED", data["draft_status"])
         self.assertFalse(data["authorization_verified"])
+
+
+class InputBoundaryTests(unittest.TestCase):
+    def test_duplicate_csv_column_cannot_silently_replace_count(self) -> None:
+        content = (
+            "analysis_set,treatment_group,meddra_version,system_organ_class,"
+            "preferred_term,subjects_affected,event_count,denominator,denominator\n"
+            "Safety set,Group A,29.1,Synthetic SOC,Synthetic term,2,3,1,10\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "aggregate.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(ValidationError, "duplicate CSV"):
+                load_aggregate_csv(str(path))
+
+    def test_whitespace_csv_header_is_rejected_before_row_mapping(self) -> None:
+        content = (
+            "analysis_set,treatment_group,meddra_version,system_organ_class,"
+            "preferred_term,subjects_affected,event_count, denominator\n"
+            "Safety set,Group A,29.1,Synthetic SOC,Synthetic term,2,3,10\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "aggregate.csv"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(ValidationError, "surrounding whitespace"):
+                load_aggregate_csv(str(path))
+
+    def test_recurrent_events_can_exceed_participant_denominator(self) -> None:
+        content = (
+            "analysis_set,treatment_group,meddra_version,system_organ_class,"
+            "preferred_term,subjects_affected,event_count,denominator\n"
+            "Safety set,Group A,29.1,Synthetic SOC,Synthetic term,2,15,10\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "aggregate.csv"
+            path.write_text(content, encoding="utf-8")
+            rows = load_aggregate_csv(str(path))
+            metadata = valid_aggregate_metadata(path.name)
+            metadata["analysis_metadata"]["meddra_version"] = "29.1"
+            validate_aggregate_metadata(metadata, input_name=path.name)
+            rendered = render_markdown(rows, metadata=metadata)
+        self.assertIn("2/10 (20.0%) | 15 |", rendered)
+        self.assertNotIn("150.0%", rendered)
+
+    def test_calendar_dates_do_not_silently_accept_basic_or_week_dates(self) -> None:
+        self.assertEqual(parse_iso_date("2026-09-30", "date").isoformat(), "2026-09-30")
+        for value in ("20260930", "2026-W40-3", "2026-02-30", "2026-09"):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                parse_iso_date(value, "date")
+
+    def test_unhashable_data_class_is_validation_error(self) -> None:
+        for value in ([], {}, ["synthetic"]):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                require_data_class(value)
+
+    def test_unhashable_route_and_item_statuses_remain_blocked(self) -> None:
+        for value in ([], {}):
+            with self.subTest(value=value):
+                self.assertEqual(validate_trial_manifest({"artifact_kind": value})["status"], "BLOCKED")
+                case = valid_case_manifest()
+                case["care_items"]["timeline"]["status"] = value
+                self.assertEqual(validate_case_manifest(case)["status"], "BLOCKED")
+                csr = valid_csr_manifest()
+                csr["sections"]["synopsis"]["status"] = value
+                self.assertEqual(validate_trial_manifest(csr)["status"], "BLOCKED")
+
+    def test_unhashable_process_statuses_remain_blocked(self) -> None:
+        template = ASSETS / "deidentification_process_checklist.json"
+        for field in ("method", "safe_harbor_identifiers", "residual_risk_review"):
+            with self.subTest(field=field):
+                data = json.loads(template.read_text(encoding="utf-8"))
+                if field == "method":
+                    data[field] = []
+                elif field == "safe_harbor_identifiers":
+                    data["method"] = "safe_harbor"
+                    data[field]["names"] = []
+                else:
+                    data[field]["free_text"] = []
+                self.assertEqual(validate_process(data)["status"], "BLOCKED")
+
+    def test_unhashable_source_kind_remains_blocked(self) -> None:
+        data = json.loads((ASSETS / "provenance_manifest_template.json").read_text())
+        data["facts"] = [{
+            "fact_id": "FACT-001", "source_record_kind": [],
+            "record_locator": "local:synthetic", "field_path": "$.n",
+            "value_hash_sha256": "a" * 64, "verification_status": "verified",
+            "verified_by_role": "synthetic reviewer", "verified_at": "2026-09-30",
+            "source_version": "synthetic-1",
+        }]
+        self.assertEqual(validate_provenance(data)["status"], "BLOCKED")
+
+    def test_unhashable_coding_status_remains_blocked(self) -> None:
+        data = json.loads((ASSETS / "terminology_manifest_template.json").read_text())
+        data["entries"] = [{
+            "system": "LOINC", "system_uri": "urn:synthetic:loinc",
+            "code": "1234-5", "display": "Synthetic observation", "version": "2.83",
+            "language": "en", "source_fact_id": "FACT-001", "coding_status": [],
+            "verified_by_role": None, "verified_at": None,
+        }]
+        self.assertEqual(validate_terminology_manifest(data)["status"], "BLOCKED")
+
+    def test_unrepresentable_quantity_is_blocked_without_overflow(self) -> None:
+        data = json.loads((ASSETS / "consistency_manifest_template.json").read_text())
+        data["quantities"] = [{
+            "id": "CHECK-001", "series_id": "SERIES-001", "value": 10 ** 400,
+            "unit": "synthetic", "expected_unit": None, "source_fact_id": "FACT-001",
+        }]
+        report = validate_consistency(data)
+        self.assertEqual(report["status"], "BLOCKED_INVALID_SCHEMA")
+        self.assertTrue(any("representable" in error for error in report["errors"]))
+
+    def test_deep_json_is_blocked_without_recursion_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "deep.json"
+            path.write_text('{"x":' + '[' * 2000 + '0' + ']' * 2000 + '}')
+            with self.assertRaises(ValidationError):
+                load_json_object(str(path))
+
+    def test_dangling_output_symlink_cannot_create_an_unselected_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            selected = Path(tmp) / "selected.json"
+            unselected = Path(tmp) / "unselected.json"
+            selected.symlink_to(unselected)
+            with self.assertRaises(ValidationError):
+                local_output_path(str(selected), suffixes={".json"}, overwrite=True)
+            self.assertFalse(unselected.exists())
 
 
 # The shared --help contract: every argparse CLI this skill ships answers --help

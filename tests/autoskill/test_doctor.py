@@ -43,8 +43,39 @@ def test_screenpipe_probe_preserves_loopback_and_https_auth(monkeypatch):
         return httpx.Response(200)
     monkeypatch.setattr("doctor.httpx.get", get)
     for url in ("http://localhost:3030", "http://127.0.0.1:3030", "http://[::1]:3030", "https://remote.example"):
-        assert default_screenpipe_probe({"screenpipe": {"url": url}}) == ("ok", url)
+        status, detail = default_screenpipe_probe({"screenpipe": {"url": url}})
+        assert status == "ok"
+        assert "search auth not verified" in detail
         assert calls[-1][1]["headers"]["Authorization"] == "Bearer test-token"
+
+
+def test_local_probe_authenticates_and_requires_selected_model(monkeypatch):
+    import httpx
+    from doctor import default_llm_probe
+    monkeypatch.setenv("LM_API_TOKEN", "synthetic-token")
+    def get(url, **kwargs):
+        assert url == "http://localhost:1234/v1/models"
+        assert kwargs["headers"]["Authorization"] == "Bearer synthetic-token"
+        return httpx.Response(200, json={"data": [{"id": "available-model"}]})
+    monkeypatch.setattr("doctor.httpx.get", get)
+    config = {"backend": "local", "local": {"endpoint": "http://localhost:1234/v1/",
+                                            "model": "missing-model"}}
+    assert default_llm_probe(config)[0] == "error"
+    config["local"]["model"] = "available-model"
+    status, detail = default_llm_probe(config)
+    assert status == "ok"
+    assert "inference not probed" in detail
+
+
+def test_local_probe_rejects_remote_http_without_sending_token(monkeypatch):
+    from doctor import default_llm_probe
+    monkeypatch.setenv("LM_API_TOKEN", "synthetic-token")
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must reject before network access")
+    monkeypatch.setattr("doctor.httpx.get", forbidden)
+    status, _ = default_llm_probe({"backend": "local", "local": {
+        "endpoint": "http://remote.example/v1", "model": "m"}})
+    assert status == "error"
 
 
 def test_check_all_green(tmp_path: Path):

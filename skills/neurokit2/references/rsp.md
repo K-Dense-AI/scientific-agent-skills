@@ -1,6 +1,6 @@
 # Respiration
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable runtime/source,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable runtime/source,
 the official RSP API/examples, and cardiorespiratory interpretation guidance.
 
 ## Acquisition contract and polarity
@@ -202,7 +202,7 @@ Use this module for respiratory time-series research. It is not a validated syst
 apnea detection, capnography, tidal-volume measurement, respiratory diagnosis,
 biofeedback safety, patient/driver monitoring, or ventilatory control.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official RSP API](https://neuropsychology.github.io/NeuroKit/functions/rsp.html)
 - [Official RRV example](https://neuropsychology.github.io/NeuroKit/examples/rsp_rrv/rsp_rrv.html)

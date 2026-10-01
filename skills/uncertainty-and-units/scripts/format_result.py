@@ -110,18 +110,18 @@ def render(rounded: dict[str, Any], unit: str | None) -> dict[str, str]:
         exponent = value.adjusted() if value != 0 else 0
         if exponent in POSITIONAL_RANGE:
             text = f"{_plain(value)}{suffix}"
-            latex = f"${_plain(value)}${latex_unit}"
+            latex = f"${_plain(value)}{latex_unit}$"
         else:
             mantissa = _plain(value.scaleb(-exponent))
             text = f"{mantissa}e{exponent:+03d}{suffix}"
             latex = (
-                f"${mantissa} \\times 10^{{{exponent}}}${latex_unit}"
+                f"${mantissa} \\times 10^{{{exponent}}}{latex_unit}$"
             )
         return {
-            "plusminus": f"{text} (exact)",
-            "ascii": f"{text} (exact)",
-            "parenthetic": f"{text} (exact)",
-            "scientific": f"{text} (exact)",
+            "plusminus": f"{text} (zero supplied uncertainty)",
+            "ascii": f"{text} (zero supplied uncertainty)",
+            "parenthetic": f"{text} (zero supplied uncertainty)",
+            "scientific": f"{text} (zero supplied uncertainty)",
             "latex": latex,
         }
 
@@ -143,7 +143,7 @@ def render(rounded: dict[str, Any], unit: str | None) -> dict[str, str]:
             "scientific": scientific,
             "latex": (
                 f"$({mantissa_value} \\pm {mantissa_uncertainty}) "
-                f"\\times 10^{{{exponent}}}${latex_unit}"
+                f"\\times 10^{{{exponent}}}{latex_unit}$"
             ),
         }
 
@@ -156,7 +156,7 @@ def render(rounded: dict[str, Any], unit: str | None) -> dict[str, str]:
             scientific_concise if place > 0 else f"{value_text}({digits}){suffix}"
         ),
         "scientific": scientific,
-        "latex": f"$({value_text} \\pm {uncertainty_text})${latex_unit}",
+        "latex": f"$({value_text} \\pm {uncertainty_text}){latex_unit}$",
     }
 
 
@@ -175,13 +175,13 @@ def build_statement(
     probability = ""
     if coverage_probability is not None:
         probability = (
-            f", which corresponds to a coverage probability of approximately "
+            f", with a caller-supplied coverage probability of approximately "
             f"{coverage_probability * 100:.0f}%"
         )
     return (
         f"{renderings['plusminus']}, where the stated uncertainty is an expanded "
         f"uncertainty U = k*u_c with a coverage factor k = {coverage_factor:g}"
-        f"{probability}."
+        f"{probability}; the formatter does not verify coverage or the model assumptions."
     )
 
 
@@ -192,7 +192,7 @@ def collect_warnings(
 
     warnings: list[str] = []
     if uncertainty == 0:
-        return warnings
+        return ["zero supplied uncertainty does not establish an exact measurement"]
     leading = _decimal(uncertainty, label="uncertainty").as_tuple().digits[0]
     if significant_digits == 1 and leading in (1, 2):
         warnings.append(
@@ -201,8 +201,9 @@ def collect_warnings(
         )
     if value != 0 and uncertainty / abs(value) > 1.0:
         warnings.append(
-            "the standard uncertainty exceeds the estimate itself; report the result "
-            "as consistent with zero rather than as a measured value"
+            "the supplied uncertainty exceeds the magnitude of the estimate; "
+            "retain the measured estimate and state the uncertainty type. Whether "
+            "it is consistent with zero depends on the stated interval and model"
         )
     if rounded["value"] == 0 and value != 0:
         warnings.append(

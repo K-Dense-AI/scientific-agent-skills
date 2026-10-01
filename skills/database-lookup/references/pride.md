@@ -1,74 +1,27 @@
-# PRIDE Archive REST API Reference
+# PRIDE Archive API
 
-## Overview
-PRIDE (PRoteomics IDEntifications Database) at EMBL-EBI provides a full public REST API for querying proteomics datasets, proteins, peptides, and spectra.
+Public base: `https://www.ebi.ac.uk/pride/ws/archive/v3` (no key).
+Use the current [OpenAPI schema](https://www.ebi.ac.uk/pride/ws/archive/v3/v3/api-docs).
 
-## Base URL
-```
-https://www.ebi.ac.uk/pride/ws/archive/v2
-```
-(Legacy v1 also exists but v2 is current)
-
-## Authentication
-- **No authentication required** for read access
-- Open and free to use
-
-## Key Endpoints
-
-| Endpoint | Description |
+| GET path | Purpose |
 |---|---|
-| `GET /projects` | Search/list proteomics projects |
-| `GET /projects/{accession}` | Get a specific project by PXD accession |
-| `GET /projects/{accession}/files` | List files for a project |
-| `GET /spectra` | Search spectra |
-| `GET /peptideevidences` | Search peptide evidences |
-| `GET /proteinevidences` | Search protein evidences |
-| `GET /stats` | Database statistics |
+| `/projects?page=0&pageSize=5` | List projects |
+| `/search/projects?keyword=alzheimer&page=0&pageSize=5` | Search projects |
+| `/projects/PXD010000` | Retrieve project metadata |
+| `/projects/PXD010000/files?page=0&pageSize=10` | List project files |
+| `/projects/PXD010000/files/count` | File count |
+| `/files/{fileAccession}` | File details |
+| `/projects/count` | Project count |
 
-## Query Parameters
-- `keyword` — free-text search
-- `filter` — field-specific filters (e.g., species, instrument, modification)
-- `pageSize` — results per page (default 10, max 100)
-- `page` — page number (0-indexed)
-- `sortDirection` — ASC or DESC
-- `sortFields` — field to sort by
+`/projects` does not implement keyword search. Use `/search/projects`; its
+`filter` syntax is `field==value`, with fields from the current search/facet
+schema. Search supports `sortFields`, `sortDirection`, and `dateGap`.
+Pagination uses zero-based `page` and `pageSize` (documented default 100).
+List/search/file-list responses are JSON arrays, not a universal `results`
+envelope. A single project is an object; inspect actual keys before parsing.
 
-## Example Calls
-
-```bash
-# Search projects by keyword
-curl "https://www.ebi.ac.uk/pride/ws/archive/v2/projects?keyword=alzheimer&pageSize=5"
-
-# Get a specific project
-curl "https://www.ebi.ac.uk/pride/ws/archive/v2/projects/PXD010000"
-
-# List files for a project
-curl "https://www.ebi.ac.uk/pride/ws/archive/v2/projects/PXD010000/files?pageSize=10"
-
-# Search by species (human = 9606)
-curl "https://www.ebi.ac.uk/pride/ws/archive/v2/projects?filter=organisms_facet==9606&pageSize=5"
-
-# Get database statistics
-curl "https://www.ebi.ac.uk/pride/ws/archive/v2/stats"
-```
-
-## Response Format
-JSON. Example (project):
-```json
-{
-  "accession": "PXD010000",
-  "title": "Project title here",
-  "projectDescription": "...",
-  "organisms": [{"accession": "9606", "name": "Homo sapiens"}],
-  "instruments": [{"name": "Q Exactive"}],
-  "submissionDate": "2018-05-01",
-  "publicationDate": "2018-09-01",
-  "numAssays": 12,
-  "references": [{"pubmedId": 12345678}]
-}
-```
-
-## Rate Limits
-- No strict published rate limits, but standard EBI fair-use policies apply
-- Recommended: limit to a few requests per second
-- Bulk data available via FTP/Aspera at ftp.pride.ebi.ac.uk
+The Archive API does not expose the previously suggested `/spectra`,
+`/peptideevidences`, or `/proteinevidences` routes. For identified molecules and
+spectra, use the linked PRIDE analysis resources or download the project files.
+Retain PXD accession, assay provenance, organism and submission/publication dates;
+submitted data alone do not establish peptide/protein identification confidence.

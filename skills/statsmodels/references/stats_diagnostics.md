@@ -13,6 +13,8 @@ Statsmodels provides extensive statistical testing capabilities:
 - Robust covariance matrices
 - Influence and outlier detection
 
+Fragments require the appropriate result type and aligned inputs; OLS diagnostics do not apply automatically to GLMs or dependent observations. A non-significant assumption test does not validate its null. Prespecify the inferential target and covariance from the study design, rather than selecting inference after a sequence of pretests. VIF/influence cutoffs are screening heuristics, and condition numbers depend on units.
+
 ## Residual Diagnostics
 
 ### Autocorrelation Tests
@@ -49,8 +51,8 @@ print(f"Durbin-Watson: {dw_stat:.4f}")
 ```python
 from statsmodels.stats.diagnostic import acorr_breusch_godfrey
 
-bg_test = acorr_breusch_godfrey(results, nlags=5)
-lm_stat, lm_pval, f_stat, f_pval = bg_test
+bg_test = acorr_breusch_godfrey(results, nlags=5, result_object=True)
+lm_stat, lm_pval = bg_test.lm, bg_test.lmpval
 
 print(f"LM statistic: {lm_stat:.4f}, p-value: {lm_pval:.4f}")
 # H0: No autocorrelation up to lag k
@@ -88,8 +90,8 @@ print(f"White test p-value: {lm_pval:.4f}")
 ```python
 from statsmodels.stats.diagnostic import het_arch
 
-arch_test = het_arch(residuals, nlags=5)
-lm_stat, lm_pval, f_stat, f_pval = arch_test
+arch_test = het_arch(residuals, nlags=5, result_object=True)
+lm_stat, lm_pval = arch_test.lm, arch_test.lmpval
 
 print(f"ARCH test p-value: {lm_pval:.4f}")
 # H0: No ARCH effects
@@ -149,11 +151,11 @@ print(f"Lilliefors test p-value: {lf_pval:.4f}")
 ```python
 from statsmodels.stats.diagnostic import linear_reset
 
-reset_test = linear_reset(results, power=2)
-f_stat, f_pval = reset_test
+reset_test = linear_reset(results, power=2, use_f=True)
+f_stat, f_pval = reset_test.fvalue, reset_test.pvalue
 
 print(f"RESET test p-value: {f_pval:.4f}")
-# H0: Model is correctly specified (linear)
+# H0: the added nonlinear terms have zero coefficients; not a general validity test
 # If rejected, may need polynomial terms or transformations
 ```
 
@@ -303,7 +305,7 @@ plt.show()
 # Studentized residuals (outliers)
 student_resid = influence.resid_studentized_internal
 
-# External studentized residuals (more conservative)
+# Externally studentized residuals use the leave-one-out variance estimate
 student_resid_external = influence.resid_studentized_external
 
 # Outliers: |studentized residual| > 3 (or > 2.5)
@@ -362,7 +364,7 @@ count = 45  # successes
 nobs = 100  # total observations
 p0 = 0.5    # hypothesized proportion
 
-z_stat, p_value = proportions_ztest(count, nobs, value=p0)
+z_stat, p_value = proportions_ztest(count, nobs, value=p0, prop_var=p0)
 
 print(f"z-statistic: {z_stat:.4f}")
 print(f"p-value: {p_value:.4f}")
@@ -437,7 +439,7 @@ print(f"p-value: {p_value:.4f}")
 ```python
 from scipy.stats import wilcoxon
 
-# H0: Median difference = 0
+# H0: the paired-difference distribution is symmetric about zero
 w_stat, p_value = wilcoxon(before, after)
 
 print(f"W statistic: {w_stat:.4f}")
@@ -462,7 +464,7 @@ print(f"p-value: {p_value:.4f}")
 from statsmodels.stats.descriptivestats import sign_test
 
 # H0: Median = m0
-result = sign_test(data, m0=0)
+result = sign_test(data, mu0=0)
 print(result)
 ```
 
@@ -500,7 +502,7 @@ print(anova_table)
 ```python
 from statsmodels.stats.anova import AnovaRM
 
-# Requires long-format data
+# Fully balanced within-subject data; no between-subject effects or sphericity correction
 aovrm = AnovaRM(df, depvar='score', subject='subject_id', within=['time'])
 results = aovrm.fit()
 
@@ -517,7 +519,9 @@ print(results.summary())
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 # Perform Tukey HSD test
-tukey = pairwise_tukeyhsd(data, groups, alpha=0.05)
+tukey = pairwise_tukeyhsd(data, groups, alpha=0.05, use_var="equal")
+# In statsmodels 0.15+, unequal variances use Games-Howell:
+games_howell = pairwise_tukeyhsd(data, groups, alpha=0.05, use_var="unequal")
 
 print(tukey.summary())
 
@@ -576,7 +580,7 @@ results_hc1 = results.get_robustcov_results(cov_type='HC1')
 # HC2 (leverage adjustment)
 results_hc2 = results.get_robustcov_results(cov_type='HC2')
 
-# HC3 (most conservative, recommended for small samples)
+# HC3 uses squared leverage adjustment; it is not a universal small-sample guarantee
 results_hc3 = results.get_robustcov_results(cov_type='HC3')
 
 print("Standard OLS SEs:", results.bse)
@@ -624,7 +628,8 @@ print("Confidence interval:", desc.tconfint_mean())
 
 # Quantiles
 print("Median:", desc.quantile(0.5))
-print("IQR:", desc.quantile([0.25, 0.75]))
+quartiles = desc.quantile([0.25, 0.75], return_pandas=False)
+print("IQR:", quartiles[1] - quartiles[0])
 ```
 
 **Weighted statistics**:
@@ -651,8 +656,9 @@ print("t-test:", cm.ttest_ind())
 # Confidence interval for difference
 print("CI for difference:", cm.tconfint_diff())
 
-# Test for equal variances
-print("Equal variance test:", cm.test_equal_var())
+# For an independent-samples variance check, use SciPy (not a CompareMeans method):
+from scipy.stats import levene
+print("Brown-Forsythe:", levene(group1, group2, center="median"))
 ```
 
 ## Power Analysis and Sample Size
@@ -672,7 +678,7 @@ n = tt_ind_solve_power(effect_size=effect_size,
                         power=power,
                         alternative='two-sided')
 
-print(f"Required sample size per group: {n:.0f}")
+print(f"Required sample size per group: {int(np.ceil(n))}")
 
 # Solve for power given n
 power = tt_ind_solve_power(effect_size=0.5,
@@ -689,7 +695,8 @@ print(f"Power: {power:.4f}")
 from statsmodels.stats.power import zt_ind_solve_power
 
 # For proportion tests (z-test)
-effect_size = 0.3  # Difference in proportions
+from statsmodels.stats.proportion import proportion_effectsize
+effect_size = proportion_effectsize(0.5, 0.35)  # Cohen's h, not raw difference
 alpha = 0.05
 power = 0.8
 
@@ -698,7 +705,7 @@ n = zt_ind_solve_power(effect_size=effect_size,
                         power=power,
                         alternative='two-sided')
 
-print(f"Required sample size per group: {n:.0f}")
+print(f"Required sample size per group: {int(np.ceil(n))}")
 ```
 
 **Power curves**:
@@ -736,7 +743,7 @@ plt.show()
 
 ```python
 def cohens_d(group1, group2):
-    \"\"\"Calculate Cohen's d for independent samples\"\"\"
+    """Calculate Cohen's d for independent samples"""
     n1, n2 = len(group1), len(group2)
     var1, var2 = np.var(group1, ddof=1), np.var(group2, ddof=1)
 
@@ -762,10 +769,11 @@ print(f"Cohen's d: {d:.4f}")
 
 ```python
 # From ANOVA table
-# η² = SS_between / SS_total
+# For a ONE-WAY ANOVA only: η² = SS_between / SS_total.
+# This sum is not a general multifactor type-II/III eta-squared denominator.
 
 def eta_squared(anova_table):
-    return anova_table['sum_sq'][0] / anova_table['sum_sq'].sum()
+    return anova_table['sum_sq'].iloc[0] / anova_table['sum_sq'].sum()
 
 # After running ANOVA
 eta_sq = eta_squared(anova_table)
@@ -841,7 +849,7 @@ propensity_scores = ps_model.predict(exog)
 
 Causal caveats:
 
-- Estimates are causal only under no unmeasured confounding and positivity
+- Causal interpretation needs consistency, no interference, no unmeasured confounding and positivity, plus the relevant estimator/model assumptions
 - Check overlap of propensity score distributions between groups; extreme
   scores near 0 or 1 make IPW unstable
 - Check covariate balance after weighting (e.g. standardized mean differences)
@@ -850,20 +858,24 @@ Causal caveats:
   Not available on `aipw` / `aipw_wls`
 - Outcome model is OLS-only (still true in 0.15); Logit/Poisson outcomes are
   not supported yet
-- In 0.14.6 and 0.15, `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
+- Verified in released 0.15.0: `ipw_ra` and `aipw_wls` raise a shape `ValueError` unless the
   selection model has exactly 6 parameters; `return_results=False` avoids the
-  GMM step and returns `(ate, pom0, pom1)`
+  GMM step and returns `(ate, pom0, pom1)` without standard errors. Do not add
+  dummy covariates to force six parameters; this is an implementation limitation.
 
 **Difference-in-differences**:
 
 ```python
 # Did formula: outcome ~ treatment * post
-model = ols('outcome ~ treatment + post + treatment:post', data=df).fit()
+model = ols('outcome ~ treatment * post', data=df).fit(
+    cov_type='cluster', cov_kwds={'groups': df['unit_id']})
 
 # DiD estimate is the interaction coefficient
 did_estimate = model.params['treatment:post']
 print(f"DiD estimate: {did_estimate:.4f}")
 ```
+
+The displayed DiD is a simple two-group/two-period design. Causal interpretation additionally requires parallel untreated trends, no anticipation/interference, appropriate sampling, and a defensible clustering level; this formula is not a general staggered-adoption estimator.
 
 ## Best Practices
 
@@ -882,7 +894,7 @@ print(f"DiD estimate: {did_estimate:.4f}")
 
 1. **Not checking test assumptions**: May invalidate results
 2. **Multiple testing without correction**: Inflated Type I error
-3. **Using parametric tests on non-normal data**: Consider non-parametric
+3. **Changing estimands after a normality test**: Rank tests do not generally test mean differences; choose the estimand and sampling assumptions explicitly
 4. **Ignoring heteroskedasticity**: Use robust SEs
 5. **Confusing statistical and practical significance**: Check effect sizes
 6. **Not reporting confidence intervals**: Only p-values insufficient

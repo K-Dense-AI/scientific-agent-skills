@@ -1,6 +1,19 @@
-# Migration to Qiskit 2.5 and Runtime 0.48
+# Migration to Qiskit 2.5 and Runtime 0.50
 
+Cloud authentication, QPU, session, and batch snippets are illustrative and were not executed in this refresh. Local evidence is listed in [sources.md](sources.md).
 Use this guide when adapting code written for Qiskit 0.x, Qiskit 1.x, or early Qiskit Runtime releases.
+
+## Runtime 0.50 client-side primitives
+
+The top-level `qiskit_ibm_runtime.SamplerV2`/`EstimatorV2` and their aliases are deprecated, not removed. Replace their imports with:
+
+```python
+from qiskit_ibm_runtime.executor_sampler import Sampler
+from qiskit_ibm_runtime.executor_estimator import Estimator
+from qiskit_ibm_runtime.options_models import SamplerOptions, EstimatorOptions
+```
+
+PUBs and result fields remain V2. The new implementations prepare and process Executor workloads locally. Recheck option defaults with `finalize_options().model_dump()`, keep ISA compilation and observable layout mapping, and test local noise-management behavior. Server `dry_run=True` returns mock values and does not establish circuit correctness.
 
 ## Start with a Clean Environment
 
@@ -10,8 +23,8 @@ Do not upgrade an environment containing both old `qiskit-terra` and modern `qis
 uv venv --python 3.13 .venv-qiskit-2
 source .venv-qiskit-2/bin/activate
 uv pip install \
-  "qiskit==2.5.0" \
-  "qiskit-ibm-runtime==0.48.0" \
+  "qiskit==2.5.2" \
+  "qiskit-ibm-runtime==0.50.0" \
   "qiskit-aer==0.17.2"
 ```
 
@@ -31,7 +44,7 @@ python scripts/check_environment.py --require-runtime --require-aer
 | `QuantumInstance` | Primitive implementation plus explicit transpilation |
 | `qiskit.opflow` | `qiskit.quantum_info.SparsePauliOp` and primitive PUBs |
 | `circuit.bind_parameters(...)` | `circuit.assign_parameters(...)`, or pass values in PUBs |
-| V1 `Sampler` / `Estimator` | `StatevectorSampler` / `StatevectorEstimator`, Runtime `SamplerV2` / `EstimatorV2` |
+| V1 `Sampler` / `Estimator` | `StatevectorSampler` / `StatevectorEstimator`, Runtime client-side `Sampler` / `Estimator` (V2 API) |
 | Parallel V1 input lists | One or more PUB tuples |
 | `result.quasi_dists` | `result[i].data.<register>.get_counts()` |
 | `result.values` | `result[i].data.evs` |
@@ -41,7 +54,7 @@ python scripts/check_environment.py --require-runtime --require-aer
 | Logical observable submitted unchanged | `observable.apply_layout(isa_circuit.layout)` |
 | `backend.configuration()` / `.properties()` | BackendV2 direct attributes and `backend.target` |
 | `channel="ibm_quantum"` | `channel="ibm_quantum_platform"` |
-| `qiskit.pulse` | IBM fractional gates or Qiskit Dynamics, depending on the goal |
+| `qiskit.pulse` | IBM fractional gates for hardware; isolated legacy simulation for archived Dynamics |
 | `QFT(...)` blueprint class | `QFTGate(...)` or `synth_qft_full(...)` |
 | Blueprint ansatz classes | Function constructors such as `efficient_su2(...)` |
 | `instruction.c_if(...)` | Structured circuit control flow such as `if_test(...)` |
@@ -117,7 +130,7 @@ Legacy Runtime:
 Current Runtime:
 
 ```python
-from qiskit_ibm_runtime import EstimatorV2 as Estimator
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 estimator = Estimator(
     mode=session,
@@ -133,7 +146,7 @@ sampler = Sampler(mode=batch)
 sampler = Sampler(mode=session)
 ```
 
-Do not pass `backend=backend` to a primitive inside a batch or session; that selects job mode.
+The old `backend=` constructor keyword is unsupported. Use `mode=backend` for job mode or `mode=session` / `mode=batch` explicitly.
 
 ## Migrate to ISA Circuits
 
@@ -210,7 +223,7 @@ Do not paste a key into source or a notebook. See [setup.md](setup.md).
 Choose based on intent:
 
 - To execute supported continuous-angle one- and two-qubit rotations on IBM hardware, request a backend target with fractional gates.
-- To model driven quantum systems and pulse-level dynamics, use the independently released Qiskit Dynamics project.
+- For historical driven-system models, Qiskit Dynamics is archived and no longer maintained (October 2025). Treat it as a separately pinned legacy dependency, not a current Qiskit 2.x pulse replacement; choose a maintained dynamics solver for new research.
 - To keep a historical pulse workflow unchanged, isolate it in a legacy Qiskit 1.x environment only for archival reproducibility; do not mix it with Qiskit 2.x.
 
 Do not copy `pulse.build`, `ScheduleBlock`, or pulse-drawer examples into Qiskit 2.x code.
@@ -295,6 +308,10 @@ from qiskit_machine_learning.utils import algorithm_globals
 ```
 
 Check the package's 0.8 migration guide for gradients, optimizers, fidelities, and utilities. Do not assume an import path from a Qiskit Machine Learning 0.7 tutorial still works.
+
+## Migrate Qiskit Optimization 0.7
+
+Use `qiskit_optimization.minimum_eigensolvers.QAOA`, `qiskit_optimization.optimizers`, and `qiskit_optimization.utils.algorithm_globals` with `MinimumEigenOptimizer`. Its result handling uses the package's own eigensolver/result classes. The stand-alone Algorithms package remains separate.
 
 ## Migrate Qiskit Nature
 

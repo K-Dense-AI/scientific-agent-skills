@@ -1,5 +1,10 @@
 # Modal API Reference
 
+Checked against installed `modal==1.6.0` signatures and official
+[Python SDK reference](https://modal.com/docs/sdk/py/latest) /
+[release notes](https://modal.com/docs/sdk/py/releases). SDK object construction was
+tested without contacting Modal; cloud behavior below is documentation-verified.
+
 ## Core Classes
 
 ### modal.App
@@ -28,7 +33,7 @@ A serverless function backed by an autoscaling container pool.
 | `.map(inputs)` | Parallel execution over inputs |
 | `.starmap(inputs)` | Parallel execution with multiple args |
 | `.for_each(inputs)` | Like `.map()` but discards outputs |
-| `.spawn_map(inputs)` | Spawn a parallel map without waiting |
+| `.spawn_map(inputs)` | Submit asynchronous inputs; returns `None`, not result handles |
 | `.from_name(app, fn)` | Reference a deployed function (replaces deprecated `.lookup`) |
 | `.hydrate()` | Force-fetch server metadata (replaces deprecated `.resolve()`) |
 | `.with_options(gpu=, ...)` | New autoscaling variant with overridden config |
@@ -58,11 +63,13 @@ class MyClass:
 | `@modal.enter()` | Container startup hook |
 | `@modal.exit()` | Container shutdown hook |
 | `@modal.method()` | Expose as callable method |
-| `@modal.parameter()` | Class-level parameter |
+| `field: str = modal.parameter()` | Class-level parameter descriptor (not a decorator) |
 
 Look up a deployed Cls with `Model = modal.Cls.from_name("app", "Model")`, then
 instantiate before calling: `Model().method.remote(...)`. Override config at invocation
 with `Model.with_options(gpu="H200", max_containers=10)`.
+SDK 1.6 rejects custom `__init__`; put initialization in `@modal.enter()`.
+Variant pools scale independently; `.with_options()` cannot set `min_containers`.
 
 ## Image
 
@@ -79,6 +86,7 @@ Defines the container environment.
 | `.uv_pip_install(*pkgs)` | Install with uv (recommended) |
 | `.pip_install(*pkgs)` | Install with pip |
 | `.pip_install_from_requirements(path)` | Install from file |
+| `.uv_sync(project_dir)` | Install the project's locked uv environment |
 | `.apt_install(*pkgs)` | Install system packages |
 | `.run_commands(*cmds)` | Run shell commands |
 | `.run_function(fn)` | Run Python during build |
@@ -125,18 +133,36 @@ dynamically generated code.
 
 ```python
 app = modal.App.lookup("my-app", create_if_missing=True)
-sb = modal.Sandbox.create(app=app, image=modal.Image.debian_slim())
+sb = modal.Sandbox.create(app=app, image=modal.Image.debian_slim(), timeout=60, block_network=True)
+try:
+    proc = sb.exec("python", "-c", "print(2 ** 10)")
+    stdout = proc.stdout.read()
+    proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError("Sandbox command failed")
+finally:
+    sb.terminate(wait=True)
 ```
 
 | Method | Description |
 |--------|-------------|
-| `.create(app=, image=, ...)` | Launch a sandbox |
+| `.create(app=, image=, ...)` | Launch and wait for scheduling (SDK 1.6) |
 | `.exec(*cmd)` | Run a command, returns a process handle |
-| `.filesystem.read_text/write_text(...)` | Filesystem API (beta) |
-| `.snapshot_filesystem()` | Snapshot the filesystem to an Image |
-| `.terminate()` | Stop the sandbox |
+| `.filesystem.read_text(path)` | Read a Sandbox file into a string |
+| `.filesystem.write_text(text, path)` | Write a string; content argument comes first |
+| `.filesystem.copy_from_local(local, remote)` | Stream a local file to the Sandbox |
+| `.filesystem.copy_to_local(remote, local)` | Stream a Sandbox file to local storage |
+| `.snapshot_filesystem(timeout=55, ttl=2592000)` | Image snapshot, default retention 30 days |
+| `.terminate(wait=True)` | Stop and wait for termination confirmation |
 
 Restrict connectivity with `inbound_cidr_allowlist=[...]` / `outbound_cidr_allowlist=[...]`.
+Use `block_network=True` when egress is unnecessary. Allowlisting a private CIDR is
+not a substitute for selecting the intended destinations. Network restrictions do
+not remove Secrets or data mounted into the container.
+`Sandbox.create()` can raise `ResourceExhaustedError` if scheduling fails. The old
+`Sandbox.open/ls/mkdir/rm/watch` APIs are removed; use `.filesystem`.
+Pass `ttl=None` explicitly if a filesystem snapshot must not expire, and track its
+Image ID. See [Sandbox snapshots](https://modal.com/docs/guide/sandbox-snapshots).
 
 ## Secrets
 
@@ -203,6 +229,8 @@ Usage: `@app.function(schedule=modal.Cron("..."))`
 | `"H200"` | NVIDIA H200 141GB |
 | `"B200"` | NVIDIA B200 192GB |
 | `"B200+"` | B200 or B300, B200 price |
+| `"B300"` | NVIDIA B300 288GB, CUDA 13.1+ |
+| `"RTX-PRO-6000"` | NVIDIA RTX PRO 6000 Blackwell 96GB |
 | `"H100:4"` | 4x H100 |
 
 ## CLI Commands

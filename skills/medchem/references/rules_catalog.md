@@ -1,6 +1,8 @@
 # Medchem Rules and Filters Catalog
 
-Catalog of medicinal chemistry rules, alert sets, and filters in **medchem 2.0.5**.
+Catalog of medicinal chemistry rules, alert sets, and filters in **medchem 2.1.1** (reviewed 2026-10-01).
+
+Thresholds below describe the **implemented functions**, which can differ from simplified literature summaries. See [versioned basic-rule source](https://github.com/datamol-io/medchem/blob/2.1.1/medchem/rules/basic_rules.py) and [official API](https://medchem-docs.datamol.io/stable/api/medchem.rules.html). Examples assume valid `mol`/`mols` supplied by the caller.
 
 ## Table of Contents
 
@@ -44,7 +46,7 @@ mc.rules.basic_rules.rule_of_five_beyond(mol)
 
 **Reference:** Veber et al., *J Med Chem* (2002) 45:2615–2623
 
-**Criteria:** Rotatable bonds ≤ 10, TPSA ≤ 140 Ų
+**Criteria:** Rotatable bonds ≤ 10, TPSA ≤ 140 Å²
 
 ```python
 mc.rules.basic_rules.rule_of_veber(mol)
@@ -52,9 +54,9 @@ mc.rules.basic_rules.rule_of_veber(mol)
 
 ### REOS (Rapid Elimination Of Swill)
 
-**Reference:** Walters & Murcko, *Adv Drug Deliv Rev* (2002) 54:255–271
+**Implementation reference:** [Walters & Namchuk (2003), Designing screens: how to make your hits a hit](https://pubmed.ncbi.nlm.nih.gov/12669025/).
 
-**Criteria:** MW 200–500, LogP −5 to 5, HBD 0–5, HBA 0–10
+**Implemented criteria:** MW 200–500, cLogP −5 to 5, HBD 0–5, HBA 0–10, rotatable bonds 0–8, heavy atoms 15–50 (inclusive). The implementation computes formal charge but does not constrain it, despite the docstring advertising −2 to 2. Add an explicit charge bound when needed.
 
 ```python
 mc.rules.basic_rules.rule_of_reos(mol)
@@ -78,9 +80,9 @@ mc.rules.basic_rules.rule_of_druglike_soft(mol)
 
 ### Rule of Oprea
 
-**Reference:** Oprea et al., *J Chem Inf Comput Sci* (2001) 41:1308–1315
+**Implementation reference:** [Oprea (2000), Property distribution of drug-related chemical databases](https://pubmed.ncbi.nlm.nih.gov/10756480/).
 
-**Criteria:** MW 200–350, LogP −2 to 4, rotatable bonds ≤ 7, rings ≤ 4
+**Implemented criteria:** HBD 0–2, HBA 2–9, rotatable bonds 2–8, rings 1–4 (inclusive). This function does not constrain MW or cLogP; add explicit bounds if the project needs them.
 
 ```python
 mc.rules.basic_rules.rule_of_oprea(mol)
@@ -88,7 +90,7 @@ mc.rules.basic_rules.rule_of_oprea(mol)
 
 ### Rule of Leadlike (Soft)
 
-**Criteria:** MW 250–450, LogP −3 to 4, rotatable bonds ≤ 10
+**Implemented criteria:** MW 150–400, cLogP −3 to 4, HBD ≤4, HBA ≤7, TPSA ≤160 Å², rotatable bonds ≤9, rigid bonds ≤30, rings ≤4, maximum ring-system size ≤18, carbons 3–35, heteroatoms 1–15, heteroatom/carbon ratio 0.1–1.1, formal charge −4 to 4, charged atoms ≤4, stereocenters ≤2.
 
 ```python
 mc.rules.basic_rules.rule_of_leadlike_soft(mol)
@@ -102,13 +104,13 @@ mc.rules.basic_rules.rule_of_leadlike_soft(mol)
 
 **Reference:** Congreve et al., *Drug Discov Today* (2003) 8:876–877
 
-**Criteria:** MW ≤ 300, LogP ≤ 3, HBD ≤ 3, HBA ≤ 3, rotatable bonds ≤ 3, PSA ≤ 60 Ų
+**Implemented criteria:** MW ≤300, cLogP ≤3, HBD ≤3, HBA ≤3, rotatable bonds ≤3. There is no TPSA bound in `rule_of_three`. `rule_of_three_extended` adds TPSA ≤60 Å² and cLogP ≥−3 but permits HBA ≤6; it is not simply the base rule plus TPSA.
 
 ```python
 mc.rules.basic_rules.rule_of_three(mol)
 ```
 
-Also available: `rule_of_three_extended`, `rule_of_two`, `rule_of_four`.
+Also available: `rule_of_three_extended` and `rule_of_two`. `rule_of_four` instead selects larger, lipophilic PPI-inhibitor space (MW ≥400, cLogP ≥4, rings ≥4, HBA ≥4); it is not a fragment filter.
 
 ---
 
@@ -116,7 +118,7 @@ Also available: `rule_of_three_extended`, `rule_of_two`, `rule_of_four`.
 
 ### Rule of CNS
 
-**Criteria:** MW ≤ 450, LogP −1 to 5, HBD ≤ 2, TPSA ≤ 90 Ų
+**Implemented criteria:** MW 135–582, cLogP −0.2 to 6.1, TPSA 3–118 Å², HBD ≤3, HBA ≤5. These are inclusive heuristic bounds, not evidence of blood-brain barrier penetration.
 
 ```python
 mc.rules.basic_rules.rule_of_cns(mol)
@@ -150,7 +152,7 @@ mc.rules.basic_rules.rule_of_generative_design_strict(mol)
 Apply via named catalog — not a `basic_rules` function:
 
 ```python
-mc.functional.alert_filter(mols, alerts=["pains"], n_jobs=-1)
+mc.functional.catalog_filter(mols, catalogs=["pains"], n_jobs=-1)
 # or query: NOT HASALERT("pains")
 ```
 
@@ -161,9 +163,9 @@ Sub-catalogs: `pains_a`, `pains_b`, `pains_c`.
 ChEMBL-curated rule sets (Glaxo, Dundee, BMS, MLSMR, etc.):
 
 ```python
-alert_filter = mc.structural.CommonAlertsFilters()
+alert_filter = mc.structural.CommonAlertsFilters(alerts_set=["BMS", "Dundee", "Glaxo"])
 df = alert_filter(mols=mol_list, n_jobs=-1)
-# status: exclude | flag | annotations | ok
+# current common-alert status: exclude | ok
 ```
 
 ### NIBR Filters
@@ -173,14 +175,15 @@ Novartis screening-deck curation ([Schuffenhauer et al., 2020](https://dx.doi.or
 ```python
 nibr_filter = mc.structural.NIBRFilters()
 df = nibr_filter(mols=mol_list, n_jobs=-1)
-# severity >= 10 → excluded by default
+# class rejects explicit exclusion alerts; also apply accumulated severity cutoff
+passes = df["pass_filter"] & (df["severity"] < 10)
 ```
 
 Or via functional API with `max_severity=10`.
 
 ### Lilly Demerits (optional)
 
-Requires `mamba install lilly-medchem-rules`. 275 structural patterns; default exclusion at >160 demerits:
+Install native upstream tools with `medchem install-lilly`; requires C++/make/zlib/Ruby and network access for installation. The native integration uses upstream 2.1 rules and was not executed locally. The wrapper requires native `pass_filter=True` and either a missing score or a score strictly below `max_demerits=160` (a score of 160 fails). Native hard-rejection and atom-count rules also apply.
 
 ```python
 mc.functional.lilly_demerit_filter(mols, max_demerits=160, n_jobs=-1)
@@ -232,7 +235,7 @@ Compared to ZINC-15 percentile thresholds via `ComplexityFilter` or `complexity_
 mc.functional.complexity_filter(mols, complexity_metric="bertz", limit="99", n_jobs=-1)
 ```
 
-`limit="99"` keeps compounds below the 99th percentile on ZINC-15.
+`limit="99"` uses a strict upper threshold in the molecule's molecular-weight bin. Available ZINC-15 labels are `median`, `90`, `99`, `999` (99.9%), and `max`; `95` is invalid. QED is also compared with an upper cutoff, so this is not a high-QED selector. Scores that are NaN pass upstream; check finiteness if applicable. The new `mc.complexity.SPS(mol)` computes normalized SpacialScore; filtering with `spacialscore` requires custom threshold statistics.
 
 ---
 
@@ -255,7 +258,7 @@ group = mc.groups.ChemicalGroup(groups=["privileged_scaffolds"])
 group.has_match(mol)
 ```
 
-Custom groups: provide a CSV via `groups_db` with columns `smiles`/`smarts`, `name`, `group`.
+Custom groups: provide a CSV via `groups_db` with both `smiles` and `smarts`, plus `name` and `group`. SMILES/SMARTS and exact-match settings can yield different answers. `ChemicalGroup.filter(names)` narrows pattern names in place; `get_matches(mol)` returns a DataFrame. Query `HASGROUP` requires an individual functional-group name, not one of these collection names.
 
 ---
 
@@ -279,8 +282,8 @@ nibr = mc.structural.NIBRFilters()(mols, n_jobs=-1)
 
 ```python
 rules = mc.rules.RuleFilters(rule_list=["rule_of_druglike_soft"])(mols, n_jobs=-1)
-alerts = mc.structural.CommonAlertsFilters()(mols, n_jobs=-1)
-complexity = mc.functional.complexity_filter(mols, complexity_metric="bertz", limit="95", n_jobs=-1)
+alerts = mc.structural.CommonAlertsFilters(alerts_set=["BMS", "Dundee", "Glaxo"])(mols, n_jobs=-1)
+complexity = mc.functional.complexity_filter(mols, complexity_metric="bertz", limit="90", n_jobs=-1)
 ```
 
 ### CNS Targets
@@ -302,9 +305,11 @@ complexity = mc.functional.complexity_filter(mols, complexity_metric="bertz", li
 ## Important Considerations
 
 **Filters are guidelines, not absolutes:**
-- ~10% of marketed oral drugs violate Ro5
+- Some marketed oral drugs violate Ro5; the fraction depends on the dataset and rule definition
 - Natural products and prodrugs often fail standard rules
-- Passing filters does not guarantee clinical success
+- Passing filters does not establish clinical success, toxicity, permeability, or synthesis feasibility
+- PAINS alerts require assay-specific counter-screens; a motif match alone does not prove interference
+- Record original structures and any salt, protonation, tautomer, or stereochemistry normalization
 
 **Combine with ML when appropriate:**
 
@@ -320,9 +325,9 @@ filtered_mols = [m for m, ok in zip(mols, rules_df["pass_all"]) if ok]
 
 1. Lipinski CA et al. *Adv Drug Deliv Rev* (1997) 23:3–25
 2. Veber DF et al. *J Med Chem* (2002) 45:2615–2623
-3. Oprea TI et al. *J Chem Inf Comput Sci* (2001) 41:1308–1315
+3. Oprea TI. *J Comput Aided Mol Des* (2000) 14:251–264; https://doi.org/10.1023/a:1008130001697
 4. Congreve M et al. *Drug Discov Today* (2003) 8:876–877
 5. Baell JB & Holloway GA. *J Med Chem* (2010) 53:2719–2740
-6. Walters WP & Murcko MA. *Adv Drug Deliv Rev* (2002) 54:255–271
+6. Walters WP & Namchuk M. (2003), Designing screens: how to make your hits a hit; https://pubmed.ncbi.nlm.nih.gov/12669025/
 7. Schuffenhauer A et al. *J Med Chem* (2020) — NIBR screening deck
 8. Doak BC et al. (2015) — Beyond Rule of Five

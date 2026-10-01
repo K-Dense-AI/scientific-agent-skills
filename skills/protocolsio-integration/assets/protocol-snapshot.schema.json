@@ -3,30 +3,6 @@
   "$id": "https://scientific-agent-skills.local/protocolsio/protocol-snapshot.schema.json",
   "title": "Local protocols.io protocol snapshot envelope",
   "description": "A conservative local validation contract for saved protocols.io protocol responses. This is not an official protocols.io schema.",
-  "oneOf": [
-    {
-      "type": "object",
-      "required": [
-        "protocol"
-      ],
-      "properties": {
-        "status_code": {
-          "enum": [
-            0,
-            "0",
-            null
-          ]
-        },
-        "protocol": {
-          "$ref": "#/$defs/protocol"
-        }
-      },
-      "additionalProperties": true
-    },
-    {
-      "$ref": "#/$defs/protocol"
-    }
-  ],
   "$defs": {
     "protocol": {
       "type": "object",
@@ -175,5 +151,63 @@
       },
       "additionalProperties": true
     }
-  }
+  },
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "protocol"
+      ],
+      "properties": {
+        "status_code": {
+          "enum": [
+            0,
+            "0",
+            null
+          ]
+        },
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": [
+        "payload"
+      ],
+      "properties": {
+        "status_code": {
+          "enum": [
+            0,
+            "0",
+            null
+          ]
+        },
+        "payload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/protocol"
+            },
+            {
+              "type": "object",
+              "required": [
+                "protocol"
+              ],
+              "properties": {
+                "protocol": {
+                  "$ref": "#/$defs/protocol"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "$ref": "#/$defs/protocol"
+    }
+  ]
 }

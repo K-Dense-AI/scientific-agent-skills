@@ -114,13 +114,13 @@ python scripts/search_google_scholar.py "AlphaFold protein structure" \
   --limit 20 \
   --output alphafold_seminal.json
 
-# Extract the top 10 by citation count
-# (script will have included citation counts in JSON)
+# Sort within the retrieved sample; this is not a global most-cited ranking
+# (the script includes citation counts in JSON)
 
 # Convert to BibTeX
 python scripts/extract_metadata.py \
   --input alphafold_seminal.json \
   --output alphafold_refs.bib
 
-# The BibTeX file now contains the most influential papers
+# Verify the selected records and their metadata before citing them
 ```

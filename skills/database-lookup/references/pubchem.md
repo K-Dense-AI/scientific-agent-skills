@@ -68,11 +68,11 @@ GET /compound/{namespace}/{id}/property/{property_list}/JSON
 ```
 Properties are comma-separated. Available properties:
 
-`MolecularFormula`, `MolecularWeight`, `CanonicalSMILES`, `IsomericSMILES`, `InChI`, `InChIKey`, `IUPACName`, `XLogP`, `ExactMass`, `MonoisotopicMass`, `TPSA`, `Complexity`, `Charge`, `HBondDonorCount`, `HBondAcceptorCount`, `RotatableBondCount`, `HeavyAtomCount`, `CID`
+`MolecularFormula`, `MolecularWeight`, `ConnectivitySMILES`, `SMILES`, `InChI`, `InChIKey`, `IUPACName`, `XLogP`, `ExactMass`, `MonoisotopicMass`, `TPSA`, `Complexity`, `Charge`, `HBondDonorCount`, `HBondAcceptorCount`, `RotatableBondCount`, `HeavyAtomCount`, `CID`
 
 Example:
 ```
-/compound/cid/2244/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName/JSON
+/compound/cid/2244/property/MolecularFormula,MolecularWeight,ConnectivitySMILES,IUPACName/JSON
 ```
 
 Response:
@@ -83,9 +83,9 @@ Response:
       {
         "CID": 2244,
         "MolecularFormula": "C9H8O4",
-        "MolecularWeight": 180.16,
+        "MolecularWeight": "180.16",
         "IUPACName": "2-acetyloxybenzoic acid",
-        "CanonicalSMILES": "CC(=O)OC1=CC=CC=C1C(O)=O"
+        "ConnectivitySMILES": "CC(=O)OC1=CC=CC=C1C(O)=O"
       }
     ]
   }
@@ -113,7 +113,7 @@ GET /compound/cid/{cid}/xrefs/PatentID/JSON
 GET /compound/cid/{cid}/xrefs/RegistryID/JSON
 ```
 
-### Similarity search (POST, returns listkey for async retrieval)
+### Fast similarity search (synchronous CID result)
 ```
 POST /compound/fastsimilarity_2d/smiles/cids/JSON
 smiles=CC(=O)OC1=CC=CC=C1C(=O)O&Threshold=90
@@ -129,7 +129,7 @@ GET /compound/cid/{cid}/PNG?image_size=300x300
 
 - Max **5 requests per second**
 - Max **400 requests per minute**
-- Batch CIDs with commas (up to 100 per GET, ~10,000 per POST)
+- Batch CIDs with commas; use POST when the URL becomes long and keep batches small enough to meet time/payload limits. Endpoint-specific limits differ.
 - Throttle error returns `PUGREST.ServerBusy` fault code
 
 ## Error Format
@@ -143,3 +143,8 @@ GET /compound/cid/{cid}/PNG?image_size=300x300
   }
 }
 ```
+
+`fastsimilarity_2d` returns `IdentifierList.CID` synchronously; do not look for an
+asynchronous ListKey in a successful fast-search response. Older SMILES property
+aliases may still be accepted but returned JSON keys use the current names above.
+Official contract: https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest

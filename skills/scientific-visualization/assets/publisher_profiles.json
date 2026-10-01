@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "accessed": "2026-07-23",
+  "accessed": "2026-10-01",
   "notice": "Dated publisher snapshots for planning only. They do not establish submission compliance; verify the target journal, article type, and submission stage.",
   "profiles": {
     "nature": {
@@ -36,7 +36,9 @@
         "Keep line art, text, and labels editable rather than rasterizing or outlining them.",
         "The companion research-figure guide says image exports should be at least 450 dpi; the flagship final-submission page accepts photographic images at 300-600 dpi.",
         "Panel labels are lowercase, bold, upright, 8 pt; other text is 5-7 pt at final size."
-      ]
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "reviewed"
     },
     "science": {
       "label": "Science (AAAS)",
@@ -69,8 +71,11 @@
       "notes": [
         "Initial-submission figures may be embedded and should be 300 dpi; revised figures are uploaded separately.",
         "Revised guidance prefers vectors and prohibits upsampling.",
-        "Lettering should be about 7 pt after reduction and never smaller than 5 pt."
-      ]
+        "Lettering should be about 7 pt after reduction and never smaller than 5 pt.",
+        "Live pages blocked direct/fresh extraction on 2026-10-01; retain historical numbers provisionally."
+      ],
+      "accessed": "2026-07-23",
+      "source_status": "historical-live-access-blocked"
     },
     "cell": {
       "label": "Cell Press",
@@ -85,7 +90,7 @@
         "one-and-half": 114.0,
         "full": 174.0
       },
-      "max_height_mm": 200.0,
+      "max_height_mm": null,
       "formats": {
         "line-art": ["pdf", "tiff", "eps"],
         "photo": ["tiff", "pdf", "jpeg"],
@@ -105,7 +110,10 @@
         "TIFF and PDF are preferred for most final production files; exceptions include STAR Protocols and Cell Leading Edge.",
         "The 16.5 by 20 cm overall size is a recommendation, not a universal hard limit.",
         "Use Arial, capital panel labels, and about 6-8 pt text at final size."
-      ]
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "reviewed",
+      "recommended_max_height_mm": 200.0
     },
     "plos": {
       "label": "PLOS research journals",
@@ -141,8 +149,16 @@
         "PLOS waives formatting requirements until provisional Editorial Accept.",
         "Use Arial, Times, or Symbol at 8-12 pt; combine all panels for one figure into one file.",
         "The cited page states TIFF or EPS only and requires RGB 8-bit/channel or grayscale.",
-        "The <10 MB rule is screened as <10,000,000 bytes; verify how the submission portal reports MB."
-      ]
+        "The <10 MB rule is screened as <10,000,000 bytes; verify how the submission portal reports MB.",
+        "Summary says <10 MB while detailed file-size guidance says 10 MB or less; the screen uses the stricter summary."
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "reviewed",
+      "tiff_requirements": {
+        "has_alpha": false,
+        "compression": "tiff_lzw",
+        "frames": 1
+      }
     },
     "elsevier": {
       "label": "Elsevier general artwork guidance",
@@ -176,7 +192,9 @@
       "notes": [
         "Elsevier explicitly directs authors to the target journal's Guide for Authors for overrides.",
         "Normal lettering is generally 7 pt at final size; 6 pt is a rule-of-thumb floor for subscripts and superscripts."
-      ]
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "reviewed"
     },
     "ieee": {
       "label": "IEEE journals",
@@ -207,7 +225,9 @@
       "notes": [
         "The cited page identifies PS, EPS, and PDF as acceptable vector formats.",
         "IEEE states greater than 300 dpi for non-vector color/grayscale and greater than 600 dpi for black-and-white line art."
-      ]
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "reviewed"
     },
     "bmc": {
       "label": "BMC journal example",
@@ -215,7 +235,7 @@
       "phase": "submission",
       "journal_specific": true,
       "sources": [
-        "https://bmcbioinformatics.biomedcentral.com/submission-guidelines/preparing-your-manuscript"
+        "https://link.springer.com/journal/12859/submission-guidelines"
       ],
       "widths_mm": {
         "half": 85.0,
@@ -239,15 +259,18 @@
         "The source says approximately 300 dpi at final size, not a universal minimum.",
         "Figures are 600 px standard or 1200 px high-resolution on the web.",
         "All fonts must be embedded and lines should be wider than 0.25 pt at final width."
-      ]
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "reviewed",
+      "max_height_includes_legend": true
     },
     "acs": {
       "label": "ACS Publications general graphics page",
-      "scope": "General manuscript-graphics sizing; consult the selected ACS journal",
+      "scope": "Legacy general manuscript-graphics page updated 2006-01-21; selected journal rules govern",
       "phase": "submission",
       "journal_specific": false,
       "sources": [
-        "https://pubs.acs.org/page/4authors/submission/graphics_prep.html"
+        "https://pubsapp.acs.org/paragonplus/submission/general/graphics_prep.html"
       ],
       "widths_mm": {
         "single": 82.55,
@@ -263,7 +286,9 @@
         "The general page gives 3.25-inch and 7-inch widths but does not establish a current universal digital format/DPI profile.",
         "It recommends lettering no smaller than 5 pt after reduction and lines no thinner than 1 pt.",
         "Use the target ACS journal's current Author Guidelines for binding technical requirements."
-      ]
+      ],
+      "accessed": "2026-10-01",
+      "source_status": "legacy-2006-guidance"
     }
   }
 }

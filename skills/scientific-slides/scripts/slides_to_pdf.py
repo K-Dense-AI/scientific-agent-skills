@@ -36,38 +36,33 @@ def get_image_files(paths: List[str]) -> List[Path]:
         paths: List of file paths or directory paths
         
     Returns:
-        Sorted list of image file paths
+        Explicit paths in input order; each directory/glob expands in filename order
     """
     image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
     image_files = []
-    
+    seen = set()
     for path_str in paths:
         path = Path(path_str)
-        
         if path.is_file():
-            if path.suffix.lower() in image_extensions:
-                image_files.append(path)
-            else:
-                print(f"Warning: Skipping non-image file: {path}")
+            matches = [path]
         elif path.is_dir():
-            # Get all images in directory
-            for ext in image_extensions:
-                image_files.extend(path.glob(f"*{ext}"))
-                image_files.extend(path.glob(f"*{ext.upper()}"))
+            matches = sorted(path.iterdir(), key=lambda p: p.name)
+        elif path.parent.exists():
+            matches = sorted(path.parent.glob(path.name), key=lambda p: p.name)
         else:
-            # Try glob pattern
-            parent = path.parent
-            pattern = path.name
-            if parent.exists():
-                matches = list(parent.glob(pattern))
-                for match in matches:
-                    if match.suffix.lower() in image_extensions:
-                        image_files.append(match)
-    
-    # Remove duplicates and sort
-    image_files = list(set(image_files))
-    image_files.sort(key=lambda x: x.name)
-    
+            matches = []
+        for match in matches:
+            if not match.is_file():
+                continue
+            if match.suffix.lower() not in image_extensions:
+                if path.is_file():
+                    print(f"Warning: Skipping non-image file: {match}")
+                continue
+            identity = match.resolve()
+            if identity not in seen:
+                seen.add(identity)
+                image_files.append(match)
+
     return image_files
 
 
@@ -85,6 +80,8 @@ def combine_images_to_pdf(image_paths: List[Path], output_path: Path,
     Returns:
         True if successful, False otherwise
     """
+    if dpi <= 0:
+        raise ValueError("dpi must be positive")
     if not image_paths:
         print("Error: No image files found")
         return False
@@ -96,7 +93,8 @@ def combine_images_to_pdf(image_paths: List[Path], output_path: Path,
     images = []
     for i, img_path in enumerate(image_paths):
         try:
-            img = Image.open(img_path)
+            with Image.open(img_path) as source:
+                img = source.copy()
             # Convert to RGB if necessary (PDF doesn't support RGBA)
             if img.mode in ('RGBA', 'P'):
                 # Create white background
@@ -114,6 +112,8 @@ def combine_images_to_pdf(image_paths: List[Path], output_path: Path,
                 print(f"  [{i+1}/{len(image_paths)}] Loaded: {img_path.name} ({img.size[0]}x{img.size[1]})")
         except Exception as e:
             print(f"Error loading {img_path}: {e}")
+            for loaded in images:
+                loaded.close()
             return False
     
     if not images:
@@ -198,6 +198,8 @@ Tips:
                        help="Verbose output")
     
     args = parser.parse_args()
+    if args.dpi <= 0:
+        parser.error("--dpi must be positive")
     
     # Get image files
     image_files = get_image_files(args.images)

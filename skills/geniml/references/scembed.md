@@ -1,7 +1,7 @@
 # scEmbed
 
 Verified against `geniml==0.8.4` release source, current Gtars
-`0.9.2`, and official BEDbase documentation on 2026-07-23.
+`0.10.0`, and official BEDbase documentation on 2026-10-01.
 
 ## Scope and evidence
 
@@ -22,7 +22,6 @@ Use:
 ```python
 from geniml.scembed.main import ScEmbed
 from geniml.region2vec.utils import Region2VecDataset
-from geniml.tokenization.utils import tokenize_anndata
 from gtars.tokenizers import Tokenizer
 ```
 
@@ -31,11 +30,13 @@ Do not use `from geniml.scembed import ScEmbed`: the 0.8.4 package
 legacy MatrixMarket options but its 0.8.4 command body does no training or
 encoding.
 
-The source method `ScEmbed.encode(adata)` is public, but 0.8.4's nested token
-handling does not match the current `tokenize_anndata` return shape observed
-with modern Gtars. Require a pinned synthetic smoke test before relying on
-that convenience method. For production, pre-tokenize explicitly, inspect the
-shape, and keep the exact versions locked.
+With Geniml 0.8.4 / Gtars 0.10.0, both `tokenize_anndata` and
+`ScEmbed.encode` fail: Geniml omits the required fourth `Region(..., rest)`
+argument. Even after that is fixed, `ScEmbed.encode` assumes an extra nesting
+level that the tokenizer does not return. Use the explicit recipe below; it
+was tested on small synthetic cells, including cell-order and pooling checks.
+The environment must keep AnnData 0.12.19 and Zarr 2.18.7; AnnData 0.13's
+Zarr >=3 requirement conflicts with Geniml.
 
 ## AnnData contract
 
@@ -101,28 +102,44 @@ Record:
 - Gtars version and special-token map/IDs;
 - `len(tokenizer)`.
 
-Do not use `Tokenizer.from_pretrained("organization/model")` unless the user
-approves a network download and supplies a pinned revision and expected
-hashes. A model and tokenizer are compatible only when the exact universe,
+Gtars 0.10.0 `Tokenizer.from_pretrained(path)` accepts only a path argument;
+it provides no revision/cache kwargs. For an authorized Hub download, fetch
+the exact universe through the Hub client at a reviewed revision and build
+`Tokenizer.from_bed` from those verified local bytes. A model and tokenizer
+are compatible only when the exact universe,
 special-token IDs, and model vocabulary size agree.
 
 ## Pre-tokenize to one bounded Parquet file
 
 ```python
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import scanpy as sc
-from geniml.tokenization.utils import tokenize_anndata
+from scipy.sparse import csr_matrix
+from gtars.models import Region
 
 adata = sc.read_h5ad("data/train.h5ad")
-adata.X = adata.X.tocsr()
+# Validate coordinates/assembly first; do not truncate noninteger coordinates.
+adata.X = csr_matrix(adata.X)
+adata.X.sum_duplicates()
+adata.X.eliminate_zeros()
+if not np.isfinite(adata.X.data).all() or (adata.X.data < 0).any():
+    raise ValueError("accessibility must be finite and nonnegative")
+features = [
+    Region(chrom, int(start), int(end), None)
+    for chrom, start, end in zip(adata.var["chr"], adata.var["start"], adata.var["end"])
+]
+cells = []
+for row in range(adata.n_obs):
+    indices = adata.X.indices[adata.X.indptr[row]:adata.X.indptr[row + 1]]
+    ids = tokenizer([features[i] for i in indices])["input_ids"] if len(indices) else []
+    cells.append(ids)
+special_ids = {getattr(tokenizer, key + "_id") for key in tokenizer.special_tokens_map}
+if any(not ids or special_ids.intersection(ids) for ids in cells):
+    raise ValueError("empty or unmatched cells require an explicit QC policy")
 
-encoded_cells = tokenize_anndata(adata, tokenizer)
-cells = [encoded["input_ids"] for encoded in encoded_cells]
-
-table = pa.table({
-    "tokens": pa.array(cells, type=pa.list_(pa.int32()))
-})
+table = pa.table({"tokens": pa.array(cells, type=pa.list_(pa.int32()))})
 pq.write_table(table, "work/train_tokens.parquet")
 ```
 
@@ -149,6 +166,7 @@ from geniml.scembed.main import ScEmbed
 dataset = Region2VecDataset(
     "work/train_tokens.parquet",
     shuffle=True,
+    convert_to_str=True,
 )
 model = ScEmbed(
     tokenizer=tokenizer,
@@ -165,6 +183,11 @@ model.train(
     seed=42,
 )
 ```
+
+Seed Python `random` before token shuffling and Torch before construction;
+Gensim's `seed` alone does not set those RNGs. Derive and retain trained-token
+IDs from the training corpus counts and the actual `min_count`; untouched
+Torch rows remain random even after `model.trained` becomes true.
 
 Bound cells, nonzeros, tokens per cell, workers, epochs, checkpoint frequency,
 RAM, and disk. `Region2VecDataset` loads the full Parquet token column into
@@ -188,6 +211,7 @@ python skills/geniml/scripts/embedding_plan.py \
 ```python
 from pathlib import Path
 import shutil
+import yaml
 
 bundle = Path("models/scembed")
 model.export(str(bundle))
@@ -195,11 +219,16 @@ shutil.copyfile(
     "refs/training_universe.bed",
     bundle / "universe.bed",
 )
+config_path = bundle / "config.yaml"
+config = yaml.safe_load(config_path.read_text())
+config["pooling_method"] = model.pooling_method
+config_path.write_text(yaml.safe_dump(config))
 ```
 
 As in Region2Vec, the 0.8.4 export utility writes `checkpoint.pt` and
-`config.yaml` but does not write the tokenizer universe. Add the exact
-validated `universe.bed` yourself and generate checksums.
+`config.yaml` but does not write the tokenizer universe or preserve
+`pooling_method`. Add the exact validated `universe.bed` and record pooling
+before generating checksums.
 
 Inspect before loading:
 
@@ -223,9 +252,10 @@ model = ScEmbed.from_pretrained("models/scembed")
 
 This classmethod is local. In contrast,
 `ScEmbed(model_path="organization/model")` downloads three files through
-Hugging Face Hub. Never trigger that constructor implicitly. Pin a revision,
-cache path, expected size, and checksums when a download is explicitly
-approved.
+Hugging Face Hub. Constructor kwargs for revision/cache/offline behavior are
+silently discarded in 0.8.4. For authorized downloads, call `hf_hub_download`
+directly at a reviewed immutable revision, verify each file, then load the
+local bundle. No public weights were downloaded in this review.
 
 `checkpoint.pt` is loaded with Torch `weights_only=True`. Continue to treat it
 as untrusted until verified and load in an isolated, resource-bounded
@@ -233,20 +263,45 @@ environment. Never inspect it using pickle.
 
 ## Generate and attach cell embeddings
 
-After a pinned synthetic smoke test confirms the installed convenience API:
+Use the token lists above, in exactly the AnnData cell order. This explicit
+mean pooling rejects unsupported cells rather than assigning random unknown
+or untrained vectors. For held-out data, tokenize its own features with the
+same frozen tokenizer; keep `trained_ids` from the training corpus.
 
 ```python
-embeddings = model.encode(adata, pooling="mean")
-assert embeddings.shape[0] == adata.n_obs
+from collections import Counter
+import numpy as np
+import torch
+
+# Set to the actual min_count passed to model.train, using training cells only.
+min_count = 10
+counts = Counter(token for ids in cells for token in ids)
+trained_ids = {token for token, count in counts.items() if count >= min_count}
+
+def pool_cells(model, cell_tokens, trained_ids):
+    projection = model.model.projection
+    rows = []
+    with torch.inference_mode():
+        for ids in cell_tokens:
+            if not ids or any(token not in trained_ids for token in ids):
+                raise ValueError("cell has empty or untrained token set")
+            tensor = torch.tensor(ids, dtype=torch.long, device=projection.weight.device)
+            rows.append(projection(tensor).mean(dim=0).cpu().numpy())
+    if not rows:
+        raise ValueError("no cells to embed")
+    return np.vstack(rows)
+
+embeddings = pool_cells(model, cells, trained_ids)
+assert embeddings.shape == (adata.n_obs, model.model.embedding_dim)
+assert np.isfinite(embeddings).all()
 adata.obsm["X_scembed"] = embeddings
 ```
 
-If the smoke fails, do not patch around token nesting silently. Pin a known
-compatible Geniml/Gtars pair or implement an explicit, tested projection using
-the verified token IDs and model contract. Never substitute a different
-universe to make shapes fit.
+This recipe explicitly chooses mean pooling. Record a different pooling policy
+if needed and test its effect. Passing `device="cuda"` to the wrapper alone
+does not move its model; CPU training/projection is the tested configuration.
 
-For Scanpy downstream analysis:
+Illustrative downstream analysis (requires the Scanpy Leiden/igraph extras):
 
 ```python
 import scanpy as sc
@@ -261,8 +316,13 @@ software versions, seeds, neighborhood parameters, and the embedding checksum.
 
 ## Cell-type annotation
 
-The release contains `geniml.scembed.annotation.Annotator`, which queries a
-Qdrant collection and can use local or remote endpoints. That is a separate
+The release contains `geniml.scembed.annotation.Annotator`, but it is not a
+working current-client recipe: it calls removed `QdrantClient.search`, and
+internally hard-codes `obsm["embedding"]` and `obs["leiden"]` despite exposing
+custom key arguments. Its public constructor also does not accept an API key.
+A modern Qdrant integration must use `query_points(...).points`, preserve the
+requested keys, and handle authentication explicitly; this is source/runtime
+API verification, not a validated annotation workflow. That is a separate
 network/data-disclosure decision: embeddings and metadata can be sensitive.
 Do not create or contact an annotation server without explicit approval.
 
@@ -296,12 +356,12 @@ datasets, document that possible leakage.
 ## Official sources
 
 - [scEmbed training tutorial](https://docs.bedbase.org/geniml/tutorials/train-scembed-model)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [scEmbed API page](https://docs.bedbase.org/geniml/api-reference/scembed/)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [Geniml v0.8.4 source](https://github.com/databio/geniml/tree/v0.8.4/geniml/scembed)
-  (released 2026-01-14; accessed 2026-07-23)
+  (released 2026-01-14; accessed 2026-10-01)
 - [Gtars tokenizer documentation](https://docs.bedbase.org/gtars/tokenizers)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [Primary scEmbed paper](https://doi.org/10.1093/nargab/lqae073)
   (2024)

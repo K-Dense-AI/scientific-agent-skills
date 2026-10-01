@@ -578,7 +578,7 @@ journal = {Proc. Natl. Acad. Sci. U.S.A.}  % If required by style
 
 ### DOI Formatting
 
-**URL format** (preferred):
+**Bare identifier** in the `doi` field:
 
 ```bibtex
 doi = {10.1038/s41586-021-03819-2}
@@ -679,8 +679,8 @@ Use same format throughout:
 
 Always include:
 - All required fields for entry type
-- DOI for modern papers (2000+)
-- Volume and pages for articles
+- DOI when assigned, regardless of publication year
+- Volume and pages or article number when assigned
 - Publisher for books
 
 ### 3. Protect Capitalization
@@ -694,8 +694,8 @@ Use braces for:
 ### 4. Complete Author Lists
 
 Include all authors when possible:
-- All authors if <10
-- Use "and others" for 10+
+- Preserve the full verified author list
+- Let the bibliography style truncate the display when required
 - Don't abbreviate to "et al." manually
 
 ### 5. Use Standard Entry Types

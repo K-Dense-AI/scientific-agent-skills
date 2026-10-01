@@ -1,6 +1,9 @@
 # RDKit API Reference
 
-This document provides a comprehensive reference for RDKit's Python API, organized by functionality.
+This document provides a selected reference for RDKit's Python API, organized by functionality.
+
+Signatures below show selected keyword arguments, not complete overloads. Tested
+on RDKit 2026.03.6; use keywords when omitted arguments precede them.
 
 ## Core Module: rdkit.Chem
 
@@ -19,12 +22,16 @@ The fundamental module for working with molecules.
 - `Chem.MolFromPDBFile(filename, sanitize=True, removeHs=True)` - Read PDB file
 - `Chem.MolFromPDBBlock(pdbblock, sanitize=True, removeHs=True)` - Parse PDB block
 - `Chem.MolFromInchi(inchi, sanitize=True, removeHs=True)` - Parse InChI string
-- `Chem.MolFromSequence(seq, sanitize=True)` - Create molecule from peptide sequence
+- `Chem.MolFromSequence(text, sanitize=True)` - Create molecule from peptide sequence
+
+MOL2 parsing expects supported atom typing (notably Corina conventions); PDB
+connectivity inference does not validate bond orders, protonation, missing atoms
+or biological assembly identity. These are format readers, not preparation pipelines.
 
 **Writing Molecules:**
 
 - `Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)` - Convert to SMILES
-- `Chem.MolToSmarts(mol, isomericSmiles=False)` - Convert to SMARTS
+- `Chem.MolToSmarts(mol, isomericSmiles=True)` - Convert to SMARTS
 - `Chem.MolToMolBlock(mol, includeStereo=True, confId=-1)` - Convert to MOL block
 - `Chem.MolToMolFile(mol, filename, includeStereo=True, confId=-1)` - Write MOL file
 - `Chem.MolToPDBBlock(mol, confId=-1)` - Convert to PDB block
@@ -37,7 +44,7 @@ The fundamental module for working with molecules.
 
 - `Chem.SDMolSupplier(filename, sanitize=True, removeHs=True)` - SDF file reader
 - `Chem.ForwardSDMolSupplier(fileobj, sanitize=True, removeHs=True)` - Forward-only SDF reader
-- `Chem.MultithreadedSDMolSupplier(filename, numWriterThreads=1)` - Parallel SDF reader
+- `Chem.MultithreadedSDMolSupplier(filename, numWriterThreads=1)` - Parallel SDF reader; experimental, output order may change
 - `Chem.SmilesMolSupplier(filename, delimiter=' ', titleLine=True)` - SMILES file reader
 - `Chem.SDWriter(filename)` - SDF file writer
 - `Chem.SmilesWriter(filename, delimiter=' ', includeHeader=True)` - SMILES file writer
@@ -48,8 +55,8 @@ The fundamental module for working with molecules.
 
 - `Chem.SanitizeMol(mol, sanitizeOps=SANITIZE_ALL, catchErrors=False)` - Sanitize molecule
 - `Chem.DetectChemistryProblems(mol, sanitizeOps=SANITIZE_ALL)` - Detect sanitization issues
-- `Chem.AssignStereochemistry(mol, cleanIt=True, force=False)` - Assign stereochemistry
-- `Chem.FindPotentialStereo(mol)` - Find potential stereocenters
+- `Chem.AssignStereochemistry(mol, cleanIt=False, force=False)` - Assign stereochemistry
+- `Chem.FindPotentialStereo(mol)` - Potential stereoelements; upstream still marks this API experimental
 - `Chem.AssignStereochemistryFrom3D(mol, confId=-1)` - Assign stereo from 3D coords
 
 **Hydrogen Management:**
@@ -57,6 +64,9 @@ The fundamental module for working with molecules.
 - `Chem.AddHs(mol, explicitOnly=False, addCoords=False)` - Add explicit hydrogens
 - `Chem.RemoveHs(mol, implicitOnly=False, updateExplicitCount=False)` - Remove hydrogens
 - `Chem.RemoveAllHs(mol)` - Remove all hydrogens
+
+`RemoveHs` normally preserves isotopic hydrogen; `RemoveAllHs` can discard it.
+Choose explicit isotope/stereo preservation policy before either operation.
 
 **Aromaticity:**
 
@@ -73,8 +83,8 @@ The fundamental module for working with molecules.
 
 **Stereochemistry:**
 
-- `Chem.FindMolChiralCenters(mol, includeUnassigned=False, useLegacyImplementation=False)` - Find chiral centers
-- `Chem.FindPotentialStereo(mol, cleanIt=True)` - Find potential stereocenters
+- `Chem.FindMolChiralCenters(mol, includeUnassigned=False, useLegacyImplementation=None)` - Find chiral centers
+- `Chem.FindPotentialStereo(mol, cleanIt=False)` - Find potential stereocenters
 
 ### Substructure Searching
 
@@ -125,8 +135,8 @@ The fundamental module for working with molecules.
 
 **Ring Information:**
 
-- `Chem.GetSymmSSSR(mol)` - Get smallest set of smallest rings
-- `Chem.GetSSSR(mol)` - Alias for GetSymmSSSR
+- `Chem.GetSymmSSSR(mol)` - Symmetrized smallest-ring set (can exceed SSSR size)
+- `Chem.GetSSSR(mol)` - Smallest set of smallest rings; not an alias (cubane: 5 versus 6 symmetrized rings)
 - `ring_info.NumRings()` - Number of rings
 - `ring_info.AtomRings()` - Tuples of atom indices in rings
 - `ring_info.BondRings()` - Tuples of bond indices in rings
@@ -200,7 +210,7 @@ Molecular descriptor calculations.
 
 ### Descriptor Lists
 
-- `Descriptors._descList` - List of (name, function) tuples for all descriptors
+- `Descriptors._descList` - Private, version-dependent registry; persist names/order with features
 
 ## rdkit.Chem.Draw
 
@@ -211,20 +221,20 @@ Molecular visualization.
 - `Draw.MolToImage(mol, size=(300,300), kekulize=True, wedgeBonds=True, highlightAtoms=None)` - Generate PIL image
 - `Draw.MolToFile(mol, filename, size=(300,300), kekulize=True, wedgeBonds=True)` - Save to file
 - `Draw.MolsToGridImage(mols, molsPerRow=3, subImgSize=(200,200), legends=None)` - Grid of molecules
-- `Draw.MolsMatrixToGridImage(mols, molsPerRow=3, subImgSize=(200,200), legends=None)` - Nested grid
+- `Draw.MolsMatrixToGridImage(molsMatrix, subImgSize=(200,200), legendsMatrix=None)` - Nested grid
 - `Draw.ReactionToImage(rxn, subImgSize=(200,200))` - Reaction image
 
 ### Fingerprint Visualization
 
 - `Draw.DrawMorganBit(mol, bitId, bitInfo, whichExample=0)` - Visualize Morgan bit
-- `Draw.DrawMorganBits(bits, mol, bitInfo, molsPerRow=3)` - Multiple Morgan bits
+- `Draw.DrawMorganBits([(mol, bitId, bitInfo)], molsPerRow=3)` - Multiple Morgan bits
 - `Draw.DrawRDKitBit(mol, bitId, bitInfo, whichExample=0)` - Visualize RDKit bit
 
 ### IPython Integration
 
-- `Draw.IPythonConsole` - Module for Jupyter integration
-- `Draw.IPythonConsole.ipython_useSVG` - Use SVG (True) or PNG (False)
-- `Draw.IPythonConsole.molSize` - Default molecule image size
+- `from rdkit.Chem.Draw import IPythonConsole` - Optional Jupyter integration (requires IPython)
+- `IPythonConsole.ipython_useSVG` - Use SVG (True) or PNG (False)
+- `IPythonConsole.molSize` - Default molecule image size
 
 ### Drawing Options
 
@@ -262,7 +272,7 @@ Scaffold analysis.
 
 - `MurckoScaffold.GetScaffoldForMol(mol)` - Get Murcko scaffold
 - `MurckoScaffold.MakeScaffoldGeneric(mol)` - Generic scaffold
-- `MurckoScaffold.MurckoDecompose(mol)` - Decompose to scaffold and sidechains
+- `Chem.MurckoDecompose(mol)` - Return scaffold molecule (not scaffold/sidechain tuple)
 
 ## rdkit.Chem.rdMolHash
 
@@ -273,7 +283,7 @@ Molecular hashing and standardization.
   - `rdMolHash.HashFunction.CanonicalSmiles` - Canonical SMILES
   - `rdMolHash.HashFunction.ElementGraph` - Element graph
   - `rdMolHash.HashFunction.MurckoScaffold` - Murcko scaffold
-  - `rdMolHash.HashFunction.Regioisomer` - Regioisomer (no stereo)
+  - `rdMolHash.HashFunction.Regioisomer` - Regioisomer abstraction (cuts selected bonds; not a general stereo-removal hash)
   - `rdMolHash.HashFunction.NetCharge` - Net charge
   - `rdMolHash.HashFunction.HetAtomProtomer` - Heteroatom protomer
   - `rdMolHash.HashFunction.HetAtomTautomer` - Heteroatom tautomer
@@ -289,14 +299,19 @@ from rdkit.Chem.MolStandardize import rdMolStandardize
 ```
 
 - `rdMolStandardize.Normalize(mol)` - Normalize functional groups
-- `rdMolStandardize.Reionize(mol)` - Fix ionization state
-- `rdMolStandardize.RemoveFragments(mol)` - Remove small fragments
-- `rdMolStandardize.Cleanup(mol)` - Full cleanup (normalize + reionize + remove)
+- `rdMolStandardize.Reionize(mol)` - Apply acid/base charge-placement rules, not a pH model
+- `rdMolStandardize.RemoveFragments(mol)` - Remove fragments matching configured rules
+- `rdMolStandardize.Cleanup(mol)` - Remove H, disconnect metals, normalize, reionize, assign stereo; retains disconnected salts
+- `rdMolStandardize.FragmentParent(mol)` - Cleanup then select a fragment; explicit policy that discards components
 - `rdMolStandardize.Uncharger()` - Create uncharger object
-  - `.uncharge(mol)` - Remove charges
+  - `.uncharge(mol)` - Neutralize eligible sites; permanent charges can remain
 - `rdMolStandardize.TautomerEnumerator()` - Enumerate tautomers
   - `.Enumerate(mol)` - Generate tautomers
   - `.Canonicalize(mol)` - Get canonical tautomer
+
+Canonical tautomer scoring is deterministic under its rules, not a prediction of
+the dominant solution tautomer. Enumeration may stop at configured limits and can
+remove stereo at tautomerizing sites; inspect the result status.
 
 ## rdkit.DataStructs
 
@@ -319,18 +334,18 @@ Fingerprint similarity and operations.
 
 ### Distance Metrics
 
-- `DataStructs.TanimotoDistance(fp1, fp2)` - 1 - Tanimoto
-- `DataStructs.DiceDistance(fp1, fp2)` - 1 - Dice
+- `1 - DataStructs.TanimotoSimilarity(fp1, fp2)` - Tanimoto distance
+- `1 - DataStructs.DiceSimilarity(fp1, fp2)` - Dice distance
 
 ## rdkit.Chem.AtomPairs
 
 Atom pair fingerprints.
 
 - `Pairs.GetAtomPairFingerprint(mol, minLength=1, maxLength=30)` - Atom pair fingerprint
-- `Pairs.GetAtomPairFingerprintAsBitVect(mol, minLength=1, maxLength=30, nBits=2048)` - As bit vector
+- `Pairs.GetAtomPairFingerprintAsBitVect(mol)` - As bit vector
 - `Pairs.GetHashedAtomPairFingerprint(mol, nBits=2048, minLength=1, maxLength=30)` - Hashed version
 
-## rdkit.Chem.Torsions
+## rdkit.Chem.AtomPairs.Torsions
 
 Topological torsion fingerprints.
 
@@ -342,7 +357,7 @@ Topological torsion fingerprints.
 
 MACCS structural keys.
 
-- `MACCSkeys.GenMACCSKeys(mol)` - Generate 166-bit MACCS keys
+- `MACCSkeys.GenMACCSKeys(mol)` - Generate 167-bit vector (166 keys; bit 0 unused)
 
 ## rdkit.Chem.ChemicalFeatures
 
@@ -365,7 +380,7 @@ Clustering algorithms.
 
 Modern fingerprint generation API. Prefer this over legacy `AllChem.GetMorganFingerprint*` helpers for new code.
 
-- `rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)` - Morgan generator
+- `rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048, includeChirality=False)` - Explicit radius 2; upstream default radius is 3
 - `rdFingerprintGenerator.GetRDKitFPGenerator(minPath=1, maxPath=7, fpSize=2048)` - RDKit FP generator
 - `rdFingerprintGenerator.GetAtomPairGenerator(minDistance=1, maxDistance=30)` - Atom pair generator
 - `rdFingerprintGenerator.GetTopologicalTorsionGenerator(fpSize=2048)` - Topological torsion generator
@@ -417,7 +432,7 @@ Modern fingerprint generation API. Prefer this over legacy `AllChem.GetMorganFin
 
 ```bash
 # Existing uv/pip environment
-uv pip install rdkit
+uv pip install "rdkit==2026.3.6"
 
 # Fresh conda-forge environment (upstream recommendation)
 conda create -c conda-forge -n my-rdkit-env rdkit

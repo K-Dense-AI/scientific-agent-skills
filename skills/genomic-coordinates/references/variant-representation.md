@@ -2,9 +2,9 @@
 
 The same change to a genome can be written many ways. Two records that share no
 field values can describe one variant, and two records with identical `POS` can
-describe different ones. Any comparison, join, deduplication, or annotation
-lookup performed before normalisation loses real matches silently — nothing
-errors, the intersection is just smaller than it should be.
+describe different ones. Comparisons, joins, deduplication, or annotation lookups can lose real matches
+when equivalent alleles are represented differently. Normalizing literal alleles
+reduces that problem; it does not solve every form of haplotype equivalence.
 
 ## Why one variant has many spellings
 
@@ -50,7 +50,8 @@ The procedure:
    base: drop the first base of every allele and increment `POS`.
 
 Step 1 walks the variant left through a repeat. Step 2 strips redundant padding.
-Both terminate. `scripts/normalize_variant.py` implements exactly this:
+At the contig start, do not extend past base 1. The helper bounds left-extension
+with `--window` and reports `incomplete` if that limit stops normalization:
 
 ```bash
 python3 normalize_variant.py --fasta ref.fa chr1 7 CAC C
@@ -82,33 +83,44 @@ a mismatch stops that record:
 ref_check  MISMATCH   REF says A but the reference has C at chr1:3
 ```
 
-A `REF` mismatch is the cheapest assembly-mismatch detector there is. If more
-than a handful of records fail, the variants and the FASTA are different builds —
-run `scripts/check_contigs.py` rather than adjusting anything.
+A `REF` mismatch is evidence of inconsistent inputs, not a diagnosis of the
+cause. Check assembly, exact contig names, strand, sequence versions, and
+coordinates. Sequence masking and reference errors can also matter. A matching
+REF at a few sites does not prove that the whole assembly matches.
 
 ## Multi-allelic records
 
-`ALT=G,GG` is two variants sharing a line. They must be split **before**
-normalising, because the shared `REF` that made them representable together is
-not the parsimonious `REF` for either one:
+`ALT=G,GG` contains two alternatives sharing a record. Normalization can operate
+on a multiallelic site jointly; its shared representation is not necessarily the
+same as the independently normalized biallelic keys. Choose the representation
+needed for comparison. This helper only normalizes one literal ALT at a time
+and rejects unsplit lists:
 
 ```bash
 python3 normalize_variant.py --fasta ref.fa --split --input cohort.vcf
 ```
 
-Splitting after normalising, or normalising a multi-allelic record as a unit,
-gives records that are individually wrong. `bcftools norm -m -any -f ref.fa` does
-both in the right order. Note that splitting rewrites the genotype and `INFO`
-fields; per-allele `INFO` entries with `Number=A` are split alongside, and
-anything else is duplicated to both records.
+This produces allele-key TSV/JSON and **does not preserve INFO, FORMAT, GT, or
+sample identity**. For a VCF workflow use the native tool, for example:
+
+```bash
+bcftools norm -m -any -f ref.fa -c e --old-rec-tag ORIG cohort.vcf -Ov -o normalized.vcf
+```
+
+`bcftools norm` handles splitting and reference-based normalization in one
+command. Field handling depends on declared `Number=A/R/G`, ploidy and options;
+it is not a blanket duplication of non-A fields. Review genotype projection
+(`--multi-overlaps 0|.`), allele depths (`--keep-sum AD`), and provenance before
+using the split output for frequency or dosage calculations. Tested with a tiny
+multiallelic GT/AD/PL fixture under bcftools 1.24.
 
 ## The other direction: HGVS shifts right
 
-VCF left-aligns. HGVS does the opposite: *"in the case of ambiguity, the most 3'
+VCF normalization conventionally left-aligns on the genome. HGVS instead uses
+the 3'-most position on the described reference: *"in the case of ambiguity, the most 3'
 position possible of the reference sequence is arbitrarily assigned to have been
-changed."* The two standards are deliberately opposite, and the difference is
-real — the same deletion has different coordinates in a VCF and in a clinical
-report.
+changed."* The shift can differ between genomic and transcript descriptions of one
+variant; it is not always opposite in genomic direction.
 
 Worse, HGVS's "3'" is relative to **the reference sequence being described**:
 
@@ -119,22 +131,29 @@ Worse, HGVS's "3'" is relative to **the reference sequence being described**:
 | HGVS `c.` / `n.` / `p.` | transcript 3' end | rightmost genomic | **leftmost** genomic |
 
 So for a minus-strand gene, an HGVS `c.` description and a left-aligned VCF
-record can coincide, and for a plus-strand gene they systematically will not.
+record can coincide. On the plus strand, they can differ in repeats.
 Never convert between the two by adjusting coordinates; round-trip through a
-tool that knows the transcript model (`bcftools csq`, VEP, Mutalyzer,
-`hgvs` in Python).
+tool that knows the transcript model (VEP, Mutalyzer, `hgvs` in Python).
+The HGVS exon-junction exceptions also apply; a blind transcript shift is unsafe.
+`bcftools norm --gff-annot` supports transcript-aware right-alignment on forward
+transcripts, but does not create a general HGVS description.
 
 ## Symbolic and structural alleles
 
-`<DEL>`, `<DUP>`, `<INV>`, `<CNV>`, `<INS>` and breakend (`BND`) records carry no
-literal sequence. `REF` is the single anchor base at `POS`; the extent lives in
-`INFO/END` and `INFO/SVLEN`. They cannot be normalised, and
-`normalize_variant.py` passes them through with `ref_check = skipped` rather than
-pretending otherwise.
+Symbolic alleles (`<DEL>`, `<DUP>`, etc.), breakend replacement strings, missing
+ALT `.`, and spanning-deletion ALT `*` are outside this helper's literal-allele
+normalization. Breakends can include local inserted sequence, and their REF
+need not always be a single base. They pass through unchanged with `ref_check =
+skipped`; this does not validate their REF, structural syntax, or event extent.
 
-`*` as an ALT allele means "this sample's allele is deleted by a different record
-overlapping this position". It is not a variant; counting `*` alleles as alternate
-observations inflates allele frequencies.
+In VCF 4.5, symbolic structural alleles use per-ALT positive `SVLEN`; legacy
+`END` and negative deletion lengths have backward-compatibility rules. gVCF
+reference blocks use `FORMAT/LEN` in the current specification. Follow the file's
+declared version and use a native structural-variant validator/comparator.
+
+`*` represents sequence absent due to an overlapping deletion. It may occur in
+sample genotypes, but should not be counted as a separate newly discovered
+sequence-change event at that position. Frequency handling is analysis-specific.
 
 ## What to run before comparing two variant sets
 
@@ -150,6 +169,14 @@ python3 normalize_variant.py --fasta ref.fa --split --input setA.vcf -o A.norm.t
 python3 normalize_variant.py --fasta ref.fa --split --input setB.vcf -o B.norm.tsv
 ```
 
-Only then join on `CHROM:POS:REF:ALT`. An intersection computed before step 3 is
-an underestimate of unknown size, and it is biased: it under-counts indels in
-repeats, which is where most of the interesting ones are.
+Join only successful literal-allele keys. Stop on mismatches, errors, or
+`incomplete` normalization; skipped rows need a different comparison. Even fully
+normalized alleles do not establish equivalence of phased haplotypes represented
+as multiple SNVs versus one MNV, complex variants, or structural events.
+
+## Official sources reviewed 2026-10-01
+
+- [bcftools norm manual](https://samtools.github.io/bcftools/bcftools.html#norm).
+- [VCF 4.5 specification](https://samtools.github.io/hts-specs/VCFv4.5.pdf).
+- [HGVS general recommendations](https://hgvs-nomenclature.org/stable/recommendations/general/)
+  and [numbering](https://hgvs-nomenclature.org/stable/background/numbering/).

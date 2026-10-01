@@ -2,11 +2,12 @@
 name: relion
 description: Validates and executes RELION single-particle cryo-EM refinement and half-map postprocessing. Supports STAR optics/acquisition checks, particle-stack consistency, gold-standard half sets, soft-mask validation, diagnostic Fourier shell correlation, and restart guidance.
 license: MIT
-compatibility: Python 3.10+ with numpy, mrcfile and starfile for bundled validation; RELION 5.0.1 CPU/MPI executables for refinement and postprocessing. GPU builds require their supported accelerator stack. FFTW, OpenMP and MPI are build/runtime dependencies. Network is needed for installation only.
+compatibility: Python 3.12+ with numpy, mrcfile and starfile for bundled validation; RELION 5.0.1 CPU/MPI executables for refinement and postprocessing. Native workflows require MPI, OpenMP and an FFT library (FFTW or MKL). GPU builds require their supported accelerator stack. Network is needed for installation only.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
   upstream-version: "5.0.1"
+  last-reviewed: "2026-10-01"
 ---
 
 # RELION single-particle refinement
@@ -26,7 +27,8 @@ aberration in **mm**, defocus in **Å**, amplitude contrast as a fraction, and t
 by the specimen. Do not “correct” a suspicious value by guessing its units.
 
 `data_optics` describes acquisition/image groups; `data_particles` references them through
-`_rlnOpticsGroup`. Particle filenames use **one-based** `index@stack.mrcs`. Relative paths resolve
+`_rlnOpticsGroup`. Particle filenames use **one-based** `index@stack.mrcs`; leading zeros such as
+`00000001@stack.mrcs` are valid. Relative paths resolve
 from the RELION project directory, not the STAR file's directory. Keep optics groups when merging
 or subsetting STAR files. `_rlnOriginXAngst`/`_rlnOriginYAngst` are Å translations, not pixels.
 
@@ -38,7 +40,8 @@ python scripts/spa_workflow.py validate-star project/particles.star --project pr
 
 This opens referenced stacks and checks optics membership, finite acquisition/CTF values, indices,
 box sizes, duplicate particle references and existing half-set assignments. Use `--metadata-only`
-only when stacks are genuinely unavailable, and report that the stack checks were omitted.
+only when stacks are genuinely unavailable; the JSON records `stack_checks_performed: false`.
+It does not scan every particle pixel for corruption or establish correct image normalization.
 Physical-range warnings are review prompts, not proof that unusual microscope settings are wrong.
 
 ## Refine a selected particle population
@@ -47,7 +50,8 @@ Before running, inspect representative particles and class averages, defocus dis
 fits, particle orientation distribution, and the initial reference. Ensure the map and particle
 boxes/pixel sizes agree after any downsampling. The runner deliberately supports one effective
 box/pixel size across optics groups; handle heterogeneous sampling with an explicit upstream
-resampling workflow.
+resampling workflow. Use conventionally extracted, normalized particles that have not already
+been phase-flipped or Wiener-filtered; this runner does not configure those special input cases.
 
 ```bash
 python scripts/spa_workflow.py refine \
@@ -88,6 +92,9 @@ writes an **unmasked diagnostic FSC**. The reported 0.143 crossing uses linear i
 `null` means no downward crossing was detected, not infinite resolution. Nyquist resolution is
 2 × pixel size. This diagnostic is limited to even cubic maps ≤256³; use RELION's native
 `relion_image_handler --fsc` for larger maps. It does not substitute for mask-corrected FSC.
+The helper requires real-space maps with canonical axes, zero MRC start indices and orthogonal
+cell angles. Convert other grids explicitly with provenance; merely editing headers can misalign
+density. Matching headers and FSC cannot determine absolute handedness.
 
 ## Postprocess with a soft mask
 
@@ -105,9 +112,10 @@ python scripts/spa_workflow.py postprocess \
 The helper checks a nonconstant mask in [0,1], soft-edge voxels and matching map grids, then runs
 `relion_postprocess` with explicit half maps, mask and pixel size. RELION performs its own
 mask/randomization correction and writes `postprocess.star`. The bounded command leaves the
-B-factor at its default; add automatic/manual sharpening only after choosing a defensible fit
+B-factor at zero (no automatic B-factor estimation); add automatic/manual sharpening only after choosing a defensible fit
 range and inspecting map quality. A valid range and some fractional mask voxels do not prove the
-mask is scientifically appropriate.
+mask is scientifically appropriate. Inspect the phase-randomized masked FSC near the reported
+resolution: residual correlation calls for a smoother/wider mask and another postprocessing run.
 
 See [references/runtime-and-validation.md](references/runtime-and-validation.md) for the tested
 native utilities and the distinction between pipeline execution and reconstruction validation.
@@ -118,3 +126,4 @@ native utilities and the distinction between pipeline execution and reconstructi
 - [STAR and map conventions](https://relion.readthedocs.io/en/release-5.0/Reference/Conventions.html).
 - [Single-particle tutorial](https://relion.readthedocs.io/en/release-5.0/SPA_tutorial/index.html).
 - [Gold-standard refinement](https://relion.readthedocs.io/en/release-5.0/SPA_tutorial/Refine3D.html).
+- [Mask creation and postprocessing](https://relion.readthedocs.io/en/release-5.0/SPA_tutorial/Mask.html).

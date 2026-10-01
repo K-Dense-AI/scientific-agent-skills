@@ -1,5 +1,8 @@
 # SymPy Physics and Mechanics
 
+Examples in this reference are ordered session fragments: run earlier imports and
+setup first. Tested with SymPy 1.14.0; exceptions are explicitly marked illustrative.
+
 This document covers SymPy's physics modules including classical mechanics, quantum mechanics, vector analysis, units, optics, continuum mechanics, and control systems.
 
 ## Vector Analysis
@@ -87,7 +90,7 @@ a = P.acc(N)
 ### Lagrangian Mechanics
 
 ```python
-from sympy import symbols, Function
+from sympy import symbols, Function, cos
 from sympy.physics.mechanics import dynamicsymbols, LagrangesMethod
 
 # Define generalized coordinates
@@ -110,7 +113,7 @@ eqs = LM.rhs()  # Right-hand side of equations of motion
 ### Kane's Method
 
 ```python
-from sympy.physics.mechanics import KanesMethod, ReferenceFrame, Point
+from sympy.physics.mechanics import KanesMethod, ReferenceFrame, Point, Particle
 from sympy.physics.vector import dynamicsymbols
 
 # Define system
@@ -118,19 +121,22 @@ N = ReferenceFrame('N')
 q = dynamicsymbols('q')
 u = dynamicsymbols('u')  # Generalized speed
 
-# Create Kane's equations
-kd = [u - q.diff()]  # Kinematic differential equations
-KM = KanesMethod(N, [q], [u], kd)
-
-# Define forces and bodies
-# ... (define particles, forces, etc.)
-# KM.kanes_equations(bodies, loads)
+# One-dimensional mass-spring oscillator; positive mass and stiffness
+m, k = symbols('m k', positive=True)
+O = Point('O')
+O.set_vel(N, 0)
+P = O.locatenew('P', q*N.x)
+P.set_vel(N, u*N.x)
+particle = Particle('particle', P, m)
+kd = [u - q.diff()]
+KM = KanesMethod(N, q_ind=[q], u_ind=[u], kd_eqs=kd)
+KM.kanes_equations([particle], [(P, -k*q*N.x)])
 ```
 
 ### System Bodies and Inertias
 
 ```python
-from sympy.physics.mechanics import RigidBody, Inertia, Point, ReferenceFrame
+from sympy.physics.mechanics import RigidBody, inertia, Point, ReferenceFrame
 from sympy import symbols
 
 # Mass and inertia parameters
@@ -142,7 +148,7 @@ A = ReferenceFrame('A')
 P = Point('P')
 
 # Define inertia dyadic
-I = Inertia(A, Ixx, Iyy, Izz)
+I = inertia(A, Ixx, Iyy, Izz)  # Dyadic; Inertia itself takes (dyadic, point)
 
 # Create rigid body
 body = RigidBody('Body', P, A, m, (I, P))
@@ -151,17 +157,18 @@ body = RigidBody('Body', P, A, m, (I, P))
 ### Joints Framework
 
 ```python
-from sympy.physics.mechanics import Body, PinJoint, PrismaticJoint
+from sympy.physics.mechanics import RigidBody, PinJoint, PrismaticJoint
 
 # Create bodies
-parent = Body('P')
-child = Body('C')
+parent = RigidBody('P')
+child = RigidBody('C')
 
 # Create pin (revolute) joint
 pin = PinJoint('pin', parent, child)
 
 # Create prismatic (sliding) joint
-slider = PrismaticJoint('slider', parent, child, axis=parent.frame.z)
+slider_child = RigidBody('S')
+slider = PrismaticJoint('slider', parent, slider_child, joint_axis=parent.frame.z)
 ```
 
 ### Linearization
@@ -169,10 +176,9 @@ slider = PrismaticJoint('slider', parent, child, axis=parent.frame.z)
 ```python
 # Linearize equations of motion about an equilibrium
 operating_point = {q: 0, u: 0}  # Equilibrium point
-A, B = KM.linearize(q_ind=[q], u_ind=[u],
-                     A_and_B=True,
-                     op_point=operating_point)
-# A: state matrix, B: input matrix
+A_linear, B_linear, inputs = KM.linearize(A_and_B=True, op_point=operating_point)
+# A_linear = Matrix([[0, 1], [-k/m, 0]]); no input in this example.
+# Coordinate/speed partitions were supplied to KanesMethod, not linearize().
 ```
 
 ## Quantum Mechanics
@@ -217,7 +223,8 @@ anti.doit()
 ### Quantum Harmonic Oscillator
 
 ```python
-from sympy.physics.quantum.qho_1d import RaisingOp, LoweringOp, NumberOp
+from sympy.physics.quantum.sho1d import RaisingOp, LoweringOp, NumberOp, SHOKet
+from sympy.physics.quantum import qapply
 
 # Creation and annihilation operators
 a_dag = RaisingOp('a')  # Creation operator
@@ -225,8 +232,9 @@ a = LoweringOp('a')      # Annihilation operator
 N = NumberOp('N')        # Number operator
 
 # Number states
-from sympy.physics.quantum.qho_1d import Ket as QHOKet
-n = QHOKet('n')
+n = symbols('n', integer=True, nonnegative=True)
+state = SHOKet(n)
+raised = qapply(a_dag * state)  # sqrt(n + 1)*|n + 1>
 ```
 
 ### Spin Systems
@@ -243,7 +251,7 @@ from sympy import Rational
 psi = JzKet(Rational(1, 2), Rational(1, 2))  # |1/2, 1/2⟩
 
 # Apply operator
-result = Jz * psi
+result = qapply(Jz * psi)  # hbar/2 times this spin-up state
 ```
 
 ### Quantum Gates
@@ -259,7 +267,7 @@ from sympy.physics.quantum.gate import (
 # Apply gate to quantum state
 from sympy.physics.quantum.qubit import Qubit
 q = Qubit('01')
-result = H(0) * q  # Apply Hadamard to qubit 0
+result = qapply(H(0) * q)  # Apply Hadamard; qubit 0 is the rightmost bit
 ```
 
 ### Quantum Algorithms
@@ -298,10 +306,12 @@ force_in_newtons = convert_to(force, newton)
 ### Unit Systems
 
 ```python
-from sympy.physics.units import SI, gravitational_constant, speed_of_light
+from sympy.physics.units.systems.si import SI
+from sympy.physics.units import gravitational_constant, speed_of_light
 
 # SI units
-print(SI._base_units)  # Base SI units
+dimension_system = SI.get_dimension_system()
+print(dimension_system.base_dims)  # Public base-dimension API
 
 # Physical constants
 G = gravitational_constant
@@ -314,8 +324,11 @@ c = speed_of_light
 from sympy.physics.units import Quantity, meter, second
 
 # Define custom unit
-parsec = Quantity('parsec')
-parsec.set_global_relative_scale_factor(3.0857e16 * meter, meter)
+from sympy import Rational
+survey_length = Quantity('survey_length')
+survey_length.set_global_relative_scale_factor(Rational('3.0857e16'), meter)
+# Scalar factor is dimensionless; reference quantity is a separate argument.
+# This is an example custom unit, not a precision definition of the parsec.
 ```
 
 ### Dimensional Analysis
@@ -326,7 +339,11 @@ from sympy.physics.units import Dimension, length, time, mass
 # Check dimensions
 from sympy.physics.units import convert_to, meter, second
 velocity = 10 * meter / second
-print(velocity.dimension)  # Dimension(length/time)
+from sympy.physics.units.systems.si import SI
+print(SI.get_dimensional_expr(velocity))  # length/time
+# convert_to leaves incompatible dimensions unchanged; it is not validation.
+from sympy.physics.units.util import check_dimensions
+check_dimensions(velocity + meter/second)  # Reject incompatible additive terms
 ```
 
 ## Optics
@@ -362,7 +379,8 @@ wave = TWave(amplitude=1, frequency=5e14, phase=0)
 
 # Medium properties (refractive index, etc.)
 from sympy.physics.optics import Medium
-medium = Medium('glass', permittivity=2.25)
+from sympy import Rational
+medium = Medium('glass', n=Rational(3, 2))  # Dimensionless refractive index
 ```
 
 ## Continuum Mechanics
@@ -378,13 +396,15 @@ E, I = symbols('E I', positive=True)  # Young's modulus, moment of inertia
 length = 10
 
 beam = Beam(length, E, I)
+R_left = beam.apply_support(0, 'pin')
+R_right = beam.apply_support(length, 'roller')
 
 # Apply loads
 from sympy.physics.continuum_mechanics.beam import Beam
 beam.apply_load(-1000, 5, -1)  # Point load of -1000 at x=5
 
 # Calculate reactions
-beam.solve_for_reaction_loads()
+beam.solve_for_reaction_loads(R_left, R_right)
 
 # Get shear force, bending moment, deflection
 x = symbols('x')
@@ -405,7 +425,8 @@ truss = Truss()
 truss.add_node(('A', 0, 0), ('B', 4, 0), ('C', 2, 3))
 
 # Add members
-truss.add_member(('AB', 'A', 'B'), ('BC', 'B', 'C'))
+truss.add_member(('AB', 'A', 'B'), ('BC', 'B', 'C'), ('AC', 'A', 'C'))
+truss.apply_support(('A', 'pinned'), ('B', 'roller'))
 
 # Apply loads
 truss.apply_load(('C', 1000, 270))  # 1000 N at 270° at node C
@@ -423,10 +444,15 @@ from sympy.physics.continuum_mechanics.cable import Cable
 cable = Cable(('A', 0, 10), ('B', 10, 10))
 
 # Apply loads
-cable.apply_load(-1, 5)  # Distributed load
+cable.apply_load(-1, ('W', 5, 5, 1000, 270))  # Downward point load, position known
 
-# Solve for tension and shape
+# Solve point-load tension and reactions for the specified polygonal shape
 cable.solve()
+# For a uniform distributed load use order=0 and (label, magnitude).
+# SymPy 1.14.0 solve(lowest_x) consumes only the first positional argument,
+# despite its docstring mentioning both x and y. Equal-height centered supports
+# leave sag underdetermined. Distributed reactions need independent equilibrium
+# verification; only the point-load workflow is validated here.
 ```
 
 ## Control Systems
@@ -435,22 +461,23 @@ cable.solve()
 
 ```python
 from sympy.physics.control import TransferFunction, StateSpace
+from sympy import Matrix
 from sympy.abc import s
 
 # Transfer function
 tf = TransferFunction(s + 1, s**2 + 2*s + 1, s)
 
 # State-space representation
-A = [[0, 1], [-1, -2]]
-B = [[0], [1]]
-C = [[1, 0]]
-D = [[0]]
+A = Matrix([[0, 1], [-1, -2]])
+B = Matrix([[0], [1]])
+C = Matrix([[1, 0]])
+D = Matrix([[0]])
 
 ss = StateSpace(A, B, C, D)
 
 # Convert between representations
-ss_from_tf = tf.to_statespace()
-tf_from_ss = ss.to_TransferFunction()
+ss_from_tf = tf.rewrite(StateSpace)
+tf_from_ss = ss.rewrite(TransferFunction)[0][0]  # Nested output/input list
 ```
 
 ### System Analysis
@@ -477,11 +504,16 @@ from sympy.physics.biomechanics import (
     FirstOrderActivationDeGroote2016
 )
 
-# Create musculotendon model
-mt = MusculotendonDeGroote2016('muscle')
-
-# Activation dynamics
+# Define an origin-to-insertion pathway and activation dynamics
+from sympy.physics.mechanics import LinearPathway, Point, ReferenceFrame, dynamicsymbols
+N = ReferenceFrame('N')
+origin, insertion = Point('origin'), Point('insertion')
+length_m = dynamicsymbols('length_m', positive=True)
+insertion.set_pos(origin, length_m*N.x)
+pathway = LinearPathway(origin, insertion)
 activation = FirstOrderActivationDeGroote2016('muscle_activation')
+mt = MusculotendonDeGroote2016('muscle', pathway, activation)
+# Defaults create symbolic parameters; calibrate them before physical predictions.
 ```
 
 ## High Energy Physics
@@ -490,10 +522,14 @@ activation = FirstOrderActivationDeGroote2016('muscle_activation')
 
 ```python
 # Gamma matrices and Dirac equations
-from sympy.physics.hep.gamma_matrices import GammaMatrix
+from sympy.physics.hep.gamma_matrices import GammaMatrix, LorentzIndex
+from sympy.tensor.tensor import tensor_indices
+mu = tensor_indices("mu", LorentzIndex)
+gamma_mu = GammaMatrix(mu)  # Indexed abstract tensor, not an integer-index matrix
 
-gamma0 = GammaMatrix(0)
-gamma1 = GammaMatrix(1)
+from sympy.physics.matrices import mgamma
+gamma0 = mgamma(0)  # Explicit 4x4 Dirac representation
+gamma1 = mgamma(1)
 ```
 
 ## Common Physics Patterns
@@ -516,7 +552,9 @@ O = Point('O')
 P = Point('P')
 
 # 4. Set kinematics
-P.set_pos(O, length * N.x)
+length = symbols("length", positive=True)
+O.set_vel(N, 0)
+P.set_pos(O, length * q * N.x)
 P.set_vel(N, length * q_dot * N.x)
 
 # 5. Define forces and apply Lagrange or Kane method
@@ -564,26 +602,26 @@ E, I = symbols('E I', positive=True, real=True)
 beam = Beam(10, E, I)
 
 # Apply boundary conditions
-beam.apply_support(0, 'pin')
-beam.apply_support(10, 'roller')
+R_left = beam.apply_support(0, 'pin')
+R_right = beam.apply_support(10, 'roller')
 
 # Apply loads
 beam.apply_load(-1000, 5, -1)  # Point load
 beam.apply_load(-50, 0, 0, 10)  # Distributed load
 
 # Solve
-beam.solve_for_reaction_loads()
+beam.solve_for_reaction_loads(R_left, R_right)
 
 # Get results at specific locations
 x = 5
-deflection_at_mid = beam.deflection().subs(symbols('x'), x)
+deflection_at_mid = beam.deflection().subs(beam.variable, x)
 ```
 
 ## Important Notes
 
 1. **Time-dependent variables:** Use `dynamicsymbols()` for time-varying quantities in mechanics problems.
 
-2. **Units:** Always specify units explicitly using the `sympy.physics.units` module for physics calculations.
+2. **Units:** Choose and record a consistent unit convention. Mechanics examples use symbolic or numeric coefficients in that convention; the mechanics classes do not automatically enforce dimensional consistency. Use `sympy.physics.units` for explicit checks and conversions.
 
 3. **Reference frames:** Clearly define reference frames and their relative orientations for vector analysis.
 

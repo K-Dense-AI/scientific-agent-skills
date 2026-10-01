@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import csv
+from datetime import date
 import json
 import stat
 import sys
@@ -20,8 +21,10 @@ sys.path.insert(0, str(SCRIPTS))
 
 from _common import (  # noqa: E402
     MAX_INPUT_BYTES,
+    MAX_JSON_DEPTH,
     ValidationError,
     read_json,
+    require_iso_date,
     write_json_report,
 )
 from audit_evidence_ledger import (  # noqa: E402
@@ -265,6 +268,13 @@ class ScaffoldTests(unittest.TestCase):
         self.assertIn("does not rank or select", rendered)
         self.assertNotIn("selected hypothesis", rendered.casefold())
 
+    def test_record_date_is_not_presented_as_generation_timestamp(self) -> None:
+        record = valid_record()
+        record["updated_on"] = "2024-02-29"
+        rendered = generate_scaffold(record)
+        self.assertIn("record last updated 2024-02-29", rendered)
+        self.assertNotIn("Generated locally on 2024-02-29", rendered)
+
     def test_unresolved_gate_blocks_scaffold(self) -> None:
         raw = load_asset_json("hypothesis_record_template.json")
         ethics = raw["ethics_and_feasibility"]
@@ -278,6 +288,30 @@ class ScaffoldTests(unittest.TestCase):
 
 
 class FileSafetyAndStaticTests(unittest.TestCase):
+    def test_dates_require_calendar_form_and_valid_day(self) -> None:
+        self.assertEqual(require_iso_date("2024-02-29", "date"), "2024-02-29")
+        for value in ("20261001", "2026-W40-4", "2026-02-29", "2026-13-01"):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                require_iso_date(value, "date")
+
+    def test_nonstandard_json_numbers_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "constant.json"
+            for constant in ("NaN", "Infinity", "-Infinity"):
+                path.write_text('{"value":' + constant + '}', encoding="utf-8")
+                with self.subTest(constant=constant), self.assertRaisesRegex(
+                    ValidationError, "nonstandard numeric constant"
+                ):
+                    read_json(path)
+
+    def test_excessive_json_nesting_is_a_validation_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested.json"
+            depth = MAX_JSON_DEPTH + 1
+            path.write_text("[" * depth + "0" + "]" * depth, encoding="utf-8")
+            with self.assertRaisesRegex(ValidationError, "nesting"):
+                read_json(path)
+
     def test_duplicate_json_keys_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "duplicate.json"
@@ -365,7 +399,8 @@ class FileSafetyAndStaticTests(unittest.TestCase):
         ) as handle:
             rows = list(csv.DictReader(handle))
         self.assertGreaterEqual(len(rows), 30)
-        self.assertTrue(all(row["verified_on"] == "2026-07-23" for row in rows))
+        for row in rows:
+            self.assertEqual(date.fromisoformat(row["verified_on"]).isoformat(), row["verified_on"])
         self.assertTrue(all(row["url"].startswith("https://") for row in rows))
         self.assertEqual(
             len(rows), len({row["source_id"] for row in rows})

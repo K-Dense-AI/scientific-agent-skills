@@ -1,7 +1,7 @@
 # NCA reporting checklist
 
-An NCA result is uninterpretable — and irreproducible — unless every item below is stated. Most
-disagreements between two analyses of the same data resolve to one of the first four.
+Record the applicable conventions and provenance below. The bundled helper uses one global BLQ
+rule, so location-dependent handling requires documented preprocessing.
 
 ## The four conventions that change the answer
 
@@ -36,8 +36,8 @@ disagreements between two analyses of the same data resolve to one of the first 
 ## Terminal-phase quality, per subject
 
 - [ ] Adjusted r-squared of the lambda_z regression
-- [ ] Span ratio (window duration ÷ t½); flag below 2
-- [ ] % AUC extrapolated; flag above 20%
+- [ ] Span ratio (window duration ÷ t½); below 2 is a screening flag, not a universal exclusion
+- [ ] % AUC extrapolated; above 20% is a screening flag, not a universal exclusion
 - [ ] Number of points in the fit; flag below 3
 - [ ] Subjects for whom lambda_z was not estimable, and how they were handled in the summary
 
@@ -45,7 +45,7 @@ disagreements between two analyses of the same data resolve to one of the first 
 
 - [ ] Exposure metrics (AUC, Cmax) as **geometric mean and geometric CV%**
 - [ ] Tmax as **median and range**
-- [ ] Arithmetic mean, SD and CV% alongside, if wanted, but not instead
+- [ ] Arithmetic mean, SD and CV% where relevant to the estimand, with the summary basis stated
 - [ ] n for each parameter, since it differs when lambda_z fails for some subjects
 
 ## Presentation
@@ -67,6 +67,6 @@ disagreements between two analyses of the same data resolve to one of the first 
 2. Interpolating Cmax, or reporting a mean Tmax.
 3. Quoting Vz as if it were Vss, or reporting Vss from oral data.
 4. Applying one BLQ rule to the test arm and another to the reference.
-5. Presenting arithmetic means for AUC and Cmax.
+5. Using a summary basis that does not match the estimand or comparing incompatible summaries.
 6. Summarising across subjects without saying that lambda_z failed for some of them.
 7. Omitting the lambda_z window, which makes the half-life unreproducible.

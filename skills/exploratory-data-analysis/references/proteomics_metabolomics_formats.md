@@ -1,6 +1,6 @@
 # Proteomics and Metabolomics Formats
 
-**Reviewed:** 2026-07-23
+**Reviewed:** 2026-09-30
 **Executable scope:** No omics-native standard is parsed by bundled scripts.
 Rectangular CSV/TSV result exports can use the general tabular CLIs after the
 schema, units, and missing/censoring codes are confirmed.
@@ -77,7 +77,9 @@ HUPO-PSI lists:
   March 2019).
 
 mzTab-M 2.1.0 is listed as draft, not a final standard. Do not silently treat
-it as 2.0.
+it as 2.0. The draft has moved to the separate
+[HUPO-PSI/mzTab-M repository](https://github.com/HUPO-PSI/mzTab-M); the released
+2.0 materials remain in HUPO-PSI/mzTab.
 
 Although mzTab is tab-delimited, it has section-specific row types, metadata,
 controlled vocabulary, optional columns, and null conventions. The generic
@@ -196,7 +198,8 @@ arrays and all pickle-based objects are rejected.
 
 ## Authoritative sources
 
-All links accessed 2026-07-23.
+Current parser APIs and format guidance reviewed 2026-09-30. Historical
+methodology citations are retained as source context.
 
 - HUPO-PSI, [mzML specification/status](https://www.psidev.info/mzml)
   (mzML 1.1.0 long-term stable).

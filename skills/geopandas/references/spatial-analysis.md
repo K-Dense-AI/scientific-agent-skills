@@ -39,7 +39,7 @@ verify row count. A pandas index is not a feature key.
 
 ## Binary-predicate spatial joins
 
-Stable GeoPandas 1.1.4 signature:
+GeoPandas 1.2.0 signature:
 
 ```python
 joined = left.sjoin(
@@ -59,8 +59,8 @@ Common choices:
 
 - point-in-polygon strict interior: points on polygon boundaries do not satisfy
   `within`;
-- point in polygon including boundary: reverse the relation and use `covers`,
-  or explicitly test the intended boundary behavior;
+- point in polygon including boundary: use `covered_by` for points on the
+  left and polygons on the right; reversing the frames permits `covers`;
 - any shared boundary/interior: `intersects`;
 - boundary-only relationships: `touches`;
 - distance threshold: `dwithin`.
@@ -247,9 +247,10 @@ indices = gdf.sindex.query(query_geometry, predicate="intersects")
 ```
 
 GeoPandas 1.0 removed `sindex.query_bulk`; use `query`. GeoPandas 1.1 supports
-indices, dense boolean, and optional SciPy sparse boolean output formats. Do not
-assume the shape/orientation of an undocumented output; set `output_format`
-explicitly and test.
+indices, dense boolean, and optional SciPy sparse boolean output formats. For array input, `output_format="indices"` returns a `(2, n)` integer array:
+row 0 indexes input/query geometries and row 1 indexes the tree geometries.
+Dense/sparse boolean output is `(len(tree), len(query))`; scalar queries yield
+a one-dimensional result. Set the format explicitly and preserve this orientation.
 
 Spatial indexing does not fix CRS, invalid geometry, distance units, predicate
 direction, or cardinality.
@@ -282,7 +283,7 @@ Record:
 - mask dissolve/rectangle choice, dissolve aggregations;
 - output row/type/state counts and new artifact hash.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [GeoPandas merging data guide](https://geopandas.org/en/stable/docs/user_guide/mergingdata.html).
 - [geopandas.sjoin](https://geopandas.org/en/stable/docs/reference/api/geopandas.sjoin.html).

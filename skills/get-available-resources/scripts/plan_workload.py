@@ -116,6 +116,8 @@ def build_plan(
     if not isinstance(cpu_ceiling, int):
         cpu_ceiling = 1
     cpu_ceiling = max(1, min(MAX_WORKERS, cpu_ceiling))
+    if cpu_capacity is not None:
+        cpu_ceiling = min(cpu_ceiling, max(1, math.floor(cpu_capacity)))
     if workload == "io":
         workload_ceiling = min(MAX_WORKERS, 32, max(2, cpu_ceiling * 2))
     else:
@@ -151,14 +153,14 @@ def build_plan(
             )
         else:
             usable = max(0, int(available_memory) - reserve_bytes)
-            memory_ceiling = max(1, min(MAX_WORKERS, usable // per_worker_bytes))
+            memory_ceiling = min(MAX_WORKERS, usable // per_worker_bytes)
             if usable < per_worker_bytes:
                 planner_warnings.append(
                     {
                         "code": "MEMORY_REQUIREMENT_EXCEEDS_BUDGET",
                         "message": (
-                            "One worker may exceed the post-reserve memory budget; "
-                            "use chunking or out-of-core processing."
+                            "No worker fits the post-reserve memory budget; "
+                            "reduce the requirement or use out-of-core processing."
                         ),
                     }
                 )
@@ -170,7 +172,7 @@ def build_plan(
         ceilings.append(("tasks", min(task_count, MAX_WORKERS)))
     if requested_workers is not None:
         ceilings.append(("user_request", requested_workers))
-    suggested = max(1, min(value for _, value in ceilings))
+    suggested = min(value for _, value in ceilings)
     binding = sorted(source for source, value in ceilings if value == suggested)
 
     if workload == "io":
@@ -201,8 +203,8 @@ def build_plan(
             }
         )
 
-    threads_per_worker = 1
-    if workload in {"cpu", "mixed"} and cpu_capacity is not None:
+    threads_per_worker = 1 if suggested else 0
+    if suggested and workload in {"cpu", "mixed"} and cpu_capacity is not None:
         threads_per_worker = max(1, math.floor(cpu_capacity / suggested))
     planner_warnings.sort(key=lambda item: (item["code"], item["message"]))
     return {
@@ -228,6 +230,11 @@ def build_plan(
         },
         "recommendation": {
             "binding_limits": binding,
+            "status": (
+                "insufficient_memory" if not suggested else
+                "review_required" if cpu_capacity is None or available_memory is None else
+                "provisional"
+            ),
             "suggested_workers": suggested,
             "threads_per_worker": threads_per_worker,
         },

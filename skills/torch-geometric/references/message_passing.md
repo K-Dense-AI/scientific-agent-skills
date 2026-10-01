@@ -29,7 +29,7 @@ For bipartite graphs, pass `size=(N, M)` to `propagate()` and provide features a
 import torch
 from torch.nn import Linear, Parameter
 from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import add_self_loops, degree
+from torch_geometric.utils import add_remaining_self_loops, degree
 
 class GCNConv(MessagePassing):
     def __init__(self, in_channels, out_channels):
@@ -40,11 +40,11 @@ class GCNConv(MessagePassing):
 
     def reset_parameters(self):
         self.lin.reset_parameters()
-        self.bias.data.zero_()
+        torch.nn.init.zeros_(self.bias)
 
     def forward(self, x, edge_index):
         # 1. Add self-loops
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        edge_index, _ = add_remaining_self_loops(edge_index, num_nodes=x.size(0))
         # 2. Linear transform
         x = self.lin(x)
         # 3. Compute normalization coefficients
@@ -89,7 +89,11 @@ class EdgeConv(MessagePassing):
         return self.mlp(torch.cat([x_i, x_j - x_i], dim=1))
 ```
 
+This unweighted implementation assumes the default source-to-target flow and matches `GCNConv` normalization for the same graph. Existing self-loops are retained once. Choose directed/undirected semantics deliberately; do not reuse a cached normalization after changing edges.
+
 ## Example: Dynamic EdgeConv (recomputes graph each layer)
+
+Illustrative: requires a compatible `pyg-lib` build in PyG 2.8. Supply the node-to-graph `batch` vector to avoid connections between examples; each graph needs more than `k` nodes with `loop=False`.
 
 ```python
 from torch_geometric.nn import knn_graph
@@ -119,3 +123,5 @@ from torch_geometric.utils import (
     scatter,             # Scatter operations (sum, mean, max)
 )
 ```
+
+Sources: [MessagePassing](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.nn.conv.MessagePassing.html), [custom layers](https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html). For sparse message passing, use target rows/source columns (`adj_t`), the transpose of source-row COO adjacency.

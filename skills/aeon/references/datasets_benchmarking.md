@@ -1,393 +1,176 @@
 # Datasets and Benchmarking
 
-Aeon provides comprehensive tools for loading datasets and benchmarking time series algorithms.
+Targets aeon 1.6. Generic archive loaders may download data on first use; use an explicit writable `extract_path` to control caching. Bundled helpers such as `load_gunpoint`, `load_covid_3month`, and `load_airline` are convenient for offline checks. Archive download examples below are illustrative and were not executed in this review.
 
-From **aeon 1.4** onward, most classification and regression archives are hosted on **Zenodo** (including the relaunched Multiverse multivariate classification archive). Loaders download on first use; cache location follows aeon defaults.
+## Classification and regression
 
-## Dataset Loading
-
-### Task-Specific Loaders
-
-**Classification Datasets**:
 ```python
-from aeon.datasets import load_classification
+from aeon.datasets import load_classification, load_regression
 
-# Load train/test split (or use load_gunpoint for this benchmark)
-from aeon.datasets import load_gunpoint
-
-X_train, y_train = load_classification("GunPoint", split="train")
-X_test, y_test = load_classification("GunPoint", split="test")
-# X_train, y_train = load_gunpoint(split="train")
-
-# Load entire dataset
-X, y = load_classification("GunPoint")
+X_train, y_train = load_classification(
+    "GunPoint", split="train", extract_path="data/aeon"
+)
+X_test, y_test = load_classification(
+    "GunPoint", split="test", extract_path="data/aeon"
+)
+X_reg, y_reg, metadata = load_regression(
+    "Covid3Month", split="train", extract_path="data/aeon", return_metadata=True
+)
 ```
 
-**Regression Datasets**:
+Equal-length collections normally have shape `(n_cases, n_channels, n_timepoints)`; unequal-length data use lists of 2D arrays. Check the returned metadata and estimator capabilities before padding, imputing, or normalizing. `Covid3Month` is a time-series **regression** benchmark with a target per case, not an API for rolling COVID forecasts.
+
 ```python
-from aeon.datasets import load_regression
+from aeon.datasets import load_gunpoint, load_covid_3month, load_airline
 
-X_train, y_train = load_regression("Covid3Month", split="train")
-X_test, y_test = load_regression("Covid3Month", split="test")
-
-# Bulk download
-from aeon.datasets import download_all_regression
-download_all_regression()  # Downloads Monash TSER archive
+X_train, y_train = load_gunpoint(split="train")
+X_test, y_test = load_gunpoint(split="test")
+X_reg, y_reg = load_covid_3month(split="train")
+y_airline = load_airline()
 ```
 
-**Forecasting Datasets**:
+Aeon 1.6 classification/regression loaders resolve published TSML records on Zenodo. They inspect record metadata and download the record's files; a requested dataset can therefore entail more than a single small file. `download_all_regression(extract_path=...)` explicitly downloads the full archive and is unsuitable for a smoke test.
+
+## Forecasting and anomaly archives
+
 ```python
 from aeon.datasets import load_forecasting
 
-# Load from forecastingdata.org
-y, X = load_forecasting("airline", return_X_y=True)
+# Returns a dataframe and metadata, not (y, exogenous_X).
+frame, metadata = load_forecasting(
+    "m1_yearly_dataset", extract_path="data/aeon", return_metadata=True
+)
+y = frame.iloc[0]["series_value"]
 ```
 
-**Anomaly Detection Datasets**:
+`load_forecasting` uses names from `aeon.datasets.tsf_datasets.tsf_all`, not arbitrary dataset nicknames; the `return_X_y` argument is unsupported. The default dataframe represents TSF records, with each series stored in its `series_value` field. Respect per-series forecast horizons/frequency from metadata.
+
 ```python
 from aeon.datasets import load_anomaly_detection
 
-X, y = load_anomaly_detection("NAB_realKnownCause")
+X, labels = load_anomaly_detection(
+    ("KDD-TSAD", "001_UCR_Anomaly_DISTORTED1sddb40"),
+    split="test", extract_path="data/aeon",
+)
 ```
 
-### File Format Loaders
+The anomaly loader requires `(collection_name, dataset_name)`. It downloads a whole TimeEval collection ZIP when necessary; some datasets have no training split. Returned multivariate data are **timepoints by channels**, and labels are one binary indicator per timepoint. Pass `axis=0` to compatible series estimators. A test label file must not enter training or threshold calibration.
 
-**Load from .ts files**:
+## Local file I/O
+
+File examples are templates; supply your own paths. `.ts` writing and reading were tested with temporary synthetic data.
+
 ```python
-from aeon.datasets import load_from_ts_file
+from pathlib import Path
+from aeon.datasets import (
+    load_from_ts_file, load_from_tsf_file, load_from_arff_file,
+    load_from_tsv_file, load_from_timeeval_csv_file, save_to_ts_file,
+)
 
-X, y = load_from_ts_file("path/to/data.ts")
+X, y = load_from_ts_file("data/example.ts")
+frame, metadata = load_from_tsf_file("data/example.tsf")
+X_arff, y_arff = load_from_arff_file("data/example.arff")
+X_tsv, y_tsv = load_from_tsv_file("data/example.tsv")
+X_time, anomaly_labels = load_from_timeeval_csv_file(Path("data/timeeval.csv"))
+
+save_to_ts_file(
+    X, y, label_type="classification", path="output", problem_name="MyDataset"
+)
+# Writes output/MyDataset.ts; use label_type="regression" for continuous targets.
 ```
 
-**Load from .tsf files**:
-```python
-from aeon.datasets import load_from_tsf_file
+`save_to_ts_file` requires `label_type` when labels are provided, and `path` is a directory. There is no public `write_to_ts_file` or `write_to_arff_file` in 1.6.
 
-df, metadata = load_from_tsf_file("path/to/data.tsf")
-```
+## Dataset metadata and discovery
 
-**Load from ARFF files**:
-```python
-from aeon.datasets import load_from_arff_file
-
-X, y = load_from_arff_file("path/to/data.arff")
-```
-
-**Load from TSV files**:
-```python
-from aeon.datasets import load_from_tsv_file
-
-data = load_from_tsv_file("path/to/data.tsv")
-```
-
-**Load TimeEval CSV**:
-```python
-from aeon.datasets import load_from_timeeval_csv_file
-
-X, y = load_from_timeeval_csv_file("path/to/timeeval.csv")
-```
-
-### Writing Datasets
-
-**Write to .ts format**:
-```python
-from aeon.datasets import write_to_ts_file
-
-write_to_ts_file(X, "output.ts", y=y, problem_name="MyDataset")
-```
-
-**Write to ARFF format**:
-```python
-from aeon.datasets import write_to_arff_file
-
-write_to_arff_file(X, "output.arff", y=y)
-```
-
-## Built-in Datasets
-
-Aeon includes several benchmark datasets for quick testing:
-
-### Classification
-- `ArrowHead` - Shape classification
-- `GunPoint` - Gesture recognition
-- `ItalyPowerDemand` - Energy demand
-- `BasicMotions` - Motion classification
-- And 100+ more from UCR/UEA archives
-
-### Regression
-- `Covid3Month` - COVID forecasting
-- Various datasets from Monash TSER archive
-
-### Segmentation
-- Time series segmentation datasets
-- Human activity data
-- Sensor data collections
-
-### Special Collections
-- `RehabPile` - Rehabilitation data (classification & regression)
-
-## Dataset Metadata
-
-Get information about datasets:
+The metadata service returns a dataframe, with case-sensitive column names:
 
 ```python
 from aeon.datasets import get_dataset_meta_data
 
-metadata = get_dataset_meta_data("GunPoint")
-print(metadata)
-# {'n_train': 50, 'n_test': 150, 'length': 150, 'n_classes': 2, ...}
+metadata = get_dataset_meta_data(data_names=["GunPoint"])
+print(metadata[["Dataset", "TrainSize", "TestSize", "Length", "Channels"]])
+all_metadata = get_dataset_meta_data()
+univariate_names = all_metadata.loc[all_metadata["Channels"] == 1, "Dataset"].tolist()
 ```
 
-## Benchmarking Tools
+This fetches `https://timeseriesclassification.com/aeon-toolkit/metadata.csv`. Use archive-specific public lists in `aeon.datasets.tsc_datasets`, `tser_datasets`, and `tsf_datasets`; `get_available_datasets("classification")` is not an aeon API. Metadata describes the published archive and is not a substitute for checking the loaded arrays.
 
-### Loading Published Results
-
-Access pre-computed benchmark results:
+## Published results
 
 ```python
-from aeon.benchmarking.results_loaders import get_estimator_results
+from aeon.benchmarking.results_loaders import (
+    get_available_estimators, get_estimator_results,
+)
 
-# Get results for specific algorithm on dataset
+names = get_available_estimators(task="classification", as_list=True)
 results = get_estimator_results(
-    estimators="ROCKET",
-    datasets=["GunPoint"]
+    estimators="ROCKET", datasets=["GunPoint"], task="classification",
+    measure="accuracy", num_resamples=1,
 )
-
-# Get estimators available for this task
-from aeon.benchmarking.results_loaders import get_available_estimators
-estimators = get_available_estimators(task="classification")
+# Nested mapping: results[estimator][dataset] is a score for one resample,
+# or an array when multiple resamples were requested.
 ```
 
-### Resampling Strategies
+The loader reads published CSVs under `https://timeseriesclassification.com/results/ReferenceResults`; task, metric, estimator alias and available resamples determine the file. These are public file downloads, without credentials or pagination. Missing dataset scores may be absent from the mapping. Match splits, resampling protocol, metric direction, hyperparameters, and compute budget before comparing your score to published results.
 
-Create reproducible train/test splits:
+## Resampling and leakage
+
+Preserve an archive's original split for a directly comparable benchmark. For a protocol explicitly requiring resamples, use:
 
 ```python
-from aeon.benchmarking import stratified_resample
+from aeon.benchmarking.resampling import stratified_resample_data
 
-# Stratified resampling maintaining class distribution
-X_train, X_test, y_train, y_test = stratified_resample(
-    X, y,
-    random_state=42,
-    test_size=0.3
+X_res_train, y_res_train, X_res_test, y_res_test = stratified_resample_data(
+    X_train, y_train, X_test, y_test, random_state=42
 )
 ```
 
-### Performance Metrics
+This combines train and test, then makes a new split preserving original set sizes and class counts; it is not an ordinary training-only validation split. Never use it to tune against a test set that must remain untouched. Use sklearn validation tools inside training data instead, with group or temporal splitting for repeated subjects or overlapping windows. Keep supervised feature selection and augmentation inside each training fold.
 
-Specialized metrics for time series tasks:
+## Metrics
 
-**Anomaly Detection Metrics**:
 ```python
 from aeon.benchmarking.metrics.anomaly_detection import (
-    range_precision,
-    range_recall,
-    range_f_score,
-    range_roc_auc_score
+    range_roc_auc_score,
 )
+from aeon.benchmarking.metrics.clustering import clustering_accuracy_score
+from aeon.benchmarking.metrics.segmentation import count_error, hausdorff_error
 
-# Range-based metrics for window detection
-precision = range_precision(y_true, y_pred, alpha=0.5)
-recall = range_recall(y_true, y_pred, alpha=0.5)
-f1 = range_f_score(y_true, y_pred, alpha=0.5)
-auc = range_roc_auc_score(y_true, y_scores)
+auc = range_roc_auc_score(y_true, y_scores)  # continuous anomaly scores
+
+# Arbitrary cluster IDs are optimally matched to class IDs.
+accuracy = clustering_accuracy_score(class_labels, cluster_labels)
+
+# Supply change-point locations, not dense state labels.
+count_err = count_error(true_change_points, predicted_change_points)
+hausdorff_err = hausdorff_error(true_change_points, predicted_change_points)
 ```
 
-**Clustering Metrics**:
-```python
-from aeon.benchmarking.metrics.clustering import clustering_accuracy
+`range_precision`, `range_recall`, and `range_f_score` require `prts`; its current NumPy<2 requirement conflicts with aeon 1.6. Those APIs were source-checked but not executed; a standard resolver cannot install the combination. F-score uses `p_alpha`/`r_alpha`, whereas precision and recall use `alpha`.
 
-# Clustering accuracy with label matching
-accuracy = clustering_accuracy(y_true, y_pred)
-```
+Range metric tolerance/weighting can change conclusions: report buffer size and threshold-selection policy; report alpha, bias and cardinality if using range precision/recall in a separately validated environment. AUC requires both anomalous and normal targets for a meaningful evaluation. Handle empty change-point sets explicitly before Hausdorff evaluation.
 
-**Segmentation Metrics**:
-```python
-from aeon.benchmarking.metrics.segmentation import (
-    count_error,
-    hausdorff_error
-)
+## Statistical comparisons across datasets
 
-# Number of change points difference
-count_err = count_error(y_true, y_pred)
-
-# Maximum distance between predicted and true change points
-hausdorff_err = hausdorff_error(y_true, y_pred)
-```
-
-### Statistical Testing
-
-Post-hoc analysis for algorithm comparison:
+Aeon's `wilcoxon_test` accepts a matrix `(n_datasets, n_estimators)` plus estimator names and returns an **upper-triangular matrix of one-sided p-values**, not `(statistic, p_value)`. Only entries above the diagonal are pairwise tests; lower-triangle zeros are placeholders. Nemenyi takes ordered average ranks and a dataset count; it does not take raw score arrays.
 
 ```python
-from aeon.benchmarking import (
-    nemenyi_test,
-    wilcoxon_test
-)
-
-# Nemenyi test for multiple algorithms
-results = nemenyi_test(scores_matrix, alpha=0.05)
-
-# Pairwise Wilcoxon signed-rank test
-stat, p_value = wilcoxon_test(scores_alg1, scores_alg2)
-```
-
-## Benchmark Collections
-
-### UCR/UEA Time Series Archives
-
-Access to comprehensive benchmark repositories:
-
-```python
-# Classification: 112 univariate + 30 multivariate datasets
-X_train, y_train = load_classification("Chinatown", split="train")
-
-# Automatically downloads from timeseriesclassification.com
-```
-
-### Monash Forecasting Archive
-
-```python
-# Load forecasting datasets
-y = load_forecasting("nn5_daily", return_X_y=False)
-```
-
-### Published Benchmark Results
-
-Pre-computed results from major competitions:
-
-- 2017 Univariate Bake-off
-- 2021 Multivariate Classification
-- 2023 Univariate Bake-off
-
-## Workflow Example
-
-Complete benchmarking workflow:
-
-```python
-from aeon.datasets import load_classification
-from aeon.classification.convolution_based import RocketClassifier
-from aeon.benchmarking.results_loaders import get_estimator_results
-from sklearn.metrics import accuracy_score
 import numpy as np
+from scipy.stats import rankdata
+from aeon.benchmarking.stats import check_friedman, nemenyi_test, wilcoxon_test
 
-# Load dataset
-dataset_name = "GunPoint"
-X_train, y_train = load_classification(dataset_name, split="train")
-X_test, y_test = load_classification(dataset_name, split="test")
-
-# Train model
-clf = RocketClassifier(n_kernels=10000, random_state=42)
-clf.fit(X_train, y_train)
-y_pred = clf.predict(X_test)
-
-# Evaluate
-accuracy = accuracy_score(y_test, y_pred)
-print(f"Accuracy: {accuracy:.4f}")
-
-# Compare with published results
-published = get_estimator_results("ROCKET", [dataset_name])
-print("Published ROCKET results:", published)
+# Illustrative scores: rows are independent datasets, columns are estimators.
+scores = np.array([[.81, .77, .75], [.72, .75, .68], [.92, .88, .85],
+                   [.69, .66, .70], [.83, .81, .79], [.76, .73, .71]])
+ranks = rankdata(-scores, axis=1)  # smaller rank = higher accuracy
+friedman_p = check_friedman(ranks.T)
+avg_ranks = ranks.mean(axis=0)
+order = np.argsort(avg_ranks)
+cliques = nemenyi_test(avg_ranks[order], n_datasets=len(scores), alpha=0.05)
+p_values = wilcoxon_test(scores, ["A", "B", "C"], lower_better=False)
 ```
 
-## Best Practices
+This code demonstrates API semantics, not evidence that any algorithm is superior. Check the omnibus test and pre-specified post-hoc protocol, account for multiplicity, and report effect sizes. Do not treat repeated resamples of the same dataset as independent datasets. Use `scipy.stats.wilcoxon(a, b, alternative="two-sided")` for a two-sided pairwise statistic and p-value.
 
-### 1. Use Standard Splits
-
-For reproducibility, use provided train/test splits:
-
-```python
-# Good: Use standard splits
-X_train, y_train = load_classification("GunPoint", split="train")
-X_test, y_test = load_classification("GunPoint", split="test")
-
-# Avoid: Creating custom splits
-X, y = load_classification("GunPoint")
-X_train, X_test, y_train, y_test = train_test_split(X, y)
-```
-
-### 2. Set Random Seeds
-
-Ensure reproducibility:
-
-```python
-clf = RocketClassifier(random_state=42)
-results = stratified_resample(X, y, random_state=42)
-```
-
-### 3. Report Multiple Metrics
-
-Don't rely on single metric:
-
-```python
-from sklearn.metrics import accuracy_score, f1_score, precision_score
-
-accuracy = accuracy_score(y_test, y_pred)
-f1 = f1_score(y_test, y_pred, average='weighted')
-precision = precision_score(y_test, y_pred, average='weighted')
-```
-
-### 4. Cross-Validation
-
-For robust evaluation on small datasets:
-
-```python
-from sklearn.model_selection import cross_val_score
-
-scores = cross_val_score(
-    clf, X_train, y_train,
-    cv=5,
-    scoring='accuracy'
-)
-print(f"CV Accuracy: {scores.mean():.4f} (+/- {scores.std():.4f})")
-```
-
-### 5. Compare Against Baselines
-
-Always compare with simple baselines:
-
-```python
-from aeon.classification.distance_based import KNeighborsTimeSeriesClassifier
-
-# Simple baseline: 1-NN with Euclidean distance
-baseline = KNeighborsTimeSeriesClassifier(n_neighbors=1, distance="euclidean")
-baseline.fit(X_train, y_train)
-baseline_acc = baseline.score(X_test, y_test)
-
-print(f"Baseline: {baseline_acc:.4f}")
-print(f"Your model: {accuracy:.4f}")
-```
-
-### 6. Statistical Significance
-
-Test if improvements are statistically significant:
-
-```python
-from aeon.benchmarking import wilcoxon_test
-
-# Run on multiple datasets
-accuracies_alg1 = [0.85, 0.92, 0.78, 0.88]
-accuracies_alg2 = [0.83, 0.90, 0.76, 0.86]
-
-stat, p_value = wilcoxon_test(accuracies_alg1, accuracies_alg2)
-if p_value < 0.05:
-    print("Difference is statistically significant")
-```
-
-## Dataset Discovery
-
-Find datasets matching criteria:
-
-```python
-# List all available classification datasets
-from aeon.datasets import get_available_datasets
-
-datasets = get_available_datasets("classification")
-print(f"Found {len(datasets)} classification datasets")
-
-# Filter by properties
-univariate_datasets = [
-    d for d in datasets
-    if get_dataset_meta_data(d)['n_channels'] == 1
-]
-```
+Sources: [datasets API](https://www.aeon-toolkit.org/en/stable/api_reference/datasets.html), [dataset source](https://github.com/aeon-toolkit/aeon/blob/v1.6.0/aeon/datasets/_data_loaders.py), [results loaders](https://github.com/aeon-toolkit/aeon/blob/v1.6.0/aeon/benchmarking/results_loaders.py), [statistical tests](https://github.com/aeon-toolkit/aeon/blob/v1.6.0/aeon/benchmarking/stats.py). Archive data downloads were source-verified only; the metadata/results CSVs were also fetched read-only. Local I/O, resampling and metric examples were exercised with synthetic data.

@@ -1,127 +1,91 @@
-# Zarr-Python 3 Migration Quick Reference
+# Zarr-Python 3 migration
 
-Targets **zarr 3.2.x** (current stable: **3.2.1**, released 2026-05-05). Official guide: [3.0 Migration Guide](https://zarr.readthedocs.io/en/stable/user-guide/v3_migration/).
+Targets **3.4.0**. Separate upgrading the Python package, migrating application APIs,
+and changing an existing store's on-disk format. Choosing `zarr_format=2` when creating
+with Zarr-Python 3 does not make its Python API compatible with code written for v2.
+Some scientific consumers still require a separate environment pinned to Zarr-Python 2.
 
-## Version and format defaults
+| Older API | Current guidance |
+|---|---|
+| `DirectoryStore` / `FSStore` | `zarr.storage.LocalStore` / `FsspecStore` |
+| `TempStore` | `tempfile.TemporaryDirectory` plus LocalStore |
+| `group.create_dataset` / `require_dataset` | `create_array` / `require_array` |
+| `group.foo` | `group["foo"]` |
+| `resize(n, m)` | `resize((n, m))` |
+| `compressor=` legacy creation | `compressors=` with the codec family appropriate to the on-disk format |
+| `synchronizer`, separate `chunk_store` | Not implemented for the v3 API; coordinate ownership externally |
+| `copy`, `copy_all`, `copy_store`, `Group.move` | Not implemented; use explicit validated copying in a new destination |
 
-| Topic | Zarr-Python 2 | Zarr-Python 3 |
-|-------|---------------|---------------|
-| Pin while migrating downstream | `zarr>=2,<3` | `zarr>=3,<4` |
-| Default on-disk format | Zarr v2 | Zarr v3 (`zarr_format=3`) |
-| Write v2-compatible data | default | `zarr_format=2` on create/open |
-| Python requirement | 3.9–3.11 (late 2.x) | **3.12+** (3.2.1 on PyPI) |
+Python 3.12+ and NumPy 2+ are required for the current package. Upstream states the
+Zarr-Python 2 support window ended; choosing an exact legacy pin is a compatibility
+choice, not a claim of current maintenance. Do not invent a Python upper bound for all
+v2 releases. Generic object dtype is ambiguous; choose a supported explicit dtype and
+validate consumer support for variable-length/string/extension data.
+
+## Format-2 creation with the current package
 
 ```python
-# Keep writing Zarr format 2 arrays (interop with older tools)
-z = zarr.create_array(store="data.zarr", shape=(1000, 1000), chunks=(100, 100),
-                      dtype="f4", zarr_format=2)
+import numpy as np
+import zarr
+from numcodecs import Blosc
+
+legacy = zarr.create_array(
+    "legacy.zarr", data=np.arange(24, dtype="i4").reshape(6, 4), chunks=(2, 2),
+    zarr_format=2, compressors=Blosc(cname="zstd"),
+    attributes={"units": "counts"},
+)
+assert legacy.metadata.zarr_format == 2
 ```
 
-## Store imports and backends
+## The CLI migrates metadata, not chunk data
+
+Install `zarr[cli]==3.4.0`. `zarr migrate v3 input.zarr output.zarr` writes new
+`zarr.json` metadata at the destination **without copying chunk payloads**. That output
+can open successfully while reading fill values instead of original data. Do not report
+it as a converted dataset. Test a **complete copy** of the source, then migrate in place
+on that copy; preserve the original until all consumers pass.
+
+Continuing the synthetic example above, copy the small closed local store:
 
 ```python
-# v3 — stores live under zarr.storage
-from zarr.storage import LocalStore, MemoryStore, ZipStore, FsspecStore
+from shutil import copytree
+copytree("legacy.zarr", "migration-copy.zarr")
 ```
 
-| v2 | v3 |
-|----|-----|
-| `DirectoryStore` | `LocalStore` |
-| `FSStore` | `FsspecStore` |
-| `TempStore` | `tempfile.TemporaryDirectory` + `LocalStore` |
-| `S3Map` / `GCSMap` (s3fs/gcsfs) | Prefer `FsspecStore` or URI strings (see below) |
-| `DBMStore`, `LMDBStore`, `SQLiteStore`, `RedisStore`, `MongoDBStore` | Removed — use `FsspecStore` or custom store |
+```bash
+zarr migrate v3 migration-copy.zarr --dry-run
+zarr migrate v3 migration-copy.zarr
+```
 
-### Cloud storage (recommended v3 pattern)
+Then verify both formats against the original source, including non-fill data:
 
 ```python
+import numpy as np
 import zarr
 
-# URI + storage_options (requires s3fs for S3)
-root = zarr.open_group(
-    store="s3://my-bucket/path/data.zarr",
-    mode="r",
-    storage_options={"anon": False},  # provider credentials are handled by fsspec
-)
-
-# Explicit FsspecStore
-from zarr.storage import FsspecStore
-store = FsspecStore.from_url("s3://my-bucket/path/data.zarr", storage_options={"anon": False})
-root = zarr.open_group(store=store, mode="r")
+original = zarr.open_array("legacy.zarr", mode="r", zarr_format=2)
+converted = zarr.open_array("migration-copy.zarr", mode="r", zarr_format=3)
+np.testing.assert_array_equal(converted[:], original[:])
+assert converted.dtype == original.dtype
+assert dict(converted.attrs) == dict(original.attrs)
 ```
 
-Install remote I/O extras with pinned versions in production projects, for example: `uv pip install "zarr[remote]==3.2.1" "s3fs==2026.4.0" "gcsfs==2026.5.0"`. Zarr's `remote` extra pulls fsspec; add the protocol backend needed by the target store.
-
-## Codecs and compression
-
-- Zarr v3 arrays: use `zarr.codecs.*` (e.g. `BloscCodec`, `GzipCodec`) via `compressors=` on `create_array`.
-- Zarr v2 arrays: `numcodecs` codecs still work; import from `numcodecs`, not `zarr.*`.
-- `compressor=` kwarg on creation functions → use `compressors=` in v3.
-- Disable compression with `compressors=None`; `BytesCodec` is the serializer, not the "no compression" setting.
-
-```python
-from zarr.codecs import BloscCodec, BloscShuffle
-
-z = zarr.create_array(
-    store="data.zarr", shape=(1000, 1000), chunks=(100, 100), dtype="f4",
-    compressors=BloscCodec(cname="zstd", clevel=5, shuffle=BloscShuffle.bitshuffle),
-)
-```
-
-## Groups and h5py-style API
-
-| v2 (removed in v3) | v3 replacement |
-|--------------------|----------------|
-| `group.create_dataset(...)` | `group.create_array(...)` |
-| `group.require_dataset(...)` | `group.require_array(...)` |
-| `group.foo` attribute access | `group["foo"]` only |
-| `zarr.storage.init_group(...)` | `zarr.open_group(...)` or `zarr.create_group(...)` |
-
-## Array operations
-
-```python
-# resize — pass a shape tuple, not separate dimension args
-z.resize((15000, 15000))  # not z.resize(15000, 15000)
-```
-
-Advanced indexing: `vindex`, `oindex`, and `blocks` remain as convenience properties; equivalent methods are `get_coordinate_selection`, `get_orthogonal_selection`, etc.
-
-### Rectilinear chunks (3.2+)
-
-Zarr 3.2 adds support for rectilinear chunk grids. Existing regular chunk tuples still work, but you can now pass nested chunk lengths when chunk boundaries vary by dimension:
-
-```python
-z = zarr.create_array(
-    store="rectilinear.zarr",
-    shape=(60, 100),
-    chunks=([10, 20, 30], [50, 50]),
-    dtype="f4",
-)
-```
-
-### Metadata migration CLI (3.1.3+)
-
-For v2 stores that need v3 metadata, use the Zarr CLI non-destructively first:
+Only after validation and consumer compatibility checks, retire v2 metadata on the copy:
 
 ```bash
-zarr migrate v3 path/to/input.zarr path/to/output.zarr
-zarr migrate v3 path/to/input.zarr --dry-run
+zarr remove-metadata v2 migration-copy.zarr --dry-run
+zarr remove-metadata v2 migration-copy.zarr
 ```
 
-Only remove v2 metadata after downstream readers have been tested:
+This is a local homogeneous numeric example, not a guarantee for all codecs/dtypes or
+remote hierarchies. Back up complete objects; list/metadata operations aren't snapshots.
+When both v2/v3 metadata exist, specify the intended format on open. For full conversion
+with changed chunks/codecs, create a new store and copy bounded selections, preserving
+scientific metadata deliberately.
 
-```bash
-zarr remove-metadata v2 path/to/input.zarr
-```
+Rectilinear chunks remain experimental (`array.rectilinear_chunks=True`), and format-3
+consolidation remains experimental. Don't make either an accidental migration default.
 
-## Not yet ported to v3 (avoid or expect errors)
-
-From the [migration guide WIP list](https://zarr.readthedocs.io/en/stable/user-guide/v3_migration/#work-in-progress):
-
-- `synchronizer` argument (`ThreadSynchronizer`, `ProcessSynchronizer`) — use separate chunks per writer or external coordination; see [performance guide — thread safety](https://zarr.readthedocs.io/en/stable/user-guide/performance/).
-- `zarr.copy`, `zarr.copy_all`, `zarr.copy_store`, `Group.move`
-- Object dtypes, ragged arrays, `cache_attrs`, `cache_metadata`, `chunk_store`
-
-## Zarr-Python 2 support
-
-For legacy workflows, choose an exact `zarr==2.x.y` release from the support-v2 release notes and commit a lockfile. Maintenance lives on the `support/v2` branch (security fixes for ~6 months after 3.0).
+Sources: [migration guide](https://zarr.readthedocs.io/en/stable/user-guide/v3_migration/),
+[CLI](https://zarr.readthedocs.io/en/stable/user-guide/cli/),
+[released migration code](https://github.com/zarr-developers/zarr-python/blob/v3.4.0/src/zarr/metadata/migrate_v3.py).

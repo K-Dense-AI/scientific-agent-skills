@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -128,6 +129,16 @@ class SafeOutputTests(unittest.TestCase):
 
 
 class SafeInputTests(unittest.TestCase):
+    def test_duplicate_json_keys_cannot_silently_replace_weights_or_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "duplicate.json"
+            for text in ('{"weight": 1, "weight": 9}',
+                         '{"provenance": {"origin": "human", "origin": "mixed"}}'):
+                with self.subTest(text=text):
+                    source.write_text(text, encoding="utf-8")
+                    with self.assertRaisesRegex(CliError, "duplicate JSON key"):
+                        read_json(str(source))
+
     def test_json_input_symlink_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -150,6 +161,24 @@ class SafeInputTests(unittest.TestCase):
 
 
 class RegisterValidationTests(unittest.TestCase):
+    def test_malformed_enum_objects_produce_structured_errors(self):
+        fields = [
+            ("assumptions", "category"), ("assumptions", "status"),
+            ("ideas", "evidence_status"), ("ideas", "status"),
+            ("provenance", "origin"), ("provenance", "recorded_stage"),
+        ]
+        for section, field in fields:
+            for value in ([], {}):
+                with self.subTest(section=section, field=field, value=value):
+                    document = populated_register()
+                    record = (document["ideas"][0]["provenance"]
+                              if section == "provenance" else document[section][0])
+                    record[field] = value
+                    report = validate_register.validate_register(document)
+                    self.assertFalse(report["valid"])
+                    self.assertEqual(len(report["errors"]), 1)
+                    self.assertTrue(report["errors"][0]["path"].endswith(field))
+
     def test_valid_register_passes_without_warnings(self):
         report = validate_register.validate_register(populated_register())
         self.assertTrue(report["valid"])
@@ -260,8 +289,71 @@ class MatrixTests(unittest.TestCase):
             )
         first = {item["idea_id"]: item for item in result["results"]}["I001"]
         low, high = first["input_uncertainty_score_interval"]
-        self.assertLess(low, first["base_score"])
-        self.assertLessEqual(first["base_score"], high)
+        self.assertEqual([low, high], [45.0, 70.0])
+        self.assertEqual(first["criteria_without_uncertainty_bounds"], [])
+        self.assertTrue(first["criteria"]["burden"]["bounds_supplied"])
+
+    def test_missing_bounds_are_disclosed_without_changing_central_scores(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, scores = self._write_inputs(Path(directory))
+            criteria = evaluate_matrix.load_criteria(str(config))
+            for csv_text in (
+                "idea_id,information_gain,burden,qualitative_review,uncertainties\n"
+                "I001,5,5,Useful,Unknown\n",
+                "idea_id,information_gain,information_gain_low,information_gain_high,"
+                "burden,burden_low,burden_high,qualitative_review,uncertainties\n"
+                "I001,5,,,5,,,Useful,Unknown\n",
+            ):
+                with self.subTest(csv=csv_text):
+                    scores.write_text(csv_text, encoding="utf-8")
+                    rows = evaluate_matrix.load_scores(str(scores), criteria)
+                    result = evaluate_matrix.calculate_matrix(criteria, rows, weight_delta=0)
+                    first = result["results"][0]
+                    self.assertEqual(first["base_score"], 60.0)
+                    self.assertEqual(first["input_uncertainty_score_interval"], [60.0, 60.0])
+                    self.assertEqual(first["criteria_without_uncertainty_bounds"],
+                                     ["information_gain", "burden"])
+                    self.assertFalse(first["criteria"]["burden"]["bounds_supplied"])
+                    self.assertTrue(result["warnings"])
+                    self.assertIsNone(result["decision"])
+
+    def test_reserved_and_generated_column_collisions_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _ = self._write_inputs(Path(directory))
+            original = json.loads(config.read_text())
+            for name in ("idea_id", "qualitative_review", "uncertainties",
+                         "information_gain_low", "information_gain_high"):
+                with self.subTest(name=name):
+                    document = json.loads(json.dumps(original))
+                    document["criteria"][1]["name"] = name
+                    config.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaisesRegex(CliError, "ambiguous CSV column"):
+                        evaluate_matrix.load_criteria(str(config))
+
+    def test_overflowing_scale_and_malformed_direction_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, _ = self._write_inputs(Path(directory))
+            original = json.loads(config.read_text())
+            for updates in ({"minimum": -1e308, "maximum": 1e308},
+                            {"minimum": -(10 ** 400)}, {"direction": []}):
+                with self.subTest(updates=updates):
+                    document = json.loads(json.dumps(original))
+                    document["criteria"][0].update(updates)
+                    config.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaises(CliError):
+                        evaluate_matrix.load_criteria(str(config))
+
+    def test_csv_parser_failure_is_reported_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config, scores = self._write_inputs(Path(directory))
+            scores.write_text("x" * (evaluate_matrix.MAX_CSV_FIELD_CHARS + 1))
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "evaluate_matrix.py"), str(scores),
+                 "--config", str(config)], capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("error:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
 
     def test_matrix_rejects_out_of_range_score(self):
         with tempfile.TemporaryDirectory() as directory:

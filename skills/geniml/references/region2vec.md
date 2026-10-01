@@ -1,7 +1,7 @@
 # Region2Vec
 
 Verified against `geniml==0.8.4` release source and the official BEDbase
-documentation on 2026-07-23.
+documentation on 2026-10-01.
 
 ## What the method does
 
@@ -42,7 +42,7 @@ from gtars.tokenizers import Tokenizer
 tokenizer = Tokenizer.from_bed("refs/universe.bed")
 ```
 
-With verified `gtars==0.9.2`:
+With verified `gtars==0.10.0`:
 
 - universe regions receive stable IDs in file order;
 - seven special tokens are added (`unk`, `pad`, `mask`, `cls`, `eos`, `bos`,
@@ -110,7 +110,7 @@ deterministic.
 from geniml.region2vec.main import Region2VecExModel
 from geniml.region2vec.utils import Region2VecDataset
 
-dataset = Region2VecDataset("work/tokens.parquet", shuffle=True)
+dataset = Region2VecDataset("work/tokens.parquet", shuffle=True, convert_to_str=True)
 model = Region2VecExModel(
     tokenizer=tokenizer,
     embedding_dim=100,
@@ -126,6 +126,11 @@ model.train(
     seed=42,
 )
 ```
+
+The recipe was executed with a tiny synthetic corpus on the pinned CPU stack.
+Seed Python's `random` before dataset iteration and Torch before model
+construction as well as passing Gensim's `seed`: `shuffle=True` uses Python's
+global RNG. `convert_to_str=True` makes vocabulary keys explicit strings.
 
 Current source defaults are not fully consistent across legacy and modern
 modules. Pass every material setting explicitly. `train` uses Gensim
@@ -169,17 +174,24 @@ only for backward compatibility and is marked for future deprecation.
 
 Important release-source caveat: `model.export(path)` calls
 `export_region2vec_model`, which writes the Torch checkpoint and YAML config
-but does **not** write the tokenizer's universe, despite the API docstring.
+but does **not** write the tokenizer's universe or the pooling method, despite
+the API docstring. A model initialized with max pooling reloads as mean pooling
+unless `pooling_method` is added to `config.yaml`.
 Copy the exact validated universe into the bundle yourself, without changing
 row order, then create a checksum manifest.
 
 ```python
 from pathlib import Path
 import shutil
+import yaml
 
 bundle = Path("models/region2vec")
 model.export(str(bundle))
 shutil.copyfile("refs/universe.bed", bundle / "universe.bed")
+config_path = bundle / "config.yaml"
+config = yaml.safe_load(config_path.read_text())
+config["pooling_method"] = model.pooling_method
+config_path.write_text(yaml.safe_dump(config))
 ```
 
 Do not overwrite an existing bundle without preserving its prior manifest.
@@ -219,8 +231,12 @@ model = Region2VecExModel(model_path="organization/model")
 ```
 
 calls `huggingface_hub.hf_hub_download` for the checkpoint, universe, and
-config. Do not use that form without explicit network approval, a pinned Hub
-revision, an approved cache directory, and expected hashes.
+config, but **does not forward constructor kwargs** such as `revision`,
+`cache_dir`, or `local_files_only`. For an authorized download, call
+`hf_hub_download(repo_id=..., filename=..., revision=REVIEWED_COMMIT,
+local_dir=...)` directly for each expected file, verify the resulting hashes,
+then use the local classmethod. This download recipe is source-verified;
+no public weights were fetched in this review.
 
 The loader constructs the tokenizer from `universe.bed`, reads `config.yaml`
 with YAML `safe_load`, creates a model of `vocab_size × embedding_dim`, and
@@ -243,7 +259,11 @@ vectors = model.encode(
 The method tokenizes each input region, projects its token IDs, and applies
 mean or max pooling. It returns one vector per input region. It does not
 validate assembly or repair malformed intervals. Validate first, and report
-aggregate shapes/statistics rather than raw genomic coordinates.
+aggregate shapes/statistics rather than raw genomic coordinates. Empty input
+raises rather than returning an empty matrix; unmatched regions get the `unk`
+embedding, which is usually untrained. Reject or explicitly flag these cases.
+The wrapper's `device` argument records a target but does not move its model
+or inference tensors; the verified recipe is CPU-only.
 
 ## Evaluate without leakage
 
@@ -257,12 +277,19 @@ Geniml's `eval` module implements the paper's:
 Source-backed CLI:
 
 ```text
-geniml eval ctt --model-path MODEL --embed-type region2vec
-geniml eval gdst --model-path MODEL --embed-type region2vec
-geniml eval npt --model-path MODEL --embed-type region2vec --K 10
-geniml eval rct --model-path MODEL --embed-type region2vec \
+geniml eval ctt --model-path MODEL --embed-type exmodel
+geniml eval gdst --model-path MODEL --embed-type exmodel
+geniml eval npt --model-path MODEL --embed-type exmodel --K 10
+geniml eval rct --model-path MODEL --embed-type exmodel \
   --bin-path BINARY_EMBEDDINGS
 ```
+
+For the modern directory bundle above, use `--embed-type exmodel`.
+`region2vec` means a legacy Gensim model file, not a Geniml bundle directory.
+The exmodel loader was executed and correctly excluded all seven special
+vectors. It does not exclude low-frequency untrained region vectors; audit
+those separately. These metric commands are parser-checked templates;
+large-cohort metric estimation was not executed.
 
 `rct` also requires binary embeddings from the same tokenized corpus. The
 official tutorial and `eval bin-gen` write pickle; treat that format as trusted
@@ -278,12 +305,12 @@ doi:[10.1093/nargab/lqae086](https://doi.org/10.1093/nargab/lqae086).
 ## Official sources
 
 - [PyPI geniml 0.8.4](https://pypi.org/project/geniml/0.8.4/) (released
-  2026-01-14; accessed 2026-07-23)
+  2026-01-14; accessed 2026-10-01)
 - [v0.8.4 release source](https://github.com/databio/geniml/tree/v0.8.4)
-  (commit `5e8dd14126c45d14917df74de4fb405f383afb61`; accessed 2026-07-23)
+  (commit `5e8dd14126c45d14917df74de4fb405f383afb61`; accessed 2026-10-01)
 - [Official Region2Vec tutorial](https://docs.bedbase.org/geniml/tutorials/region2vec/)
-  (undated; accessed 2026-07-23; contains legacy imports)
+  (undated; accessed 2026-10-01; contains legacy imports)
 - [Official evaluation tutorial](https://docs.bedbase.org/geniml/tutorials/evaluation/)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [Gtars tokenizer documentation](https://docs.bedbase.org/gtars/tokenizers)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)

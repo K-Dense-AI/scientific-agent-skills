@@ -119,7 +119,7 @@ For the matrix as a whole include:
 - bypass paths around human review;
 - rollback and retirement behavior.
 
-The bundled helper validates identifiers, allowed node/output types, citations, and required review fields, then emits CSV. It does not parse or execute the logic statement.
+The bundled helper validates identifiers, allowed node/output types, citations, and required review fields, then emits CSV. It does not parse or execute the logic statement. Invalid matrices produce diagnostics without CSV export; `--strict` also withholds export when review warnings remain.
 
 ## Change Control
 

@@ -1,11 +1,12 @@
 ---
 name: matplotlib
-description: Low-level plotting library for full customization. Use when you need fine-grained control over every plot element, creating novel plot types, or integrating with specific scientific workflows. Export to PNG/PDF/SVG for publication. For quick statistical plots use seaborn; for interactive plots use plotly; for publication-ready multi-panel figures with journal styling, use scientific-visualization.
+description: Creates and customizes scientific plots with Matplotlib. Used for fine-grained control over plot elements, novel plot types, and scientific workflows. Export to PNG/PDF/SVG for publication. For quick statistical plots use seaborn; for interactive plots use plotly; for publication-ready multi-panel figures with journal styling, use scientific-visualization.
 allowed-tools: Read Write Bash
 license: https://github.com/matplotlib/matplotlib/tree/main/LICENSE
-compatibility: Requires Python 3.10+ and Matplotlib 3.10.x. Use `uv add matplotlib` in projects; interactive Jupyter widgets require `ipympl`.
+compatibility: Requires Python 3.11+ and Matplotlib 3.11.2. Bundled examples also use NumPy and SciPy; pandas examples need pandas, and Jupyter widgets need ipympl. Installation needs network access; local plotting needs no credentials.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -32,18 +33,29 @@ This skill should be used when:
 For project work, install Matplotlib with uv:
 
 ```bash
-uv add matplotlib
+uv add "matplotlib==3.11.2" numpy scipy
 ```
 
 For notebook interactivity:
 
 ```bash
-uv add matplotlib ipympl
+uv add "matplotlib==3.11.2" ipympl
 ```
 
 Then enable the widget backend in Jupyter with `%matplotlib widget` or `%matplotlib ipympl`.
 
-Matplotlib 3.10 requires Python 3.10+ and NumPy 1.23+. Non-interactive file output works through backends such as Agg, PDF, and SVG. For GUI windows, Matplotlib auto-selects an available backend; if `TkAgg` fails in a uv-managed Python, update uv and Python builds with `uv self update` and `uv python upgrade --reinstall`, or install a Qt backend with `uv add pyside6`.
+Targets Matplotlib 3.11.2 (Python 3.11+), reviewed 2026-10-01. The bundled
+scripts and representative examples were executed using Agg and PNG/PDF/SVG output.
+GUI windows, Jupyter widgets, and external LaTeX are environment-dependent and were
+not exercised. Fragment examples assume imports and named data; adapt and validate
+them before use. Check the [3.11 API changes](https://matplotlib.org/stable/api/prev_api_changes/api_changes_3.11.0.html)
+when migrating older code: use `tick_labels` and `orientation` for box plots,
+`mpl.colormaps[name]` for colormaps, and label contour lines rather than `contourf`.
+
+File output needs no GUI. Use `MPLBACKEND=Agg` for batch scripts, or select Agg before
+importing pyplot. Interactive output requires an installed GUI toolkit such as
+PySide6 (`QtAgg`) or working Tk (`TkAgg`); `plt.ioff()` does not remove GUI thread
+requirements. See [backends](https://matplotlib.org/stable/users/explain/figure/backends.html).
 
 ## Core Concepts
 
@@ -167,7 +179,7 @@ ax.hist(data, bins=30, edgecolor='black', alpha=0.7)
 
 **Heatmaps** - Matrix data, correlations
 ```python
-im = ax.imshow(matrix, cmap='coolwarm', aspect='auto')
+im = ax.imshow(matrix, cmap='viridis', aspect='auto', interpolation='nearest')
 plt.colorbar(im, ax=ax)
 ```
 
@@ -240,10 +252,18 @@ fig.savefig('figure.png', dpi=300, bbox_inches='tight', transparent=True)
 ```
 
 **Important parameters:**
-- `dpi`: Resolution (300 for publications, 150 for web, 72 for screen)
-- `bbox_inches='tight'`: Removes excess whitespace
+- `dpi`: Raster pixels per inch; choose from required pixel size and final print size.
+- `bbox_inches='tight'`: Crops to artist bounds, changing final physical/pixel dimensions.
 - `facecolor='white'`: Ensures white background (useful for transparent themes)
-- `transparent=True`: Transparent background
+- `transparent=True`: Makes axes/figure backgrounds transparent; explicit facecolors can override this.
+
+For a fixed-size figure, use constrained layout and omit tight cropping (also set
+`savefig.bbox=None` in an `mpl.rc_context` if a style sets it). PNG dimensions are
+approximately `figsize * dpi`; PDF/SVG remain vector except images and rasterized
+artists. DPI does not add information to source image data. Save with `fig.savefig`
+before `show`, then `plt.close(fig)` in batch loops. Inspect the actual exported
+file at its final size for clipped labels, missing glyphs, contrast, and readable
+legends. See [savefig](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html).
 
 ### 6. Working with 3D Plots
 
@@ -275,14 +295,13 @@ ax.set_zlabel('Z Label')
 
 ### 2. Figure Size and DPI
 - Set figsize at creation: `fig, ax = plt.subplots(figsize=(10, 6))`
-- Use appropriate DPI for output medium:
-  - Screen/notebook: 72-100 dpi
-  - Web: 150 dpi
-  - Print/publications: 300 dpi
+- Choose DPI and final dimensions together; 300 dpi is a common starting point
+  for print, not a universal publication requirement.
 
 ### 3. Layout Management
-- Use `constrained_layout=True` or `tight_layout()` to prevent overlapping elements
-- `fig, ax = plt.subplots(constrained_layout=True)` is recommended for automatic spacing
+- Prefer `fig, ax = plt.subplots(layout="constrained")` for automatic spacing.
+- Do not combine layout engines: `tight_layout()` disables constrained layout.
+  Neither engine replaces visual inspection of the exported figure.
 
 ### 4. Colormap Selection
 - **Sequential** (viridis, plasma, inferno): Ordered data with consistent progression
@@ -303,11 +322,25 @@ ax.set_zlabel('Z Label')
 - Include descriptive labels and legends
 
 ### 6. Performance
-- For large datasets, use `rasterized=True` in plot calls to reduce file size
+- For dense artists in PDF/SVG, use `rasterized=True`; PNG is already raster.
+  Rasterization mainly reduces vector file size, not the number of input points.
 - Use appropriate data reduction before plotting (e.g., downsample dense time series)
-- For animations, use blitting for better performance
+- Use blitting only when the backend supports it and return all changed artists.
 
-### 7. Code Organization
+### 7. Scientific Checks
+- Validate units, shapes, paired missing-value handling, and the ordering of x values.
+  Preserve gaps rather than connecting across excluded observations silently.
+- `errorbar` accepts nonnegative error **sizes**, not endpoint coordinates; an
+  asymmetric array has shape `(2, N)`, lower errors first. `fill_between` receives
+  lower/upper endpoints. Calculate SD, SEM, or CI upstream and state which, with
+  sample size, sampling unit, and method; Matplotlib does not infer uncertainty.
+- Box-plot whiskers default to 1.5 IQR; plotted fliers are not automatically invalid.
+  Violin shapes depend on bandwidth; 3.11 ignores masked/nonfinite observations,
+  so count and disclose excluded values and validate each group before plotting.
+- Shared colorbars require shared norms and units. Scientific image orientation,
+  pixel extent, and spatial aspect must follow the data, not aesthetics.
+
+### 8. Code Organization
 ```python
 # Good practice: Clear structure
 def create_analysis_plot(data, title):
@@ -335,11 +368,13 @@ fig.savefig('analysis.png', dpi=300, bbox_inches='tight')
 This skill includes helper scripts in the `scripts/` directory:
 
 ### `plot_template.py`
-Template script demonstrating various plot types with best practices. Use this as a starting point for creating new visualizations.
+Template script using reproducible synthetic data. Bar errors are sample SD across
+12 synthetic replicates; box and violin plots use supplied groups. Replace these
+with actual data and declared uncertainty. Commands below run from the skill root.
 
 **Usage:**
 ```bash
-uv run python scripts/plot_template.py
+MPLBACKEND=Agg uv run --isolated --with "matplotlib==3.11.2" --with numpy --with scipy python scripts/plot_template.py --no-show --output plot.png
 ```
 
 ### `style_configurator.py`
@@ -347,7 +382,7 @@ Interactive utility to configure matplotlib style preferences and generate custo
 
 **Usage:**
 ```bash
-uv run python scripts/style_configurator.py
+MPLBACKEND=Agg uv run --isolated --with "matplotlib==3.11.2" --with numpy python scripts/style_configurator.py --preset dark --output dark.mplstyle --preview --no-show
 ```
 
 ## Detailed References
@@ -369,10 +404,10 @@ Matplotlib integrates well with:
 
 ## Common Gotchas
 
-1. **Overlapping elements**: Use `constrained_layout=True` or `tight_layout()`
+1. **Overlapping elements**: Use one layout engine, then inspect the export
 2. **State confusion**: Use OO interface to avoid pyplot state machine issues
 3. **Memory issues with many figures**: Close figures explicitly with `plt.close(fig)`
-4. **Font warnings**: Install fonts or suppress warnings with `plt.rcParams['font.sans-serif']`
+4. **Font warnings**: Install the requested font or choose an available fallback; do not hide missing-glyph warnings
 5. **DPI confusion**: Remember that figsize is in inches, not pixels: `pixels = dpi * inches`
 
 ## Additional Resources

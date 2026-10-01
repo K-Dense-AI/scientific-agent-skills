@@ -1,6 +1,6 @@
 # Authentication and Credential Safety
 
-Verified **2026-07-23** against the official
+Verified **2026-09-30** against the official
 [Developer resources](https://www.protocols.io/developers) page and
 [API authentication reference](https://apidoc.protocols.io/).
 
@@ -77,7 +77,8 @@ found in the official materials reviewed. Therefore:
 
 - use a client token for public-only discovery;
 - do not initiate OAuth merely because an access token is absent;
-- request `readwrite` only when a reviewed write workflow genuinely needs it;
+- use `readwrite` only for an authorized user-context workflow requiring OAuth;
+  private read workflows still receive this broad documented scope;
 - enforce narrower authorization in the application even if the upstream
   token is broad;
 - recheck the live developer page before production authorization, because
@@ -126,10 +127,12 @@ Before any authenticated operation:
 ## Source Notes
 
 - [Developer resources](https://www.protocols.io/developers), accessed
-  2026-07-23 — REST API link, client access, credential creation, OAuth setup.
+  2026-09-30 — REST API link, client access, credential creation, OAuth setup.
 - [API authentication and OAuth reference](https://apidoc.protocols.io/),
-  accessed 2026-07-23 — token modes, `readwrite`, authorize/token paths,
+  accessed 2026-09-30 — token modes, `readwrite`, authorize/token paths,
   response fields, lifetime/refresh behavior.
-- [Official MCP server](https://www.protocols.io/mcp-server), accessed
-  2026-07-23 — OAuth or client-token authentication for the read-oriented MCP
-  endpoint.
+- [Official MCP server](https://www.protocols.io/mcp-server),
+  accessed 2026-09-30 through rendered extraction — endpoint/auth, public
+  read tools, temporary Claude Connector unavailability. Its public-content
+  tool descriptions are narrower than the API page's OAuth access statement;
+  verify actual tool permissions before relying on private MCP reads.

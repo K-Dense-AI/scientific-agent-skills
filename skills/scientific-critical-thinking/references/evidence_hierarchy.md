@@ -2,6 +2,13 @@
 
 ## Traditional Evidence Hierarchy (Medical/Clinical)
 
+This is a teaching shorthand for some intervention questions, not a universal ranking.
+Choose designs for the question: prevalence, prognosis, diagnostic accuracy, harms, and
+mechanisms have different evidence needs. A review synthesizes its underlying studies;
+meta-analysis alone does not increase certainty. Reporting quality, risk of bias,
+applicability, and certainty must be assessed separately. Current sources are recorded in
+[review_sources.md](review_sources.md).
+
 ### Level 1: Systematic Reviews and Meta-Analyses
 **Description:** Comprehensive synthesis of all available evidence on a question.
 
@@ -9,7 +16,7 @@
 - Combines multiple studies for greater power
 - Reduces impact of single-study anomalies
 - Can identify patterns across studies
-- Quantifies overall effect size
+- May quantify a pooled effect if studies and estimands can meaningfully be combined
 
 **Weaknesses:**
 - Quality depends on included studies ("garbage in, garbage out")
@@ -22,15 +29,17 @@
 - Were inclusion criteria appropriate and prespecified?
 - Was study quality assessed?
 - Was heterogeneity explored?
-- Was publication bias assessed (funnel plots, fail-safe N)?
+- Were missing studies/results sought in registries and protocols? If funnel-plot methods
+  were appropriate, were alternative explanations for asymmetry considered? Fail-safe N
+  is not a reliable assessment of missing-evidence bias.
 - Were appropriate statistical methods used?
 
 ### Level 2: Randomized Controlled Trials (RCTs)
 **Description:** Experimental studies with random assignment to conditions.
 
 **Strengths:**
-- Gold standard for establishing causation
-- Controls for known and unknown confounders
+- Strong design for estimating intervention effects when implemented and analysed appropriately
+- Balances prognostic factors in expectation, not necessarily in each realized sample
 - Minimizes selection bias
 - Enables causal inference
 
@@ -65,7 +74,7 @@
 - Susceptible to confounding
 - Selection bias possible
 - Attrition can bias results
-- Cannot prove causation definitively
+- Causal interpretation requires explicit identification assumptions and sensitivity analysis
 
 **Critical evaluation:**
 - Were cohorts comparable at baseline?
@@ -84,10 +93,10 @@
 - Useful for generating hypotheses
 
 **Weaknesses:**
-- Cannot calculate incidence
+- Usually cannot estimate absolute incidence from sampled case/control counts alone
 - Susceptible to recall bias
 - Selection of controls is challenging
-- Cannot prove causation
+- Causal interpretation depends on the sampling design and control of relevant biases
 
 **Critical evaluation:**
 - Were cases and controls defined clearly?
@@ -129,7 +138,7 @@
 
 **Weaknesses:**
 - No control group
-- No statistical inference possible
+- Descriptive uncertainty may be estimable; uncontrolled counts do not identify a comparative effect
 - Highly susceptible to bias
 - Cannot establish causation or frequency
 
@@ -155,11 +164,11 @@
 
 ### When Lower-Level Evidence Can Be Strong
 1. **Well-designed observational studies** with:
-   - Large effects (hard to confound)
+   - Large effects that plausible bias cannot explain (size alone does not establish this)
    - Dose-response relationships
    - Consistent findings across contexts
    - Biological plausibility
-   - No plausible confounders
+   - Explicitly justified confounding and selection assumptions, with sensitivity analyses
 
 2. **Multiple converging lines of evidence** from different study types
 
@@ -170,7 +179,7 @@
    - Inadequate randomization
    - High attrition
    - No blinding when feasible
-   - Conflicts of interest
+   - Design, conduct, or reporting problems associated with sponsor influence
 
 2. **Biased meta-analyses**:
    - Publication bias
@@ -186,41 +195,60 @@
 
 ## Alternative: GRADE System
 
-GRADE (Grading of Recommendations Assessment, Development and Evaluation) assesses evidence quality across four levels:
+GRADE assesses certainty in a **body of evidence for a specified outcome and comparison**.
+Choose the relevant GRADE application, target population and decision threshold; retain
+effect estimates and uncertainty alongside domain judgments. The current GRADE Book is
+being released progressively; consult its updated chapters and the handbook only for
+sections not yet replaced.
 
-### High Quality
-**Definition:** Very confident that true effect is close to estimated effect.
+For intervention effects, the traditional approach starts randomized evidence at high and
+non-randomized evidence at low certainty. When using the ROBINS-I-integrated approach,
+start at high and assess bias from confounding/selection explicitly, usually rating down
+substantially. Do not penalize lack of randomization twice. Specify the approach before
+rating. Consider risk of bias, inconsistency, indirectness, imprecision, and missing-evidence
+bias, and justify any large-effect, dose-response, or opposing-confounding considerations.
+
+These levels are judgments about certainty, not numerical probabilities or recommendation strength:
+
+### High Certainty
+**Definition:** High confidence that the effect is on the specified side of a threshold
+or within the target range.
 
 **Characteristics:**
-- Well-conducted RCTs
-- Overwhelming evidence from observational studies
-- Large, consistent effects
-- No serious limitations
+- No important unresolved concerns across the applicable certainty domains
+- Neither an RCT label nor a large effect alone establishes high certainty
 
-### Moderate Quality
-**Definition:** Moderately confident; true effect likely close to estimated, but could be substantially different.
+### Moderate Certainty
+**Definition:** Moderate confidence in that target; the effect could be in another range.
 
 **Downgrades from high:**
 - Some risk of bias
 - Inconsistency across studies
 - Indirectness (different populations/interventions)
-- Imprecision (wide confidence intervals)
+- Imprecision relative to the specified threshold/range of important effects
 - Publication bias suspected
 
-### Low Quality
-**Definition:** Limited confidence; true effect may be substantially different.
+### Low Certainty
+**Definition:** Limited confidence in that target; the effect may be in a different range.
 
 **Downgrades:**
 - Serious limitations in above factors
 - Observational studies without special strengths
 
-### Very Low Quality
-**Definition:** Very limited confidence; true effect likely substantially different.
+### Very Low Certainty
+**Definition:** Very little confidence in that target; substantial uncertainty remains
+about the effect's range.
 
 **Characteristics:**
 - Very serious limitations
-- Expert opinion
+- Evidence may be too sparse or indirect to support an effect estimate at all; do not
+  invent a numerical estimate or GRADE rating for an unsupported opinion
 - Multiple serious flaws
+
+Document threshold magnitudes and their rationale. For intervention decisions use absolute
+effects with an appropriate baseline risk and its uncertainty. Rate down/up only when a
+concern changes confidence in the target range; do not double-count the same underlying
+problem across domains. Have independent assessors reconcile formal judgments.
 
 ## Study Quality Assessment Criteria
 
@@ -230,7 +258,8 @@ GRADE (Grading of Recommendations Assessment, Development and Evaluation) assess
 - Was allocation concealed?
 - Were groups similar at baseline?
 - Was blinding implemented?
-- Was attrition minimal and balanced?
+- Could missingness depend on the unobserved outcome? Low or balanced attrition alone
+  does not establish low risk of bias.
 - Was intention-to-treat used?
 - Were all outcomes reported?
 
@@ -264,28 +293,36 @@ GRADE (Grading of Recommendations Assessment, Development and Evaluation) assess
 ### For Different Study Types
 
 **RCTs:**
-- Cochrane RoB 2 (Risk of Bias 2) — current standard for randomized trials
-- PEDro Scale (for trials in physical therapy)
-- Legacy: Cochrane RoB 1, Jadad Scale (historical; prefer RoB 2 for new reviews)
+- Cochrane RoB 2 — recommended for randomized trials in Cochrane intervention reviews;
+  assess a result, use the correct parallel/cluster/crossover variant, and retain reasons
+- PEDro Scale — used for physiotherapy trials; its score is not interchangeable with RoB 2
+- Legacy RoB 1 and Jadad ratings in older reviews should be identified as such
 
 **Observational Studies:**
-- ROBINS-I (Risk of Bias in Non-randomized Studies — of Interventions)
-- Newcastle-Ottawa Scale
+- ROBINS-I applies to non-randomized **intervention effects**, not every observational question.
+  Specify the 2016 version or November 2025 ROBINS-I V2 draft for follow-up/cohort studies;
+  do not combine version-specific signalling questions or domains.
+- Newcastle-Ottawa Scale has cohort and case-control forms; record the chosen form and
+  item judgments, not an unexplained universal good/poor star cutoff.
 
 **Diagnostic Studies:**
-- QUADAS-2 (Quality Assessment of Diagnostic Accuracy Studies)
+- QUADAS-3 (current tool v1.2, published February 2026) assesses bias and applicability
+  for individual accuracy estimates against defined synthesis questions and an ideal
+  test accuracy trial. QUADAS-2 is the previous version.
 
 **Systematic Reviews:**
-- PRISMA 2020 checklist (reporting standard for systematic reviews)
-- AMSTAR-2 (A Measurement Tool to Assess Systematic Reviews)
+- AMSTAR 2 appraises systematic reviews of healthcare interventions; assess critical
+  weaknesses rather than calculating a total score.
+- PRISMA 2020 assesses reporting completeness; it is not a risk-of-bias instrument.
 
-**All Study Types:**
-- CASP Checklists (Critical Appraisal Skills Programme)
+**Design-specific general appraisal:**
+- CASP supplies separate checklists for supported study designs; select the matching one.
+  Do not assume every design has the same domains or numerical score.
 
 ## Domain-Specific Considerations
 
 ### Basic Science Research
-**Hierarchy differs:**
+**Consider together, without imposing a fixed ranking:**
 1. Multiple convergent lines of evidence
 2. Mechanistic understanding
 3. Reproducible experiments
@@ -322,9 +359,9 @@ GRADE (Grading of Recommendations Assessment, Development and Evaluation) assess
 - Dose-response relationships
 - Temporal consistency
 - Biological plausibility
-- Specificity
+- Specificity can inform interpretation but is not necessary for causation
 - Consistency across populations
-- Large effects unlikely due to confounding
+- Large effects assessed against plausible confounding and selection mechanisms
 
 ### Social Sciences
 **Challenges:**
@@ -381,7 +418,7 @@ GRADE (Grading of Recommendations Assessment, Development and Evaluation) assess
 
 ### Strength of Association
 **Strong evidence:**
-- Large effects unlikely to be due to confounding
+- Large effects with plausible confounding, selection, and measurement explanations examined
 - Dose-response relationships
 - All-or-none effects
 
@@ -438,25 +475,12 @@ GRADE (Grading of Recommendations Assessment, Development and Evaluation) assess
 
 ### Making Decisions with Imperfect Evidence
 
-**High-quality evidence:**
-- Strong confidence in acting on findings
-- Reasonable to change practice/policy
-
-**Moderate-quality evidence:**
-- Provisional conclusions
-- Consider in conjunction with other factors
-- May warrant action depending on stakes
-
-**Low-quality evidence:**
-- Weak confidence
-- Hypothesis-generating
-- Insufficient for major decisions alone
-- Consider cost/benefit of waiting for better evidence
-
-**Very low-quality evidence:**
-- Very uncertain
-- Should not drive decisions alone
-- Useful for identifying gaps and research needs
+Certainty does not itself authorize changing practice or policy. A high-certainty estimate
+may show negligible benefit or important harm. Low-certainty evidence may still inform a
+decision when delay or alternatives carry costs. A separate evidence-to-decision process
+considers absolute benefits/harms, values, resources, equity, acceptability, and feasibility.
+State whose decision and setting are involved; an appraisal is not an individual clinical
+recommendation. Identify the information most likely to change the decision.
 
 ### When Evidence is Conflicting
 

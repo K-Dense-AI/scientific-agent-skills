@@ -1,165 +1,189 @@
 # Tamarind Bio REST API reference
 
-**Spec:** the OpenAPI spec at `https://app.tamarind.bio/openapi.yaml` (3.0, auth `ApiKeyAuth`) covers the 8 **core job endpoints** (`/submit-job`, `/submit-batch`, `/jobs`, `/result`, `/upload/{filename}`, `/files`, `/delete-job`, `/delete-file`) — fetch it for those exact shapes. It does **not** include the discovery/management endpoints (`/tools`, `/usage-statistics`, `/submit-pipeline`, `/run-pipeline`, `/stop-job`) — for those, use this file + the live MCP `getAvailableTools`/`getJobSchema`/`getJobs`. This file also adds the behaviors no spec spells out (response-shape-by-query, two-step result download, batch aggregation polling, REST-vs-MCP field differences).
+Reviewed 2026-09-30 against the [current OpenAPI](https://app.tamarind.bio/api/openapi.json),
+[REST guide](https://app.tamarind.bio/llms-full.txt), and
+[public catalog](https://app.tamarind.bio/tools.json). These are documentation
+checks, not authenticated endpoint tests.
 
-Base URL: `https://app.tamarind.bio/api/`
-Authentication: `x-api-key: <YOUR_KEY>` header on every request.
-Interactive docs: [app.tamarind.bio/api-docs](https://app.tamarind.bio/api-docs) · markdown docs at [docs.tamarind.bio](https://docs.tamarind.bio)
+All paths below are relative to `https://app.tamarind.bio/api`, or the user's
+organization deployment's `/api` base. Requests use `x-api-key` except public
+catalog discovery. Do not send the key when downloading a signed storage URL.
 
-These REST recipes use `requests` (Python) or `curl`. The official `tamarind-cli` distribution also provides a Python client for Custom Tools; consult the current SDK reference for supported methods. An MCP server (`https://mcp.tamarind.bio/mcp`, `X-API-Key` header) exposes the same operations with agent-friendly schemas.
+## Endpoint map
 
-## Endpoints
-
-| Method | Path | Purpose |
+| Method | Path | Request and response |
 |---|---|---|
-| GET | `/tools` | List available tools and their inline parameter schemas. Returns the **full list** (no server-side filtering — filter client-side). |
-| POST | `/submit-job` | Submit one job. Body: `jobName`, `type`, `settings` (+ optional `projectTag`). |
-| POST | `/submit-batch` | Submit many jobs of the same tool. See payload shapes below. |
-| GET | `/jobs` | List/inspect jobs. Query: `jobName`, `batch`, `limit`, `startKey`, `organization`, `includeSubjobs`, `jobEmail`. |
-| POST | `/result` | Get a presigned download URL for job results (two-step — see below). Body: `jobName` (+ optional `fileName`, `pdbsOnly`, `jobEmail`). |
-| POST | `/stop-job` | Stop a running or queued job. Body: `jobName`. |
-| DELETE | `/delete-job` | Delete a job and its data. Body: `jobName`. |
-| PUT | `/upload/{filename}` | Upload a file (`--data-binary`; add `?folder=` to file it). Or get a presigned URL via MCP `uploadFile`. |
-| GET | `/files` | List your account's uploaded files as a flat array of filename strings. Query: `folder`, `includeFolders=true`. Does **not** enumerate a specific job's outputs — use MCP `listJobFiles` for that. |
-| DELETE | `/delete-file` | Remove a file/folder. Query: `filePath` or `folder`. |
-| POST | `/submit-pipeline` | Run a multi-step pipeline defined inline via `stages[]`. |
-| POST | `/run-pipeline` | Run a pipeline saved in the UI. Body: `pipelineName`, `initialInputs`/`inputs`. |
-| GET | `/usage-statistics` | Usage/billing. Query: `statistic` (`weighted_hours`/`jobs`), `scope` (`user`/org). |
+| GET | `/tools-catalog` | Public catalog; also at host-level `/tools.json`. Optional `type`/`tag` filters; `tools` contains public types and conditional required settings. |
+| GET | `/tools` | Account-scoped array with `name`, descriptions, trimmed `settings`, and optional output metadata. `custom=true` selects legacy custom tools only. |
+| GET | `/tools/{name}/schema` | JSON Schema for the settings object. Optional `version` pins a custom build. 404 covers missing, inaccessible, and mid-deploy tools. |
+| POST | `/validate-job` | `type`, object/array `settings`; optional `jobName` (single), `jobNames` (array), `version`. HTTP 200 contains a `valid` verdict. |
+| POST | `/submit-job` | `jobName`, `type`, object `settings`; optional `version`, `projectTag`. 200 is a **plain-text** confirmation. |
+| POST | `/submit-batch` | `batchName`, `type`, array `settings`; optional parallel `jobNames`, `version`, `projectTag`. 200 schema has `batchName`, `jobs`, `totalJobs`. |
+| GET | `/jobs` | Exact lookup or cursor-paginated listing; shapes below. |
+| POST | `/jobs/search` | `jobNames` (up to 1,000), optional `organization`, `includeSubjobs`, `jobEmail`. Returns `jobs`, `notFound`, `statuses`. |
+| POST | `/result` | `jobName`; optional `fileName`, `pdbsOnly`, `jobEmail`, `noAsync`. 200 JSON string URL or 202 preparing object. |
+| POST | `/stop-job` | `jobName`; stops queued/running work, including stoppable batch children. Returns `message`, `stoppedCount`. |
+| DELETE | `/delete-job` | `jobName`; soft-deletes the job/batch children from listings. Result files remain. Unknown name: 400. |
+| PUT | `/upload/{filename}` | Binary body; optional `folder`. This route redirects to the upload service; follow redirects. |
+| GET | `/files` | Optional `folder`, `includeFolders=true`; complete array of name strings for that folder, no pagination. |
+| DELETE | `/delete-file` | Query `filePath` **or** `folder`. A folder request removes its files. |
+| GET | `/usage-statistics` | `statistic=hours\|weighted_hours\|jobs`, `scope=user\|organization`; details below. |
+| POST | `/submit-pipeline` | Legacy inline execution: `jobName`, `stages`, conditional `initialInputs`, optional `projectTag`. |
+| POST | `/run-pipeline` | Legacy saved execution: `jobName`, `pipelineName`, nonempty `initialInputs` array, optional `version`. |
 
-## Request shapes
+## Discovery and validation
 
-### GET /tools
+`/tools` is an array, not `{"tools": [...]}`. Each trimmed parameter has `name`
+and `required`; optional metadata includes `type`, `description`, `default`,
+`options`, `extension`, and `list`. Filter built-ins client-side; arbitrary search
+query parameters are not documented. `/tools?custom=true` does not discover
+current custom deployments: use the deployed name and `/tools/{name}/schema`.
 
-Returns a JSON **array**. Each element:
+The latter is a **JSON Schema document**, not the trimmed parameter array and not
+an MCP `parameters` envelope. Domain strings may carry `x-tamarind-type`. Numeric
+strings and sequence normalization are not fully checked by JSON Schema bounds;
+use `/validate-job` for domain validation and file existence. Keep `version`
+consistent across schema, validate, and submit for a pinned custom build.
 
-```json
-{
-  "name": "alphafold",
-  "displayName": "AlphaFold",
-  "description": "Accurate and quick protein structure prediction ...",
-  "github": "https://github.com/...",
-  "paper": "https://...",
-  "settings": [ { "name": "sequence", "type": "sequence", "required": true, "description": "..." }, ... ]
-}
-```
+For valid credentials, `/validate-job` returns 200 whether valid or invalid:
 
-In each `settings` param, only `name` and `required` are guaranteed; `type`, `default`, `description`, `options` are present only when applicable (about 60% of params carry `type`). Read them with `param.get("type")`, not `param["type"]`.
+- Single success: `{"valid": true, "normalized": {...}}`. Current `normalized`
+  contains cleaned settings and defaults intended for submission. Inspect these
+  defaults for model/sample-count changes, then submit that settings object.
+- Single failure: `valid: false`, `error`, possibly `missing_fields` and `code`.
+  `missing_fields` may be empty despite failure. Do not interpret quota/policy
+  codes as sequence-format errors.
+- `job_name` reflects name normalization when `jobName` was supplied;
+  `job_name_changed` indicates a change. Persist this stored name.
+- The guide additionally documents `unrecognized_settings`: correct every typo,
+  even if `valid` is true. Unknown settings sent directly to submit are carried
+  through and may silently leave the intended optional field at its default.
+- For array input, inspect **presence of `results`**, not just `valid`.
+  `results` holds one verdict per row, with its `index`, and top-level `valid`
+  aggregates all rows. If `results` is absent, the whole request was rejected and
+  top-level `error` explains why. Array validation supports at most 1,000 rows
+  per call and approximately 4.5 MB; large normalized responses can also require
+  smaller chunks. Validate all rows, not a representative sample.
 
-`settings` is the tool's inline parameter schema — read it directly, no separate schema endpoint over REST. The REST list is not filtered by query params; filter client-side on `name`/`displayName`/`description`. (The MCP `getAvailableTools` wraps the list as `{"totalTools", "tools":[...]}` and adds `categories`/`tags` per tool plus server-side `search`/`category`/`tag` filtering.)
+Field validation does not reserve compute or re-check every organization policy,
+queue constraint, or custom-tool deployment state. A valid verdict can still be
+rejected at submission. Do not manually add internal routing settings.
 
-### POST /submit-job
+## Names, projects, and batches
 
-```json
-{
-  "jobName": "my-protein-analysis",
-  "type": "alphafold",
-  "settings": { "sequence": "MKT...", "numRecycles": 3 },
-  "projectTag": "proj_xxxxxxxx"
-}
-```
+Names are sanitized: whitespace becomes `_` and characters outside
+`[A-Za-z0-9_.-]` are removed. Send an already-clean, nonempty name of at most 200
+characters so exact job lookup works; this is a compatibility limit, not a
+100-character submit validator. Parse the actual name from the successful
+`<stored-name> submitted to queue.` response. On a lost response, check that
+persisted clean name before retrying.
 
-- `jobName` — unique, `^[a-zA-Z0-9_-]+$`, 1-100 chars.
-- `type` — a tool name from `/tools`. The list changes often; never hardcode.
-- `settings` — tool-specific; match the schema from `/tools` (or MCP `getJobSchema`).
-- `projectTag` — optional `proj_...` ProjectId to file the job under a project.
+`projectTag` accepts an organization project ID or name. It is normally optional
+but required under an organization's project policy. A refusal may include
+`availableProjects`; absence does not establish that no projects exist.
 
-Response (200): a confirmation string like `myJobName submitted to queue.`
+Batch `settings` must be a nonempty array. If `jobNames` is supplied it must have
+the same length, with no duplicates or child name equal to the parent. Stored
+child names may be prefixed/rewritten; enumerate `/jobs?batch=...` rather than
+assuming names. The batch cap is **30,000 jobs after design fan-out**, plus a
+separate approximately **4.5 MB** request cap. The older `{tool, jobs:[...]}`
+alternative is not the current documented contract. Do not rely on undocumented
+`weightedHoursBudget`, `maxRuntimeSeconds`, or `gpuType` keys for limits.
 
-### POST /submit-batch
+## Jobs, status, and pagination
 
-Two payload shapes appear in the official docs — the **Python** form uses parallel arrays; the **curl** form uses a `jobs[]` array of objects with a `tool` key. The parallel-array form matches the MCP `submitBatch` and is the recommended one:
+`GET /jobs` query fields: `jobName`, `batch`, `limit` (1–1,000; default 1,000),
+`startKey`, `batchOnly`, `includeSubjobs`, `includeSequences`, `organization`, and
+`jobEmail`. Use lowercase string `true` for boolean query values.
 
-```json
-{
-  "batchName": "egfr-screen",
-  "type": "alphafold",
-  "jobNames": ["seq1", "seq2"],
-  "settings": [{ "sequence": "..." }, { "sequence": "..." }],
-  "maxRuntimeSeconds": 3600,
-  "weightedHoursBudget": 100
-}
-```
+- Own-account exact `jobName`: row directly, without a `jobs` wrapper.
+- Listing or `batch`: `{"jobs": [...], "statuses": {...}, "startKey": ...}`.
+  Follow nonempty `startKey` even when a page is short. Batch children paginate.
+- `organization=true` exact-name collisions have a legacy exceptional response
+  shape; prefer a known owner with `jobEmail`. `/jobs/search` instead selects the
+  newest visible match for each requested name, not every member's match.
+- `includeSubjobs=true` includes children in ordinary listings. `batchOnly=true`
+  selects parents. `includeSequences` is retained for compatibility; do not
+  assume it controls `Settings` presence.
+- Page `statuses` is generally page-local, but organization queries may return a
+  collection-wide tally. Do not sum those tallies to infer batch completion.
 
-curl-form alternative (same endpoint): `{ "tool": "<type>", "batchName": ..., "jobs": [{ "jobName": ..., "settings": {...} }, ...] }`.
+Rows require `JobName`, `JobStatus`, `Created`. Other fields are optional:
+`Type`, `Started`, `Completed`, `Batch`, `WeightedHours`, `Settings`, `Score`,
+`User`, `batchStatus`, `AggregationError`, and result/aggregation metadata.
+`Settings` can be JSON text or a structured value; `Score` may be a string,
+number, or null. Do not assume every successful tool emits pLDDT or any score.
+`/jobs/search` omits large settings/scores/errors and result URLs; fetch individual
+details only when needed.
 
-- `jobNames` and `settings` are parallel arrays, same length, 1-100 items, all using the same tool.
-- `maxRuntimeSeconds` — optional per-job timeout. `weightedHoursBudget` — optional budget cap.
-- The MCP `submitBatch` schema exposes `maxRuntimeSeconds` + `weightedHoursBudget`. Some accounts/tools may accept an optional `gpuType` (seen in the docs UI), but it isn't in `openapi.yaml` or the MCP schema — treat it as unverified and confirm with support before relying on it.
+Single-job terminal states are `Complete`, `Stopped`, `Failed`. Handle legacy
+`Deleted` and lookup errors; a deleted/missing job need not remain pollable.
+A batch parent uses `batchStatus`: `Running`, `Aggregating`, `Complete`, `Stopped`,
+`AggregationFailed`. Discriminate by `Type == "batch"`/`batchStatus`, not
+`statuses`, which also appears for a single job.
 
-### GET /jobs
+The guide and schema disagree about whether compatibility rows expose a signed
+`resultUrl`; the schema makes it optional. Use `/result` for all downloads.
 
-**Response shape depends on the query:**
-- **List / batch query** (no `jobName`, or `?batch=`/`?organization=`) → `{ "jobs": [...], "startKey": "...", "statuses": {...} }`.
-- **By-name** (`?jobName=<name>`) → the **job row object directly** (no `jobs` wrapper). Don't index `["jobs"][0]` on this response.
+## Results and uploads
 
-Each job row includes `JobName`, `Type`, `JobStatus`, `Created`, `Started`, `Completed`, `Settings` (JSON string), `Score` (JSON string, tool metrics), `WeightedHours`. Use `startKey` for pagination past the `limit` (default 1000). Only top-level jobs return by default; add `includeSubjobs=true` for batch subjobs.
+Check HTTP status **before** decoding `/result`:
 
-**Batch parent rows** have `Type: "batch"` and carry `batchStatus`. Fetched by name (`?jobName=<batchName>`), a complete batch parent also includes `resultUrl` (presigned download). `batchStatus` transitions: `Running` → `Aggregating` → `Complete` (or `AggregationFailed`, with `AggregationError`). Poll the parent's `batchStatus`, not subjob `JobStatus` — subjobs go `Complete` before the aggregated output is ready.
+- **200:** `response.json()` is the signed URL string; download with a separate
+  GET, no API key. File requests return that file instead of an archive.
+- **202:** object with `status: "preparing"`, `jobName`, and `message`; wait and
+  repeat the same result call. Do not resubmit compute.
+- `noAsync: true` changes a not-yet-built archive to a 400 instead of 202.
+- A result request can wait up to approximately 290 seconds for archive assembly;
+  use an adequate read timeout and persist the job name to resume later.
+- `fileName: "output.log"` is permitted for failed/stopped jobs before completion.
 
-**Discriminate batch vs single by `Type == "batch"` (or presence of `batchStatus`), not by `statuses`.** A by-name response can carry a `statuses` tally even for a single (non-batch) job, so `statuses` presence is not a reliable batch signal.
+Upload uses `Content-Type: application/octet-stream`; `curl -L --data-binary`
+follows the documented upload redirect. The schema describes success fields
+`message`, `fileUrl`, `signedUrl`, but verify registered names with `/files` and
+pass the **relative stored path** (`target.pdb` or `inputs/target.pdb`) to a tool.
+The current guide says a redundant account-email prefix is stripped. Prefer the
+relative path; do not construct internal storage keys. Prior results use
+`JobName/path/to/file.ext`. Inline text can cause side effects/large bodies during
+validation; prefer uploaded paths.
 
-### POST /result (two-step download)
+## Usage and pipeline boundaries
 
-POST returns a presigned URL as a **bare string** (not JSON). Fetch that URL with a second GET to download the results zip:
+Usage defaults to `statistic=hours`, `scope=organization`. The response has
+`users` (each with `email`, `total`, per-tool `tools`), `lastUpdated`, and
+`metadata.statistic`/`metadata.scope`. Unauthorized organization scope can narrow
+to the user: read the applied scope. Weighted hours depend on compute resources;
+inspect the current account report rather than assuming a per-job price.
 
-```python
-url = requests.post(f"{BASE}/result", headers=H, json={"jobName": "myJob"}).text.strip('"')
-open("myJob.zip", "wb").write(requests.get(url).content)
-```
+Legacy `/submit-pipeline` requires `jobName` and `stages`; every stage requires
+`task` and nonempty `toolSettings` keyed by tool name. `initialInputs` is required
+when the first stage uses the `"pipe"` placeholder; file/sequence inputs must
+match that stage. Filter names must be in the tool's published `filterMetrics`.
+`/run-pipeline` requires `jobName`, `pipelineName`, and `initialInputs` (array of
+uploaded PDB filenames or raw sequences with unique basenames), not an `inputs`
+alias. Both return plain-text submission confirmations.
 
-Optional body fields: `fileName` (one file instead of the zip), `pdbsOnly: true` (PDB outputs only), `jobEmail` (a teammate's job, if permitted).
+For new integrations, consult the [pipeline guide](https://docs.tamarind.bio/tamarind/pipelines.md):
+`POST /pipelines/templates` creates a template; `POST /pipelines/validate` checks
+the same run body accepted by `POST /pipelines/submit`: required `name`,
+`bindings`, and exactly one of `templateId` or inline `pipeline`, plus optional
+version and permitted per-node overrides. `idempotencyKey` enables safe retries
+on this newer submit surface. Poll
+`GET /pipelines/runs/{run_id}` with its lowercase statuses:
+`queued`, `running`, `finished`, `partial`, `stopped`, `failed`. Terminal partial
+runs need per-step inspection. Pipeline runs are not visible through `/jobs`.
+Check the live spec for graph/binding shapes and account feature availability.
 
-## Status codes
+## Errors and safe retries
 
-| Code | Meaning |
-|---|---|
-| 200 | Success |
-| 400 | Bad request — invalid parameters/settings |
-| 401 | Unauthorized — invalid/missing `x-api-key` |
-| 403 | Budget exceeded (org/team) |
-| 429 | Rate limited |
-| 404 | Not found (e.g. unknown job) |
-| 500 | Server error |
+Classic auth rejection is often 400 recovery JSON; jobs use 401 problem JSON or
+an earlier gateway 403; usage can return 401. A 403 can also mean policy, quota,
+or tool access. Parse the actual error; do not treat every 403 as a budget cap.
+Exact unknown job lookup is 400, not a guaranteed 404.
 
-## Field-handling rules (important)
-
-**The REST and MCP schemas expose different fields.** The REST `/tools` entry
-gives a trimmed per-param view — `{name, type, required, default, description, options}`.
-The advanced gating keys `exclude` and `conditionals` appear **only in MCP
-`getJobSchema`**, not in REST `/tools` (`restrictOrgs` is no longer returned by
-either surface — see below). So don't try to hand-derive what to strip from REST
-schema keys — they aren't there. The reliable guard on
-both surfaces is **`validateJob`** (MCP): it runs `/submit-job`'s exact validation
-without submitting and returns the first error.
-
-- **Build your submit from your own settings, not `validateJob`'s `normalized` output.**
-  `normalized` is informational (defaults filled in, sometimes platform-managed
-  fields). Submit the same clean settings you validated, not the normalized echo.
-- **Platform-internal routing fields** — `submit_method`, `monomer_msa`, `msa` are
-  set by the platform. Never pass them.
-- **`restrictOrgs`** — org-gated parameters. `getJobSchema` no longer returns this
-  key (it's stripped server-side): a parameter your account isn't authorized for is
-  dropped from the schema entirely, and any param you do see is one you may set. So
-  you won't encounter `restrictOrgs` in a response — don't look for it.
-- **`conditionals`** (MCP schema only) — a field only applies when another field
-  has a given value (e.g. `pairMode` applies only when `useMSA` is `true`). Don't
-  send conditioned fields when their condition isn't met.
-- **`exclude: [...]`** (MCP schema only) — marks a field as UI/pipeline-only for a
-  surface. Treat it as advisory; `validateJob` is the authority on what a given
-  submission accepts.
-- **`required: true`** — must be present. Some tools require more than `sequence`
-  (e.g. `boltz` requires `inputFormat`). Run `validateJob` to get the first
-  missing/invalid field before submitting.
-- **File-typed fields with a plain string value are treated as INLINE CONTENT**,
-  not a path. To reference an **uploaded file**, use its **bare filename**
-  (`target.pdb`) — the platform scopes it to your account, so do NOT email-prefix
-  it. The `{email}/{filename}` form is the underlying S3 key, and passing it makes
-  `submit-job` 400 with `"The following files have not been uploaded: <email>/<file>"`.
-  To reference a **prior job's output**, use `JobName/path/to/file.ext`. Confirm the
-  exact registered name with `getFiles` / `GET /files` (a flat list of bare names).
-
-## Authentication and secrets
-
-- Read the key from `TAMARIND_API_KEY` (env or `.env`); never hardcode or commit it.
-- The same key authenticates REST (`x-api-key`) and the MCP server (`X-API-Key`).
-- Query operations are scoped to the authenticated account (and, with `organization=true`/`jobEmail`, to your org if permitted).
+Submit 400 errors may be JSON or plain text, independent of Content-Type.
+Ordinary duplicate-name checks return 400; concurrent locks can return 409.
+A 413 means the request was rejected before jobs were created (body shape varies
+by deployment); split it or upload files. For timeout/5xx ambiguity, inspect the
+stored name before retrying a submit. Back off on rate limits, and use batched
+status/validation requests instead of flooding per-job calls.

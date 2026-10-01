@@ -84,7 +84,7 @@ class FrontmatterTests(unittest.TestCase):
             {
                 "python-pptx": "1.0.2",
                 "Pillow": "12.3.0",
-                "lxml": "6.1.1",
+                "lxml": "6.1.3",
             },
         )
         generator = importlib.import_module("generate_poster")

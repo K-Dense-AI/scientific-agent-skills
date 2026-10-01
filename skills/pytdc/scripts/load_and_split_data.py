@@ -68,6 +68,22 @@ def normalize_columns(values: list[str] | None) -> list[str]:
     return columns
 
 
+def validate_label(task: str, dataset: str, label: str | None) -> str | None:
+    """Resolve multi-label targets from the download-free upstream registry."""
+    from tdc.utils import dataset2target_lists
+
+    choices = dataset2target_lists.get(dataset, [])
+    if choices:
+        if TASKS[task][0] == "tdc.generation" or task in {"DrugSyn", "TCREpitopeBinding"}:
+            raise CliError(f"{task}/{dataset} has no supported label-selecting constructor")
+        if label is None:
+            raise CliError(f"{dataset} requires --label-name; available: {', '.join(choices[:20])}")
+        return canonical_name(label, choices, "label")
+    if label is not None:
+        raise CliError(f"{dataset} has no target list in the reviewed package registry")
+    return None
+
+
 def validate_request(
     *,
     task_query: str,
@@ -133,12 +149,14 @@ def build_plan(
     time_column: str | None,
     data_dir: Path,
     package_version: str,
+    label_name: str | None = None,
 ) -> dict[str, Any]:
     return {
         "action": "plan",
         "acknowledgement_required": "--execute",
         "data_directory": str(data_dir),
         "dataset": dataset,
+        "label_name": label_name,
         "download_performed": False,
         "network_and_storage": (
             "Constructing the loader may contact TDC/Harvard Dataverse and write "
@@ -209,12 +227,14 @@ def execute_split(
     data_dir: Path,
     preview: int,
     package_version: str,
+    label_name: str | None = None,
 ) -> dict[str, Any]:
     """Instantiate a loader only after the caller acknowledges the download."""
 
     module_name, class_name, _ = TASKS[task]
     task_class = getattr(importlib.import_module(module_name), class_name)
-    loader = task_class(name=dataset, path=str(data_dir))
+    constructor_kwargs = {"label_name": label_name} if label_name is not None else {}
+    loader = task_class(name=dataset, path=str(data_dir), **constructor_kwargs)
 
     split_kwargs: dict[str, Any] = {
         "method": method,
@@ -235,6 +255,7 @@ def execute_split(
         "action": "executed",
         "data_directory": str(data_dir),
         "dataset": dataset,
+        "label_name": label_name,
         "download_acknowledged": True,
         "package": "PyTDC",
         "package_version": package_version,
@@ -270,6 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--task", required=True, help="exact public PyTDC task class")
     parser.add_argument("--dataset", required=True, help="exact package-registry name")
+    parser.add_argument("--label-name", help="required target for a multi-label dataset")
     parser.add_argument(
         "--method",
         choices=SPLIT_METHODS,
@@ -333,6 +355,7 @@ def main(argv: list[str] | None = None) -> int:
             time_column=args.time_column,
             metadata=metadata,
         )
+        label_name = validate_label(task, dataset, args.label_name)
         data_dir = safe_directory(
             args.data_dir,
             label="data directory",
@@ -350,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
                 data_dir=data_dir,
                 preview=args.preview,
                 package_version=package_version,
+                label_name=label_name,
             )
         else:
             result = build_plan(
@@ -362,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
                 time_column=args.time_column,
                 data_dir=data_dir,
                 package_version=package_version,
+                label_name=label_name,
             )
         emit_json(result, args.output, force=args.force)
     except (CliError, ImportError, OSError, TypeError, ValueError) as exc:

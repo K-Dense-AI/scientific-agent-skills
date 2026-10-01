@@ -1,16 +1,18 @@
 # Official Sources and Version Snapshot
 
-Research date: **2026-07-23**
+Research date: **2026-09-30**
 
-This file records the authoritative basis for skill version 1.2. The snapshot
+This file records the authoritative basis for skill version 1.6. The snapshot
 must not replace checking the target server's own version and discovery
 endpoints.
 
-## Current Versions
+## Versions and Tested Pairing
 
 - **OMERO.server 5.6.18** — May 2026 bug-fix release.
-- **OMERO.py / `omero-py` 5.22.1** — released 2026-03-25.
-- **OMERO.web 5.31.0** — the version tested with OMERO.server 5.6.18.
+- **OMERO.py / `omero-py` 5.23.0** — latest PyPI release, 2026-07-30.
+  The server history still records testing with **5.22.1** (2026-03-25).
+- **OMERO.web 5.33.2** — latest PyPI release. **5.31.0** remains the version
+  recorded as tested with OMERO.server 5.6.18.
 - **Bio-Formats 8.5.0** — bundled by OMERO.server 5.6.18.
 - **ZeroC IcePy 3.6.5** — exact client binding version in current official
   installation examples and OMERO-linked wheel matrix.
@@ -27,14 +29,26 @@ assuming compatibility from package version numbers.
 
 - `omero-py` on PyPI
   https://pypi.org/project/omero-py/
-  Basis for 5.22.1, 2026-03-25 release date, Python `>=3.10`, IcePy 3.6,
+  Basis for latest 5.23.0, its 2026-07-30 release, Python `>=3.10`, IcePy 3.6,
   NumPy/Pillow requirements, OMERODIR notes, and GPL-2.0-or-later package
   license.
 
 - Official OME `omero-py` repository and changelog
   https://github.com/ome/omero-py
-  https://github.com/ome/omero-py/blob/v5.22.1/CHANGELOG.md
-  Basis for recent Python/NumPy compatibility and historical deprecations.
+  https://github.com/ome/omero-py/releases/tag/v5.23.0
+  https://github.com/ome/omero-py/blob/v5.23.0/src/omero/gateway/__init__.py
+  Source check for gateway signatures, session lifecycle, context forwarding,
+  annotation materialization, channel inversion, and ROI/model handling.
+  The 5.23.0 release adds default-group CLI support and shape externalInfo
+  loading; it does not announce IRoi removal.
+
+- Current OMERO.web package and API implementation
+  https://pypi.org/project/omero-web/
+  https://github.com/ome/omero-web/blob/v5.33.2/omeroweb/api/urls.py
+  https://github.com/ome/omero-web/blob/v5.33.2/omeroweb/api/views.py
+  https://github.com/ome/omero-web/blob/v5.33.2/omeroweb/webgateway/views.py
+  Cross-check for discovery, ROI routes, list defaults, login body/cookies,
+  version 0.2 and Project/Dataset/Screen save support.
 
 - Official OME OMERO.server component releases
   https://github.com/ome/omero-server/releases
@@ -132,8 +146,8 @@ assuming compatibility from package version numbers.
   https://omero.readthedocs.io/en/stable/users/cli/export.html
   Basis for OME-TIFF/XML-only export and experimental Dataset iteration.
 
-- Current `omero-py==5.22.1` CLI help (`omero download -h`)
-  Verified in an isolated environment on 2026-07-23. Basis for explicit
+- Current `omero-py==5.23.0` CLI help (`omero download -h`)
+  Verified in an isolated environment on 2026-09-30. Basis for explicit
   OriginalFile, FileAnnotation, Image, and Fileset download forms. This was
   cross-checked against the official `ome/omero-py` package.
 
@@ -159,23 +173,34 @@ assuming compatibility from package version numbers.
   Basis for public-user defaults (`enabled=false`, `get_only=true`, and a
   URL filter that allows nothing until configured).
 
-## Research Method
+## Review Evidence and Endpoint Coverage
 
-The refresh used focused `parallel-cli search` queries restricted primarily to:
+The 2026-09-30 review read all bundled scripts and references, the stable OME
+release/JSON API pages, current PyPI metadata, and official source at
+`ome/omero-py` v5.23.0 and `ome/omero-web` v5.33.2. Direct extraction of
+Read the Docs pages returned HTTP 403, so the corresponding source files in
+[OME's documentation repository](https://github.com/ome/omero-documentation)
+were used alongside browser-readable pages. The generated IRoi definition and
+OME ROI model were fetched directly.
 
-- `omero.readthedocs.io`
-- `docs.openmicroscopy.org`
-- `ome-model.readthedocs.io`
-- `openmicroscopy.org`
-- `pypi.org`
-- official `github.com/ome/*` repositories
+| Surface used by this skill | Verified contract |
+| --- | --- |
+| `GET /api/`, `GET /api/v0/` | `data` versions, `url:base` and discovered starting links; current API header is 0.2, independent of server release. |
+| `GET /api/v0/servers/`, `GET /api/v0/token/` | Server IDs and CSRF value in `data`; the latter is not a bearer credential endpoint. |
+| `POST /api/v0/login/` | Form parameters `server`, `username`, `password`; session cookies and CSRF; current 5.33.2 source also accepts JSON. Response includes sensitive `eventContext` and `success`. |
+| `GET /api/v0/m/rois/` | `image`, `group`, `owner`, `limit`, `offset`, `normalize`; `data` includes shapes, `meta` reports pagination. Also `/api/v0/m/images/{image_id}/rois/`. |
+| JSON object writes (capability description only) | `POST`/`PUT` through discovered `url:save`; model support remains Project/Dataset/Screen, with explicit group and schema `@type`. No generic Image write endpoint implied. |
+| BlitzGateway / Ice services | Not HTTP endpoints. Checked gateway, IQuery/IUpdate, IRoi, RawFileStore, pixel/rendering, SharedResources/Table and model signatures against source/generated API. Direct proxy calls need the selected group context. |
+| CLI | Session, group, download, import target/scan/depth, export and script upload/launch syntax checked against current source/help; import additionally needs the server Java distribution. |
+| Public webclient links | Navigation examples, not a supported API contract or proof of public access. |
 
-Canonical pages above were then fetched with `parallel-cli extract` using
-objectives specific to versions, Python/Ice compatibility, connection
-security, BlitzGateway APIs, CLI behavior, tables, ROIs/annotations,
-rendering, and OMERO.web/public APIs.
-
-No Parallel JSON research artifacts were written into the repository.
+Local checks installed OMERO.py 5.22.1 and 5.23.0 with the OMERO-linked
+macOS universal IcePy 3.6.5 wheel on Python 3.12. Real annotation/shape model regression tests
+and CLI help ran without a server. All Python documentation blocks were
+syntax-checked. Pure local planners and mocked group/session tests ran in the
+repository suite. No login, remote read/write, import, export, rendering,
+server script, table service, or deployed HTTP API was executed. These examples
+remain illustrative until validated against the selected installation.
 
 ## Known Documentation Tensions
 

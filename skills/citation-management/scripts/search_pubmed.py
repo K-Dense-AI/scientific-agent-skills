@@ -60,12 +60,14 @@ class PubMedSearcher:
             List of PMIDs
         """
         # Build query with filters
-        full_query = query
+        if max_results < 1:
+            raise ValueError('max_results must be positive')
+        full_query = f'({query})'
         
         # Add date range
         if date_start or date_end:
-            start = date_start or '1900'
-            end = date_end or datetime.now().strftime('%Y')
+            start = (date_start or '1900').replace('-', '/')
+            end = (date_end or datetime.now().strftime('%Y')).replace('-', '/')
             full_query += f' AND {start}:{end}[Publication Date]'
         
         # Add publication types
@@ -75,11 +77,11 @@ class PubMedSearcher:
         
         print(f'Searching PubMed: {full_query}', file=sys.stderr)
 
-        # ESearch caps retmax at 10000; asking for more is silently truncated,
+        # PubMed ESearch exposes only the first 10000 matches in total,
         # so say so rather than letting the caller believe they got everything.
         if max_results > 10000:
             print(
-                f'Note: ESearch returns at most 10000 records per request; '
+                f'Note: PubMed ESearch exposes only the first 10000 matches; '
                 f'requesting 10000 rather than {max_results}. Narrow the query '
                 f'or split it by date range for a larger set.',
                 file=sys.stderr,
@@ -92,7 +94,8 @@ class PubMedSearcher:
             'db': 'pubmed',
             'term': full_query,
             'retmax': max_results,
-            'retmode': 'json'
+            'retmode': 'json',
+            'tool': 'citation-management',
         }
         
         if self.email:
@@ -105,6 +108,8 @@ class PubMedSearcher:
             response.raise_for_status()
             
             data = response.json()
+            if data.get('error') or data.get('esearchresult', {}).get('errorlist'):
+                raise ValueError('ESearch returned a query error')
             pmids = data['esearchresult']['idlist']
             count = int(data['esearchresult']['count'])
             
@@ -142,7 +147,7 @@ class PubMedSearcher:
                 'db': 'pubmed',
                 'id': ','.join(batch),
                 'retmode': 'xml',
-                'rettype': 'abstract'
+                'tool': 'citation-management',
             }
             
             if self.email:
@@ -151,24 +156,30 @@ class PubMedSearcher:
                 params['api_key'] = self.api_key
             
             try:
+                time.sleep(self.delay)
                 response = self.session.get(efetch_url, params=params, timeout=60)
                 response.raise_for_status()
                 
                 # Parse XML
                 root = ET.fromstring(response.content)
+                if root.find('.//ERROR') is not None:
+                    raise ValueError('EFetch returned an error')
                 articles = root.findall('.//PubmedArticle')
+                batch_metadata = []
                 
                 for article in articles:
                     metadata = self._extract_metadata_from_xml(article)
                     if metadata:
-                        metadata_list.append(metadata)
-                
-                # Rate limiting
-                time.sleep(self.delay)
+                        batch_metadata.append(metadata)
+                if {record['pmid'] for record in batch_metadata} != set(batch):
+                    print('Error: EFetch omitted requested records or returned unsupported book records', file=sys.stderr)
+                    raise ValueError('Incomplete EFetch batch')
+                metadata_list.extend(batch_metadata)
                 
             except Exception as e:
                 print(f'Error fetching metadata for batch ({type(e).__name__}); request details omitted', file=sys.stderr)
-                continue
+                # Never export a failed batch as a complete bibliography.
+                return []
         
         return metadata_list
     
@@ -371,6 +382,8 @@ def main():
     if not query:
         parser.print_help()
         sys.exit(1)
+    if args.limit < 1:
+        parser.error('--limit must be positive')
     
     # Parse publication types
     pub_types = None
@@ -393,6 +406,9 @@ def main():
     
     # Fetch metadata
     metadata_list = searcher.fetch_metadata(pmids)
+    if not metadata_list:
+        print('Error: incomplete PubMed metadata retrieval; no output written', file=sys.stderr)
+        sys.exit(2)
     
     # Format output
     if args.format == 'json':
@@ -416,4 +432,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

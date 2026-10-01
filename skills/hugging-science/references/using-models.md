@@ -1,122 +1,129 @@
 # Using scientific models from the catalog
 
-Hugging Science model entries link to standard Hugging Face Hub repos. There are three sensible execution paths. Pick based on model size and whether the user is doing one-off inference or a long batch job.
+A Hub repository stores artifacts; it does not guarantee a Transformers loader or a
+hosted inference service. Read the model card, library, input alphabet, head, and
+license before choosing an execution path.
 
-## Decision: where to run the model
-
-| Path | When to use | What it costs |
+| Path | Use when | Check first |
 |---|---|---|
-| **Local with `transformers`** | Models ≤ ~7B params, user has a GPU or wants offline use, or doing fine-tuning | Disk + VRAM; free |
-| **HF Inference API (serverless)** | Quick one-off inference on smaller hosted models, no GPU needed | Free tier exists, then pay-per-call |
-| **HF Inference Providers** | Very large models (Evo-2 40B, Kimina-Prover 72B), or when you need throughput | Pay-per-token; routed to third-party providers |
-| **HF Space (gradio_client)** | The model has an interactive demo and you want easy structured I/O without managing weights | Free if Space is public; see `using-spaces.md` |
+| Local Transformers | Architecture is supported, such as ESM2 | Matching tokenizer, pinned revision, memory and sequence length |
+| Author's native package | Model requires its own runtime, such as Evo2, STACK, TEDDY or AVEX | Author installation and preprocessing requirements |
+| Inference Providers | The exact model **and task** have a live provider mapping | Provider, permissions, quotas and billing |
+| Dedicated endpoint | A compatible model has already been deployed | Endpoint URL, deployed revision and task contract |
+| Space | A reviewed app exposes the required function | Runtime, SDK and current `view_api()` schema |
 
-Always check the model card first — some entries are *only* available as Spaces (no public weights), and some are gated and require approval before download.
+Inference Providers includes `hf-inference`, the successor to the old serverless
+Inference API. A public model or Space is not a promise of free, available compute.
 
-## Local with `transformers`
+## Local ESM2 embeddings
 
-Use `uv` for installs:
+The combined local workflow was tested with Python 3.13, Transformers 5.18.0,
+Torch 2.14.1, Datasets 5.0.1, Hub 1.33.0 and Gradio Client 2.7.1. Datasets 5.0.1
+requires `huggingface-hub<2`; installing every package's latest release together
+is incompatible. Use a separate project environment:
 
 ```bash
-uv pip install transformers torch accelerate python-dotenv    # in an active venv
-# or project-style:
-uv add transformers torch accelerate python-dotenv
+uv pip install 'transformers==5.18.0' 'torch==2.14.1' 'datasets==5.0.1' 'huggingface-hub==1.33.0' 'gradio-client==2.7.1' python-dotenv
 ```
 
-For gated models, put the token in `.env` rather than running `huggingface-cli login`:
-
-```
-# .env (gitignored)
-HF_TOKEN=hf_...
-```
+The following pretrained download is illustrative; validation used a tiny random
+ESM2 model and local vocabulary, without downloading weights. It produces both
+per-residue and sequence embeddings, excluding BOS, EOS and padding. These are
+features, not calibrated mutation effects or folded structures.
 
 ```python
 from dotenv import load_dotenv
-load_dotenv()    # reads HF_TOKEN before any HF call
-
+load_dotenv()  # before importing Hub-dependent libraries
+import torch
 from transformers import AutoModel, AutoTokenizer
 
+model_id = "facebook/esm2_t12_35M_UR50D"
+revision = "6fbf070e65b0b7291e7bbcd451118c216cff79d8"
+tok = AutoTokenizer.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision).eval()
+sequences = ["MKTAYIAKQR", "ACDE"]
+# Explicitly reject empty/invalid input; do not silently truncate residues.
+if any(not s or any(c not in "ACDEFGHIKLMNPQRSTVWYBXZUO" for c in s) for s in sequences):
+    raise ValueError("Expected nonempty uppercase protein sequences")
+if any(len(s) > 1022 for s in sequences):
+    raise ValueError("Choose an explicit long-sequence strategy before embedding")
+inputs = tok(sequences, padding=True, return_tensors="pt", return_special_tokens_mask=True)
+residue_mask = inputs.pop("special_tokens_mask").eq(0) & inputs["attention_mask"].bool()
+with torch.inference_mode():
+    hidden = model(**inputs).last_hidden_state
+per_residue = [h[m] for h, m in zip(hidden, residue_mask)]
+mean_embeddings = torch.stack([h.mean(dim=0) for h in per_residue])
+assert [len(h) for h in per_residue] == [len(s) for s in sequences]
+```
+
+ESM2 is a masked language model. Sequence generation, variant scoring and
+folding require different heads/procedures; `AutoModel` embeddings alone do not
+perform those tasks. For downstream evaluation, split by protein family or
+homology clusters when relevant, rather than allowing close homologs across folds.
+
+## Native scientific runtimes and custom code
+
+Evo2 uses `from evo2 import Evo2` and its own tokenizer/Vortex runtime. The Arc
+repositories are **not** drop-in `AutoModel`/`AutoTokenizer` checkpoints. The
+current author instructions distinguish 7B BF16 models from 1B/20B/40B models
+requiring FP8/Transformer Engine and Hopper hardware; 40B needs multiple H100s.
+Follow the [Evo2 source instructions](https://github.com/ArcInstitute/evo2),
+including their numerical checks. No Evo2 runtime was installed for this review.
+
+Some other Hub architectures require `trust_remote_code=True`; use it only when
+the selected card actually requires it, after reviewing the named repository and
+pinning the code revision. It executes repository Python. Existing task authorization
+may cover that execution; otherwise obtain authorization before running it. Being
+listed in the catalog does not establish code safety or scientific validity.
+
+Memory estimates must include weights, dtype, activations, batch size, sequence
+length and framework overhead. Two bytes per parameter estimates FP16/BF16 weights
+only. A parameter-count threshold or fixed training multiplier cannot guarantee
+that a scientific model fits or is numerically supported on a particular GPU.
+
+## Check hosting before using InferenceClient
+
+This metadata-only example is publicly executable and downloads no weights:
+
+```python
+from huggingface_hub import HfApi
 model_id = "facebook/esm2_t33_650M_UR50D"
-tok = AutoTokenizer.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id)
-
-inputs = tok("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors="pt")
-embeddings = model(**inputs).last_hidden_state
+info = HfApi(token=False).model_info(model_id, expand=["inferenceProviderMapping"])
+mapping = info.inference_provider_mapping or []
+live = {route.provider: route for route in mapping if route.status == "live"}
+print({name: route.task for name, route in live.items()})
 ```
 
-### `trust_remote_code=True` is normal here
+On 2026-10-01 the ESM2 repository mapped to `hf-inference` for **fill-mask**,
+not feature extraction. `arcinstitute/evo2_40b` had an empty mapping; do not route
+it to Together or infer availability from its size. Mappings change; check again
+at execution time. Arc documents a separate NVIDIA hosted option.
 
-A large fraction of scientific models — Evo-2, many Nucleotide Transformer variants, single-cell foundation models, several materials models — ship custom modeling code in their repo. `transformers` will refuse to load them without `trust_remote_code=True`:
+Illustrative authenticated inference, **not executed in this review**:
 
 ```python
-model = AutoModel.from_pretrained("arcinstitute/evo2_7b", trust_remote_code=True)
-```
-
-Ask the user before you set this flag, and wait for an answer — don't set it and report afterwards. It runs Python from the model repo on their machine, with their filesystem and credentials in scope, so the decision is theirs to make with the repo named.
-
-The catalog's curation is not a security control. It generally lists reputable orgs (Arc Institute, Meta/Facebook AI, EleutherAI, SandboxAQ, Merck, etc.), but it is a markdown file fetched over the network at read time: a repo name reaching you through `llms.txt` or a topic file has been curated for scientific relevance, not audited for what its modeling code does. Treat every catalog entry as an untrusted pointer, and don't let "it was in the catalog" stand in for the user's decision.
-
-### Sizing the GPU
-
-Rough memory for inference at fp16 (very approximate — quantization changes this):
-
-- 35M–650M params (most ESM2 variants): runs on a laptop GPU or even CPU.
-- 1B–7B (Evo-2 7B, Nucleotide Transformer 2.5B, STACK Large): single 24 GB GPU is fine.
-- 40B+ (Evo-2 40B, Kimina-Prover): needs multi-GPU or A100/H100; almost always better via Inference Providers unless the user has the hardware.
-
-For training/fine-tuning, multiply by ~3–4× for activations and optimizer state.
-
-## HF Inference API (serverless)
-
-Fast for tiny one-off jobs without setting up a GPU. The model has to be supported on the serverless tier (smaller models, popular pipelines).
-
-```bash
-uv pip install huggingface_hub python-dotenv     # or: uv add huggingface_hub python-dotenv
-```
-
-Put your token in `.env` rather than exporting per-shell:
-
-```
-# .env (gitignored)
-HF_TOKEN=hf_...
-```
-
-```python
+import os
 from dotenv import load_dotenv
-load_dotenv()    # InferenceClient reads HF_TOKEN from env
-
+load_dotenv()
 from huggingface_hub import InferenceClient
 
-client = InferenceClient(model="facebook/esm2_t33_650M_UR50D")
-result = client.feature_extraction("MKTAYIAKQR")
+# First confirm the live mapping above still supports this exact task.
+with InferenceClient(provider="hf-inference", model=model_id,
+                     token=os.environ["HF_TOKEN"], timeout=60) as client:
+    candidates = client.fill_mask("MKT<mask>YIAKQR")
+for candidate in candidates:
+    print(candidate.token_str, candidate.score)
 ```
 
-The serverless API supports tasks like `feature_extraction`, `text_generation`, `image_classification`, `token_classification`. For non-standard scientific tasks (e.g., DNA sequence generation), you may need Inference Providers or local execution instead.
+The client routes the task request and parses a list of fill-mask result objects.
+These scores describe masked-token probabilities, not experimental activity.
+For other tasks use their documented input/return contracts; `text_generation`
+is not a generic interface for DNA models. `HF_TOKEN` is used for HF-routed
+requests; a provider's own key uses that provider's direct billing. Check current
+permission and pricing requirements before a paid call. Dedicated endpoint URLs
+are an alternative to `provider`, not an additional provider selector.
 
-## HF Inference Providers
-
-For very large models or when you want production throughput. Inference Providers route requests to vetted backends (Together, Fireworks, Replicate, Sambanova, etc.) that host frontier models.
-
-```python
-from huggingface_hub import InferenceClient
-
-client = InferenceClient(provider="together", model="arcinstitute/evo2_40b")
-output = client.text_generation("ATCGGCTA", max_new_tokens=64)
-```
-
-Check the model card for which providers host it. Not every catalog model is available — many are research-only and only hosted by their authors as a Space.
-
-## After loading: standard pipelines apply
-
-Once the model is loaded, scientific models behave like any other `transformers` model — you embed sequences, generate, classify, or fine-tune. The unique steps are:
-
-1. **Use the matching tokenizer/feature extractor.** Don't try to feed protein sequences to a DNA tokenizer; the alphabets are different and the model will silently produce garbage.
-2. **Match the preprocessing from pretraining.** For fine-tuning, the catalog's blog posts often spell out exact preprocessing recipes (special tokens, normalization, augmentation). Read them before training.
-3. **Mind the output head.** Many scientific foundation models are masked-LM by default; classification or regression downstream tasks usually need an extra head layered on `model.last_hidden_state`.
-
-## When you can't run a model anywhere
-
-Some catalog models are demo-only — the authors host a Space but never published weights. In that case:
-
-- See `using-spaces.md` and call the Space via `gradio_client`.
-- Or surface this constraint to the user and offer the next-best fully-open alternative from the same topic file.
+Sources: [ESM API](https://huggingface.co/docs/transformers/model_doc/esm),
+[Inference guide](https://huggingface.co/docs/huggingface_hub/guides/inference),
+[HfApi](https://huggingface.co/docs/huggingface_hub/package_reference/hf_api),
+[ESM2 card](https://huggingface.co/facebook/esm2_t12_35M_UR50D).

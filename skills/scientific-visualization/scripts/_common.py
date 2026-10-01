@@ -84,9 +84,15 @@ def atomic_write_bytes(path: Path, payload: bytes, *, force: bool = False) -> No
             handle.flush()
             os.fsync(handle.fileno())
         os.chmod(temporary, 0o600)
-        if destination.exists() and not force:
-            raise CliError(f"refusing to overwrite existing output: {destination}")
-        os.replace(temporary, destination)
+        if force:
+            os.replace(temporary, destination)
+        else:
+            # A second existence check followed by replace still races another
+            # writer. Linking a same-filesystem temporary refuses collisions.
+            try:
+                os.link(temporary, destination)
+            except FileExistsError as exc:
+                raise CliError(f"refusing to overwrite existing output: {destination}") from exc
     finally:
         try:
             temporary.unlink()

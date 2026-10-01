@@ -117,7 +117,7 @@ channel.
 
 ### Encoded representation
 
-`flow.events` is a flattened one-dimensional sequence, ordered by event and
+`flow.events` is a decoded flattened one-dimensional sequence, ordered by event and
 then channel. It is usually an `array.array`; mixed-width integer channels use
 a Python `list`:
 
@@ -130,6 +130,12 @@ event_1_channel_1, event_1_channel_2, ..., event_2_channel_1, ...
 ```text
 (event_count, channel_count)
 ```
+
+For integer DATA, FlowIO applies the PnR range mask during decoding, before
+`as_array()`. Values with high bits outside that range do not retain those bits
+in `flow.events` or `preprocess=False`; preserve the original file for byte fidelity.
+The number of array rows is inferred from DATA and may disagree with `$TOT`.
+Verify shape/counts explicitly.
 
 The returned NumPy array is `float64`, even when the encoded file uses integer
 or single-precision event data.
@@ -156,7 +162,8 @@ For PnE `(decades, log_zero)` and PnR `range`:
 linear_value = 10 ** (decades * encoded_value / range) * log_zero
 ```
 
-The conversion is applied when `decades > 0`.
+The conversion is applied when `decades > 0`. FlowIO replaces a zero
+`log_zero` with `1.0` when decades is nonzero.
 
 #### Gain
 
@@ -166,7 +173,9 @@ For PnG `gain`:
 gain_scaled = value / gain
 ```
 
-FlowIO skips division when gain is zero or one.
+FlowIO skips division when gain is zero or one. For a recognized non-null
+channel named `Time` (case-insensitive), FlowIO forces the parsed channel
+gain to `1.0`, regardless of TEXT PnG; `timestep` scaling still applies.
 
 The operations are metadata-driven. Bad metadata can therefore produce bad
 scaled values even when the DATA bytes were parsed correctly.
@@ -243,8 +252,9 @@ Approximate additional memory for the 2-D array is:
 event_count * channel_count * 8 bytes
 ```
 
-This excludes the original event array, Python objects, temporary arrays, and
-downstream DataFrames.
+The estimate assumes `$TOT` agrees with DATA; check the actual loaded length
+before allocating the array. This excludes the original event array, Python
+objects, temporary arrays, and downstream DataFrames.
 
 Use `only_text=True` for inventory. FlowIO 1.4.0 does not expose chunked,
 streaming, lazy, or memory-mapped event reads. If a file does not fit safely in

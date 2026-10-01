@@ -1,281 +1,178 @@
 # Search, retrieval, and query craft
 
-How to find the right documents, and how to avoid the three ways Paperclip queries commonly go wrong:
-searching the wrong source, writing a keyword-shaped query for an embedding model, and using SQL as
-if it were full-text search.
+Reviewed on 2026-09-30 against the 0.7.92 CLI/SDK, the
+[core reference](https://paperclip.gxl.ai/skills/full_skill.md),
+[protein reference](https://paperclip.gxl.ai/skills/skills/proteins.md), and
+[web docs](https://paperclip.gxl.ai/docs). Retrieval examples are illustrative: no paid or
+authenticated searches were executed for this review. Load credentials as described in
+[installation.md](installation.md).
 
-Examples omit the auth prefix. Every real invocation needs it, because shell state does not survive
-between tool calls: `[ -f .env ] && { set -a; . ./.env; set +a; }; paperclip <command>`. All search
-and lookup flags documented here were executed against 0.7.15.
+## Choose a source explicitly
 
-## Sources
-
-`-s` is mandatory on every search. Omitting it prints this list and exits non-zero.
-
-| Flag | Contents |
+| Source | Scope |
 |---|---|
-| `-s pmc` | PubMed Central full text (~7.7M documents) |
-| `-s arxiv` | arXiv preprints (~3.0M) |
-| `-s biorxiv` | bioRxiv preprints (~400K) |
-| `-s medrxiv` | medRxiv preprints (~86K) |
-| `-s papers` | All four paper corpora at once |
-| `-s abstracts` | Abstract-only corpus — much broader, no full text |
-| `-s fda` | US FDA regulatory documents |
-| `-s fda/jp` | Japan PMDA |
-| `-s fda/eu` | EU EMA / EPAR |
-| `-s trials` | All trial registries |
-| `-s trials/us` | ClinicalTrials.gov |
-| `-s trials/eu` | EudraCT, CTIS, ISRCTN |
-| `-s trials/jp` | UMIN, jRCT |
-| `-s trials/cn` | ChiCTR |
-| `-s proteins` (alias `-s uniprot`) | UniProt + PDB + ChEMBL |
-| `-s clipboard` | Your own uploaded documents |
+| `pmc` | PMC full-text papers |
+| `arxiv`, `biorxiv`, `medrxiv` | Corresponding preprint corpora |
+| `papers` | The four paper corpora combined |
+| `abstracts` | Title/abstract-grain retrieval across scholarly corpora; not a full-text promise |
+| `fda` | Regulatory search; use a regional source/path to disambiguate |
+| `fda/jp`, `fda/eu`, `/fda/us` | PMDA, EMA/EPAR, and US FDA |
+| `trials` | Trial registries; `trials/us`, `trials/eu`, `trials/jp`, `trials/cn` narrow geography |
+| `proteins` | Unified UniProt/PDB/ChEMBL records; `uniprot`, `pdb`, `chembl` are aliases in the client |
+| `clipboard` | The user's documents; `clipboard/FOLDER` scopes to a folder |
+| `geo` | GEO Series (documented CLI source; not listed in the current v1 JSON search enum) |
+| `patents` | Patent records; load `paperclip skill patents` first |
 
-Combine with commas — `-s pmc,biorxiv,medrxiv` — or use a virtual directory instead of the flag:
+The `abstracts` CLI source and the public `/api/v1/search` default have different published coverage
+wording. Choose a source explicitly and report the selected interface; do not label all abstract
+results as OpenAlex or assume coverage equals PMC. Counts in upstream documents disagree and change,
+so use a dated catalogue or query result when a corpus count matters.
 
 ```bash
-paperclip search "pembrolizumab" /fda/us
-paperclip search "breast cancer" /trials/us
+paperclip search -s pmc,biorxiv "protein design" -n 5
+paperclip search "pembrolizumab" /fda/us -n 5
+paperclip search "breast cancer" /trials/us -n 5
 ```
 
-Counts above come from `paperclip sql "SELECT source, COUNT(*) FROM documents GROUP BY source"` on
-2026-07-27; they grow monthly.
-
-### Choosing
-
-- General biomedical literature → `-s pmc`.
-- User said "trials", "regulatory", "FDA", "label" → the matching flag or directory.
-- Recent, not-yet-peer-reviewed work → `-s biorxiv` or `-s medrxiv`.
-- ML/methods work → `-s arxiv`.
-- Need breadth over depth, willing to lose full text → `-s abstracts`.
-- Proteins, drugs, compounds, structures → **ask first** whether the user wants structured records
-  (`-s proteins`) or papers about the topic (`-s pmc`). They are different answers.
-
-When several sources are genuinely needed, run separate targeted searches rather than one broad one —
-the ranking is per-source and the results are easier to reason about.
+Match the task to paper evidence, trial registration, regulatory material, or structured protein
+records. Infer that choice from a clear user request; clarify only when the intended output remains
+ambiguous. Regional paths `/trials/...` and `/clinicaltrials/...` are aliases in current docs.
 
 ## Search options
 
-| Option | Notes |
+| Option | Contract |
 |---|---|
-| `-n, --limit N` | Default is small. Use `-n 5`/`-n 10` before `map`, higher before `filter` |
-| `-e, --exact` | Exact phrase |
-| `--since DATE` | Documents after a date |
-| `--sort relevance\|date` | `date` for "what's new", `relevance` otherwise |
-| `--author`, `--journal`, `--year` | Metadata narrowing |
-| `--ranking hybrid\|bm25\|vector\|analogical` | See below |
-| `--corpus` | Ignore an active repo's scope during discovery |
+| `-n/--limit N` | Requested hit count, not a corpus census or a pagination cursor |
+| `-e/--exact` | Exact-phrase search |
+| `--year YYYY` | Publication-year filter; validate returned metadata |
+| `--since WINDOW` | Recency strings such as `30d`, `6m`, `1y`; support depends on source |
+| `--sort relevance\|date` | Ordering |
+| `--author`, `--journal` | Metadata narrowing; source coverage varies |
+| `--ranking hybrid\|bm25\|vector\|analogical` | Retrieval mode |
+| `--min-embedding-similarity FLOAT` | Floor on the vector leg |
+| `--min-bm25-score FLOAT` | Floor on the lexical leg |
+| `--corpus` | Full-corpus discovery even when scoped to a repo |
 
-### Ranking modes
+The SDK and vendor core reference disagree on arXiv `--since` support; use `--year` for arXiv,
+medRxiv, and abstracts unless current server help confirms the needed recency behavior. Do not
+assume an arbitrary date string or a filter unsupported by a source is applied.
 
-- `hybrid` (default) — semantic plus keyword. Correct for almost everything.
-- `bm25` — pure lexical. Use for exact terminology, gene symbols, catalog numbers.
-- `vector` — pure semantic. Use when vocabulary varies but the topic is fixed.
-- `analogical` — matches papers sharing a *structural method* across unrelated fields. Requires a
-  descriptive query; a keyword string produces nothing useful.
-
-## Writing the query
-
-The query is embedded with a model fine-tuned on paper abstracts. Give it abstract-shaped text.
-
-1. **Best — a full abstract.** If the user has a reference paper, read it and paste the whole
-   abstract as the query. This is exactly what the model was trained on.
-2. **Good — one or two sentences describing the method or problem.** Say what the work *does*, not
-   what it is *about*: "correcting for systematic under-reporting in training data where the
-   missingness mechanism is unknown".
-3. **Good — the problem in plain language.** "My training labels are unreliable because some
-   positives are systematically recorded as negatives" surfaces positive-unlabeled learning work
-   across NLP, biology, and cosmology.
-4. **Weak — bare keywords.** "CRISPR delivery nanoparticle" returns topically adjacent papers. Fine
-   for `hybrid`, useless for `analogical`.
-
-### Analogical search worked example
+The relevance floors **do have CLI equivalents**. For hybrid mode, each applies only to its own
+retrieval leg: use both to bound both legs, or pair one with its matching ranking. Floors do not
+expand the requested candidate set. They are unsupported with regex/analogical modes; a vector
+floor is incompatible with date sorting. These restrictions are documented in the 0.7.92 SDK.
 
 ```bash
-# From a known paper: read it, then use its abstract as the query
-paperclip cat /papers/PMC1234567/meta.json
-paperclip search -s arxiv   --ranking analogical "<full abstract>" -n 10
-paperclip search -s biorxiv --ranking analogical "<full abstract>" -n 10
+paperclip search -s pmc --ranking hybrid \
+  --min-embedding-similarity 0.7 --min-bm25-score 5 \
+  "protein design" -n 5
+```
 
-# From a described problem
+`hybrid` is a good discovery default; `bm25` fits exact terminology and gene symbols, `vector` fits
+varying vocabulary, and `analogical` fits cross-domain method transfer. Write one or two sentences
+about the method/problem for analogical search, or use an identified reference paper's abstract:
+
+```bash
 paperclip search -s arxiv --ranking analogical \
   "I need to approximate an expensive leave-one-out computation cheaply by exploiting low-rank structure in my parameter space" -n 10
 ```
 
-Run it against each source separately. The useful analogue is usually in the field you would not have
-thought to check.
+Upstream describes stable search prefixes through `-n 100` for unchanged query, filters, and index;
+requests above 100 can expand the candidate pool and reorder earlier results. This is not pagination
+or a cross-date reproducibility guarantee. Save exact queries, source filters, returned IDs, and date.
 
-## Reading the results
+## Structured results and cohort preservation
 
-```text
-Found 3 papers  [s_5bcc8044]
-
-  1. Targeted nonviral delivery of genome editors in vivo
-     Connor A. Tsuchida, Kevin M. Wasko, Jennifer R. Hamilton, Jennifer A. Doudna
-     PMC10945750 · PMC · 2024-03-04
-     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10945750/
-     "This paper reviews targeted nonviral delivery methods for CRISPR-Cas genome editors in vivo..."
-
-[304ms, saved to s_5bcc8044]
-```
-
-The quoted line is a **generated summary, not an extract**. It is a triage signal only — open the
-document and read the lines before you cite anything.
-
-`s_5bcc8044` is the result id. Feed it to `filter`, `map`, or `results`. Recover ids later with
-`paperclip results --list`, which shows each id alongside the command that produced it.
-
-### Output shape is nondeterministic
-
-The block above is only one of the two shapes `search` returns. The *same* command, same query, same
-redirection target, also returns raw JSON:
-
-```json
-{"results_id": "s_e18e2e62", "count": 1, "papers": [{"document_id": "PMC12131857", "source": "pmc",
- "score": 51.81, "backend": "opensearch", "pub_year": 2025, "title": "...", "journal_title": "...",
- "authors": "...", "doi": "...", "tldr": "...", "abstract_snippet": "..."}]}
-```
-
-Eight identical runs of `paperclip search -s pmc "CRISPR" -n 1` produced a mix of both. It does not
-correlate with piping, redirection, or `--json`: forcing `--json` produced JSON 0/8 times, and
-`lookup --json` returns rendered text too.
-
-So **do not write a parser against `search` output.** What is reliable:
-
-| Need | Reliable route |
-|---|---|
-| The result id | `grep -oE 's_[a-f0-9]{8}' \| head -1` — matches both shapes |
-| Per-paper structured rows | `paperclip results <id> --save out.csv` → stable header `title,authors,id,source,date,url,abstract` |
-| One document's metadata | `paperclip cat /papers/<id>/meta.json` — a file read, always JSON |
-
-Rendered output additionally carries ANSI colour codes; strip with `sed $'s/\033\\[[0-9;]*m//g'`.
-
-## `filter` — trim before you spend LLM calls
+Search previews and generated summaries are triage, not paper quotations. In 0.7.92 SDK,
+`result.papers`, `result.count`, and `result.result_id` expose structured results and hydrate missing
+hit data from saved results when possible. A failed hydration can leave incomplete data: check
+requested versus returned count and reported truncation. See [python-sdk.md](python-sdk.md).
 
 ```bash
-paperclip search -s fda "semaglutide" -n 50
-paperclip filter --from s_abc123 "semaglutide cardiovascular outcomes"
-paperclip map --from s_abc123 "What were the primary endpoints and results?"
+paperclip results --list
+paperclip results s_ID --save search.csv
+paperclip results s_ID --export-bundle cohort/
+paperclip results s_ID --sample 20 --seed 42
 ```
 
-`filter` **overwrites the result set in place** — the id stays the same and the discarded results are
-gone. If `--require N` cannot be satisfied, widen the original search for a fresh id; filtering an
-already-filtered set will not bring anything back.
-
-## `lookup` — exact metadata match
-
-No ranking, no semantics. Use when the user already identified the document.
+CSV exports and bundle formats depend on result kind; do not assume every map export has the search
+metadata header. Cohort paging retrieves the **saved cohort**, not additional corpus search hits.
+The CLI supports `--save-as NAME` aliases on result-producing commands; their scope is session-bound,
+so record the durable result ID for another session.
 
 ```bash
-paperclip lookup doi 10.1101/2024.01.15.575613
+paperclip filter --from s_ID --require 3 "in vivo delivery with quantitative outcomes"
+```
+
+`filter` is an LLM pass that overwrites the cohort in place. If too few survive, rerun a broader
+search for a fresh ID; a second filter cannot recover discarded rows. For deterministic quality
+filters, consult current `refine --help` and preserve both input and output cohort IDs.
+
+## Exact metadata lookup
+
+```bash
+paperclip lookup doi 10.1073/pnas.2307796121
 paperclip lookup pmc PMC7194329
 paperclip lookup pmid 32943797
 paperclip lookup arxiv 2403.03507
 paperclip lookup author "James Zou" -n 10
-paperclip lookup journal "Nature Medicine"
-paperclip lookup title "CRISPR base editing" --json
 ```
 
-`--json` is accepted but was observed returning rendered text rather than JSON. Do not depend on it —
-see *Output shape is nondeterministic* below.
+Current docs list `doi`, `title`, `author`, `abstract`, `source`, `date`/`month_year`, `pmc`, `pmid`,
+`journal`, `publisher`, `type`, `keywords`, `category`, `license`, `year`, `volume`, `issue`, `issn`;
+the core reference also lists `arxiv`. Many metadata fields are PMC-specific. Do not turn an empty
+field match into a claim that the paper does not exist. The public HTTP lookup's narrower typed
+contract is documented separately in [python-sdk.md](python-sdk.md).
 
-Fields: `doi`, `author`, `title`, `abstract`, `source`, `date`, `pmc`, `pmid`, `arxiv`, `journal`,
-`publisher`, `type`, `keywords`, `category`, `license`, `year`, `volume`, `issue`, `issn`.
-
-## `grep` — the real full-text search
-
-This is the tool for "which papers mention X". It scans document bodies, so it finds mentions in
-Methods, Results, Data Availability, and reference lists that abstract-level search never sees.
+## Full-text grep and scan
 
 ```bash
-paperclip grep -l "SLC30A8" /papers/                 # corpus-wide, filenames only
-paperclip grep -n "lipid nanoparticle" /papers/PMC10945750/content.lines
-paperclip grep -c "CRISPR" /papers/PMC12345/content.lines
-paperclip grep -A 3 -B 1 "IC50" /papers/PMC12345/content.lines
-paperclip grep -i -e "off-target" -e "offtarget" /papers/PMC12345/content.lines
-paperclip grep "TP53" /proteins/
+paperclip grep -l "SLC30A8" /papers/
+paperclip grep -n -C 3 "lipid nanoparticle" /papers/PMC10945750/content.lines
+paperclip grep -i -e "off-target" -e "offtarget" /papers/PMC10945750/content.lines
+paperclip grep --from s_ID "IC50"
+paperclip scan -i -C 3 /papers/PMC10945750/content.lines "IC50" "EC50" "dose"
 ```
 
-Corpus-wide output groups matched paragraphs by document and returns a result id:
+`-n` means line numbers; `-m N` bounds matches. Corpus scans are parallel and time-bounded, so a limit
+or timeout can change returned membership/order. `--exhaustive` allows more scan time, not guaranteed
+completeness. The current guide says corpus `grep -c` counts documents exactly only through 500 bitmap
+candidates, then approximately; file `grep -c` counts matching lines. Do not report a corpus estimate
+as an exact prevalence count.
 
-```text
-Matched 80 paragraphs across 80 papers [results_id: s_a5590fe3]
+Boolean search and grep use different semantics: `search --bool --ranking bm25` uses analyzed phrase
+operands; `grep --bool` uses regex predicates over whole documents. Do not interchange them in a
+review protocol without validating the intended matching behavior.
 
-  arx_1312.6639/ (1 matches)
-    …rs13266634SLC30A8C/CC/C  rs1153188DCDT/TT/A…
-```
-
-Two behaviors worth knowing:
-
-- The corpus scan is **time-bounded**. A no-match result prints
-  `bounded scan — re-run with --exhaustive for a full-timeout scan`. For a rare term, do that before
-  concluding it is absent.
-- Line numbers in the output come from the `L<n>` prefixes stored in the file, so `-n` output can be
-  cited directly.
-
-## `scan` — several patterns, one pass
-
-```bash
-paperclip scan /papers/PMC12345/content.lines "CRISPR" "off-target" "efficiency"
-paperclip scan -i -C 3 /papers/PMC12345/content.lines "IC50" "EC50" "dose"
-```
-
-Results are grouped by pattern with context. Prefer this to three sequential greps.
-
-## SQL
-
-**SQL is for counting and grouping, never for finding papers by content.** It sees titles and
-abstracts only, and `ILIKE '%term%'` is an unindexed scan. A paper whose Methods mention your term
-will not appear.
+## Metadata SQL
 
 ```bash
 paperclip sql "SELECT source, COUNT(*) AS n FROM documents GROUP BY source"
-paperclip sql "SELECT pub_year, COUNT(*) AS n FROM documents
-               WHERE title ILIKE '%CRISPR%' GROUP BY pub_year ORDER BY pub_year DESC LIMIT 10"
+paperclip sql "SELECT pub_year AS year, COUNT(*) AS n FROM documents WHERE title ILIKE '%CRISPR%' GROUP BY pub_year ORDER BY year DESC LIMIT 10"
 ```
 
-Constraints: `SELECT` only, 15 s timeout, 200-row cap.
+The current core reference documents `SELECT` on `documents`, 15-second server timeout and a
+200-row cap. Its columns are `id`, `title`, `doi`, `authors`, `source`, `abstract_text`, `pub_date`,
+`pub_year`, `journal_title`, `article_type`, `pmid`, `keywords`, and `categories`.
+Source-specific missing fields may be NULL. Use explicit aliases and inspect actual returned columns.
 
-### `documents` columns
-
-`id`, `title`, `doi`, `authors`, `source`, `abstract_text`, `pub_date`, `pub_year`, `journal_title`,
-`article_type`, `pmid`, `keywords`, `categories`.
-
-`paperclip sql --help` describes a lower-level view of the same store with `document_id`, `month_year`,
-`created_at`, plus `content_blocks` (`document_id`, `line_number`, `content`, `section`, `block_type`,
-`citation_info`) and `figures` (`document_id`, `graphic`, `source_path`). Both column vocabularies are
-accepted; the server normalizes them, and a `pub_year` projection may come back labelled `pub_date`.
-Do not depend on the header string — alias explicitly:
-
-```bash
-paperclip sql "SELECT pub_year AS year, COUNT(*) AS n FROM documents GROUP BY pub_year ORDER BY year DESC LIMIT 5"
-```
+This metadata SQL route does not search paper bodies. `abstract_text ILIKE '%X%'` misses a term
+found only in Methods or supplementary material. The web docs expose lower-level `document_id`,
+`content_blocks`, and `figures` in an **export** context; do not assume those names or joins are
+interchangeable with ordinary `sql`. Current docs differ on some column naming, so check server help
+before introducing a new query rather than claiming automatic normalization.
 
 ### Protein SQL
 
 ```bash
+paperclip skill proteins
 paperclip sql -s proteins "SELECT COUNT(*) FROM uniprot_v.proteins"
 paperclip sql -s proteins "SELECT * FROM pdb_v.structures_by_accession WHERE accession='P00533' LIMIT 10"
 paperclip cat /proteins/P04637/meta.json
 ```
 
-Key views: `uniprot_v.proteins`, `uniprot_v.features`, `pdb_v.structures_by_accession`,
-`chembl_v.bioactivities_by_accession`, `chembl_v.drugs_by_accession`. The join key throughout is the
-UniProt accession.
-
-**Run `paperclip skills show proteins` before writing any protein query.** Column names, enum values,
-and join semantics are not guessable, and a guessed query returns plausible wrong answers rather than
-an error. There are further protein workflows in `paperclip skills`: `domain_map`, `ptm`,
-`catalytic_residues`, `sequence_analysis`, `experimental_methods`.
-
-## Decision table
-
-| Question | Tool |
-|---|---|
-| "Papers about X?" | `search -s pmc "X"` |
-| "Which papers mention X?" | `grep "X" /papers/` |
-| "This DOI/PMID/arXiv id" | `lookup` |
-| "How many papers per year on X?" | `sql` |
-| "Papers like this one, other fields" | `search --ranking analogical "<abstract>"` |
-| "Exact phrase / gene symbol" | `search -e` or `--ranking bm25`, or `grep -F` |
-| "Everything in this one paper about X" | `scan` or `grep` on its `content.lines` |
+The current domain reference exposes `uniprot_v.proteins`, `uniprot_v.features`,
+`pdb_v.structures_by_accession`, `chembl_v.bioactivities_by_accession`, and
+`chembl_v.drugs_by_accession`. Check that reference for exact column names, enum values, join
+cardinality, and accession mapping before writing a biological query. An accession-based join is
+not a guarantee of one row per protein or of directly comparable bioactivity assays.

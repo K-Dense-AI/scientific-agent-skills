@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/packages/pi-interview
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Interactive interview forms: the agent collects structured user responses through a form with single/multi-select, text input, image upload, and info panels, plus rich media (code, diffs, Markdown, images, Chart.js charts, Mermaid diagrams, tables, HTML).
 
 ```bash
@@ -52,7 +54,7 @@ Question types: `single` (radio), `multi` (checkbox), `text`, `image` (upload), 
 | Field | Purpose |
 |---|---|
 | `id`, `type`, `question` | Identifier, type, question text |
-| `options` | Choices for single/multi; strings or `{ label, content? }` objects |
+| `options` | Choices for single/multi; strings or `{ label, content?, recommended?, conviction? }` objects |
 | `recommended` | Pre-selected option(s) with a "Recommended" badge |
 | `conviction` | `"strong"` or `"slight"` (slight opts out of pre-selection); requires `recommended` |
 | `weight` | `"critical"` (prominent card) or `"minor"` (compact card) |
@@ -61,6 +63,8 @@ Question types: `single` (radio), `multi` (checkbox), `text`, `image` (upload), 
 | `media` | Object or array of `image`, `table`, `chart`, `mermaid`, `html`; each supports `position` (`"above"`/`"below"`/`"side"`) and `caption`; tables take `{ headers, rows, highlights }` |
 
 Single/multi questions also support an "Other" custom-text option, per-question image attachments (button or drag & drop), "✦ Generate more" and "↻ Review options" LLM actions, an "Ask about an option" inline assistant panel with prompt chips and provider/model overrides, and an optional per-option clarification field.
+
+Question IDs must be unique. `conviction` requires a recommendation. Use either question-level recommendations or option-level flags, never both; a single-select recommendation names exactly one option. Markdown `content` rejects `lines`/`highlights`, and `showSource` is Markdown-only. The shipped question example was executed against 0.13.0 `validateQuestions`. GUI launch, remote browser routing, and paid option generation were not exercised.
 
 ## Response Format
 

@@ -55,31 +55,13 @@ Proper timing is critical for professional scientific presentations. This guide 
 **Total: 15 minutes, 15-18 slides**
 
 ```
-Introduction (2-3 minutes, 2-3 slides):
-├─ Title slide: 30 seconds
-├─ Hook/Background: 90 seconds
-└─ Research question: 60 seconds
-
-Methods (2-3 minutes, 2-3 slides):
-├─ Study design: 60-90 seconds
-├─ Key procedures: 60 seconds
-└─ Analysis: 30-60 seconds
-
-Results (6-7 minutes, 6-8 slides):
-├─ Result 1: 2-3 minutes (2-3 slides)
-├─ Result 2: 2 minutes (2 slides)
-└─ Result 3: 2 minutes (2-3 slides)
-
-Discussion (2-3 minutes, 3-4 slides):
-├─ Interpretation: 60 seconds
-├─ Prior work: 60 seconds
-└─ Implications: 60 seconds
-
-Conclusion (1 minute, 1-2 slides):
-├─ Key takeaways: 45 seconds
-└─ Acknowledgments: 15 seconds
-
-Buffer: 1-2 minutes for transitions and variation
+Introduction: 2.5 minutes (title/hook 0.5; background 1; question 1)
+Methods: 2 minutes (design 1; procedures and analysis 1)
+Results: 6 minutes (two or three findings, including uncertainty)
+Discussion: 2.5 minutes (interpretation 1; prior work 0.5; limits 1)
+Conclusion and acknowledgments: 1 minute
+Buffer: 1 minute
+Total: 15 minutes; Q&A is separate. Shorten the content if Q&A shares the slot.
 ```
 
 **Key Principle**: Spend 40-50% of time on results.
@@ -89,39 +71,14 @@ Buffer: 1-2 minutes for transitions and variation
 **Total: 45 minutes, 35-45 slides**
 
 ```
-Introduction (8-10 minutes, 8-10 slides):
-├─ Title and personal intro: 1 minute
-├─ Big picture: 3-4 minutes
-├─ Literature review: 3-4 minutes
-├─ Research questions: 1-2 minutes
-└─ Roadmap: 1 minute
-
-Methods (8-10 minutes, 8-10 slides):
-├─ Design with rationale: 2-3 minutes
-├─ Participants/materials: 2 minutes
-├─ Procedures: 3-4 minutes
-└─ Analysis approach: 2 minutes
-
-Results (18-22 minutes, 16-20 slides):
-├─ Overview: 2 minutes
-├─ Main finding 1: 6-8 minutes
-├─ Main finding 2: 6-8 minutes
-├─ Additional analyses: 4-6 minutes
-└─ Summary: 1 minute
-
-Discussion (10-12 minutes, 8-10 slides):
-├─ Summary: 2 minutes
-├─ Literature comparison: 3-4 minutes
-├─ Mechanisms: 2-3 minutes
-├─ Limitations: 2 minutes
-└─ Implications: 2 minutes
-
-Conclusion (2-3 minutes, 2-3 slides):
-├─ Key messages: 1 minute
-├─ Future directions: 1-2 minutes
-└─ Acknowledgments: 30 seconds
-
-Reserve: 5-10 minutes for Q&A or discussion
+Introduction: 6 minutes
+Methods: 6 minutes
+Results: 17 minutes
+Discussion: 6 minutes
+Conclusion and acknowledgments: 2 minutes
+Buffer: 1 minute
+Q&A: 7 minutes
+Total: 45 minutes including Q&A
 ```
 
 ### Lightning Talk (5 Minutes)
@@ -132,7 +89,7 @@ Reserve: 5-10 minutes for Q&A or discussion
 Slide 1: Title (15 seconds)
 Slide 2: The Problem (45 seconds)
 Slide 3: Your Solution (60 seconds)
-Slide 4-5: Key Result (2-3 minutes total)
+Slide 4-5: Key Result (105 seconds total)
 Slide 6: Impact/Implications (45 seconds)
 Slide 7: Conclusion + Contact (30 seconds)
 ```
@@ -569,11 +526,12 @@ PRESENTATION TIMING CHEAT SHEET
 General Rule: 1 slide = 1 minute
 
 Section Time Allocation (15-min talk):
-├─ Intro: 2-3 min (20%)
-├─ Methods: 2-3 min (15-20%)
-├─ Results: 6-7 min (45%)
-├─ Discussion: 2-3 min (15%)
-└─ Conclusion: 1 min (5%)
+├─ Intro: 2.5 min
+├─ Methods: 2 min
+├─ Results: 6 min
+├─ Discussion: 2.5 min
+├─ Conclusion: 1 min
+└─ Buffer: 1 min (15 min total; Q&A separate)
 
 Practice Schedule:
 ├─ Run 1: Rough (expect to run long)

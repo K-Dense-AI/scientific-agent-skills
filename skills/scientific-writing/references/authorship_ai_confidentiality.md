@@ -45,9 +45,10 @@ and journal policy.
 
 ## AI-use disclosure
 
-The January 2026 ICMJE Recommendations require transparency about which AI tool was
-used and for what purpose, place writing assistance in acknowledgments, and place AI
-used for data collection, analysis, or figure generation in Methods as applicable
+The January 2026 ICMJE Recommendations call for disclosure of the AI tool and purpose
+in the cover letter and appropriate manuscript section. Writing assistance belongs
+in acknowledgments; use for data collection, analysis, or figure generation belongs
+in Methods as applicable
 [SW-S01, SW-S02]. COPE's formal position likewise requires disclosure and keeps full
 responsibility with human authors [SW-S03].
 
@@ -92,11 +93,11 @@ confidentiality concern [SW-S24].
 
 ## COPE status as of the research date
 
-COPE's 2017 Core Practices are historical: COPE states they were retired in 2024. As of
-2026-07-24, its website stated that a replacement Code of Conduct would be published in
-2026; do not present the archived Core Practices as current membership standards
-[SW-S04, SW-S05]. Continue to use current topic-specific COPE guidance and distinguish
-formal positions from discussion documents, webinars, comments, and case advice.
+COPE's 2017 Core Practices were retired in 2024. The Code of Conduct for COPE
+Members was published on 21 July 2026, with 12 months from first publication for
+implementation. It sits alongside the 2026 Core Principles [SW-S04, SW-S05]. Use
+current topic-specific guidance; distinguish formal positions from discussion
+documents, webinars, comments, and case advice.
 
 ## Validation
 
@@ -107,5 +108,11 @@ python3 scripts/validate_authorship.py authorship.json
 ```
 
 The validator checks human authorship gates, exact CRediT role names, guarantors, final
-approval, hashed declarations, AI disclosure, and restricted external-transfer gates.
-It cannot adjudicate contribution disputes or determine who deserves authorship.
+approval, declaration-hash syntax, AI disclosure, and restricted external-transfer
+gates. It does not compare declaration hashes against manuscript statements.
+These are ICMJE-style local gates, not a universal authorship standard. For example,
+Nature Portfolio uses a different contribution criterion [SW-S23]. The guarantor
+record is a local accountability convention, not a claim that all journals require
+one. Do not falsely attest to a gate to pass the tool; document the actual venue
+criteria and any local-validator limitation. The tool cannot adjudicate contribution
+disputes or determine who deserves authorship.

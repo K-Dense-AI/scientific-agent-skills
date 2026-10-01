@@ -1,6 +1,8 @@
 # Fluorescent Pixel Art Generation
 
 **URL:** https://cloud.ginkgo.bio/protocols/fluorescent-pixel-art-generation
+**Service terms:** https://cloud.ginkgo.bio/terms/pixel-art
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Beta
 **Price:** $25/plate (Echo 1536 format)
 **Turnaround:** up to 7 days
@@ -12,7 +14,8 @@ Transforms a digital image into a living, fluorescent bacterial artwork printed 
 ## Input
 
 - **Design:** Created in the Design Tool (upload an image or paint from scratch); the tool maps the artwork to the 7-color palette automatically
-- **Plate format:** Echo 1536 (32x48 wells, 1,536 dots). Echo 6144 format (64x96 wells, 6,144 dots) coming soon
+- Service terms specify PNG or SVG design files and plate orientation; the result is a digital photograph, not a promise to ship a living plate
+- **Plate format:** Echo 1536 (32x48 wells, 1,536 dots). The catalog still labels Echo 6144 (64x96) as coming soon, although the Design Tool displays that format; confirm orderability and price before selecting it.
 - **Mapping controls:** Adjust brightness, contrast, and saturation, or use the Enhance slider to optimize color mapping in one step
 
 ## Available Fluorescent E. coli Strains (7-color palette)
@@ -61,7 +64,7 @@ Transforms a digital image into a living, fluorescent bacterial artwork printed 
 
 ## Ordering
 
-- Create or import your design in the **Design Tool**, then order directly from it ($25/plate, Echo 1536)
+- Create or import your design in the [Design Tool](https://cloud.ginkgo.bio/art), then order directly from it ($25/plate, Echo 1536)
 - Or start from a community design in the **Gallery** (https://cloud.ginkgo.bio/gallery)
 
 ## Use Cases

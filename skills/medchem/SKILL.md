@@ -1,11 +1,12 @@
 ---
 name: medchem
-description: Medicinal chemistry filters for compound triage. Apply drug-likeness rules (Lipinski, Veber, CNS), structural alert catalogs (PAINS, NIBR, ChEMBL), complexity metrics, and the medchem query language for library filtering.
+description: Applies medicinal chemistry filters for compound triage, using drug-likeness rules (Lipinski, Veber, CNS), structural alert catalogs (PAINS, NIBR, ChEMBL), complexity metrics, and the medchem query language for library filtering.
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.9+ and datamol (installed with medchem). Optional Lilly demerit filter requires separate `lilly-medchem-rules` conda package.
+compatibility: Requires Python 3.11+ with medchem, datamol, and RDKit. Optional Lilly demerits require native tools built with medchem install-lilly, a C++ compiler, make, zlib, and Ruby; installation needs network access. Other filters run locally without credentials.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,7 +16,7 @@ metadata:
 
 Medchem is a Python library from [datamol-io](https://github.com/datamol-io/medchem) for molecular filtering and prioritization in drug discovery. Apply literature-derived drug-likeness rules, named alert catalogs, complexity thresholds, chemical-group detection, and a custom query language to triage compound libraries at scale. Filters are context-specific guidelines — combine with domain expertise and target knowledge.
 
-**Version note:** Examples target **medchem 2.0.5** (PyPI stable, Nov 2024). Requires **Python ≥3.9**. Depends on **datamol** and **RDKit** (installed automatically). `RuleFilters` and structural filter classes return **pandas DataFrames**. Lilly demerits require optional native binaries (`mamba install lilly-medchem-rules`).
+**Verified runtime:** medchem **2.1.1**, datamol **0.13.0**, RDKit **2026.3.6**; Python **3.11+**. `RuleFilters` and structural classes return pandas DataFrames. Filters run locally; installation and documentation lookup need network access. Lilly native execution was not tested in this review.
 
 ## When to Use This Skill
 
@@ -30,13 +31,13 @@ This skill should be used when:
 ## Installation
 
 ```bash
-uv pip install medchem datamol
+uv pip install "medchem==2.1.1" "datamol==0.13.0" "rdkit==2026.3.6"
 ```
 
-Optional — Eli Lilly demerit filter (requires conda-forge native binaries):
+Optional Lilly integration: install the upstream checksum-pinned native tools beside the active Python. This downloads source, builds executables, and runs native regression tests (C++ compiler, make, zlib, Ruby; WSL on Windows). This installation command is documented upstream, not executed here:
 
 ```bash
-mamba install -c conda-forge lilly-medchem-rules
+medchem install-lilly
 ```
 
 ## Core Capabilities
@@ -83,7 +84,7 @@ df = rfilter(mols=mols, n_jobs=-1, progress=True, keep_props=False)
 passing = df[df["pass_all"]]
 ```
 
-Use `keep_props=True` to include computed descriptors (`mw`, `clogp`, `tpsa`, etc.) in the result.
+Examples below use already parsed `mol_list`, `smiles_list`, and `candidates` supplied by the caller; reject missing/empty structures before filtering. Use `keep_props=True` to include computed descriptors (`mw`, `clogp`, `tpsa`, etc.) in the result.
 
 ### 2. Structural Alert Filters
 
@@ -94,7 +95,7 @@ Detect problematic patterns with `medchem.structural`. Both classes return **Dat
 ```python
 import medchem as mc
 
-alert_filter = mc.structural.CommonAlertsFilters()
+alert_filter = mc.structural.CommonAlertsFilters(alerts_set=["BMS", "Dundee", "Glaxo"])
 df = alert_filter(mols=mol_list, n_jobs=-1, progress=True)
 # df columns: mol, pass_filter, status, reasons
 
@@ -109,7 +110,7 @@ df = nibr_filter(mols=mol_list, n_jobs=-1, progress=True)
 # df columns: mol, pass_filter, status, severity, reasons, n_covalent_motif, special_mol
 ```
 
-Compounds with `severity >= 10` are excluded by default (see NIBR paper).
+The class rejects explicit exclusion alerts. To also reject accumulated flag severity ≥10, use `df["pass_filter"] & (df["severity"] < 10)`, or `mc.functional.nibr_filter(..., max_severity=10)`. The functional cutoff is strict `< 10` and assumes valid molecules: it checks severity alone and can admit parse failures with severity zero. Prevalidate inputs.
 
 ### 3. Named Catalog Filters (PAINS, Brenk, etc.)
 
@@ -123,7 +124,7 @@ mc.catalogs.list_named_catalogs()
 # ['tox', 'pains', 'pains_a', 'brenk', 'nibr', 'zinc', ...]
 
 # Functional API — True means molecule passes (no alert match)
-passes = mc.functional.alert_filter(mols=mol_list, alerts=["pains"], n_jobs=-1)
+passes = mc.functional.catalog_filter(mols=mol_list, catalogs=["pains"], n_jobs=-1)
 
 # Or via catalog objects
 passes = mc.functional.catalog_filter(
@@ -132,6 +133,8 @@ passes = mc.functional.catalog_filter(
     n_jobs=-1,
 )
 ```
+
+`alert_filter` is a different API: it uses the ChEMBL common-alert collection names from `CommonAlertsFilters.list_default_available_alerts()`, not every `NamedCatalogs` name. For example, `brenk` and `pains_a` belong in `catalog_filter`. Set common-alert sets explicitly; the current class implementation defaults to BMS only. `catalog_filter` rejects the string names `nibr` and `bredt`; use their dedicated functional filters. Raw NIBR catalog matches include annotations, regardless of severity.
 
 ### 4. Functional API
 
@@ -142,11 +145,11 @@ import medchem as mc
 
 mc.functional.rules_filter(mols=mol_list, rules=["rule_of_five", "rule_of_cns"], n_jobs=-1)
 mc.functional.nibr_filter(mols=mol_list, max_severity=10, n_jobs=-1)
-mc.functional.alert_filter(mols=mol_list, alerts=["pains", "brenk"], n_jobs=-1)
+mc.functional.catalog_filter(mols=mol_list, catalogs=["pains", "brenk"], n_jobs=-1)
 mc.functional.complexity_filter(mols=mol_list, complexity_metric="bertz", limit="99", n_jobs=-1)
 ```
 
-Other helpers: `catalog_filter`, `chemical_group_filter`, `lilly_demerit_filter` (requires optional binaries), `macrocycle_filter`, `bredt_filter`, `protecting_groups_filter`, and more.
+Other helpers: `catalog_filter`, `chemical_group_filter`, `lilly_demerit_filter` (requires optional binaries), `macrocycle_filter`, `bredt_filter`, `protecting_groups_filter`, and more. Pass copies to `bredt_filter` (`[Chem.Mol(m) for m in mol_list]`, after `from rdkit import Chem`): its in-place kekulization changes later aromatic alert matches in 2.1.1.
 
 ### 5. Chemical Groups
 
@@ -161,18 +164,19 @@ mc.groups.list_default_chemical_groups()
 
 group = mc.groups.ChemicalGroup(groups=["privileged_scaffolds"])
 group.has_match(mol)                          # bool
-group.get_matches(mol)                        # dict of group → atom indices
-group.filter(mols)                            # molecules matching the group
+group.get_matches(mol)                        # DataFrame, including a matches column
+matching_mols = [mol for mol in mol_list if group.has_match(mol)]
+# group.filter(names=[...]) narrows pattern names in place; it does not filter molecules.
 
-# Returns molecules that do NOT match the group
+# Returns a boolean mask: True means the molecule does NOT match the group
 mc.functional.chemical_group_filter(mols=mol_list, chemical_group=group, n_jobs=-1)
 ```
 
-Custom groups can be loaded from a file via `groups_db` (CSV with `smiles`/`smarts`, `name`, `group` columns).
+Custom groups use `groups_db` CSV with both `smiles` and `smarts`, plus `name` and `group` columns. SMILES and SMARTS matching can differ; record the representation and `exact_match` setting.
 
 ### 6. Molecular Complexity
 
-Compare complexity metrics to precomputed ZINC-15 percentile thresholds:
+Compare complexity metrics to precomputed, molecular-weight-binned ZINC-15 thresholds. Valid default limit labels are `median`, `90`, `99`, `999` (99.9th percentile), and `max`; `95` is not provided. `spacialscore` needs a custom threshold file. All metrics use an upper cutoff, including QED; do not interpret that as selecting high QED.
 
 ```python
 import medchem as mc
@@ -202,12 +206,16 @@ mc.complexity.BaroneCT(mol)
 import datamol as dm
 import medchem as mc
 
-core = dm.to_mol("c1ccccc1")
+core = dm.from_smarts("c1cncc([*:1])c1")
+for atom in core.GetAtoms():
+    if atom.GetAtomMapNum() == 1:
+        atom.SetProp("query", "aromatic_sidechain")
 constraints = mc.constraints.Constraints(
     core=core,
-    constraint_fns={"query": lambda mol, atom_idx, query: ...},
+    constraint_fns={"aromatic_sidechain": lambda fragment: dm.descriptors.n_aromatic_atoms(fragment) > 0},
 )
-constraints(mol)
+assert not constraints(dm.to_mol("CN(C)C(=O)c1cncc(C)c1"))
+assert constraints(dm.to_mol("c1ccc(cc1)-c1cccnc1"))
 ```
 
 ### 8. Medchem Query Language
@@ -230,7 +238,7 @@ mask = qf(mols=mol_list, n_jobs=-1)
 - `MATCHRULE("rule_of_five")` — apply a named rule
 - `HASALERT("pains")` — match a named catalog (`pains`, `brenk`, `nibr`, `tox`, …)
 - `HASPROP("mw", <, 500)` — compare a descriptor (unquoted comparator)
-- `HASGROUP("privileged_scaffolds")` — match a chemical group
+- `HASGROUP("Primary amines")` — match a functional-group name from `mc.groups.get_functional_group_map()`; collection names such as `privileged_scaffolds` are not valid here
 - `HASSUBSTRUCTURE("c1ccccc1")` — substructure match
 - Operators: `AND`, `OR`, `NOT`
 
@@ -276,12 +284,13 @@ import medchem as mc
 rules_df = mc.rules.RuleFilters(rule_list=["rule_of_leadlike_soft"])(mols=candidates, n_jobs=-1)
 nibr_df = mc.structural.NIBRFilters()(mols=candidates, n_jobs=-1)
 complex_mask = mc.functional.complexity_filter(
-    mols=candidates, complexity_metric="bertz", limit="95", n_jobs=-1
+    mols=candidates, complexity_metric="bertz", limit="90", n_jobs=-1
 )
 
 passes = (
     rules_df["pass_all"]
     & nibr_df["pass_filter"]
+    & (nibr_df["severity"] < 10)
     & complex_mask
 )
 ```
@@ -302,8 +311,9 @@ warhead_mols = [mol for mol, m in zip(mol_list, matches) if m]
 2. **Combine filters** — rules, alert catalogs, and complexity thresholds work best together.
 3. **Use parallelization** — pass `n_jobs=-1` for libraries >1000 molecules.
 4. **Check return types** — `RuleFilters` and structural classes return DataFrames; functional helpers return boolean arrays.
-5. **Lilly demerits are optional** — install `lilly-medchem-rules` separately; default max demerits is 160 in the functional API.
-6. **Document decisions** — retain `status`, `reasons`, and `severity` columns for audit trails.
+5. **Lilly demerits are optional** — run `medchem install-lilly` in the active environment; default max demerits is 160 in the functional API.
+6. **Document decisions** — retain `status`, `reasons`, and `severity` columns and record salt handling, protonation, tautomer, stereochemistry, and package versions. No normalization is automatic in the bundled loader.
+7. **Interpret alerts cautiously** — PAINS and reactive motifs indicate review priorities, not measured assay interference or toxicity; require assay-specific controls. Complexity is a library-relative heuristic, not a synthesis feasibility assessment. The upstream complexity filter admits NaN scores, so calculate and validate finite scores when a metric can be undefined.
 
 ## Resources
 
@@ -314,7 +324,7 @@ Module-by-module API reference with signatures, return types, and patterns.
 Catalog of available rules, alert sets, complexity metrics, and filter selection guidelines.
 
 ### scripts/filter_molecules.py
-Batch filtering script for CSV/TSV/SDF/SMILES inputs with configurable rules, alerts, and complexity thresholds.
+Batch filtering script for CSV/TSV/SDF or one-SMILES-per-line TXT inputs with configurable rules, named catalogs, and complexity thresholds. Run the command from the skill directory in the installed environment. `--groups` adds annotations; it does not exclude matches. `--filter-output` retains all-filter passes, while its summary covers the full parsed library. Unknown group/catalog names and unavailable requested Lilly filters fail. Existing `passes_*` input annotations do not act as newly evaluated filters. The loader requires RDKit-valid molecules even for Lilly; use raw SMILES with the native wrapper separately when LillyMol-specific valence handling matters. Invalid inputs are removed; retain stable IDs and a separate rejected-input table before invoking the script.
 
 ```bash
 uv run python scripts/filter_molecules.py input.csv \
@@ -325,7 +335,7 @@ uv run python scripts/filter_molecules.py input.csv \
 
 - Official docs: https://medchem-docs.datamol.io/
 - GitHub: https://github.com/datamol-io/medchem
-- PyPI: https://pypi.org/project/medchem/ (2.0.5)
+- PyPI: https://pypi.org/project/medchem/ (2.1.1)
 
 ## Citing Scientific Agent Skills
 

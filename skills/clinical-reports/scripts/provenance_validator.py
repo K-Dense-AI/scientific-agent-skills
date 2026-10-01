@@ -114,7 +114,10 @@ def validate_provenance(data: dict[str, Any]) -> dict[str, Any]:
             if fact_id in fact_ids:
                 errors.append(f"duplicate fact_id: {fact_id}")
             fact_ids.add(fact_id)
-            if fact.get("source_record_kind") not in SOURCE_KINDS:
+            if (
+                not isinstance(fact.get("source_record_kind"), str)
+                or fact.get("source_record_kind") not in SOURCE_KINDS
+            ):
                 errors.append(f"facts[{index}].source_record_kind is invalid")
             locator = require_string(
                 fact.get("record_locator"),

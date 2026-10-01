@@ -184,6 +184,14 @@ and requires the external enumlib executables (`enum.x` and `makestr.x`).
 Several advanced transformations, including magnetic ordering, can rely on
 enumeration.
 
+Current installation docs recommend Enumlib.jl, which provides both executables
+in recent releases, alongside the original Fortran implementation. The docs
+record `makestr.x` tolerance failures on some inputs and a `makeStr.py` fallback;
+verify the selected implementation on the actual structure. Current pymatgen
+idealizes coordinates within the declared symmetry tolerance and raises when
+fewer structures are produced than enumerated. Preserve those warnings and
+the returned count. External enumlib execution was not tested in this refresh.
+
 Treat enumlib as a separate native-code execution:
 
 1. verify official source, version, build instructions, license, and hash
@@ -373,7 +381,7 @@ Every automated workflow should cap:
 Stop on bound exhaustion and report partial progress; never silently truncate a
 candidate set and present it as exhaustive.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-09-30)
 
 - [pymatgen transformations API](https://pymatgen.org/pymatgen.transformations.html)
 - [pymatgen alchemy API](https://pymatgen.org/pymatgen.alchemy.html)

@@ -549,6 +549,70 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("duplicate JSON key", result.stderr)
 
+    def test_nonfinite_and_overflow_json_numbers_are_input_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "nonfinite.json"
+            for number in ("NaN", "Infinity", "-Infinity", "1e999", "-1e999"):
+                with self.subTest(number=number):
+                    path.write_text('{"nested": [{"value": ' + number + ' }]}', encoding="utf-8")
+                    result = self.run_cli("gap_analyzer.py", str(path))
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertIn("non-finite JSON number", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_dates_require_calendar_format(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            for invalid in ("20260723", "2026-W30-4", "2026-02-30"):
+                with self.subTest(date=invalid):
+                    data = scope_data()
+                    data["metadata"]["review_date"] = invalid
+                    path = self.write_json(Path(temp), "input.json", data)
+                    result = self.run_cli("validate_scope_intake.py", str(path))
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("DATE_INVALID", result.stdout)
+
+    def test_qmsr_organization_review_date_is_not_the_skill_release_date(self) -> None:
+        data = qmsr_data()
+        data["qmsr_basis"]["as_of"] = "2026-09-30"
+        self.assert_valid("check_qmsr_transition.py", data)
+
+    def test_malformed_gap_entry_produces_findings_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            for key, value in (("domain", []), ("domain", {}), ("status", {})):
+                with self.subTest(key=key, value=value):
+                    data = manifest_data()
+                    data["entries"][0][key] = value
+                    path = self.write_json(Path(temp), "input.json", data)
+                    result = self.run_cli("gap_analyzer.py", str(path))
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("CHOICE_INVALID", result.stdout)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_gap_domain_does_not_call_malformed_evidence_present(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            for key, value in (("evidence", [{}]), ("source_refs", [{}]), ("approval", {"status": "approved"})):
+                with self.subTest(field=key):
+                    data = manifest_data()
+                    data["entries"][0][key] = value
+                    path = self.write_json(Path(temp), "input.json", data)
+                    result = self.run_cli("gap_analyzer.py", str(path))
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    report = json.loads(result.stdout)
+                    domain = next(row for row in report["domains"] if row["domain"] == "document-and-record-control")
+                    self.assertEqual(domain["status"], "evidence-incomplete")
+
+    def test_gap_domain_hash_mismatch_blocks_evidence_present(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            (directory / "evidence.md").write_text("Changed local evidence", encoding="utf-8")
+            path = self.write_json(directory, "input.json", manifest_data(digest="0" * 64))
+            result = self.run_cli("gap_analyzer.py", str(path), "--base-dir", str(directory), "--verify-files")
+            self.assertEqual(result.returncode, 1, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertTrue(any(row["code"] == "HASH_MISMATCH" for row in report["findings"]))
+            domain = next(row for row in report["domains"] if row["domain"] == "document-and-record-control")
+            self.assertEqual(domain["status"], "evidence-incomplete")
+
     def test_output_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = self.write_json(Path(temp), "scope.json", scope_data())

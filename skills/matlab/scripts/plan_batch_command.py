@@ -25,11 +25,15 @@ TOOL = "plan_batch_command"
 SAFE_COMMAND = re.compile(r"^[A-Za-z0-9_.+-]{1,64}$")
 
 
-def matlab_string(value: str) -> str:
+def matlab_string(value: str, *, engine: str = "matlab") -> str:
     if len(value) > 100_000:
         raise CliError("MATLAB string literal exceeds 100000 characters")
     if any(ord(character) < 32 for character in value):
         raise CliError("control characters are not accepted in MATLAB strings")
+    if engine == "octave":
+        # Octave interprets backslash escapes inside double quotes. Its single
+        # quotes preserve Windows paths and other literal backslashes.
+        return "'" + value.replace("'", "''") + "'"
     return '"' + value.replace('"', '""') + '"'
 
 
@@ -42,7 +46,7 @@ def _numeric_row(values: list[Any]) -> str | None:
     return "[" + " ".join(matlab_literal(item) for item in values) + "]"
 
 
-def matlab_literal(value: Any, *, depth: int = 0) -> str:
+def matlab_literal(value: Any, *, depth: int = 0, engine: str = "matlab") -> str:
     if depth > 12:
         raise CliError("argument nesting exceeds 12")
     if value is None:
@@ -58,7 +62,7 @@ def matlab_literal(value: Any, *, depth: int = 0) -> str:
             raise CliError("nonfinite JSON numbers are refused")
         return format(value, ".17g")
     if isinstance(value, str):
-        return matlab_string(value)
+        return matlab_string(value, engine=engine)
     if isinstance(value, list):
         row = _numeric_row(value)
         if row is not None:
@@ -72,9 +76,13 @@ def matlab_literal(value: Any, *, depth: int = 0) -> str:
                         row_value[1:-1] for row_value in rows if row_value
                     ) + "]"
         if value and all(isinstance(item, str) for item in value):
-            return "[" + " ".join(matlab_string(item) for item in value) + "]"
+            if engine == "matlab":
+                return "[" + " ".join(matlab_string(item) for item in value) + "]"
+            return "{" + ", ".join(
+                matlab_string(item, engine=engine) for item in value
+            ) + "}"
         return "{" + ", ".join(
-            matlab_literal(item, depth=depth + 1) for item in value
+            matlab_literal(item, depth=depth + 1, engine=engine) for item in value
         ) + "}"
     if isinstance(value, dict):
         fields: list[str] = []
@@ -82,8 +90,12 @@ def matlab_literal(value: Any, *, depth: int = 0) -> str:
             validate_identifier(key, name="JSON object field")
             fields.extend(
                 [
-                    matlab_string(key),
-                    matlab_literal(value[key], depth=depth + 1),
+                    matlab_string(key, engine=engine),
+                    # A scalar outer cell prevents struct() from expanding a
+                    # cell-valued field into a struct array (or empty struct).
+                    "{" + matlab_literal(
+                        value[key], depth=depth + 1, engine=engine
+                    ) + "}",
                 ]
             )
         return "struct(" + ", ".join(fields) + ")"
@@ -117,9 +129,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     if args.arg_json and args.mode != "function":
         raise CliError("--arg-json is accepted only in function mode")
     literals = [
-        matlab_literal(parse_json_text(argument)) for argument in args.arg_json
+        matlab_literal(parse_json_text(argument), engine=args.engine)
+        for argument in args.arg_json
     ]
-    target_literal = matlab_string(str(target))
+    target_literal = matlab_string(str(target), engine=args.engine)
     warnings = [
         "This plan does not execute or prove the target safe.",
         "Confirm the exact runtime, products, licenses, startup behavior, "
@@ -173,7 +186,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         else:
             statement = (
                 f"success = test({target_literal}, "
-                f'{matlab_string("quiet")}); assert(success)'
+                f'{matlab_string("quiet", engine="octave")}); assert(success)'
             )
             argv.extend(["--eval", statement])
             warnings.append(
@@ -186,8 +199,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "arguments": {
             "count": len(literals),
-            "json_arrays": "numeric rectangular arrays map to MATLAB arrays; "
-            "other arrays map to cells",
+            "json_arrays": "numeric rectangular arrays map to numeric arrays; "
+            "string lists map to MATLAB string arrays or Octave cell arrays; "
+            "other arrays map to cells; JSON objects map to scalar structs",
         },
         "command_argv": argv,
         "disable_graphics": bool(args.disable_graphics),

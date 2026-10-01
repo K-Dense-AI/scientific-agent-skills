@@ -1,4 +1,4 @@
-"""Dependency-free tests for the lab-hardware-cad scripts.
+"""Standard-library tests for the lab-hardware-cad scripts.
 
 Everything here runs without build123d: the standards database, the fit-check
 arithmetic, argument parsing, and the CLI help paths. Geometry commands are
@@ -89,7 +89,7 @@ class TestHelp(unittest.TestCase):
                 self.assertIn("usage", result.stdout.lower())
 
     def test_check_subcommands_have_help(self):
-        for sub in ("standards", "facts", "fit", "clearance", "interfaces"):
+        for sub in ("standards", "facts", "fit", "clearance", "interfaces", "geometry", "probe", "bores"):
             with self.subTest(subcommand=sub):
                 result = run_cli(str(SCRIPTS / "check.py"), sub, "--help")
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -175,7 +175,7 @@ class TestFitArithmetic(unittest.TestCase):
         self.assertFalse(json.loads(result.stdout)["pass"])
 
     def test_envelope_intent_requires_maximum_material_condition(self):
-        """A pocket sized from nominal fits only the smaller half of conforming plates."""
+        """A continuous pocket must account for the overall +0.50 mm tolerance."""
         nominal = self._fit(
             "--standard", "slas-microplate-footprint", "--intent", "envelope",
             "--clearance", "0.8", "--value", "footprint_length=128.56",
@@ -184,7 +184,7 @@ class TestFitArithmetic(unittest.TestCase):
 
         max_material = self._fit(
             "--standard", "slas-microplate-footprint", "--intent", "envelope",
-            "--clearance", "0.8", "--value", "footprint_length=128.81",
+            "--clearance", "0.8", "--value", "footprint_length=129.06",
         )
         self.assertEqual(max_material.returncode, 0, max_material.stderr)
         self.assertTrue(json.loads(max_material.stdout)["pass"])
@@ -192,7 +192,7 @@ class TestFitArithmetic(unittest.TestCase):
     def test_clearance_offset_shifts_the_expected_band(self):
         result = self._fit(
             "--standard", "slas-microplate-footprint",
-            "--clearance", "1.05", "--value", "footprint_length=128.81",
+            "--clearance", "1.05", "--value", "footprint_length=129.06",
         )
         payload = json.loads(result.stdout)
         self.assertTrue(payload["pass"])
@@ -250,20 +250,20 @@ class TestDeclaredInterfaces(unittest.TestCase):
         }
 
     def test_pocket_at_maximum_material_passes(self):
-        result = self._check([self._pocket(128.81)])
+        result = self._check([self._pocket(129.06)])
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertTrue(payload["pass"])
         self.assertEqual(payload["checks"][0]["feature"], "plate pocket length")
 
     def test_pocket_sized_from_nominal_fails(self):
-        """127.76 + 0.80 ignores the plate's +0.25 tolerance: half of plates jam."""
+        """127.76 + 0.80 ignores the plate's overall +0.50 tolerance."""
         result = self._check([self._pocket(128.56)])
         self.assertEqual(result.returncode, 1)
         self.assertFalse(json.loads(result.stdout)["pass"])
 
     def test_one_failing_entry_fails_the_whole_check(self):
-        result = self._check([self._pocket(128.81), self._pocket(128.56)])
+        result = self._check([self._pocket(129.06), self._pocket(128.56)])
         self.assertEqual(result.returncode, 1)
         payload = json.loads(result.stdout)
         self.assertEqual([item["pass"] for item in payload["checks"]], [True, False])
@@ -272,9 +272,9 @@ class TestDeclaredInterfaces(unittest.TestCase):
         result = run_cli(
             str(SCRIPTS / "check.py"), "interfaces",
             str(self._manifest([{
-                "standard": "slas-well-positions-384",
-                "dimension": "well_pitch",
-                "value": 4.5,
+                "standard": "cuvette-standard-10mm",
+                "dimension": "external_width",
+                "value": 12.5,
             }])),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -403,6 +403,73 @@ class TestHelpers(unittest.TestCase):
     def test_run_model_rejects_a_missing_file(self):
         with self.assertRaises(_common.LabCadError):
             _common.run_model(SKILL_ROOT / "no_such_model.py")
+
+
+
+class TestFailClosedChecks(unittest.TestCase):
+    def test_booleans_and_overflow_are_not_dimensions(self):
+        for value in (True, False, 10 ** 1000):
+            for key in ("value", "clearance"):
+                with self.subTest(value_type=type(value).__name__, key=key):
+                    entry = {"standard": "s", "dimension": "d", "value": 1, key: value}
+                    with self.assertRaises(_common.LabCadError):
+                        _common.normalise_interfaces([entry])
+            for raw in (
+                {"clear": {"cylinder": value}},
+                {"clear": {"box": [1, 1, value]}},
+                {"clear": {"box": [1, 1, 1]}, "tol_mm3": value},
+                {"bbox_z": {"max": value}},
+            ):
+                with self.subTest(value_type=type(value).__name__, raw_kind=list(raw)):
+                    with self.assertRaises(_common.LabCadError):
+                        _common.normalise_checks([raw])
+
+    def test_bad_regions_cannot_pass_vacuously(self):
+        for raw in (
+            {'clear': {'box': [1, 1, 1], 'at': []}},
+            {'material': {'cylinder': 1, 'at': []}},
+            {'clear': {'cylinder': float('nan')}},
+            {'clear': {'box': [1, 1, float('inf')]}},
+            {'clear': {'cylinder': 1, 'span': [2, 2]}},
+            {'clear': {'box': [1, 1, 1]}, 'tol_mm3': float('inf')},
+            {'material': {'box': [1, 1, 1]}, 'min_mm3': 0},
+            {'bbox_z': {'max': float('nan')}},
+            {'bbox_z': {'min': None}},
+            {'bbox_z': {'min': 4, 'max': 2}},
+        ):
+            with self.subTest(raw=raw), self.assertRaises(_common.LabCadError):
+                _common.normalise_checks([raw])
+
+    def test_nonfinite_fit_and_wrong_units_fail_cleanly(self):
+        for args in (
+            ('--standard', 'slas-microplate-footprint', '--value', 'footprint_length=inf'),
+            ('--standard', 'slas-microplate-footprint', '--value', 'footprint_length=1000', '--clearance', 'inf'),
+            ('--standard', 'sm1-lens-tube-thread', '--value', 'threads_per_inch=40'),
+        ):
+            result = run_cli(str(SCRIPTS / 'check.py'), 'fit', *args)
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertNotIn('Traceback', result.stderr)
+
+    def test_slas_overall_and_local_bands_are_not_interchangeable(self):
+        import check
+        footprint = _common.get_standard('slas-microplate-footprint')
+        self.assertFalse(check._evaluate(footprint, 'footprint_length', 128.81, .8, 'test', 'envelope')['pass'])
+        self.assertTrue(check._evaluate(footprint, 'footprint_length_at_corners', 128.81, .8, 'test', 'envelope')['pass'])
+        height = _common.get_standard('slas-microplate-height')
+        self.assertEqual(height['fit_checks'][0]['dimension'], 'overall_plate_height')
+        self.assertTrue(check._evaluate(height, 'overall_plate_height', 15.11, 0, 'test', 'match')['pass'])
+        self.assertFalse(check._evaluate(height, 'plate_height', 15.11, 0, 'test', 'match')['pass'])
+
+    def test_clearance_failures_do_not_exit_success(self):
+        import check
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from unittest.mock import patch
+        args = types.SimpleNamespace(a=Path('a.step'), b=Path('b.step'), min=0, as_json=True)
+        with patch.object(check, 'load_shape'), patch.object(check, 'intersection_volume', return_value=0), patch.object(check, '_min_distance', return_value=None), redirect_stdout(StringIO()):
+            self.assertEqual(check.cmd_clearance(args), 2)
+        with patch.object(check, 'load_shape'), patch.object(check, 'intersection_volume', side_effect=_common.LabCadError('kernel failed')), self.assertRaises(_common.LabCadError):
+            check.cmd_clearance(args)
 
 
 if __name__ == "__main__":

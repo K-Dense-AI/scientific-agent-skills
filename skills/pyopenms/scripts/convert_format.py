@@ -31,7 +31,8 @@ def load_experiment(path):
 
 
 def filter_experiment(exp, ms_level=None, rt_min=None, rt_max=None, min_intensity=None):
-    out = ms.MSExperiment()
+    out = ms.MSExperiment(exp)
+    selected = []
     for spec in exp:
         if ms_level is not None and spec.getMSLevel() != ms_level:
             continue
@@ -43,12 +44,13 @@ def filter_experiment(exp, ms_level=None, rt_min=None, rt_max=None, min_intensit
         if min_intensity is not None:
             mz, inten = spec.get_peaks()
             keep = inten >= min_intensity
-            spec.set_peaks((mz[keep], inten[keep]))
-        out.addSpectrum(spec)
-    # carry chromatograms if no MS-level filter requested
-    if ms_level is None:
-        for chrom in exp.getChromatograms():
-            out.addChromatogram(chrom)
+            spec.select(keep.nonzero()[0].tolist())
+        selected.append(spec)
+    out.setSpectra(selected)
+    # These are spectrum filters; chromatograms remain unchanged unless an MS
+    # level is selected, in which case they are omitted.
+    if ms_level is not None:
+        out.setChromatograms([])
     return out
 
 

@@ -57,7 +57,7 @@ Response:
 }
 ```
 
-The IDs returned are numeric UIDs (not accession numbers). For GSE records: UID = 200000000 + GSE_number.
+The IDs returned are numeric Entrez UIDs, not accessions. Resolve them with ESummary and read `accession`; do not depend on an arithmetic UID conversion.
 
 ### eSummary — Get metadata for UIDs
 
@@ -66,16 +66,16 @@ GET /esummary.fcgi?db=gds&id={uid_list}&retmode=json
 ```
 
 Key response fields per record:
-- `Accession` — e.g. "GSE12345"
+- `accession` — e.g. "GSE12345"
 - `title`, `summary`
 - `taxon` — organism
 - `entrytype` — "GDS", "GSE", "GPL", "GSM"
 - `gdstype` — e.g. "Expression profiling by array"
 - `n_samples` — sample count
 - `pubmedids` — linked PubMed IDs
-- `PDAT` — publication date
-- `Samples` — array of sample objects
-- `FTPLink` — data download path
+- `pdat` — publication date
+- `samples` — array of sample objects
+- `ftplink` — data download path
 
 Example:
 ```

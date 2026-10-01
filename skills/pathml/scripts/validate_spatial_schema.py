@@ -64,7 +64,7 @@ def validate_graph(args: argparse.Namespace) -> dict[str, Any]:
         raise CliError("graph schema_version must be '1.0'")
     _identifier(document["slide_id"], context="slide_id")
     coordinate_unit = document["coordinate_unit"]
-    if coordinate_unit not in COORDINATE_UNITS:
+    if not isinstance(coordinate_unit, str) or coordinate_unit not in COORDINATE_UNITS:
         raise CliError(
             "coordinate_unit must be one of: "
             + ", ".join(sorted(COORDINATE_UNITS))
@@ -73,6 +73,8 @@ def validate_graph(args: argparse.Namespace) -> dict[str, Any]:
         level = document["level"]
         if isinstance(level, bool) or not isinstance(level, int) or level < 0:
             raise CliError("level must be a nonnegative integer")
+    elif coordinate_unit == "level_pixels":
+        raise CliError("level is required for level_pixels coordinates")
     nodes = document["nodes"]
     edges = document["edges"]
     if not isinstance(nodes, list) or not isinstance(edges, list):
@@ -84,6 +86,7 @@ def validate_graph(args: argparse.Namespace) -> dict[str, Any]:
 
     node_ids: set[str] = set()
     feature_length: int | None = None
+    features_present: bool | None = None
     for index, node in enumerate(nodes):
         if not isinstance(node, dict):
             raise CliError(f"node {index} must be an object")
@@ -99,6 +102,10 @@ def validate_graph(args: argparse.Namespace) -> dict[str, Any]:
         node_ids.add(node_id)
         finite_float(node["x"], name=f"node {index} x", minimum=0, maximum=1e12)
         finite_float(node["y"], name=f"node {index} y", minimum=0, maximum=1e12)
+        if features_present is None:
+            features_present = "features" in node
+        elif features_present != ("features" in node):
+            raise CliError("features must be present for all nodes or none")
         if "features" in node:
             features = node["features"]
             if not isinstance(features, list):
@@ -244,6 +251,8 @@ def validate_multiplex(args: argparse.Namespace) -> dict[str, Any]:
                 if row_count > args.max_rows:
                     raise CliError(f"CSV exceeds --max-rows={args.max_rows}")
                 row_number = row_count + 1
+                if None in raw_row or any(value is None for value in raw_row.values()):
+                    raise CliError(f"row {row_number}: CSV field count does not match header")
                 row = {
                     key.strip(): (value or "").strip()
                     for key, value in raw_row.items()
@@ -282,6 +291,8 @@ def validate_multiplex(args: argparse.Namespace) -> dict[str, Any]:
                 unit_counts[unit] += 1
 
                 level_raw = row.get("level", "")
+                if (unit == "level_pixels" or "level" in headers) and not level_raw:
+                    raise CliError(f"row {row_number}: level must be supplied")
                 if level_raw:
                     try:
                         level = int(level_raw)

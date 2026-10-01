@@ -67,7 +67,7 @@ class ArgumentBoundTests(unittest.TestCase):
 
     def test_tolerances_must_be_strictly_positive(self) -> None:
         self.assertEqual(tabular_report.positive_float("1e-6"), 1e-6)
-        for value in ("0", "-1e-6"):
+        for value in ("0", "-1e-6", "nan", "inf", "-inf"):
             with self.subTest(value=value):
                 with self.assertRaises(argparse.ArgumentTypeError):
                     tabular_report.positive_float(value)
@@ -98,6 +98,10 @@ class OutputSelectionTests(unittest.TestCase):
     def test_a_class_index_past_the_last_output_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "outside 2 outputs"):
             tabular_report.select_output(SingleOutputStub((4, 3, 2)), 2)
+
+    def test_negative_output_index_cannot_silently_select_last_class(self) -> None:
+        with self.assertRaisesRegex(ValueError, "zero or greater"):
+            tabular_report.select_output(SingleOutputStub((4, 3, 2)), -1)
 
     def test_output_names_fall_back_to_a_positional_label(self) -> None:
         explanation = shap.Explanation(
@@ -216,10 +220,10 @@ class ReportRunTests(unittest.TestCase):
             [
                 sys.executable, str(REPORT),
                 "--output-dir", str(cls.output),
-                "--background-size", "20",
+                "--background-size", "150",
                 "--explain-size", "12",
                 "--max-display", "5",
-                "--seed", "3",
+                "--seed", "7",
             ],
             capture_output=True,
             text=True,
@@ -253,8 +257,9 @@ class ReportRunTests(unittest.TestCase):
                 self.assertGreater(path.stat().st_size, 0)
 
     def test_the_metadata_records_the_run_it_actually_did(self) -> None:
-        self.assertEqual(self.metadata["seed"], 3)
-        self.assertEqual(self.metadata["background_rows"], 20)
+        self.assertEqual(self.metadata["seed"], 7)
+        self.assertEqual(self.metadata["background_rows"], 150)
+        self.assertEqual(self.metadata["background_requested_rows"], 150)
         self.assertEqual(self.metadata["explained_rows"], 12)
         # Breast cancer ships 30 features and 2 classes.
         self.assertEqual(self.metadata["feature_count"], 30)
@@ -262,6 +267,8 @@ class ReportRunTests(unittest.TestCase):
         self.assertEqual(self.metadata["selected_output_shape"], [12, 30])
         self.assertEqual(self.metadata["output_units"], "class probability")
         self.assertEqual(self.metadata["feature_perturbation"], "interventional")
+        self.assertEqual(self.metadata["selected_class_meaning"], "benign")
+        self.assertEqual(self.metadata["selected_output_name"], "benign")
 
     def test_the_additivity_error_is_inside_the_tolerance_it_reports(self) -> None:
         self.assertLess(
@@ -282,6 +289,9 @@ class ReportRunTests(unittest.TestCase):
         )
         # Probability-space output: every prediction is a probability.
         self.assertTrue(((frame["prediction"] >= 0) & (frame["prediction"] <= 1)).all())
+        np.testing.assert_allclose(
+            frame["base_value"], self.metadata["background_mean_prediction"], atol=1e-6
+        )
 
     def test_the_importance_table_is_ranked_by_mean_absolute_shap(self) -> None:
         frame = pd.read_csv(self.output / "feature_importance.csv")
@@ -326,6 +336,20 @@ class ReportFailureTests(unittest.TestCase):
             )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--class-index 7 is outside model classes", completed.stderr)
+
+    def test_an_upstream_additivity_failure_prevents_report_artifacts(self) -> None:
+        # This frozen 0.52.0 breast-cancer configuration encounters a native
+        # split-threshold discrepancy. The report must reject it, not export
+        # an apparently successful decomposition by loosening tolerances.
+        with tempfile.TemporaryDirectory() as directory:
+            completed = subprocess.run(
+                [sys.executable, str(REPORT), "--output-dir", directory,
+                 "--seed", "3", "--background-size", "150", "--explain-size", "2"],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("Not equal to tolerance", completed.stderr)
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_a_negative_background_size_is_refused_by_the_parser(self) -> None:
         completed = subprocess.run(

@@ -2,9 +2,11 @@
 
 Comprehensive guidelines for creating effective academic research posters including sizing, layout, typography, and design best practices.
 
-**Reviewed**: 2026-07-20
+**Reviewed**: 2026-10-01
 
-Poster dimensions and upload rules are event-specific. Confirm the current presenter instructions before choosing a size, orientation, or file format.
+Poster dimensions and upload rules are event-specific. Confirm the current presenter instructions before choosing a size, orientation, or file format. Numerical layout, typography, and content proportions below are adjustable design heuristics, not venue mandates or accessibility certification. Check readability at the actual printed size.
+
+Primary package sources: https://ctan.org/pkg/beamerposter , https://ctan.org/pkg/tikzposter , https://ctan.org/pkg/qrcode . The beamerposter custom width/height options use centimetres. The beamerposter and tikzposter preambles below were compiled in the review environment; no tikzposter template is bundled. The baposter preamble received a bounded compatibility check with an archival 2011 class supplied separately in the test workspace; current upstream availability was not verified. No baposter class is bundled.
 
 ---
 
@@ -14,7 +16,7 @@ Poster dimensions and upload rules are event-specific. Confirm the current prese
 
 | Size | Dimensions (mm) | Dimensions (inches) | Common Use |
 |------|----------------|---------------------|------------|
-| **A0** | 841 × 1189 | 33.1 × 46.8 | Most common international standard |
+| **A0** | 841 × 1189 | 33.1 × 46.8 | ISO paper size; event may specify another |
 | **A1** | 594 × 841 | 23.4 × 33.1 | Smaller conferences, travel-friendly |
 | **A2** | 420 × 594 | 16.5 × 23.4 | Mini posters, small venues |
 
@@ -37,10 +39,10 @@ Poster dimensions and upload rules are event-specific. Confirm the current prese
 
 ### Orientation
 
-- **Portrait**: Most common (height > width)
+- **Portrait**: height > width
   - Better for long visual flows (top to bottom)
   - Examples: A0, 36"×48"
-- **Landscape**: Less common but sometimes preferred
+- **Landscape**: width > height
   - Better for wide content, timelines
   - Examples: 48"×36", 40"×30"
 
@@ -175,7 +177,7 @@ Use colorblind-friendly color combinations:
 
 **Text**:
 - **Dark on light**: Black or dark gray text on white/light backgrounds
-- **Contrast ratio**: At least 4.5:1 (WCAG AA standard)
+- **Contrast ratio**: Use the WCAG text-contrast criterion as a design aid: 4.5:1 for ordinary text, 3:1 for large text; it is a web-content criterion, not proof of printed-poster accessibility
 
 **Accent Colors**:
 - Use 2-3 accent colors maximum
@@ -258,7 +260,7 @@ Use colorblind-friendly color combinations:
 2. **Enlarge**: Make larger than in paper
 3. **Label clearly**: Large axis labels, legends
 4. **Standalone**: Each figure tells a complete story
-5. **High resolution**: 300 dpi minimum
+5. **Raster resolution**: Follow print-provider requirements at final physical size
 
 **Figure Types**:
 - **Photographs**: High quality, cropped appropriately
@@ -293,7 +295,7 @@ Use colorblind-friendly color combinations:
 - BioRender: https://biorender.com/ (scientific illustrations)
 - Font Awesome: https://fontawesome.com/ (icons)
 
-**Caution**: Don't overuse; maintain professionalism
+**Caution**: Check the license and publication permissions for each asset. A tool subscription does not imply unrestricted redistribution rights.
 
 ---
 
@@ -375,10 +377,10 @@ Use colorblind-friendly color combinations:
 
 **For Printing**:
 - **PDF**: Universal standard
-- **High resolution**: 300 dpi minimum, 600 dpi for photos
-- **Color space**: RGB for most printers (check with printer)
+- **Raster resolution**: Follow the print provider at final physical size; retain vector text and plots where possible
+- **Color space**: Use the profile and color mode specified by the print provider
 - **Embed fonts**: Ensure all fonts embedded
-- **Flatten**: No transparency issues
+- **Transparency**: Inspect the print proof; flatten only when required by the provider or output standard
 
 ### Print Quality Checks
 
@@ -387,7 +389,7 @@ Before printing:
 2. **Colors**: Check in print preview
 3. **Resolution**: Zoom to 100%, check figure quality
 4. **Margins**: Verify nothing cut off
-5. **Test print**: Print small version (A4) to check layout
+5. **Test print**: Print a reduced proof for layout and an actual-size crop for type/figure readability
 
 ### Print Providers
 
@@ -399,7 +401,7 @@ Before printing:
    - Printful
    - Academic Poster Printing (specialized)
 
-**Cost**: Typically $50-150 for A0 glossy poster
+**Cost**: Obtain a current quote for size, material, turnaround, and delivery.
 
 ### Paper Types
 
@@ -434,10 +436,8 @@ Generate QR codes linking to:
 - **Size**: 3-4 inches (7-10 cm) square
 - **Label**: "Scan for paper" or "More info"
 
-### QR Code Generators
-- QR Code Generator: https://www.qr-code-generator.com/
-- QRStuff: https://www.qrstuff.com/
-- LaTeX package: `qrcode` for generating in LaTeX
+### QR Code Generation
+The [qrcode package](https://ctan.org/pkg/qrcode) generates a static code locally in LaTeX. Replace the illustrative URL before enabling the template code, then scan the final exported PDF and a print-size crop. A successful compile does not establish that the destination exists or is appropriate to share.
 
 ---
 
@@ -503,7 +503,7 @@ Generate QR codes linking to:
 
 ### Visual Accessibility
 
-1. **Color contrast**: High contrast (4.5:1 minimum)
+1. **Color contrast**: Measure text/background contrast; WCAG 2.2 uses 4.5:1 for ordinary text and 3:1 for large text (https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html). Print conditions and viewing distance still need testing.
 2. **Colorblind-safe**: Use Okabe-Ito or similar palettes
 3. **Font size**: Large enough to read from distance
 4. **Font choice**: Clear, sans-serif fonts
@@ -522,7 +522,7 @@ Generate QR codes linking to:
 - [ ] Check author names and affiliations
 - [ ] Verify all figures are high resolution (300+ dpi)
 - [ ] Ensure colorblind-safe color schemes
-- [ ] Test readability from 6 feet away (print small version)
+- [ ] Test actual-size text and figure crops at the intended viewing distance
 - [ ] Verify poster dimensions match conference requirements
 - [ ] Check that fonts are embedded in PDF
 - [ ] Include contact information (email, QR code)

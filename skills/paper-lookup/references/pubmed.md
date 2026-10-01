@@ -27,14 +27,16 @@ GET /esearch.fcgi?db=pubmed&term={query}&retmode=json
 | `db` | Yes | -- | `pubmed` |
 | `term` | Yes | -- | Search query. Supports PubMed syntax: field tags `[AU]`, `[TI]`, `[TA]`, `[MH]` (MeSH), boolean AND/OR/NOT |
 | `retmax` | No | 20 | Max PMIDs returned (max 10,000) |
-| `retstart` | No | 0 | Pagination offset |
+| `retstart` | No | 0 | Pagination offset within the first 10,000 matching IDs |
 | `retmode` | No | `xml` | `json` or `xml` |
 | `rettype` | No | `uilist` | `uilist` (IDs) or `count` (count only) |
-| `sort` | No | `relevance` | `relevance`, `pub_date`, `Author`, `JournalName` |
+| `sort` | No | Set explicitly | `relevance`, `pub_date`, `Author`, `JournalName` |
 | `datetype` | No | -- | `pdat` (publication), `mdat` (modification), `edat` (entrez) |
 | `mindate` / `maxdate` | No | -- | Date range `YYYY/MM/DD` |
 | `reldate` | No | -- | Items from last N days |
-| `usehistory` | No | -- | `y` to store on History Server for large result sets |
+| `usehistory` | No | -- | `y` to return `WebEnv`/`query_key`; does not bypass the PubMed/PMC ESearch 10,000-ID cap |
+
+**Large searches:** split the query into disjoint date intervals with fewer than 10,000 hits each, or use NCBI EDirect. Reconcile counts and deduplicate PMIDs across partitions; `retstart` alone cannot traverse a larger PubMed result.
 
 **Example:**
 ```
@@ -62,7 +64,7 @@ GET /esummary.fcgi?db=pubmed&id={pmids}&retmode=json
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `db` | Yes | `pubmed` |
-| `id` | Yes | Comma-separated PMIDs (max 10,000) |
+| `id` | Yes* | Comma-separated PMIDs; prefer POST above about 200 IDs. Alternatively supply `WebEnv` and `query_key` |
 | `retmode` | No | `json` or `xml` |
 
 **Example:**
@@ -90,7 +92,7 @@ GET /efetch.fcgi?db=pubmed&id={pmids}&rettype={type}&retmode={mode}
 https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39984857&retmode=xml
 ```
 
-The XML contains `<PubmedArticle>` with `<MedlineCitation>` (title, abstract, MeSH terms, authors) and `<PubmedData>` (article IDs, publication history).
+Use POST for more than about 200 explicit IDs. The XML contains `<PubmedArticle>` with `<MedlineCitation>` (title, abstract, MeSH terms, authors) and `<PubmedData>` (article IDs, publication history).
 
 ### 4. eLink -- Find related articles
 
@@ -98,7 +100,7 @@ The XML contains `<PubmedArticle>` with `<MedlineCitation>` (title, abstract, Me
 GET /elink.fcgi?dbfrom=pubmed&db=pubmed&id={pmid}&cmd=neighbor_score&retmode=json
 ```
 
-Returns related PMIDs with relevance scores.
+For `cmd=neighbor_score`, read `linksets[].linksetdbs[].links[]` objects with `id` and `score` (confirmed in a public JSON response on 2026-09-30); relatedness is not a citation edge. `neighbor_score` is the documented scored-neighbor command.
 
 ## Search Syntax Tips
 
@@ -122,3 +124,7 @@ Returns related PMIDs with relevance scores.
 ```
 
 HTTP 400 for bad requests, 429 for rate limiting.
+
+## Official sources reviewed 2026-09-30
+
+- https://www.ncbi.nlm.nih.gov/books/NBK25499/

@@ -1,10 +1,14 @@
 ---
 name: markdown-mermaid-writing
-description: Comprehensive markdown and Mermaid diagram writing skill. Use when creating any scientific document, report, analysis, or visualization. Establishes text-based diagrams as the default documentation standard with full style guides (markdown + mermaid), 24 diagram type references, and 9 document templates.
+description: Writes scientific Markdown documentation and Mermaid diagrams for workflows, relationships, timelines, and schemas. Provides syntax references, document templates, accessibility guidance, and version-aware rendering checks. Use when a user requests Markdown, Mermaid, or a text-based structural diagram; quantitative scientific figures require suitable plotting tools.
 allowed-tools: Read Write Edit Bash
 license: Apache-2.0
+compatibility: Markdown authoring needs no runtime. Local rendering targets Mermaid and Mermaid CLI 12.0.0, Node.js 22.13+ and a supported Chromium browser. Package or CDN installation needs network access; no credentials required.
 metadata:
-  version: "1.2"
+  version: "1.3"
+  last-reviewed: "2026-10-01"
+  mermaid-tested: "12.0.0"
+  mermaid-cli-tested: "12.0.0"
   skill-author: Clayton Young / Superior Byte Works, LLC (@borealBytes)
   skill-source: https://github.com/SuperiorByteWorks-LLC/agent-project
   skill-version: 1.0.0
@@ -15,15 +19,16 @@ metadata:
 
 ## Overview
 
-This skill teaches you — and enforces a standard for — creating scientific documentation
-using **markdown with embedded Mermaid diagrams as the default and canonical format**.
+This skill provides an optional house style for **Markdown documentation with Mermaid
+structural diagrams**. Follow the requested output format, existing repository conventions,
+and journal requirements first. This skill does not replace scientific analysis or plotting.
 
-The core bet: a relationship expressed as a Mermaid diagram inside a `.md` file is more
-valuable than any image. It is text, so it diffs cleanly in git. It requires no build step.
+A relationship expressed as Mermaid inside a `.md` file is editable text that diffs
+cleanly in git. A compatible host renders it without a separate user build step.
 It renders where the host has Mermaid support; plain Markdown viewers may show only code,
 and platforms/extensions ship different Mermaid versions. It uses
-fewer tokens than a prose description of the same relationship. And it can always be
-converted to a polished image later — but the text version remains the source of truth.
+a compact source representation, though token use depends on the diagram. Exporting
+SVG/PNG requires a renderer; retain the diagram source alongside exported figures.
 
 > "The more you get your reports and files in .md in just regular text, which mermaid is
 > as well as being a simple 'script language'. This just helps with any downstream rendering
@@ -37,15 +42,13 @@ converted to a polished image later — but the text version remains the source 
 
 Use this skill when:
 
-- Creating **any scientific document** — reports, analyses, manuscripts, methods sections
-- Writing **any documentation** — READMEs, how-tos, decision records, project docs
-- Producing **any diagram** — workflows, data pipelines, architectures, timelines, relationships
-- Generating **any output that will be version-controlled** — if it's going into git, it should be markdown
-- Working with **any other skill** — this skill defines the documentation layer that wraps every other output
-- Someone asks you to "add a diagram" or "visualize the relationship" — Mermaid first, always
+- Writing a requested Markdown report, README, methods overview, or research note
+- Diagramming a workflow, data pipeline, schema, state machine, or conceptual relationship
+- Maintaining editable Mermaid sources and their rendered SVG/PNG exports
 
-Do NOT start with Python matplotlib, seaborn, or AI image generation for structural or relational diagrams.
-Those are Phase 2 and Phase 3 — only used when Mermaid cannot express what's needed (e.g., scatter plots with real data, photorealistic images).
+Use scientific plotting tools directly for measured data, uncertainty, statistical graphics,
+exact geometry, or publication figures that Mermaid cannot faithfully represent. Mermaid
+is not a required precursor to a quantitative chart or an existing SVG/code-native asset.
 
 ## 🎨 The Source Format Philosophy
 
@@ -53,13 +56,13 @@ Those are Phase 2 and Phase 3 — only used when Mermaid cannot express what's n
 
 | What matters | Mermaid in Markdown | Python / AI Image |
 | ----------------------------- | :-----------------: | :---------------: |
-| Git diff readable | ✅ | ❌ binary blob |
-| Editable without regenerating | ✅ | ❌ |
-| Token efficient vs. prose | ✅ smaller | ❌ larger |
-| Renders without a build step | ✅ | ❌ needs hosting |
+| Git diff readable | ✅ text source | Plotting code/SVG can also be text |
+| Editable source | ✅ | Plotting scripts and vector sources are editable |
+| Compact relationship notation | Often | Depends on representation |
+| Native preview | Host/version dependent | Viewer/format dependent |
 | Parseable by AI without vision | ✅ | ❌ |
-| Works in GitHub / GitLab / Notion | ✅ | ⚠️ if hosted |
-| Accessible (screen readers) | ✅ accTitle/accDescr | ⚠️ needs alt text |
+| Works in destination | Check Mermaid support and version | Check image format support |
+| Accessible (screen readers) | Check SVG metadata and text alternative | Provide alt text/data table |
 | Convertible to image later | ✅ anytime | — already image |
 
 ### The three-phase workflow
@@ -67,15 +70,15 @@ Those are Phase 2 and Phase 3 — only used when Mermaid cannot express what's n
 ```mermaid
 flowchart LR
     accTitle: Three-Phase Documentation Workflow
-    accDescr: Phase 1 Mermaid in markdown is always required and is the source of truth. Phases 2 and 3 are optional downstream conversions for polished output.
+    accDescr: Markdown holds the structural diagram source. Quantitative charts come from data and plotting code; optional illustrations require a separate factual review.
 
-    p1["📄 Phase 1<br/>Mermaid in Markdown<br/>(ALWAYS — source of truth)"]
+    p1["📄 Phase 1<br/>Mermaid in Markdown<br/>(structural source)"]
     p2["🐍 Phase 2<br/>Python Generated<br/>(optional — data charts)"]
     p3["🎨 Phase 3<br/>AI Generated Visuals<br/>(optional — polish)"]
     out["📊 Final Deliverable"]
 
     p1 --> out
-    p1 -.->|"when needed"| p2
+    data["Data and plotting code"] --> p2
     p1 -.->|"when needed"| p3
     p2 --> out
     p3 --> out
@@ -89,11 +92,13 @@ flowchart LR
     class out output
 ```
 
-**Phase 1 is mandatory.** Even if you proceed to Phase 2 or 3, the Mermaid source stays committed.
+Retain Mermaid for structural diagrams and data/code for quantitative charts. An AI illustration
+is not a quantitative conversion; verify every label and relationship against its sources.
 
 ### What Mermaid can express
 
-Mermaid covers 24 diagram types. Almost every scientific relationship fits one:
+This skill includes 23 diagram-type guides plus a composition guide. Mermaid supports
+additional types; these references are a curated subset, not an exhaustive version catalogue:
 
 | Use case | Diagram type | File |
 | -------------------------------------------- | ---------------- | ---------------------------------------------------- |
@@ -148,15 +153,16 @@ Check if a template exists before writing from scratch:
 
 ### Step 2: Read the style guide
 
-Before writing any `.md` file: read `references/markdown_style_guide.md`.
+For this Markdown workflow, read `references/markdown_style_guide.md`. Treat emoji,
+heading counts, and horizontal rules as house style rather than Markdown syntax requirements.
 
 Key rules to internalize:
 
 - **One H1 per document** — the title. Never more.
 - **Emoji on H2 headings only** — one emoji per H2, none in H3/H4
-- **Cite everything** — every external claim gets a footnote `[^N]` with full URL
+- **Support factual claims** — use verified sources and the requested citation format
 - **Bold sparingly** — max 2-3 bold terms per paragraph, never full sentences
-- **Horizontal rule after every `</details>`** — mandatory
+- **Optional horizontal rules** after `</details>` when they improve separation
 - **Tables over prose** for comparisons, configurations, structured data
 - **Diagrams over walls of text** — if it describes flow, structure, or relationships, add Mermaid
 
@@ -166,17 +172,17 @@ Before creating any Mermaid diagram: read `references/mermaid_style_guide.md`.
 
 Then open the specific type file (e.g., `references/diagrams/flowchart.md`) for the exemplar, tips, and copy-paste template.
 
-Mandatory rules for every diagram:
+Add accessibility metadata for types that emit it in the chosen renderer:
 
 ```
 accTitle: Short Name 3-8 Words
 accDescr: One or two sentences explaining what this diagram shows.
 ```
 
-- **No `%%{init}` directives** — breaks GitHub dark mode
-- **No inline `style`** — use `classDef` only
+- Prefer host themes; `%%{init}` directives are deprecated in favor of YAML configuration
+- Prefer reusable `classDef` where supported; style syntax is diagram-specific
 - **One emoji per node max** — at the start of the label
-- **`snake_case` node IDs** — match the label
+- Use descriptive IDs with the type's syntax: `snake_case` works for flowcharts; ER/class/state conventions differ
 
 ### Step 4: Write the document
 
@@ -189,9 +195,12 @@ A successful latest-version local preview does not establish GitHub or another h
 will render it. Where Mermaid is unsupported, supply a rendered SVG/PNG with a text
 description alongside the retained `.md` source.
 
-### Step 5: Commit as text
+### Step 5: Retain source and verification
 
-The `.md` file with embedded Mermaid is what gets committed. If you also generated a PNG or AI image, those are supplementary — the markdown is the source.
+Keep the `.md` source, rendered deliverable, and tested renderer version together.
+Follow the project's version-control workflow; this skill does not itself authorize a commit or publication.
+For CLI export, embedding, and the tested accessibility matrix, read
+[Current rendering and validation](references/current-rendering.md).
 
 ---
 
@@ -199,8 +208,8 @@ The `.md` file with embedded Mermaid is what gets committed. If you also generat
 
 ### Radar chart syntax (`radar-beta`)
 
-**WRONG:**
-```mermaid
+**WRONG (shown as text so it does not break the document renderer):**
+```text
 radar
 title Example
 x-axis ["A", "B", "C"]
@@ -210,6 +219,8 @@ x-axis ["A", "B", "C"]
 **CORRECT:**
 ```mermaid
 radar-beta
+accTitle: Example Radar Scores
+accDescr: Illustrative values of one, two, and three on a shared zero-to-three scale.
 title Example
 axis a["A"], b["B"], c["C"]
 curve series["Series"]{1, 2, 3}
@@ -219,7 +230,7 @@ max 3
 - **Use `radar-beta`** not `radar` (the bare keyword doesn't exist)
 - **Use `axis`** to define dimensions, **not** `x-axis`
 - **Use `curve`** to define data series, **not** quoted labels with colon
-- **No `accTitle`/`accDescr`** — radar-beta doesn't support accessibility annotations; always add a descriptive italic paragraph above the diagram
+- Mermaid 12.0.0 radar emits `accTitle`/`accDescr`; check older hosts and retain a visible description
 
 ### XY Chart vs Radar confusion
 
@@ -232,9 +243,9 @@ max 3
 
 Only some diagram types support `accTitle`/`accDescr`. For those that don't, always place a descriptive italic paragraph directly above the code block:
 
-> _Radar chart comparing three methods across five performance dimensions. Note: Radar charts do not support accTitle/accDescr._
+> _Radar chart comparing three methods on a stated, common score scale. See the data table for exact values._
 
-```mermaid
+```text
 radar-beta
 ...
 ```
@@ -256,14 +267,15 @@ Workflow:
 
 ### With `scientific-writing`
 
-When `scientific-writing` produces a manuscript, all diagrams and structural figures should use this skill's standards. The writing skill handles prose and citations; this skill handles visual structure.
+For a manuscript that uses Mermaid structural figures, this skill handles diagram syntax.
+Follow the manuscript's required figure formats and scientific visualization conventions.
 
 ```
 Workflow:
 1. Use scientific-writing to draft the manuscript
 2. For every figure that shows a workflow, architecture, or relationship:
    - Replace placeholder with a Mermaid diagram following this skill's guide
-3. Use scientific-schematics only for figures that truly need photorealistic/complex rendering
+3. Use plotting or schematic tools where appropriate to the scientific content
 ```
 
 ### With `literature-review`
@@ -277,14 +289,14 @@ Literature review produces summaries with lots of relationship data. Use this sk
 
 ### With any skill that produces output documents
 
-Before finalizing any document from any skill, apply this skill's checklist:
+Before finalizing a document using this skill, check:
 
 - [ ] Does the document use a template? If so, did I start from the right one?
-- [ ] Are all diagrams in Mermaid with `accTitle` + `accDescr`?
-- [ ] No `%%{init}`, no inline `style`, only `classDef`?
-- [ ] Are all external claims cited with `[^N]`?
+- [ ] Is each diagram in an appropriate format, with working accessibility metadata or a text alternative?
+- [ ] Is configuration supported by the destination and tested in light/dark themes?
+- [ ] Do citations support external claims, and are synthetic values labeled?
 - [ ] One H1, emoji on H2 only?
-- [ ] Horizontal rules after every `</details>`?
+- [ ] Does the final Markdown/HTML structure render correctly?
 
 ---
 
@@ -294,10 +306,11 @@ Before finalizing any document from any skill, apply this skill's checklist:
 
 | Guide | Path | Lines | What it covers |
 | ----------------------- | ------------------------------------------- | ----- | -------------------------------------------------- |
-| Markdown Style Guide | `references/markdown_style_guide.md` | ~733 | Headings, formatting, citations, tables, Mermaid integration, templates, quality checklist |
-| Mermaid Style Guide | `references/mermaid_style_guide.md` | ~458 | Accessibility, emoji set, color classes, theme neutrality, type selection, complexity tiers |
+| Markdown Style Guide | `references/markdown_style_guide.md` | see file | Headings, formatting, citations, tables, Mermaid integration, templates, quality checklist |
+| Mermaid Style Guide | `references/mermaid_style_guide.md` | see file | Accessibility, emoji set, color classes, theme neutrality, type selection, complexity tiers |
+| Current Rendering | `references/current-rendering.md` | see file | Mermaid 12 changes, CLI export, browser APIs, tested accessibility matrix, scientific checks |
 
-### Diagram type guides (24 types)
+### Diagram guides (23 types plus composition)
 
 Each file contains: production-quality exemplar, tips specific to that type, and a copy-paste template.
 
@@ -309,7 +322,7 @@ Each file contains: production-quality exemplar, tips specific to that type, and
 
 ### Examples
 
-`assets/examples/example-research-report.md` — a complete scientific research report demonstrating proper heading hierarchy, multiple diagram types (flowchart, sequence, gantt), tables, footnote citations, collapsible sections, and all style guide rules applied.
+`assets/examples/example-research-report.md` — a synthetic quality-control report with explicitly invented data, an auditable count table, a structural flowchart, a bar chart, and a chronology. It makes no experimental or software API claims.
 
 ---
 

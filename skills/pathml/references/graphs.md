@@ -1,6 +1,6 @@
 # Graph construction and spatial schema
 
-This reference targets **PathML 3.0.5 stable**. The stable graph API is based on
+This reference targets **PathML 3.0.8 stable**. The stable graph API is based on
 graph builders and PyTorch Geometric data objects; it does not contain the
 `CellGraph.from_instance_map()` abstraction found in older generated examples.
 
@@ -107,7 +107,17 @@ Stable behavior:
 - `return_networkx` is a **builder constructor** option, not an argument to
   `process()`.
 
-In v3.0.5 source, `BaseGraphBuilder.process()` reads `features.shape` before its
+Distinct objects can round to the same centroid; zero-distance adjacency entries
+are discarded by the builder, so inspect coincident centroids and missing edges.
+For anisotropic MPP, pixel-space nearest neighbors are not physical nearest
+neighbors. Convert centroids to micrometres first and use
+`builder.process_with_centroids(centroids_xy_um, features=features)` with
+`centroids_xy_um` as a CPU Torch tensor and `add_loc_feats=False`; set `thresh`
+in micrometres and retain original pixel
+coordinates separately. Scaling only the reported distances after building
+the graph does not fix a topology constructed in the wrong metric.
+
+In v3.0.8 source, `BaseGraphBuilder.process()` reads `features.shape` before its
 nominal `features=None` branch. Pass an explicit `(N, F)` feature array.
 
 ## Region adjacency graph
@@ -251,6 +261,11 @@ Inputs must share the same origin, level, orientation, and units.
 Tissue labels should be contiguous positive IDs. Cells on background or outside
 the map require an explicit policy before calling the helper.
 
+The helper truncates centroid coordinates to integers and subtracts one from the
+sampled tissue label. Background label 0 therefore indexes the final tissue
+column rather than producing an unassigned cell. Reject/filter background and
+out-of-bounds centroids first and retain an explicit unassigned-cell record.
+
 `HACTPairData` stores:
 
 ```text
@@ -319,16 +334,18 @@ Report:
 
 Do not treat thousands of correlated nodes or tiles as independent patients.
 
-## Sources, accessed 2026-07-23
+## Sources and further reading
+
+API baseline reviewed 2026-10-01 using the released wheel/tag; hosted docs may lag.
 
 - Stable graph guide:
   https://pathml.readthedocs.io/en/stable/graphs.html
 - Stable graph API:
   https://pathml.readthedocs.io/en/stable/api_graph_reference.html
 - Stable graph builder source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/graph/preprocessing.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/graph/preprocessing.py
 - Stable graph schema/helpers:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/graph/utils.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/graph/utils.py
 - Pati et al. (2022), HACT:
   https://doi.org/10.1016/j.media.2021.102264
 - Jaume et al. (2021), histocartography:

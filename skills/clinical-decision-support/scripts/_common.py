@@ -62,6 +62,7 @@ class IssueLog:
             "warnings": self.warnings,
             "info": self.info,
             "disclaimer": (
+                "Not for patient care or live clinical use. "
                 "Structural checks only; not a clinical, privacy, regulatory, "
                 "legal, or compliance determination."
             ),
@@ -99,7 +100,7 @@ def local_output_path(raw: str, suffixes: Iterable[str] | None = None) -> Path:
 
     _reject_nonlocal_path(raw)
     path = Path(raw).expanduser()
-    if path.exists() and path.is_symlink():
+    if path.is_symlink():
         raise InputError("Symlink outputs are not allowed")
     resolved = path.resolve()
     if not resolved.parent.is_dir():
@@ -115,11 +116,11 @@ def load_json_object(raw_path: str) -> dict[str, Any]:
     path = local_input_path(raw_path, {".json"})
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        if not isinstance(value, dict):
+            raise InputError("Top-level JSON value must be an object")
+        ensure_no_person_level_keys(value)
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise InputError(f"Invalid UTF-8 JSON: {exc}") from exc
-    if not isinstance(value, dict):
-        raise InputError("Top-level JSON value must be an object")
-    ensure_no_person_level_keys(value)
     return value
 
 
@@ -172,7 +173,10 @@ def require_list(value: Any, field_name: str, *, maximum: int) -> list[Any]:
 def finite_number(value: Any, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise InputError(f"{field_name} must be numeric")
-    result = float(value)
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise InputError(f"{field_name} must be representable as a finite number") from exc
     if not math.isfinite(result):
         raise InputError(f"{field_name} must be finite")
     return result

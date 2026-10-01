@@ -127,15 +127,15 @@ STYLE_OVERRIDES: dict[str, dict[str, Any]] = {
 STYLE_NOTICES = {
     "nature": (
         "Starting point based on flagship Nature final-artwork guidance "
-        "accessed 2026-07-23; verify article stage and current instructions."
+        "accessed 2026-10-01; verify article stage and current instructions."
     ),
     "science": (
-        "Starting point based on Science revised-manuscript guidance accessed "
-        "2026-07-23; it is not a submission-compliance claim."
+        "Historical Science revised-manuscript guidance accessed 2026-07-23; "
+        "live access failed on 2026-10-01. Verify current journal instructions."
     ),
     "cell": (
         "Starting point based on general Cell Press production guidance accessed "
-        "2026-07-23; journal and article-type exceptions exist."
+        "2026-10-01; journal and article-type exceptions exist."
     ),
 }
 
@@ -189,7 +189,7 @@ def _matplotlib_style(style: dict[str, Any]) -> dict[str, Any]:
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required to apply styles; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
     prepared = dict(style)
     colors = prepared.pop("_palette_colors")
@@ -212,7 +212,7 @@ def apply_publication_style(
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required to apply styles; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
     if reset:
         mpl.rcdefaults()
@@ -240,7 +240,7 @@ def style_context(
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required to use a style context; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
     style = _matplotlib_style(get_style(style_name, palette_name=palette_name))
     with mpl.rc_context(style):
@@ -258,7 +258,7 @@ def set_color_palette(palette_name: str = "okabe_ito_on_white") -> list[str]:
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required to set a palette; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
     palettes = available_palettes()
     if palette_name not in palettes:
@@ -358,7 +358,9 @@ def configure_for_journal(
         "publisher_profile": journal,
         "profile_width": profile_width,
         "figsize_inches": [width_inches, height_inches],
-        "profile_accessed": load_publisher_profiles()["accessed"],
+        "profile_accessed": load_publisher_profiles()["profiles"][journal].get(
+            "accessed", load_publisher_profiles()["accessed"]
+        ),
         "notice": (
             "Configured from a dated planning snapshot. This does not establish "
             "journal compliance; verify current target-journal instructions."
@@ -384,18 +386,18 @@ def create_style_template(
     """Write a parseable mplstyle file, refusing implicit overwrite."""
     output = checked_output_file(output_file, force=force)
     style = get_style(style_name, palette_name=palette_name)
-    colors = [color.lstrip("#") for color in style.pop("_palette_colors")]
+    colors = style.pop("_palette_colors")
     lines = [
         "# Scientific visualization style preset",
         f"# style: {style_name}; palette: {palette_name}",
-        "# Generated from skill version 1.1; verify target-journal rules.",
+        "# Verify current target-journal rules before submission.",
         "",
     ]
     for key, value in style.items():
         lines.append(f"{key}: {_mplstyle_value(key, value)}")
     lines.append(
         "axes.prop_cycle: cycler('color', "
-        + repr(colors).replace('"', "'")
+        + json.dumps(colors)
         + ")"
     )
     payload = ("\n".join(lines) + "\n").encode("utf-8")

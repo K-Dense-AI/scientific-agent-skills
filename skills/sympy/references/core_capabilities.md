@@ -1,5 +1,8 @@
 # Core Capabilities
 
+Examples in this reference are ordered session fragments: run earlier imports and
+setup first. Tested with SymPy 1.14.0; exceptions are explicitly marked illustrative.
+
 Symbolic computation basics, calculus, equation solving, matrices and linear algebra,
 physics and mechanics, advanced mathematics, and code generation and output. Per-topic
 detail is in the other reference files in this directory.
@@ -15,19 +18,19 @@ x, y, z = symbols('x y z')
 expr = x**2 + 2*x + 1
 
 # With assumptions
-x = symbols('x', real=True, positive=True)
+xp = symbols('xp', positive=True)  # Keep x generic for later solving examples
 n = symbols('n', integer=True)
 ```
 
 **Simplification and manipulation:**
 ```python
-from sympy import simplify, expand, factor, cancel
+from sympy import simplify, expand, factor, cancel, sin, cos, exp
 simplify(sin(x)**2 + cos(x)**2)  # Returns 1
 expand((x + 1)**3)  # x**3 + 3*x**2 + 3*x + 1
 factor(x**2 - 1)    # (x - 1)*(x + 1)
 ```
 
-**For detailed basics:** See `references/core-capabilities.md`
+**For detailed basics:** See `core-capabilities.md`
 
 ### 2. Calculus
 
@@ -54,7 +57,7 @@ limit(sin(x)/x, x, 0)  # 1
 series(exp(x), x, 0, 6)  # 1 + x + x**2/2 + x**3/6 + x**4/24 + x**5/120 + O(x**6)
 ```
 
-**For detailed calculus operations:** See `references/core-capabilities.md`
+**For detailed calculus operations:** See `core-capabilities.md`
 
 ### 3. Equation Solving
 
@@ -79,7 +82,7 @@ f = symbols('f', cls=Function)
 dsolve(Derivative(f(x), x) - f(x), f(x))  # Eq(f(x), C1*exp(x))
 ```
 
-**For detailed solving methods:** See `references/core-capabilities.md`
+**For detailed solving methods:** See `core-capabilities.md`
 
 ### 4. Matrices and Linear Algebra
 
@@ -103,10 +106,10 @@ P, D = M.diagonalize()  # M = P*D*P^-1
 ```python
 A = Matrix([[1, 2], [3, 4]])
 b = Matrix([5, 6])
-x = A.solve(b)  # Solve Ax = b
+solution = A.solve(b)  # Solve Ax = b; keep x as a Symbol
 ```
 
-**For comprehensive linear algebra:** See `references/matrices-linear-algebra.md`
+**For comprehensive linear algebra:** See `matrices-linear-algebra.md`
 
 ### 5. Physics and Mechanics
 
@@ -124,6 +127,8 @@ L = m*(l*q.diff())**2/2 - m*g*l*(1 - cos(q))
 
 # Apply Lagrange's method
 LM = LagrangesMethod(L, [q])
+LM.form_lagranges_equations()
+state_derivatives = LM.rhs()
 ```
 
 **Vector analysis:**
@@ -144,7 +149,7 @@ psi = Ket('psi')
 comm = Commutator(A, B).doit()
 ```
 
-**For detailed physics capabilities:** See `references/physics-mechanics.md`
+**For detailed physics capabilities:** See `physics-mechanics.md`
 
 ### 6. Advanced Mathematics
 
@@ -158,7 +163,7 @@ The skill includes comprehensive support for:
 - **Special Functions:** Gamma, Bessel, orthogonal polynomials, hypergeometric functions
 - **Polynomials:** Polynomial algebra, roots, factorization, Groebner bases
 
-**For detailed advanced topics:** See `references/advanced-topics.md`
+**For detailed advanced topics:** See `advanced-topics.md`
 
 ### 7. Code Generation and Output
 
@@ -187,4 +192,4 @@ from sympy import latex
 latex_str = latex(expr)  # Convert to LaTeX for documents
 ```
 
-**For comprehensive code generation:** See `references/code-generation-printing.md`
+**For comprehensive code generation:** See `code-generation-printing.md`

@@ -1,5 +1,7 @@
 # Supervised Learning Reference
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 ## Overview
 
 Supervised learning algorithms learn from labeled training data to make predictions on new data. Scikit-learn provides comprehensive implementations for both classification and regression tasks.
@@ -10,7 +12,7 @@ Supervised learning algorithms learn from labeled training data to make predicti
 
 **Linear Regression (`sklearn.linear_model.LinearRegression`)**
 - Ordinary least squares regression
-- Fast, interpretable, no hyperparameters
+- Ordinary least squares; choices include intercept, positivity constraints, and sparse-solver tolerance
 - Use when: Linear relationships, interpretability matters
 - Example:
 ```python
@@ -67,7 +69,7 @@ model.fit(X_train, y_train)
 - Key parameters: `C` (inverse regularization), `l1_ratio` (0=L2, 1=L1, between for elastic net)
 - Returns probability estimates
 - Use when: Need probabilistic predictions, interpretability
-- Note: The `penalty` parameter is deprecated since 1.8; use `l1_ratio` instead
+- `penalty` is deprecated since 1.8; use `l1_ratio`. `lbfgs` supports only L2 (`l1_ratio=0`); use `saga` for elastic net. Use `C=np.inf` for no regularization
 - Example:
 ```python
 from sklearn.linear_model import LogisticRegression
@@ -161,7 +163,7 @@ plot_tree(model, feature_names=feature_names, class_names=class_names)
   - `max_features`: Features to consider for splits ('sqrt', 'log2', or int)
   - `min_samples_split`, `min_samples_leaf`: Control tree growth
 - Use when: High accuracy needed, can afford computation
-- Provides feature importance
+- Provides impurity importance, which favors high-cardinality features; use held-out permutation importance to assess predictive contribution, not causality
 - Example:
 ```python
 from sklearn.ensemble import RandomForestClassifier
@@ -188,7 +190,7 @@ importances = model.feature_importances_
   - `max_depth`: Depth of individual trees (typically 3-5)
   - `subsample`: Fraction of samples for training each tree
 - Use when: Need high accuracy, can afford training time
-- Often achieves best performance
+- Compare on a held-out design; no estimator is universally best
 - Example:
 ```python
 from sklearn.ensemble import GradientBoostingClassifier
@@ -205,7 +207,7 @@ model.fit(X_train, y_train)
 **HistGradientBoostingClassifier / HistGradientBoostingRegressor**
 - Faster gradient boosting with histogram-based algorithm
 - Native support for missing values and categorical features
-- Key parameters: Similar to GradientBoosting
+- Uses `max_iter` rather than `n_estimators`. `from_dtype` detects pandas categorical dtype, not arbitrary strings; each categorical feature must fit the `max_bins` cardinality limit
 - Use when: Large datasets, need faster training
 - Example:
 ```python
@@ -369,11 +371,17 @@ model.fit(X_train_scaled, y_train)
 
 **Feature types:**
 - Continuous: Most algorithms work well
-- Categorical: Trees, HistGradientBoosting (native support)
-- Mixed: Trees, Gradient Boosting
+- Categorical: Encode for ordinary trees/forests; HistGradientBoosting supports explicitly declared categoricals
+- Mixed: Use ColumnTransformer or correctly declared histogram-boosting categoricals
 - Text: Naive Bayes, Linear Models with TF-IDF
 
 **Common starting points:**
 1. Logistic Regression (classification) / Linear Regression (regression) - fast baseline
 2. Random Forest - good default choice
-3. Gradient Boosting - optimize for best accuracy
+3. Gradient Boosting - compare and tune within the same evaluation design
+
+## Upstream references
+
+- https://scikit-learn.org/stable/modules/linear_model.html
+- https://scikit-learn.org/stable/modules/ensemble.html
+- https://scikit-learn.org/stable/auto_examples/inspection/plot_permutation_importance.html

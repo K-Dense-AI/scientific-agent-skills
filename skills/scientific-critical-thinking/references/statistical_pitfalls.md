@@ -1,13 +1,20 @@
 # Common Statistical Pitfalls
 
+Use the estimand, sampling design, and assumptions to judge an analysis; the examples
+below are illustrative. Primary guidance is linked in [review_sources.md](review_sources.md).
+
 ## P-Value Misinterpretations
 
 ### Pitfall 1: P-Value = Probability Hypothesis is True
 **Misconception:** p = .05 means 5% chance the null hypothesis is true.
 
-**Reality:** P-value is the probability of observing data this extreme (or more) *if* the null hypothesis is true. It says nothing about the probability the hypothesis is true.
+**Reality:** A p-value is a tail probability for the specified test statistic under the
+null and the rest of the statistical model, including the sampling/analysis procedure.
+It is not a posterior probability that a hypothesis is true.
 
-**Correct interpretation:** "If there were truly no effect, we would observe data this extreme only 5% of the time."
+**Correct interpretation:** "Under this null model and analysis procedure, a test statistic
+at least this extreme has probability .05." Selection or unaccounted optional stopping
+can invalidate this calibration.
 
 ### Pitfall 2: Non-Significant = No Effect
 **Misconception:** p > .05 proves there's no effect.
@@ -20,13 +27,15 @@
 
 **Better approach:**
 - Report confidence intervals
-- Conduct power analysis
-- Consider equivalence testing
+- Compare the interval with effects of practical importance; do not calculate power
+  from the observed effect to explain this result
+- Consider equivalence testing with scientifically justified, prespecified bounds
 
 ### Pitfall 3: Significant = Important
 **Misconception:** Statistical significance means practical importance.
 
-**Reality:** With large samples, trivial effects become "significant." A statistically significant 0.1 IQ point difference is meaningless in practice.
+**Reality:** With large samples, effects too small to matter for the decision can become
+"significant." Judge magnitude against a justified practical threshold.
 
 **Better approach:**
 - Report effect sizes
@@ -39,21 +48,24 @@
 **Reality:** These represent nearly identical evidence. The .05 threshold is arbitrary.
 
 **Better approach:**
-- Treat p-values as continuous measures of evidence
+- Interpret p-values continuously as model-compatibility summaries, not stand-alone evidence scores
 - Report exact p-values
 - Consider context and prior evidence
 
 ### Pitfall 5: One-Tailed Tests Without Justification
 **Misconception:** One-tailed tests are free extra power.
 
-**Reality:** One-tailed tests assume effects can only go one direction, which is rarely true. They're often used to artificially boost significance.
+**Reality:** A one-sided test addresses a directional hypothesis; the opposite direction
+need not be impossible. Choosing the tail after seeing data invalidates the nominal error rate.
 
-**When appropriate:** Only when effects in one direction are theoretically impossible or equivalent to null.
+**When appropriate:** Prespecify a directional decision and error criterion (for example,
+a justified non-inferiority margin). Still report estimates, uncertainty, and possible harm.
 
 ## Multiple Comparisons Problems
 
 ### Pitfall 6: Multiple Testing Without Correction
-**Problem:** Testing 20 hypotheses at p < .05 gives ~65% chance of at least one false positive.
+**Problem:** For 20 independent tests of true nulls at alpha .05, the probability of at
+least one false rejection is `1 - 0.95**20 = 0.6415` (about 64%). Dependence changes this value.
 
 **Examples:**
 - Testing many outcomes
@@ -67,13 +79,20 @@
 - Prespecify primary outcome
 - Treat exploratory analyses as hypothesis-generating
 
+Define the hypothesis family and error target first. FWER limits the probability of any
+false rejection; FDR limits the expected false-discovery proportion (zero when there are
+no discoveries). Neither is the probability that a particular discovery is false. A named
+primary outcome does not resolve multiplicity across doses, time points, interim looks,
+subgroups, or data-selected analysis choices.
+
 ### Pitfall 7: Subgroup Analysis Fishing
 **Problem:** Testing many subgroups until finding significance.
 
 **Why problematic:**
 - Inflates false positive rate
 - Often reported without disclosure
-- "Interaction was significant in women" may be random
+- A significant result in women and a non-significant result in men does not establish
+  a difference between groups; estimate and test the interaction directly
 
 **Solutions:**
 - Prespecify subgroups
@@ -101,16 +120,20 @@
 
 **Consequences:**
 - High false negative rate
-- Significant results more likely to be false positives
+- Among selected significant findings, the false-discovery fraction depends on power,
+  prior prevalence of real effects, bias, and multiplicity; low power alone does not
+  increase a correctly calibrated test's Type I error above its alpha
 - Overestimated effect sizes (when significant)
 
 **Solutions:**
 - Conduct a priori power analysis
-- Aim for 80-90% power
-- Consider effect size from prior research
+- Justify power or precision targets for the decision; 80-90% are conventions, not guarantees
+- Use a meaningful effect and plausible variance; assess uncertainty in small pilot estimates
 
 ### Pitfall 10: Post-Hoc Power Analysis
-**Problem:** Calculating power after seeing results is circular and uninformative.
+**Problem:** Calculating "observed power" using the observed effect and the same test is
+circular and uninformative. This does not prohibit design sensitivity calculations at an
+independently justified effect size.
 
 **Why useless:**
 - Non-significant results always have low "post-hoc power"
@@ -127,13 +150,13 @@
 **Issues:**
 - High sampling variability
 - Outliers have large influence
-- Assumptions of tests violated
+- Distributional approximations may be unreliable; small n alone is not an assumption violation
 - Confidence intervals very wide
 
 **Guidelines:**
-- Be skeptical of n < 30
+- There is no universal n = 30 validity threshold; count independent units and inspect precision
 - Check assumptions carefully
-- Consider non-parametric tests
+- Choose methods for the estimand and design; non-parametric methods also have assumptions
 - Replicate findings
 
 ## Effect Size Misunderstandings
@@ -148,7 +171,8 @@
 
 **Solutions:**
 - Always report effect sizes
-- Use standardized measures (Cohen's d, r, η²)
+- Report effects in interpretable original units or absolute risks; add standardized
+  measures (Cohen's d, r, η²) when they answer the comparison of interest
 - Interpret using field conventions
 - Consider minimum clinically important difference
 
@@ -169,7 +193,7 @@
 **Problem:** "Only explains 5% of variance" = unimportant.
 
 **Reality:**
-- Height explains ~5% of variation in NBA player salary but is crucial
+- A small explained-variance fraction can still matter for an important outcome
 - Complex phenomena have many small contributors
 - Predictive accuracy ≠ causal importance
 
@@ -186,11 +210,10 @@
 - Coincidence
 - Selection bias
 
-**Criteria for causation:**
-- Temporal precedence
-- Covariation
-- No plausible alternatives
-- Ideally: experimental manipulation
+**Causal appraisal:** Specify the intervention/exposure contrast, population, and outcome.
+Assess temporality, exchangeability/confounding, positivity, consistency, selection, and
+measurement assumptions. Observational causal inference is possible under defensible
+assumptions; randomization does not repair missing outcomes or post-randomization selection.
 
 ### Pitfall 16: Ecological Fallacy
 **Problem:** Inferring individual-level relationships from group-level data.
@@ -204,9 +227,11 @@
 
 **Example:** Treatment appears worse overall but better in every subgroup.
 
-**Cause:** Confounding variable distributed differently across groups.
+**Cause:** Different group weights can reverse marginal and conditional associations.
+The stratifying variable is not automatically a confounder; it may be a mediator or collider.
 
-**Solution:** Consider confounders and look at appropriate level of analysis.
+**Solution:** Choose adjustment from the causal question and temporal structure, not
+from whichever stratification gives the preferred answer.
 
 ## Regression and Modeling Pitfalls
 
@@ -219,7 +244,7 @@
 - No cross-validation
 
 **Solutions:**
-- Use cross-validation
+- Use cross-validation with all learned preprocessing and tuning inside training folds
 - Penalized regression (LASSO, ridge)
 - Independent test set
 - Simpler models
@@ -231,17 +256,19 @@
 - Relationships may not hold outside observed range
 - Increased uncertainty not reflected in predictions
 
-**Solution:** Only interpolate; avoid extrapolation.
+**Solution:** Label extrapolation, justify transport/model assumptions, and assess
+sensitivity. In-range predictions can also fail under population or measurement shifts.
 
 ### Pitfall 20: Ignoring Model Assumptions
 **Problem:** Using statistical tests without checking assumptions.
 
 **Common violations:**
-- Non-normality (for parametric tests)
+- Incorrect distributional assumptions for the relevant errors/conditional outcomes;
+  not all parametric models require normally distributed raw data
 - Heteroscedasticity (unequal variances)
 - Non-independence
 - Linearity
-- No multicollinearity
+- Rank deficiency or unstable coefficient estimation; some predictor correlation is allowed
 
 **Solutions:**
 - Check assumptions with diagnostics
@@ -254,7 +281,8 @@
 
 **Reality:** Non-significant covariates can still be important confounders. Significance ≠ confounding.
 
-**Solution:** Include theoretically important covariates regardless of significance.
+**Solution:** Prespecify an appropriate adjustment set from causal knowledge; do not
+select confounders by p-values or automatically adjust for mediators/colliders.
 
 ### Pitfall 22: Collinearity Masking Effects
 **Problem:** When predictors are highly correlated, true effects may appear non-significant.
@@ -273,16 +301,18 @@
 - Combine correlated variables
 - Use regularization methods
 
+Regularization may stabilize prediction but does not make a non-identifiable effect
+identified by the data. Check design rank, parameter symmetries, profiles/sensitivity,
+and dependence on constraints or priors. Good fit and convergence are insufficient.
+
 ## Specific Test Misuses
 
-### Pitfall 23: T-Test for Multiple Groups
-**Problem:** Conducting multiple t-tests instead of ANOVA.
+### Pitfall 23: Uncontrolled Pairwise Comparisons
+**Problem:** Treating many unadjusted pairwise tests as one confirmatory analysis.
 
-**Why wrong:** Inflates Type I error rate dramatically.
-
-**Correct approach:**
-- Use ANOVA first
-- Follow with planned comparisons or post-hoc tests with correction
+**Correct approach:** Prespecify contrasts and an appropriate familywise or other error
+strategy. An omnibus ANOVA is useful for its own question but is not a universal prerequisite
+for planned contrasts, and a significant omnibus test does not authorize all unadjusted pairs.
 
 ### Pitfall 24: Pearson Correlation for Non-Linear Relationships
 **Problem:** Using Pearson's r for curved relationships.
@@ -295,21 +325,20 @@
 - Consider polynomial or non-linear models
 
 ### Pitfall 25: Chi-Square with Small Expected Frequencies
-**Problem:** Chi-square test with expected cell counts < 5.
-
-**Why wrong:** Violates test assumptions, p-values inaccurate.
+**Problem:** Relying on an asymptotic chi-square approximation with sparse expected counts.
+The often-used count-of-five rule is a heuristic, not a universal validity boundary.
 
 **Solutions:**
 - Fisher's exact test
-- Combine categories
+- Combine categories only for a prespecified substantive reason, not to obtain significance
 - Increase sample size
 
 ### Pitfall 26: Paired vs. Independent Tests
 **Problem:** Using independent samples test for paired data (or vice versa).
 
 **Why wrong:**
-- Wastes power (paired data analyzed as independent)
-- Violates independence assumption (independent data analyzed as paired)
+- Ignoring real dependence can misestimate uncertainty in either direction
+- Inventing pairs changes the estimand and may discard data or distort uncertainty
 
 **Solution:** Match test to design.
 
@@ -318,16 +347,20 @@
 ### Pitfall 27: 95% CI = 95% Probability True Value Inside
 **Misconception:** "95% chance the true value is in this interval."
 
-**Reality:** The true value either is or isn't in this specific interval. If we repeated the study many times, 95% of resulting intervals would contain the true value.
+**Reality:** For a correctly calibrated frequentist 95% interval procedure under its
+assumptions, 95% of intervals across repetitions cover the fixed parameter. An individual
+interval does not assign a 95% posterior probability to that parameter.
 
-**Better interpretation:** "We're 95% confident this interval contains the true value."
+**Better reporting:** Give the estimate, interval, confidence level, assumptions, and
+whether the interval excludes effects important to the scientific decision.
 
 ### Pitfall 28: Overlapping CIs = No Difference
 **Problem:** Assuming overlapping confidence intervals mean no significant difference.
 
 **Reality:** Overlapping CIs are less stringent than difference tests. Two CIs can overlap while the difference between groups is significant.
 
-**Guideline:** Overlap of point estimate with other CI is more relevant than overlap of intervals.
+**Guideline:** Estimate the contrast and its interval directly, accounting for covariance.
+Neither overlap heuristic substitutes for that calculation.
 
 ### Pitfall 29: Ignoring CI Width
 **Problem:** Focusing only on whether CI includes zero, not precision.
@@ -343,12 +376,13 @@
 
 **Examples:**
 - "Probability hypothesis is true" (Bayesian) from p-value (frequentist)
-- "Evidence for null" from non-significant result (frequentist can't support null)
+- "Evidence for no meaningful effect" from a non-significant test alone; frequentist
+  equivalence tests can address prespecified bounds, not prove an exact point null
 
 **Solution:**
 - Be clear about framework
 - Use Bayesian methods for Bayesian questions
-- Use Bayes factors to compare hypotheses
+- For Bayes factors, specify competing models and priors and examine prior sensitivity
 
 ### Pitfall 31: Ignoring Prior Probability
 **Problem:** Treating all hypotheses as equally likely initially.
@@ -372,7 +406,8 @@
 
 **Exceptions:** Clinically meaningful cutoffs with strong justification.
 
-**Better:** Keep continuous or use multiple categories.
+**Better:** Model the continuous relationship, including nonlinear terms when justified;
+adding arbitrary categories still loses information.
 
 ### Pitfall 33: Trying Multiple Transformations
 **Problem:** Testing many transformations until finding significance.
@@ -402,11 +437,13 @@
 **Problem:** Not considering why data are missing.
 
 **Types:**
-- MCAR (Missing Completely at Random): Safe to delete
-- MAR (Missing at Random): Can impute
-- MNAR (Missing Not at Random): May bias results
+- MCAR: missingness independent of observed and unobserved data; deletion can lose precision
+- MAR: conditional on the observed variables used, missingness is independent of missing
+  values; imputation/likelihood methods still require correctly specified, compatible models
+- MNAR: residual dependence on missing values; examine plausible sensitivity scenarios
 
-**Solution:** Analyze patterns, use appropriate methods, consider sensitivity analyses.
+**Solution:** Record reasons, timing, and assumptions. Observed missingness patterns cannot
+establish MAR versus MNAR. Pool imputation uncertainty; single mean imputation is not a fix.
 
 ## Publication and Reporting Issues
 
@@ -435,7 +472,8 @@
 
 **Consequences:**
 - Can't verify results
-- Can't include in meta-analyses
+- Some independent checks or individual-participant-data analyses may be impossible;
+  published aggregate estimates can still support an appropriate meta-analysis
 - Hinders scientific progress
 
 **Best practice:** Share data unless privacy concerns prohibit.
@@ -462,7 +500,9 @@
 
 **Consequence:** Inflated performance metrics.
 
-**Prevention:** All preprocessing decisions made using only training data.
+**Prevention:** Fit learned preprocessing only on the training portion of each fold; tune
+within that boundary and reserve an untouched evaluation set. Split by independent subject,
+site, batch, or time as the deployment question requires; technical replicates must not leak.
 
 ## Meta-Analysis Pitfalls
 
@@ -481,16 +521,21 @@
 
 **Consequences:** Overestimated effects in meta-analyses.
 
-**Detection:**
-- Funnel plots
-- Trim-and-fill
-- PET-PEESE
-- P-curve analysis
+**Assessment:** Compare protocols/registries and reported outcomes; seek eligible unpublished
+results. Funnel asymmetry indicates small-study effects, not necessarily publication bias.
+Asymmetry tests generally need at least ten studies with varying precision and a method
+appropriate to the effect measure; a negative test cannot exclude missing evidence.
 
-**Solutions:**
-- Include unpublished studies
-- Register reviews
-- Use bias-correction methods
+**Sensitivity analysis:** Trim-and-fill, selection models, PET-PEESE, and p-curve have
+different assumptions and targets. Do not describe adjusted estimates as recovered truth
+or treat fail-safe N as a reliability certificate.
+
+### Pitfall 43: Pseudoreplication and Changing Denominators
+Repeated measurements, cells from one donor, or wells from one culture are not automatically
+independent biological replicates. Identify assignment and sampling units; use an appropriate
+hierarchical/repeated-measures analysis or justified aggregation. Report independent-unit n
+separately from measurement count. A mean of group percentages differs from the pooled
+numerator/denominator when group sizes differ; state weighting, evaluable counts, and exclusions.
 
 ## General Best Practices
 

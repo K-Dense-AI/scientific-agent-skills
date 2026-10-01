@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
-"""Maximum a posteriori Bayesian forecasting for therapeutic drug monitoring.
+"""Research MAP fitting for a simple one-compartment prior and fixed IV regimen.
 
-Given a published population model and one or two measured concentrations,
-MAP estimation produces individual parameters that shrink towards the
-population when the data are uninformative and follow the data when they are
-not. That property is exactly why it beats the alternatives clinicians reach
-for: a single trough interpreted with population parameters ignores the
-individual, and log-linear regression on two points ignores the population and
-falls apart when a level is drawn during distribution.
+Assumes identical evenly spaced doses, fixed physiology and Gaussian residual
+error. The included vancomycin prior is illustrative, not clinically validated.
+No posterior interval or patient-specific dose recommendation is provided.
 
-    python3 tdm_bayes.py --model vancomycin-adult --weight 80 --crcl 75 \\
-        --dose 1500 --interval 12 --level 18.2@11.5 --level 42@1.5
-
-    python3 tdm_bayes.py --custom --cl-pop 4.2 --v-pop 45 --omega-cl 0.30 \\
-        --omega-v 0.25 --prop-error 0.12 --dose 1000 --interval 8 --level 12@7.5
-
-Each ``--level`` is ``concentration@time-after-the-most-recent-dose``. The
-regimen is assumed to have been given long enough to be at steady state unless
-``--doses-given`` says otherwise.
+    python3 tdm_bayes.py --custom --cl-pop 5 --v-pop 40 --dose 1000 --interval 12 --level 15@10
 """
 
 from __future__ import annotations
@@ -140,23 +128,23 @@ def map_estimate(
 
 
 def exposure_metrics(cl: float, v: float, dose: float, interval: float, infusion: float) -> dict:
-    disp = disposition(cl, v)
-    regimen = build_regimen(dose, interval=interval, n_doses=60, duration=infusion)
-    grid = np.linspace(59 * interval, 60 * interval, 2001)
-    profile = simulate_linear(grid, regimen, disp)
-    auc_tau = float(np.trapezoid(profile, grid))
+    k = cl / v
+    accumulation = -math.expm1(-k * interval)
+    peak = dose / v / accumulation if infusion == 0 else dose / (infusion * cl) * (-math.expm1(-k * infusion)) / accumulation
+    trough = peak * math.exp(-k * (interval - infusion))
+    auc_tau = dose / cl
     per_day = 24.0 / interval
     return {
         "auc_tau": auc_tau,
         "auc_24h": auc_tau * per_day,
-        "cmax_ss": float(profile.max()),
-        "cmin_ss": float(profile.min()),
+        "cmax_ss": peak,
+        "cmin_ss": trough,
         "cavg_ss": auc_tau / interval,
     }
 
 
 def recommend_dose(cl: float, target_auc24: float) -> float:
-    """Total daily dose to hit a target AUC24: linear PK makes this exact."""
+    """Model-implied total daily dose under linear steady-state PK, not clinical advice."""
     return target_auc24 * cl
 
 
@@ -171,7 +159,7 @@ def _level(text: str) -> tuple[float, float]:
         conc, time = float(conc_text), float(time_text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"could not parse --level {text!r}") from exc
-    if conc <= 0 or time < 0:
+    if not math.isfinite(conc) or not math.isfinite(time) or conc <= 0 or time < 0:
         raise argparse.ArgumentTypeError("concentration must be positive and time non-negative")
     return conc, time
 
@@ -197,13 +185,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--infusion", type=float, default=1.0, help="infusion duration, h (default: 1)")
     parser.add_argument("--doses-given", type=int, default=20, help="doses administered before the levels (default: 20)")
     parser.add_argument("--level", type=_level, action="append", required=True, help="conc@time-after-last-dose")
-    parser.add_argument("--target-auc24", type=float, help="target AUC24 for a dose recommendation")
+    parser.add_argument("--target-auc24", type=float, help="target AUC24 for an illustrative dose calculation")
     add_format_argument(parser)
     return parser
 
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
     if bool(args.model) == bool(args.custom):
         raise InputError("choose either --model NAME or --custom")
     if args.custom:
@@ -226,6 +216,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         model = LIBRARY[args.model]
         cl_prior, v_prior = model.individualise(args.weight, args.crcl)
 
+    if cl_prior <= 0 or v_prior <= 0 or model.omega_cl <= 0 or model.omega_v <= 0:
+        raise InputError("population CL, V and log-scale omega SDs must be positive")
+    if model.prop_error < 0 or model.add_error <= 0:
+        raise InputError("proportional error must be non-negative and additive SD positive")
+    if args.doses_given < 1 or args.infusion < 0 or (args.target_auc24 is not None and args.target_auc24 <= 0):
+        raise InputError("invalid dose count, infusion duration or target AUC")
     if args.interval <= 0 or args.dose <= 0:
         raise InputError("dose and interval must be positive")
     if args.infusion >= args.interval:
@@ -240,6 +236,8 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     report = Report()
     report.scalar("model", model.name)
+    report.scalar("doses_given", args.doses_given)
+    report.note("Levels use hours after the latest dose START; history is identical evenly spaced IV doses. Default 20 doses does not guarantee steady state. No posterior intervals or clinical model validation are provided.")
     report.scalar("population_cl", cl_prior)
     report.scalar("population_v", v_prior)
     report.scalar("individual_cl", result["cl_individual"])
@@ -269,10 +267,10 @@ def run(argv: Sequence[str] | None = None) -> int:
         daily = recommend_dose(result["cl_individual"], args.target_auc24)
         per_dose = daily / (24.0 / args.interval)
         report.scalar("target_auc24", args.target_auc24)
-        report.scalar("recommended_total_daily_dose", daily)
-        report.scalar("recommended_dose_per_interval", per_dose)
+        report.scalar("model_target_total_daily_dose", daily)
+        report.scalar("model_target_dose_per_interval", per_dose)
         report.note(
-            "The dose recommendation assumes linear pharmacokinetics, so AUC scales exactly with dose. "
+            "The model target calculation assumes linear pharmacokinetics, so AUC scales exactly with dose. "
             "It says nothing about whether the target itself is right for this patient."
         )
 

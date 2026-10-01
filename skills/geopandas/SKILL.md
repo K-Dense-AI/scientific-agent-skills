@@ -2,41 +2,62 @@
 name: geopandas
 description: Guidance and local audit tools for Python workflows that directly use GeoPandas GeoSeries, GeoDataFrame, spatial operations, or vector-data I/O.
 license: MIT
-compatibility: Requires Python 3.10+ and uv. Bundled CLIs are local-only; runtime analysis requires the pinned GeoPandas stack below.
+compatibility: Requires Python 3.12+ and uv for the tested stack. Bundled CLIs are local-only; runtime analysis requires the pinned GeoPandas stack below.
 allowed-tools: Read Write Bash Glob Grep
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-10-01"
 ---
 
 # GeoPandas
 
 Use GeoPandas for planar vector data represented as pandas-like `GeoSeries` and
-`GeoDataFrame` objects. This skill targets stable **GeoPandas 1.1.4** (released
-2026-06-26), not the unreleased 1.2 documentation.
+`GeoDataFrame` objects. This skill targets stable **GeoPandas 1.2.0** (released
+2026-09-28). The stable website currently carries a development build label;
+release-specific behavior below was checked against the v1.2.0 source and wheel.
 
 ## Reproducible environment
 
-GeoPandas 1.1.4 requires Python 3.10+; its tagged source requires NumPy >=1.24,
-pandas >=2.0, Shapely >=2.0, pyproj >=3.5, pyogrio >=0.7.2, and `packaging`.
-This exact Python 3.12 snapshot was smoke-tested on 2026-07-23:
+GeoPandas 1.2.0 requires Python 3.11+, NumPy >=2, pandas >=2.2,
+Shapely >=2.1, pyproj >=3.7, pyogrio >=0.8, and `packaging`. The current
+pyproj wheel below requires Python 3.12+. This exact Python 3.12 snapshot was
+smoke-tested on 2026-10-01:
 
 ```bash
 uv venv --python 3.12
 uv pip install \
-  "geopandas==1.1.4" \
-  "numpy==2.5.1" \
-  "pandas==3.0.5" \
+  "geopandas==1.2.0" \
+  "numpy==2.5.3" \
+  "pandas==3.0.6" \
   "shapely==2.1.2" \
-  "pyproj==3.7.2" \
+  "pyproj==3.8.0" \
   "pyogrio==0.13.0" \
-  "pyarrow==25.0.0" \
-  "packaging==26.2"
+  "pyarrow==25.0.1" \
+  "packaging==26.3"
 ```
 
 Keep optional plotting and PostGIS packages pinned in the project lock as well.
 Do not mix binary geospatial packages from incompatible package channels.
+
+## Workflow
+
+1. Inspect a vetted local layer with `vector_inventory.py`; retain source hashes.
+2. Use `crs_reprojection_plan.py` to inspect candidate transformations. It plans
+   only: execute an appropriate `to_crs()`/pyproj transformation separately.
+3. Audit geometry with `geometry_validity_report.py`; compare simulated repair
+   changes before requesting its optional new GeoPackage output.
+4. Run the intended analysis with explicit predicates, CRS units, precision,
+   and aggregation rules. `spatial_join_audit.py` measures join cardinality;
+   it does not export joined features or perform a dissolve.
+5. Use `export_plan.py` to inspect the proposed contract, then write and reopen
+   the actual output separately. A successful plan has not written a file.
+6. Review disclosure and generalization before sharing derived geodata/maps,
+   using `sensitive_coordinates_checklist.py` when sensitive locations occur.
+
+Examples below use synthetic or placeholder local inputs. File/database examples
+need the named dataset or service; PostGIS and tile-provider calls were reviewed
+against upstream contracts but were not exercised against a live service.
 
 ## Safety and privacy contract
 
@@ -165,9 +186,11 @@ GeoPandas 1.x defaults to pyogrio. Driver availability and semantics come from
 the installed GDAL, not GeoPandas alone. Prefer local GeoPackage for general
 interchange and WKB GeoParquet for columnar interoperability.
 
-GeoParquet defaults to stable schema 1.0.0. Native GeoArrow encodings and bbox
-covering require schema 1.1.0 and remain less interoperable. A missing GeoParquet
-`crs` key means `OGC:CRS84`; explicit `crs: null` means unknown—do not conflate
+GeoParquet defaults to stable schema **1.1.0** in GeoPandas 1.2. Set
+`schema_version="1.0.0"` explicitly for an older consumer. Native GeoArrow
+encoding requires 1.1.0; bbox covering requires 1.1.0 or later. The upcoming
+2.0.0 schema is opt-in, WKB-only, and requires PyArrow >=21 for writing.
+A missing GeoParquet `crs` key means `OGC:CRS84`; explicit `crs: null` means unknown—do not conflate
 them. Reopen and validate every export.
 
 Use parameterized SQL and a SQLAlchemy `Engine`/`Connection` for PostGIS.
@@ -196,8 +219,13 @@ For code moving from GeoPandas 0.14 or earlier:
 - Do not assign `.crs` to override metadata or rely on deprecated
   `set_geometry(drop=...)`; use explicit `set_crs()` and rename/drop steps.
 - GeoPandas 1.1 requires Python >=3.10, pandas >=2.0, NumPy >=1.24, and pyproj
-  >=3.5. Version 1.1.2 fixed SQL injection through a PostGIS geometry-column
-  name; the pinned 1.1.4 includes that fix.
+  >=3.5. Version 1.2 raises these floors as listed above. PostGIS hardening
+  shipped in 1.1.2 and 1.1.4 and is included in the pinned 1.2.0.
+- In 1.2, replace `buffer(resolution=...)` with `quad_segs=...`; remove the
+  expired `use_pygeos` option and use `sample_points(rng=...)`, not `seed=`.
+- Recheck plot styling/legends after the 1.2 plotting rewrite. Avoid depending
+  on Matplotlib collection internals; static `plot(tiles=...)` can now fetch
+  basemap imagery when requested.
 
 ### Plotting and exploration
 
@@ -231,7 +259,7 @@ python skills/geopandas/scripts/geometry_validity_report.py data.gpkg
 python skills/geopandas/scripts/spatial_join_audit.py points.gpkg zones.gpkg \
   --predicate within --left-id point_id --right-id zone_id
 python skills/geopandas/scripts/export_plan.py data.gpkg result.parquet \
-  --format geoparquet --schema-version 1.0.0 \
+  --format geoparquet --schema-version 1.1.0 \
   --stable-id-column feature_id --id-unique-verified
 python skills/geopandas/scripts/sensitive_coordinates_checklist.py \
   --public-output --precise-points --contains-addresses
@@ -246,11 +274,11 @@ python skills/geopandas/scripts/sensitive_coordinates_checklist.py \
 - [Data I/O](references/data-io.md)
 - [Visualization](references/visualization.md)
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
-- [GeoPandas 1.1.4 on PyPI](https://pypi.org/project/geopandas/1.1.4/) — released 2026-06-26.
-- [GeoPandas 1.1.4 release](https://github.com/geopandas/geopandas/releases/tag/v1.1.4) — bug-fix release.
-- [GeoPandas 1.1.4 tagged dependencies](https://github.com/geopandas/geopandas/blob/v1.1.4/pyproject.toml).
+- [GeoPandas 1.2.0 on PyPI](https://pypi.org/project/geopandas/1.2.0/) — released 2026-09-28.
+- [GeoPandas changelog](https://geopandas.org/en/stable/docs/changelog.html).
+- [GeoPandas 1.2.0 tagged dependencies](https://github.com/geopandas/geopandas/blob/v1.2.0/pyproject.toml).
 - [Stable GeoPandas documentation](https://geopandas.org/en/stable/).
 - [GeoPandas 1.0 migration release](https://github.com/geopandas/geopandas/releases/tag/v1.0.0).
 

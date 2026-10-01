@@ -1,111 +1,107 @@
-# Biohub Platform and ESMFold2
+# Biohub and ESMFold2: esm 3.4.1.post1
 
-## Overview
+## Released support and access
 
-EvolutionaryScale and Forge now surface current hosted ESM workflows through the [Biohub platform](https://biohub.ai). The Python SDK still uses `esm.sdk.forge` client classes and "Forge" naming in some places, but current Biohub APIs use `https://biohub.ai` endpoints.
+The released SDK includes ESMFold2; a floating GitHub installation is unnecessary.
+Use the isolated environment in `SKILL.md`. Current Biohub ESMC6B and ESMFold2
+weights are public with MIT model-card labels; ESMC also links third-party
+license notices. Availability of weights
+does not imply a small memory footprint or access to every hosted model.
 
-Use this reference when you need **all-atom structure prediction** (ESMFold2) or when upstream docs point to `biohub.ai` instead of `forge.evolutionaryscale.ai`.
+ESMFold2 combines ESMC representations with all-atom diffusion prediction. It
+returns a molecular complex, unlike ESM3's `ESMProtein` structure track. Use
+`result.complex.to_mmcif()` for mixed polymers/ligands and preserve chain IDs,
+modifications and chemical components. A predicted static structure is not a
+binding-energy, activity or dynamics assay.
 
-## Authentication
+## Hosted example
 
-Create API keys in the [Biohub developer console](https://biohub.ai/developer-console/api-keys). Store the key in `ESM_API_KEY` (same env var used by `esm.sdk.client()` on Forge).
-
-```python
-import os
-
-token = os.environ["ESM_API_KEY"]
-```
-
-Never commit API keys or paste them into notebooks checked into git.
-
-## Installation
-
-The legacy ESM3/ESMC examples in this skill target `esm==3.2.3`. Do not assume that pin includes the newer Biohub/ESMFold2 classes shown below; match those examples to the SDK release or commit specified by their current upstream documentation.
-
-For ESMFold2 and the newest Biohub SDK features, upstream may recommend installing from the Biohub GitHub repo. Avoid floating branch installs in automated or production instructions. Pin a trusted release or a full 40-character commit SHA from the official Biohub repository, and review the verified GitHub release/commit before installing:
-
-```bash
-uv pip install "esm@git+https://github.com/Biohub/esm.git@<full-40-character-commit-sha>"
-```
-
-Confirm which install source your task requires before mixing PyPI and GitHub builds in one environment.
-
-## ESMFold2 Structure Prediction
-
-ESMFold2 is a structure prediction model built on ESMC 6B, available through `SequenceStructureForgeInferenceClient` with Biohub as the API host. Biohub lists ESMFold2 as a 2026-04/2026-05 model family and documents `esmfold2-fast-2026-05` for hosted inference.
+Illustrative; requires an authorized key and sends the input to Biohub.
 
 ```python
 import os
-from esm.sdk.forge import SequenceStructureForgeInferenceClient
-from esm.sdk.api import FoldingConfig
+from esm.sdk import esmfold2_client
+from esm.sdk.api import ESMProteinError, FoldingConfig
 from esm.utils.structure.input_builder import ProteinInput, StructurePredictionInput
 
-client = SequenceStructureForgeInferenceClient(
-    model="esmfold2-fast-2026-05",
-    url="https://biohub.ai",
-    token=os.environ["ESM_API_KEY"],
+input_data = StructurePredictionInput(
+    sequences=[ProteinInput(id="A", sequence="MPRTKEINDAGLIVHSPQWFYK")]
 )
-
-sequence = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK"
-
-fold_input = StructurePredictionInput(
-    sequences=[ProteinInput(id="A", sequence=sequence)]
-)
-
-config = FoldingConfig(num_loops=3, num_sampling_steps=32)
-result = client.fold_all_atom(fold_input, config=config)
-
-with open("result.cif", "w") as f:
-    f.write(result.complex.to_mmcif())
+config = FoldingConfig(num_loops=20, num_sampling_steps=100, include_pae=True)
+with esmfold2_client(model="esmfold2-fast-2026-05", url="https://biohub.ai",
+                     token=os.environ["ESM_API_KEY"], request_timeout=300) as client:
+    result = client.fold_all_atom(input_data, config=config)
+if isinstance(result, ESMProteinError):
+    raise result
+with open("predicted.cif", "w") as handle:
+    handle.write(result.complex.to_mmcif())
 ```
 
-## Hosted ESMC Embeddings
+`fold_all_atom` posts `/api/v1/fold_all_atom`; settings are passed by keyword
+because the second positional argument of the synchronous method is
+`model_name`, not `config`. The released deserializer returns one
+`MolecularComplexResult`, despite an annotation allowing a list.
 
-Biohub also documents hosted ESMC inference with `esmc_client()` and dated ESMC model IDs:
+The response exposes `plddt`, `ptm`, `iptm` (mapped from `interface_ptm`), `pae`,
+and optional embeddings. Some values may be absent; inspect their shape and
+units for the actual result before summarizing. Chain/atom arrays may require
+mapping to polymer residues; do not assume every complex token is one amino acid.
+Keep low-confidence regions and alignment coverage visible. No numerical
+accuracy or confidence calibration was measured in this refresh.
+
+## MSA and configuration limits
+
+- `esmfold2-fast-2026-05` is the documented single-sequence hosted example and
+  **ignores supplied MSAs**, with an SDK warning. Current constants also name
+  `esmfold2-2026-05`; confirm account availability before using another model.
+- `ProteinInput.msa` accepts an SDK `MSA` object or `None`, not a raw A3M string.
+  Keep the query sequence, row alignment and chain assignment consistent. The
+  client rejects an over-limit MSA for the MSA-enabled model; inspect the released
+  `ESMFOLD2_MAX_MSA_SEQS` and current service limits rather than inventing a depth.
+- `FoldingConfig` defaults to 20 loops and 100 sampling steps. Lower values trade
+  computation for quality; they are not validated accuracy-equivalent settings.
+  `lm_mask_pct=None` resolves to 0.1 for the fast model, 0.0 for the full model.
+- Hosted `include_distogram=True` is rejected by the released client. Although
+  `include_pair_chains_iptm` exists in `FoldingConfig`, the released
+  `fold_all_atom` serializer does not send it. Do not promise pair-chain IPTM
+  output through that path.
+- `FoldingConfig` has no seed field. Record settings and returned identifiers;
+  a local seed is not transmitted by this hosted API.
+
+## Local ESMFold2
+
+The following is an official-API illustration, not an executed pretrained run:
 
 ```python
-import os
-from esm.sdk import esmc_client
-from esm.sdk.api import ESMProtein, LogitsConfig
+from esm.models.esmfold2 import EsmFold2Model, ESMFold2InputBuilder
 
-model = esmc_client(
-    model="esmc-600m-2024-12",
-    url="https://biohub.ai",
-    token=os.environ["ESM_API_KEY"],
+model = EsmFold2Model.from_pretrained("biohub/ESMFold2", device="cuda").eval()
+result = ESMFold2InputBuilder().fold(
+    model, input_data, num_loops=20, num_sampling_steps=100,
+    num_diffusion_samples=1, seed=0,
 )
-
-protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
-protein_tensor = model.encode(protein)
-logits_output = model.logits(
-    protein_tensor,
-    LogitsConfig(sequence=True, return_embeddings=True),
-)
-embeddings = logits_output.embeddings
+with open("local_prediction.cif", "w") as handle:
+    handle.write(result.complex.to_mmcif())
 ```
 
-### Model IDs
+This needs large model weights and suitable GPU resources. Do not download them
+for a signature check. The repository also documents longer-sequence Fold-CP
+and an independent Transformers implementation; those deployment paths were not
+executed here and require their own dependency/parallelism review.
 
-| Model ID | Use case |
-|----------|----------|
-| `esmfold2-fast-2026-05` | Fast single-sequence folding |
-| Check Biohub docs for additional variants | MSA-augmented or higher-accuracy modes |
+## Complex input conventions
 
-ESMFold2 predicts static all-atom structures. Treat outputs as hypotheses that require experimental validation, especially for therapeutic, clinical, or safety-sensitive uses.
+`ProteinInput`, `DNAInput`, `RNAInput`, and `LigandInput` belong in
+`StructurePredictionInput.sequences`. IDs must preserve chain identity.
+`LigandInput(ccd=["SAH"], id="L")` uses a **list** of CCD codes; a bare string is
+rejected. Use a CCD list or SMILES deliberately rather than providing ambiguous
+competing representations. `Modification.position`, covalent-bond residue
+indices and atom indices are **0-based**; they do not share the 1-based ESM3
+`FunctionAnnotation` convention. Validate molecule chemistry and all residue/atom
+mappings before inference. Prediction availability does not validate them.
 
-## Relationship to Forge (ESM3 / ESM C)
-
-| Capability | Typical endpoint | Client |
-|------------|------------------|--------|
-| ESM3 generation | `https://forge.evolutionaryscale.ai` | `esm.sdk.client()` or `ESM3ForgeInferenceClient` |
-| ESM C 6B embeddings (hosted) | Forge | `ESM3ForgeInferenceClient` with `esmc-6b-2024-12` |
-| ESMC hosted embeddings | `https://biohub.ai` | `esmc_client()` with dated ESMC model IDs |
-| ESMFold2 structure prediction | `https://biohub.ai` | `SequenceStructureForgeInferenceClient` |
-
-For ESM3 and ESM C cloud usage patterns, see `forge-api.md`. For local open-weight models, see `esm3-api.md` and `esm-c-api.md`.
-
-## Additional Resources
-
-- **Biohub:** https://biohub.ai
-- **Biohub/esm repository:** https://github.com/Biohub/esm
-- **Tutorials:** https://github.com/Biohub/esm/tree/main/cookbook/tutorials
-- **ESMC & ESMFold2 preprint:** https://biohub.ai/papers/esm_protein.pdf
+Sources: [official README](https://github.com/Biohub/esm),
+[ESMFold2 card](https://huggingface.co/biohub/ESMFold2),
+[folding SDK](https://github.com/Biohub/esm/blob/main/esm/sdk/forge.py),
+[input types](https://github.com/Biohub/esm/blob/main/esm/utils/structure/input_builder.py),
+[API configs](https://github.com/Biohub/esm/blob/main/esm/sdk/api.py).

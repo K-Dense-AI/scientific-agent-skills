@@ -16,13 +16,22 @@ This script removes:
 """
 
 import posixpath
-import re
 import sys
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 import defusedxml.minidom
 
 from office.helpers import SLIDE_REL_TYPE, opc_target, rels_source_part
+
+PRESENTATION_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+CONTENT_TYPES_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
+
+
+class RefusedToClean(Exception):
+    """The package does not look the way a readable package should."""
 
 
 def _slide_rids(pres_rels_path: Path, unpacked_dir: Path) -> dict[str, str]:
@@ -30,14 +39,17 @@ def _slide_rids(pres_rels_path: Path, unpacked_dir: Path) -> dict[str, str]:
     rels_dom = defusedxml.minidom.parse(str(pres_rels_path))
 
     rids: dict[str, str] = {}
-    for rel in rels_dom.getElementsByTagName("Relationship"):
+    for rel in rels_dom.getElementsByTagNameNS(PACKAGE_REL_NS, "Relationship"):
         if rel.getAttribute("Type") != SLIDE_REL_TYPE:
             continue
         part = opc_target(
             rel.getAttribute("Target"), source_part, rel.getAttribute("TargetMode")
         )
         if part is not None:
-            rids[rel.getAttribute("Id")] = part
+            rid = rel.getAttribute("Id")
+            if not rid or rid in rids:
+                raise RefusedToClean("missing or duplicate slide relationship Id")
+            rids[rid] = part
     return rids
 
 
@@ -45,23 +57,25 @@ def get_slides_in_sldidlst(unpacked_dir: Path) -> set[str]:
     pres_path = unpacked_dir / "ppt" / "presentation.xml"
     pres_rels_path = unpacked_dir / "ppt" / "_rels" / "presentation.xml.rels"
 
-    if not pres_path.exists() or not pres_rels_path.exists():
-        return set()
+    if not pres_path.is_file() or not pres_rels_path.is_file():
+        raise RefusedToClean("presentation.xml and its relationships must both exist")
 
     rid_to_slide = _slide_rids(pres_rels_path, unpacked_dir)
 
-    pres_content = pres_path.read_text(encoding="utf-8")
-    referenced_rids = set(re.findall(r'<p:sldId[^>]*r:id="([^"]+)"', pres_content))
-
-    return {
-        posixpath.basename(rid_to_slide[rid])
-        for rid in referenced_rids
-        if rid in rid_to_slide
-    }
-
-
-class RefusedToClean(Exception):
-    """The package does not look the way a readable package should."""
+    dom = defusedxml.minidom.parse(str(pres_path))
+    root = dom.documentElement
+    if root.namespaceURI != PRESENTATION_NS or root.localName != "presentation":
+        raise RefusedToClean("unsupported or unrecognized presentation namespace")
+    referenced = set()
+    for node in dom.getElementsByTagNameNS(PRESENTATION_NS, "sldId"):
+        rid = node.getAttributeNS(OFFICE_REL_NS, "id")
+        part = rid_to_slide.get(rid)
+        if part is None or not (unpacked_dir / part).is_file():
+            raise RefusedToClean(f"listed slide {rid!r} has no existing internal slide target")
+        if posixpath.dirname(part) != "ppt/slides":
+            raise RefusedToClean(f"unsupported slide location: {part}")
+        referenced.add(posixpath.basename(part))
+    return referenced
 
 
 def remove_orphaned_slides(unpacked_dir: Path) -> list[str]:
@@ -74,20 +88,6 @@ def remove_orphaned_slides(unpacked_dir: Path) -> list[str]:
 
     referenced_slides = get_slides_in_sldidlst(unpacked_dir)
     on_disk = sorted(slides_dir.glob("slide*.xml"))
-
-    if on_disk and not any(s.name in referenced_slides for s in on_disk):
-        listed = re.findall(
-            r'<p:sldId[^>]*r:id="([^"]+)"',
-            (unpacked_dir / "ppt" / "presentation.xml").read_text(encoding="utf-8")
-            if (unpacked_dir / "ppt" / "presentation.xml").exists()
-            else "",
-        )
-        if listed:
-            raise RefusedToClean(
-                f"<p:sldIdLst> lists {len(listed)} slide(s) and none of the "
-                f"{len(on_disk)} slide(s) on disk match any of them. Refusing to "
-                f"delete them all — this is a parse failure, not an empty deck."
-            )
 
     removed = []
 
@@ -107,7 +107,7 @@ def remove_orphaned_slides(unpacked_dir: Path) -> list[str]:
         source_part = rels_source_part(pres_rels_path, unpacked_dir)
         changed = False
 
-        for rel in list(rels_dom.getElementsByTagName("Relationship")):
+        for rel in list(rels_dom.getElementsByTagNameNS(PACKAGE_REL_NS, "Relationship")):
             if rel.getAttribute("Type") != SLIDE_REL_TYPE:
                 continue
             part = opc_target(
@@ -148,7 +148,9 @@ def _referenced_by(rels_files, unpacked_dir: Path) -> set:
     for rels_file in rels_files:
         source_part = rels_source_part(rels_file, unpacked_dir)
         dom = defusedxml.minidom.parse(str(rels_file))
-        for rel in dom.getElementsByTagName("Relationship"):
+        if dom.documentElement.namespaceURI != PACKAGE_REL_NS:
+            raise RefusedToClean(f"unsupported relationships namespace in {rels_file.name}")
+        for rel in dom.getElementsByTagNameNS(PACKAGE_REL_NS, "Relationship"):
             part = opc_target(
                 rel.getAttribute("Target"), source_part, rel.getAttribute("TargetMode")
             )
@@ -238,8 +240,8 @@ def update_content_types(unpacked_dir: Path, removed_files: list[str]) -> None:
     dom = defusedxml.minidom.parse(str(ct_path))
     changed = False
 
-    for override in list(dom.getElementsByTagName("Override")):
-        part_name = override.getAttribute("PartName").lstrip("/")
+    for override in list(dom.getElementsByTagNameNS(CONTENT_TYPES_NS, "Override")):
+        part_name = opc_target(override.getAttribute("PartName"), "")
         if part_name in removed_files:
             if override.parentNode:
                 override.parentNode.removeChild(override)
@@ -252,6 +254,19 @@ def update_content_types(unpacked_dir: Path, removed_files: list[str]) -> None:
 
 def clean_unused_files(unpacked_dir: Path) -> list[str]:
     all_removed = []
+
+    # Check all metadata before the first deletion, including content types,
+    # which would otherwise be parsed only after slides had been removed.
+    if any(path.is_symlink() for path in unpacked_dir.rglob("*")):
+        raise RefusedToClean("clean an extracted package without symbolic links")
+    ct_path = unpacked_dir / "[Content_Types].xml"
+    if not ct_path.is_file():
+        raise RefusedToClean("[Content_Types].xml is missing")
+    ct = defusedxml.minidom.parse(str(ct_path))
+    if ct.documentElement.namespaceURI != CONTENT_TYPES_NS:
+        raise RefusedToClean("unsupported content-types namespace")
+    for node in ct.getElementsByTagNameNS(CONTENT_TYPES_NS, "Override"):
+        opc_target(node.getAttribute("PartName"), "")
 
     if list(unpacked_dir.rglob("*.rels")) and not get_referenced_files(unpacked_dir):
         raise RefusedToClean(
@@ -296,9 +311,9 @@ if __name__ == "__main__":
 
     try:
         removed = clean_unused_files(unpacked_dir)
-    except (RefusedToClean, ValueError) as e:
+    except (RefusedToClean, ValueError, OSError, ExpatError) as e:
         print(f"Error: {e}", file=sys.stderr)
-        print("Nothing was deleted.", file=sys.stderr)
+        print("Cleanup stopped; check the working copy before retrying.", file=sys.stderr)
         sys.exit(1)
 
     if removed:

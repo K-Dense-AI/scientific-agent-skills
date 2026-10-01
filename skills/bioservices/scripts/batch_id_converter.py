@@ -25,14 +25,14 @@ Common database codes:
     Ensembl_Protein  - Ensembl protein IDs
     RefSeq_Protein   - RefSeq protein IDs
     PDB              - Protein Data Bank IDs
-    HGNC             - Human gene symbols
-    GO               - Gene Ontology IDs
+    HGNC             - HGNC identifiers (not gene symbols)
 """
 
 import sys
 import argparse
 import csv
 import time
+from pathlib import Path
 from bioservices import UniProt
 
 
@@ -51,17 +51,16 @@ DATABASE_CODES = {
     'pdb': 'PDB',
     'hgnc': 'HGNC',
     'mgi': 'MGI',
-    'go': 'GO',
-    'pfam': 'Pfam',
-    'interpro': 'InterPro',
     'reactome': 'Reactome',
     'string': 'STRING',
     'biogrid': 'BioGRID'
 }
 
 
-def normalize_database_code(code):
+def normalize_database_code(code, target=False):
     """Normalize database code to official format."""
+    if target and code.lower() in {"uniprot", "uniprotkb"}:
+        return "UniProtKB"
     # Try exact match first
     if code in DATABASE_CODES.values():
         return code
@@ -91,73 +90,55 @@ def read_ids_from_file(filename):
     return ids
 
 
-def batch_convert(ids, from_db, to_db, chunk_size=100, delay=0.5):
-    """Convert IDs with automatic chunking and error handling."""
-    print(f"\nConverting {len(ids)} IDs:")
-    print(f"  From: {from_db}")
-    print(f"  To: {to_db}")
-    print(f"  Chunk size: {chunk_size}")
-    print()
+def mapping_to_lists(response):
+    """Normalize the 1.16 mapping envelope without losing one-to-many matches.
 
+    UniProtKB targets are records; KEGG and many other targets are strings.
+    A missing/invalid envelope is a service failure, not an unmapped result.
+    """
+    if not isinstance(response, dict) or not ({"results", "failedIds"} & response.keys()):
+        raise ValueError("UniProt mapping did not return results/failedIds")
+    mapping = {}
+    for row in response.get("results", []):
+        source, target = row["from"], row["to"]
+        if isinstance(target, dict):
+            target = target.get("primaryAccession") or target.get("uniParcId") or target.get("id")
+        if not isinstance(source, str) or not isinstance(target, str) or not target:
+            raise ValueError("Unsupported mapping record; preserve and inspect the raw response")
+        values = mapping.setdefault(source, [])
+        if target not in values:
+            values.append(target)
+    for identifier in response.get("failedIds", []):
+        mapping.setdefault(identifier, [])
+    return mapping
+
+
+def batch_convert(ids, from_db, to_db, chunk_size=100, delay=0.5):
+    """Return mapping and unresolved IDs; [] means explicitly unmapped, None failed."""
+    if chunk_size < 1 or chunk_size > 100000 or delay < 0:
+        raise ValueError("chunk_size must be 1..100000 and delay nonnegative")
     u = UniProt(verbose=False)
     all_results = {}
-    failed_ids = []
-
-    total_chunks = (len(ids) + chunk_size - 1) // chunk_size
-
     for i in range(0, len(ids), chunk_size):
-        chunk = ids[i:i+chunk_size]
-        chunk_num = (i // chunk_size) + 1
-
-        query = ",".join(chunk)
-
+        chunk = ids[i:i + chunk_size]
         try:
-            print(f"  [{chunk_num}/{total_chunks}] Processing {len(chunk)} IDs...", end=" ")
-
-            results = u.mapping(fr=from_db, to=to_db, query=query)
-
-            if results:
-                all_results.update(results)
-                mapped_count = len([v for v in results.values() if v])
-                print(f"[OK] Mapped: {mapped_count}/{len(chunk)}")
-            else:
-                print(f"[FAIL] No mappings returned")
-                failed_ids.extend(chunk)
-
-            # Rate limiting
-            if delay > 0 and i + chunk_size < len(ids):
-                time.sleep(delay)
-
-        except Exception as e:
-            print(f"[FAIL] Error: {e}")
-
-            # Try individual IDs in failed chunk
-            print(f"    Retrying individual IDs...")
-            for single_id in chunk:
+            result = mapping_to_lists(u.mapping(fr=from_db, to=to_db, query=",".join(chunk)))
+            all_results.update({identifier: result.get(identifier) for identifier in chunk})
+        except Exception as error:
+            print(f"[FAIL] Batch lookup: {error}; retrying individual identifiers")
+            for identifier in chunk:
                 try:
-                    result = u.mapping(fr=from_db, to=to_db, query=single_id)
-                    if result:
-                        all_results.update(result)
-                        print(f"      [OK] {single_id}")
-                    else:
-                        failed_ids.append(single_id)
-                        print(f"      [FAIL] {single_id} - no mapping")
-                except Exception as e2:
-                    failed_ids.append(single_id)
-                    print(f"      [FAIL] {single_id} - {e2}")
-
-                time.sleep(0.2)
-
-    # Add missing IDs to results (mark as failed)
-    for id_ in ids:
-        if id_ not in all_results:
-            all_results[id_] = None
-
-    print(f"\n[OK] Conversion complete:")
-    print(f"  Total: {len(ids)}")
-    print(f"  Mapped: {len([v for v in all_results.values() if v])}")
-    print(f"  Failed: {len(failed_ids)}")
-
+                    result = mapping_to_lists(u.mapping(fr=from_db, to=to_db, query=identifier))
+                    all_results[identifier] = result.get(identifier)
+                except Exception as retry_error:
+                    print(f"[FAIL] {identifier}: {retry_error}")
+                    all_results[identifier] = None
+                if delay:
+                    time.sleep(delay)
+        if delay and i + chunk_size < len(ids):
+            time.sleep(delay)
+    failed_ids = [identifier for identifier in dict.fromkeys(ids) if not all_results.get(identifier)]
+    print(f"[OK] Mapped {sum(bool(v) for v in all_results.values())}/{len(all_results)} unique IDs")
     return all_results, failed_ids
 
 
@@ -178,7 +159,7 @@ def save_mapping_csv(mapping, output_file, from_db, to_db):
                 status = "Success"
             else:
                 target_str = ""
-                status = "Failed"
+                status = "Unmapped" if target_ids == [] else "Failed"
 
             writer.writerow([source_id, from_db, target_str, to_db, status])
 
@@ -212,8 +193,8 @@ def print_mapping_summary(mapping, from_db, to_db):
     print(f"\nSource database: {from_db}")
     print(f"Target database: {to_db}")
     print(f"\nTotal identifiers: {total}")
-    print(f"Successfully mapped: {mapped} ({mapped/total*100:.1f}%)")
-    print(f"Failed to map: {failed} ({failed/total*100:.1f}%)")
+    print(f"Successfully mapped: {mapped} ({mapped/total*100 if total else 0:.1f}%)")
+    print(f"Failed to map: {failed} ({failed/total*100 if total else 0:.1f}%)")
 
     # Show some examples
     if mapped > 0:
@@ -267,15 +248,15 @@ Examples:
 
 Common database codes:
   UniProtKB_AC-ID, KEGG, GeneID, Ensembl, Ensembl_Protein,
-  RefSeq_Protein, PDB, HGNC, GO, Pfam, InterPro, Reactome
+  RefSeq_Protein, PDB, HGNC, Reactome
 
 Use --list-databases to see all supported aliases.
         """
     )
-    parser.add_argument("input_file", help="Input file with IDs (one per line)")
-    parser.add_argument("--from", dest="from_db", required=True,
+    parser.add_argument("input_file", nargs="?", help="Input file with IDs (one per line)")
+    parser.add_argument("--from", dest="from_db",
                        help="Source database code")
-    parser.add_argument("--to", dest="to_db", required=True,
+    parser.add_argument("--to", dest="to_db",
                        help="Target database code")
     parser.add_argument("-o", "--output", default=None,
                        help="Output CSV file (default: mapping_results.csv)")
@@ -295,13 +276,18 @@ Use --list-databases to see all supported aliases.
         list_common_databases()
         sys.exit(0)
 
+    if not args.input_file or not args.from_db or not args.to_db:
+        parser.error("input_file, --from and --to are required unless --list-databases is used")
+    if not 1 <= args.chunk_size <= 100000 or args.delay < 0:
+        parser.error("--chunk-size must be 1..100000 and --delay nonnegative")
+
     print("=" * 70)
     print("BIOSERVICES: Batch Identifier Converter")
     print("=" * 70)
 
     # Normalize database codes
     from_db = normalize_database_code(args.from_db)
-    to_db = normalize_database_code(args.to_db)
+    to_db = normalize_database_code(args.to_db, target=True)
 
     if from_db != args.from_db:
         print(f"\nNote: Normalized '{args.from_db}' -> '{from_db}'")
@@ -337,7 +323,7 @@ Use --list-databases to see all supported aliases.
 
     # Save failed IDs if requested
     if args.save_failed and failed_ids:
-        failed_file = output_file.replace(".csv", "_failed.txt")
+        failed_file = str(Path(output_file).with_name(Path(output_file).stem + "_failed.txt"))
         save_failed_ids(failed_ids, failed_file)
 
     print(f"\n[OK] Done!")

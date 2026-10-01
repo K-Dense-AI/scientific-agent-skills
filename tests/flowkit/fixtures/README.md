@@ -6,7 +6,7 @@ The upstream commit is `f2159043b6a56e527d4baacf97490caf8354618e`.
 Its BSD-3-Clause license is preserved in `LICENSE`.
 
 The FCS contains 100 generated points, not biological samples. The workspace
-was saved by FlowJo 10.6.1 and defines a polygon containing 50 points and a
+declares `flowJoVersion="10.7.1"` and defines a polygon containing 50 points and a
 rectangle containing none. The only change to the upstream WSP is replacement
 of its original absolute `file:/V:/flowkit/flowjo_workspace_parsing/simple_line_example/`
 URI prefix with `file:`. Tests supply FCS paths explicitly and do not follow

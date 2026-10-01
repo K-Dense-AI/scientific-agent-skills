@@ -8,6 +8,7 @@ conformity from filenames or keywords and never reports a compliance percentage.
 from __future__ import annotations
 
 import argparse
+import re
 from collections import Counter
 from typing import Any
 
@@ -31,7 +32,8 @@ def _entry_ready(entry: dict[str, Any]) -> bool:
     evidence = entry.get("evidence")
     sources = entry.get("source_refs")
     return (
-        status in {"approved", "implemented", "verified", "closed"}
+        isinstance(status, str)
+        and status in {"approved", "implemented", "verified", "closed"}
         and isinstance(approval, dict)
         and approval.get("status") == "approved"
         and isinstance(evidence, list)
@@ -63,15 +65,20 @@ def analyze(
 
     entries_raw = data.get("entries")
     entries = entries_raw if isinstance(entries_raw, list) else []
-    by_domain: dict[str, list[dict[str, Any]]] = {
+    invalid_entries = {
+        int(match.group(1))
+        for finding in review.findings
+        if (match := re.match(r"entries\[(\d+)\](?:\.|$)", finding.path))
+    }
+    by_domain: dict[str, list[tuple[int, dict[str, Any]]]] = {
         domain: [] for domain in profile.process_domains
     }
-    for item in entries:
+    for index, item in enumerate(entries):
         if not isinstance(item, dict):
             continue
         domain = item.get("domain")
-        if domain in by_domain:
-            by_domain[domain].append(item)
+        if isinstance(domain, str) and domain in by_domain:
+            by_domain[domain].append((index, item))
 
     domain_results: list[dict[str, Any]] = []
     statuses: Counter[str] = Counter()
@@ -86,17 +93,20 @@ def analyze(
         elif not domain_entries:
             status = "evidence-missing"
             explanation = "No manifest entry was supplied for this expected domain."
-        elif all(_entry_ready(entry) for entry in domain_entries):
+        elif all(
+            index not in invalid_entries and _entry_ready(entry)
+            for index, entry in domain_entries
+        ):
             status = "evidence-present-for-human-review"
             explanation = (
-                "All submitted entries have evidence, sources, and recorded approval; "
+                "Submitted entry metadata passed the requested structural checks; "
                 "substantive adequacy remains for authorized human review."
             )
         else:
             status = "evidence-incomplete"
             explanation = (
-                "At least one submitted entry is draft, unapproved, unsourced, or "
-                "missing evidence."
+                "At least one submitted entry has a structural finding, is draft, "
+                "unapproved, unsourced, or missing evidence."
             )
         statuses[status] += 1
         domain_results.append(
@@ -104,7 +114,7 @@ def analyze(
                 "domain": domain,
                 "entry_ids": sorted(
                     str(entry.get("id"))
-                    for entry in domain_entries
+                    for _, entry in domain_entries
                     if isinstance(entry.get("id"), str)
                 ),
                 "explanation": explanation,

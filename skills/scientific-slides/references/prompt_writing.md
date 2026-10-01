@@ -3,6 +3,10 @@
 How to phrase prompts for the two workflows: complete slides rendered as images (PDF
 workflow) and standalone visuals for embedding (PPT workflow).
 
+All numeric results, study descriptions and citations below are illustrative. Replace
+with verified source material. Attached scientific figures may be redrawn; compose
+original quantitative figures deterministically in the final deck.
+
 ## Prompt Writing for Slide Generation
 
 ### Full Slide Prompts (PDF Workflow)

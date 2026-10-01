@@ -1,6 +1,6 @@
 # Domain conversions and dimensional blind spots
 
-Values below were produced with pint 0.25.3 and SciPy 1.18.0 (CODATA 2022). Anything
+Values below were produced with pint 0.26.1 and SciPy 1.18.1 (CODATA 2022). Anything
 marked *exact* is fixed by definition and carries zero uncertainty.
 
 ## Dimensional analysis does not catch these
@@ -10,7 +10,7 @@ means anything.
 
 | Pair | Shared dimension | What pint does | Why it matters |
 | --- | --- | --- | --- |
-| gray and sievert | L²T⁻² | converts 1:1, silently | Sv includes a radiation weighting factor; the numbers coincide only for photons and electrons |
+| gray and sievert | L²T⁻² | converts 1:1, silently | equivalent/effective dose uses radiation/tissue weighting; a unit conversion cannot supply these factors |
 | newton-metre and joule | ML²T⁻² | converts 1:1, silently | torque is a vector product, energy a scalar; adding them is meaningless |
 | hertz and becquerel | T⁻¹ | converts 1:1, silently | one is periodic, the other stochastic |
 | radian and dimensionless | none | radians vanish | `sin(x)` needs radians; a degrees value that lost its unit is silently wrong |
@@ -35,7 +35,7 @@ per-mole and therefore need the Avogadro constant.
 | k_B T at 298.15 K | eV | 0.02569257912108585 |
 | k_B T at 298.15 K | kJ/mol | 2.478957029602389 |
 | 1 cal (thermochemical) | J | 4.184 (exact) |
-| 1 cal_IT | J | 4.1868 (exact) |
+| 1 cal_it | J | 4.1868 (exact) |
 
 Two traps. First, **per-mole and per-particle units are not dimensionally
 interchangeable**: eV is an energy, kJ/mol is an energy per amount of substance, and the
@@ -52,7 +52,7 @@ Q(298.15, "K").to("eV", "boltzmann")     # 0.02569257912108585 electron_volt
 ## Spectroscopy
 
 Wavelength, frequency, wavenumber, and photon energy are related by physics, not by
-dimensional analysis, and the relations are *reciprocal* — an uncertainty does not
+dimensional analysis, and wavelength-frequency/energy relations are *reciprocal* — an uncertainty does not
 convert by the same factor as the value.
 
 ```python
@@ -66,17 +66,19 @@ scales as 1/λ². Propagate through the relation, do not scale the uncertainty b
 value's conversion factor. `scripts/convert_units.py --uncertainty` does this with the
 conversion's local derivative.
 
-The `sp` context assumes vacuum unless given a refractive index: `n=1.33` for water
-shifts a 532 nm frequency from 563.5 THz to 423.7 THz.
+The `sp` context assumes vacuum unless given a refractive index. With `n=1.33`,
+532 nm is interpreted as the wavelength **in that medium**, giving 423.7 THz.
+A photon crossing an interface retains its frequency; its wavelength changes. Do not
+apply n to a vacuum wavelength merely because the experiment contains water.
 
 ## Concentration
 
 | Quantity | Unit | Depends on |
 | --- | --- | --- |
 | Molarity | mol/L | temperature, through solution volume |
-| Molality | mol/kg solvent | nothing — preferred for thermodynamics |
-| Mole fraction | dimensionless | nothing |
-| Mass fraction, ppm(m/m) | dimensionless | nothing |
+| Molality | mol/kg solvent | composition and solvent basis, not thermal expansion alone |
+| Mole fraction | dimensionless | composition and entity definition |
+| Mass fraction, ppm(m/m) | dimensionless | composition and mass basis |
 | Volume fraction, ppm(v/v) | dimensionless | temperature |
 | Mass concentration | mg/L, g/L | temperature |
 
@@ -87,7 +89,11 @@ it conventionally means volume/volume. State which.
 
 Pint treats `ppm` and `percent` as plain dimensionless scale factors (1e-6 and 0.01),
 which is right for arithmetic and gives no protection against mixing the three senses.
-Defining `ureg.define("ppm_v = 1e-6 = ppmv")` as a distinct unit does give protection.
+Defining `ureg.define("ppm_v = 1e-6 = ppmv")` only adds an alias-like scale; it
+provides **no** dimensional protection. To enforce semantic separation, use a custom
+base dimension (for example `volume_fraction_kind = [volume_fraction_kind]`, then
+`ppm_v = 1e-6 * volume_fraction_kind`) and explicit adapters to physical dimensionless
+fractions. This is an application convention, not a new SI dimension.
 
 Mass and amount of substance need the `chemistry` context and a molar mass:
 
@@ -103,10 +109,10 @@ Q(1, "g").to("mol", "chemistry", mw=Q(180.156, "g/mol"))   # 0.00555074490996691
 | 1 bar | 100000 | exact |
 | 1 torr | 133.32236842105263 | atm/760, exact by definition |
 | 1 psi | 6894.7572931683635 | |
-| 1 mmHg | 133.322387415 | *not* identical to torr, differs in the 8th digit |
+| 1 mmHg | 133.322387415 | *not* identical to torr, differs by about 1.4e-7 relatively |
 
-**Gauge and absolute pressure are different quantities and no unit library models the
-difference.** "psig" and "psia" have the same dimensions; a gauge reading needs the
+**Gauge and absolute pressure need an explicit reference pressure.** Pint can define
+custom offset units, but a static offset cannot infer the actual ambient pressure. "psig" and "psia" have the same dimensions; a gauge reading needs the
 ambient pressure added before it can be used in a gas law. Vacuum work, autoclave
 protocols, and chromatography backpressures are where this bites.
 
@@ -137,9 +143,11 @@ as a mass is wrong for any ion with z > 1, which is most of a protein spectrum.
 pH, pKa, dB, and magnitudes are logarithms of ratios. They do not add, average, or
 propagate like ordinary quantities:
 
-- the mean of pH 5 and pH 7 is not pH 6 — averaging requires converting to
-  concentration, averaging, and converting back;
-- a standard deviation in pH units is a *relative* standard deviation in concentration;
+- the arithmetic mean of pH 5 and 7 is pH 6 **on the pH scale**. If the target is
+  mean hydrogen-ion activity, transform to activity first. Mixing two solutions needs
+  volume, activity coefficients, acid-base equilibria and buffering, not merely averaging;
+- pH is minus log10 of hydrogen-ion activity, not generally concentration. Locally,
+  `u(a)/a = ln(10)*u(pH)`; large uncertainties give asymmetric transformed intervals;
 - adding two dB quantities multiplies the underlying linear quantities (see
   `pint-recipes.md`);
 - decibel scales differ by reference: dBm references 1 mW, dBW references 1 W, dBV
@@ -166,9 +174,11 @@ uncertainty is zero and no future CODATA release will change them:
 | Boltzmann constant, k | 1.380649e-23 J/K |
 | Avogadro constant, N_A | 6.02214076e23 /mol |
 
-Everything else is a measured recommended value that moves between CODATA releases —
-electron mass, the gravitational constant, the fine-structure constant, the Rydberg
-constant, and every derived quantity built from them.
+These are five of the seven SI defining constants; the cesium frequency and luminous
+efficacy complete the set. Quantities derived only from exact defining constants are
+also exact (for example R = N_A*k and the Faraday constant N_A*e). Electron mass,
+the gravitational constant, fine-structure constant, and Rydberg constant are measured.
+Check each uncertainty rather than declaring all other constants measured.
 
 ```python
 import scipy.constants as constants
@@ -179,10 +189,16 @@ constants.precision("electron mass")   # 3.07e-10  relative standard uncertainty
 constants.precision("Planck constant") # 0.0       exact by definition
 ```
 
-`scipy.constants` in SciPy 1.18.0 defaults to **CODATA 2022**; SciPy 1.11 and earlier
-served CODATA 2018. Hard-coding a constant pins you to whichever release you copied it
+`scipy.constants` in SciPy 1.18.1 defaults to **CODATA 2022**; SciPy 1.11 and earlier
+served CODATA 2018; SciPy 1.15 introduced the CODATA 2022 data. Hard-coding a constant pins you to whichever release you copied it
 from and discards its uncertainty entirely. `scripts/audit_units.py` flags literals that
 match a known constant (`CONST001`).
 
 Note also that `constants.precision` returns a *relative* standard uncertainty. The
-absolute standard uncertainty is `value * precision`.
+absolute standard uncertainty is `abs(value) * precision`. Nominal constants used in
+Pint definitions do not automatically carry the measured constant's uncertainty.
+
+Primary definitions reviewed 2026-10-01: [BIPM SI Brochure, updated 2026](https://www.bipm.org/en/publications/si-brochure),
+[NIST CODATA 2022](https://physics.nist.gov/cuu/Constants/),
+[IUPAC pH](https://goldbook.iupac.org/terms/view/P04524), and
+[Pint 0.26.1 definitions](https://github.com/hgrecco/pint/blob/0.26.1/pint/default_en.txt).

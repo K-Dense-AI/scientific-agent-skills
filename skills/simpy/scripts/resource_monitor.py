@@ -19,6 +19,7 @@ from _common import (
     CliError,
     emit_json,
     emit_text,
+    finite_number,
     integer,
     load_simpy,
 )
@@ -134,6 +135,7 @@ class ResourceMonitor:
         """Close the final time interval with the resource's current state."""
 
         final_time = float(self.env.now if at is None else at)
+        finite_number(final_time, name="monitor final time")
         if final_time < self.samples[-1].time:
             raise CliError("monitor final time cannot precede its latest sample")
         self._record("final", at=final_time)
@@ -145,6 +147,8 @@ class ResourceMonitor:
         start: float,
         end: float,
     ) -> float:
+        finite_number(start, name="monitor window start")
+        finite_number(end, name="monitor window end")
         if start < self.samples[0].time:
             raise CliError("monitor window starts before monitoring began")
         if end <= start:
@@ -309,6 +313,7 @@ class ContainerMonitor:
         @wraps(operation)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             event = operation(*args, **kwargs)
+            self._record(event_name + "_call")
             if event.callbacks is not None:
                 event.callbacks.append(lambda _: self._record(event_name))
             return event
@@ -321,14 +326,24 @@ class ContainerMonitor:
 
     def finalize(self, *, at: float | None = None) -> None:
         final_time = float(self.env.now if at is None else at)
+        finite_number(final_time, name="monitor final time")
         if final_time < self.samples[-1][0]:
             raise CliError("monitor final time cannot precede its latest sample")
         self._record("final", at=final_time)
+
+    def detach(self) -> None:
+        self.container.put = self._original_put
+        self.container.get = self._original_get
+        setattr(self.container, "_simpy_skill_monitor_attached", False)
 
     def average_level(
         self, *, start: float = 0.0, end: float | None = None
     ) -> float:
         final = self.samples[-1][0] if end is None else float(end)
+        finite_number(start, name="monitor window start")
+        finite_number(final, name="monitor window end")
+        if start < self.samples[0][0]:
+            raise CliError("monitor window starts before monitoring began")
         if final <= start:
             raise CliError("monitor window end must be greater than start")
         if final > self.samples[-1][0]:

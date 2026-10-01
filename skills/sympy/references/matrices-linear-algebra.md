@@ -1,5 +1,8 @@
 # SymPy Matrices and Linear Algebra
 
+Examples in this reference are ordered session fragments: run earlier imports and
+setup first. Tested with SymPy 1.14.0; exceptions are explicitly marked illustrative.
+
 This document covers SymPy's matrix operations, linear algebra capabilities, and solving systems of linear equations.
 
 ## Matrix Creation
@@ -96,13 +99,13 @@ M = M.row_insert(1, Matrix([[5, 6]]))
 #  [3, 4]]
 
 # Insert column
-M = M.col_insert(1, Matrix([7, 8]))
+M = M.col_insert(1, Matrix([7, 8, 9]))
 
 # Delete row
-M = M.row_del(0)
+M.row_del(0)  # In-place; returns None
 
 # Delete column
-M = M.col_del(1)
+M.col_del(1)  # In-place; returns None
 ```
 
 ## Basic Matrix Operations
@@ -165,7 +168,7 @@ M_inv = M.inv()
 M * M_inv  # Returns identity matrix
 
 # Check if invertible
-M.is_invertible()  # True or False
+M.det().is_zero  # False here; None means undecided for symbolic parameters
 ```
 
 ## Advanced Linear Algebra
@@ -319,7 +322,7 @@ M = Matrix([[1, 2, 3], [4, 5, 6], [7, 8, 10]])
 L, U, perm = M.LUdecomposition()
 # L: lower triangular
 # U: upper triangular
-# perm: permutation indices
+# perm: row swaps; M.permuteFwd(perm) == L*U
 ```
 
 ### QR Decomposition
@@ -329,7 +332,7 @@ M = Matrix([[1, 2], [3, 4], [5, 6]])
 
 # QR decomposition
 Q, R = M.QRdecomposition()
-# Q: orthogonal matrix
+# Q: matrix with orthonormal columns (possibly rectangular); Q.H*Q == eye(Q.cols)
 # R: upper triangular matrix
 ```
 
@@ -346,11 +349,12 @@ L = M.cholesky()
 ### Singular Value Decomposition (SVD)
 
 ```python
-M = Matrix([[1, 2], [3, 4], [5, 6]])
+M = Matrix([[1, 0], [0, 2], [0, 0]])
 
-# SVD (note: may require numerical evaluation)
-U, S, V = M.singular_value_decomposition()
-# M = U * S * V
+# Condensed SVD: U and V have rank(M) columns
+U, Sigma, V = M.singular_value_decomposition()
+assert U * Sigma * V.H == M  # Conjugate transpose of V, unlike NumPy
+# Numerical SVD is preferable for large floating-point matrices.
 ```
 
 ## Solving Linear Systems
@@ -363,7 +367,7 @@ A = Matrix([[1, 2], [3, 4]])
 b = Matrix([5, 6])
 
 # Solution
-x = A.solve(b)  # or A**-1 * b
+x = A.solve(b)  # Requires a unique solution; avoid forming an inverse
 
 # Least squares (for overdetermined systems)
 x = A.solve_least_squares(b)
@@ -397,7 +401,8 @@ sol = linsolve((A, b), [x, y])
 # Underdetermined (infinite solutions)
 A = Matrix([[1, 2, 3]])
 b = Matrix([6])
-sol = A.solve(b)  # Returns parametric solution
+x1, x2, x3 = symbols("x1 x2 x3")
+sol = linsolve((A, b), (x1, x2, x3))  # {(6 - 2*x2 - 3*x3, x2, x3)}
 
 # Overdetermined (least squares)
 A = Matrix([[1, 2], [3, 4], [5, 6]])
@@ -415,7 +420,8 @@ from sympy import symbols, Matrix
 a, b, c, d = symbols('a b c d')
 M = Matrix([[a, b], [c, d]])
 
-# All operations work symbolically
+# For parameter values satisfying a*d - b*c != 0, the inverse exists.
+# Treat singular parameter cases separately; symbolic rank is usually generic.
 M.det()  # a*d - b*c
 M.inv()  # Matrix([[d/(a*d - b*c), -b/(a*d - b*c)], ...])
 M.eigenvals()  # Symbolic eigenvalues
@@ -431,9 +437,11 @@ M = Matrix([[0, 1], [-1, 0]])
 # Matrix exponential
 exp(M)
 
-# Trigonometric functions
-sin(M)
-cos(M)
+# Analytic matrix functions (not elementwise sine/cosine)
+t = symbols("t")
+matrix_sin = M.analytic_func(sin(t), t)
+matrix_cos = M.analytic_func(cos(t), t)
+entrywise_sin = M.applyfunc(sin)
 ```
 
 ## Mutable vs Immutable Matrices
@@ -472,13 +480,10 @@ S = SparseMatrix(M)
 
 ```python
 A = Matrix([[1, 2], [3, 4]])
-A_inv = A.inv()
-
 b1 = Matrix([5, 6])
 b2 = Matrix([7, 8])
-
-x1 = A_inv * b1
-x2 = A_inv * b2
+solutions = A.LUsolve(Matrix.hstack(b1, b2))
+x1, x2 = solutions[:, 0], solutions[:, 1]
 ```
 
 ### Pattern 2: Change of Basis
@@ -500,10 +505,9 @@ v_new = P_inv * v
 ### Pattern 3: Matrix Condition Number
 
 ```python
-# Estimate condition number (ratio of largest to smallest singular value)
+# Spectral condition number: singular values, not eigenvalues
 M = Matrix([[1, 2], [3, 4]])
-eigenvals = M.eigenvals()
-cond = max(eigenvals.keys()) / min(eigenvals.keys())
+cond = M.condition_number()  # approximately 14.9330
 ```
 
 ### Pattern 4: Projection Matrices
@@ -511,8 +515,9 @@ cond = max(eigenvals.keys()) / min(eigenvals.keys())
 ```python
 # Project onto column space of A
 A = Matrix([[1, 0], [0, 1], [1, 1]])
-P = A * (A.T * A).inv() * A.T
-# P is projection matrix onto column space of A
+P = A * (A.H * A).inv() * A.H
+# Requires full column rank. H also handles complex matrices.
+assert P * P == P and P.H == P
 ```
 
 ## Important Notes

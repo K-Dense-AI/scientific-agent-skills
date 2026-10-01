@@ -53,7 +53,6 @@ def summarize_event_trace(path: Path, *, max_records: int) -> dict[str, Any]:
     counts: Counter[str] = Counter()
     first_time: float | None = None
     last_time: float | None = None
-    previous_key: tuple[float, int, int] | None = None
     ordering_violations = 0
     maximum_queue_size = 0
     records = 0
@@ -77,13 +76,13 @@ def summarize_event_trace(path: Path, *, max_records: int) -> dict[str, Any]:
                 time = finite_number(
                     record["time"], name=f"line {line_number} time", minimum=0
                 )
-                priority = integer(
+                integer(
                     record["priority"],
                     name=f"line {line_number} priority",
                     minimum=-1_000_000,
                     maximum=1_000_000,
                 )
-                event_id = integer(
+                integer(
                     record["event_id"],
                     name=f"line {line_number} event_id",
                     minimum=0,
@@ -104,10 +103,11 @@ def summarize_event_trace(path: Path, *, max_records: int) -> dict[str, Any]:
                     raise CliError(
                         f"line {line_number} event_type must be a short identifier"
                     )
-                key = (time, priority, event_id)
-                if previous_key is not None and key < previous_key:
+                # A callback may schedule an urgent event at the same time.
+                # Heap ordering applies to the current queue, not to the full
+                # processing trace. Only backwards model time is detectable here.
+                if last_time is not None and time < last_time:
                     ordering_violations += 1
-                previous_key = key
                 first_time = time if first_time is None else first_time
                 last_time = time
                 maximum_queue_size = max(maximum_queue_size, queue_size)
@@ -125,7 +125,9 @@ def summarize_event_trace(path: Path, *, max_records: int) -> dict[str, Any]:
         "records": records,
         "semantics": (
             "Each row is the next private event-queue entry immediately before "
-            "Environment.step(); ordering is checked by (time, priority, event_id)."
+            "Environment.step(); ordering_violations counts decreasing times only. "
+            "Same-time priority/event_id decreases can be valid; validating heap "
+            "selection requires schedule/insertion history absent from this trace."
         ),
     }
 
@@ -149,6 +151,8 @@ def summarize_resource_csv(path: Path, *, max_records: int) -> dict[str, Any]:
                 )
             previous_time: float | None = None
             for row_number, row in enumerate(reader, start=2):
+                if None in row or any(value is None for value in row.values()):
+                    raise CliError(f"resource CSV row {row_number} has the wrong field count")
                 if len(samples) >= max_records:
                     raise CliError(
                         f"resource CSV exceeds the record limit ({max_records})"
@@ -227,7 +231,7 @@ def summarize_resource_csv(path: Path, *, max_records: int) -> dict[str, Any]:
         "records": len(samples),
         "start": start,
         "semantics": (
-            "Time-weighted values treat each sampled state as left-continuous "
+            "Time-weighted values carry each post-transition state forward "
             "until the next sample. Same-time pre/post samples have zero duration."
         ),
     }
@@ -245,7 +249,7 @@ def summarize(path: Path, *, max_records: int) -> dict[str, Any]:
     return {
         "input": {"kind": kind, "name": path.name},
         "network_used": False,
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "summary": summary,
     }
 

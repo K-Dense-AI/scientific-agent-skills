@@ -1,104 +1,115 @@
-# Common Workflow Patterns
+# Datamol pipeline patterns (0.13.0)
 
-Three end-to-end pipelines: data loading through filtering to analysis, structure-activity
-relationship analysis by scaffold series, and a virtual screening pipeline.
+These functions were tested on small synthetic inputs. Supply project inputs/paths when
+applying them. Use explicit structure policies and preserve source-row provenance.
 
-## Common Workflows and Patterns
-
-### Complete Pipeline: Data Loading → Filtering → Analysis
+## Load, screen and select diverse compounds
 
 ```python
 import datamol as dm
+import numpy as np
 import pandas as pd
 
-# 1. Load molecules
-df = dm.read_sdf("compounds.sdf")
 
-# 2. Standardize
-df['mol'] = df['mol'].apply(lambda m: dm.standardize_mol(m) if m else None)
-df = df[df['mol'].notna()]  # Remove failed molecules
+def prepare_library(raw):
+    """Illustrative policy for ordinary organic compounds; returns accepted and rejected rows."""
+    if "mol" not in raw or "source_id" not in raw:
+        raise ValueError("Expected mol and source_id columns")
+    df = raw.copy()
+    df["source_smiles"] = [dm.to_smiles(m) if m is not None else None for m in df["mol"]]
+    transformed, reasons = [], []
+    for molecule in df["mol"]:
+        try:
+            clean = None if molecule is None else dm.standardize_mol(
+                molecule, disconnect_metals=False, normalize=True,
+                reionize=True, uncharge=False, stereo=True,
+            )
+            transformed.append(clean)
+            reasons.append(None if clean is not None else "invalid molecule")
+        except Exception as error:
+            transformed.append(None)
+            reasons.append(type(error).__name__)
+    df["mol"], df["rejection_reason"] = transformed, reasons
+    rejected = df.loc[df["mol"].isna()].copy()
+    accepted = df.loc[df["mol"].notna()].copy().reset_index(drop=True)
+    if accepted.empty:
+        return accepted, rejected
+    properties = {"mw": "MolWt", "logp": "MolLogP", "hbd": "NumHDonors", "hba": "NumHAcceptors"}
+    desc = dm.descriptors.batch_compute_many_descriptors(
+        accepted["mol"].tolist(), properties_fn=properties, add_properties=False, n_jobs=1,
+    )
+    # Both frames now have the same RangeIndex; no accidental label re-alignment.
+    accepted = pd.concat([accepted, desc.add_prefix("screen_")], axis=1)
+    accepted["passes_screen"] = ((desc["mw"] <= 500) & (desc["logp"] <= 5)
+                                 & (desc["hbd"] <= 5) & (desc["hba"] <= 10))
+    return accepted, rejected
 
-# 3. Compute descriptors
-desc_df = dm.descriptors.batch_compute_many_descriptors(
-    df['mol'].tolist(),
-    n_jobs=-1,
-    progress=True
-)
 
-# 4. Filter by drug-likeness
-druglike = (
-    (desc_df['mw'] <= 500) &
-    (desc_df['logp'] <= 5) &
-    (desc_df['hbd'] <= 5) &
-    (desc_df['hba'] <= 10)
-)
-filtered_df = df[druglike]
-
-# 5. Cluster and select diverse subset
-diverse_mols = dm.pick_diverse(
-    filtered_df['mol'].tolist(),
-    npick=100
-)
-
-# 6. Visualize results
-dm.viz.to_image(
-    diverse_mols,
-    legends=[dm.to_smiles(m) for m in diverse_mols],
-    outfile="diverse_compounds.png",
-    n_cols=10
-)
+def select_diverse(accepted, limit=100):
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("limit must be a positive integer")
+    if accepted.empty:
+        return accepted.copy()
+    eligible = accepted.loc[accepted["passes_screen"]].copy().reset_index(drop=True)
+    if eligible.empty:
+        return eligible
+    indices, _ = dm.pick_diverse(eligible["mol"].tolist(), npick=min(limit, len(eligible)), seed=42)
+    return eligible.iloc[indices].copy()
 ```
 
-### Structure-Activity Relationship (SAR) Analysis
+Read SDF using `dm.read_sdf(path, as_df=True, mol_column="mol", discard_invalid=False)`;
+assign or validate a durable `source_id` before passing it to `prepare_library`. Its
+`source_smiles` is the parsed representation; archive raw files separately to retain records
+that cannot be parsed. Report all parsed-invalid and screening-excluded rows. Do not treat
+the screening criteria as validated activity, safety or bioavailability predictions.
 
 ```python
-# Group by scaffold
-scaffolds = [dm.to_scaffold_murcko(mol) for mol in mols]
-scaffold_smiles = [dm.to_smiles(s) for s in scaffolds]
-
-# Create DataFrame with activities
-sar_df = pd.DataFrame({
-    'mol': mols,
-    'scaffold': scaffold_smiles,
-    'activity': activities  # User-provided activity data
-})
-
-# Analyze each scaffold series
-for scaffold, group in sar_df.groupby('scaffold'):
-    if len(group) >= 3:  # Need multiple examples
-        print(f"\nScaffold: {scaffold}")
-        print(f"Count: {len(group)}")
-        print(f"Activity range: {group['activity'].min():.2f} - {group['activity'].max():.2f}")
-
-        # Visualize with activities as legends
-        dm.viz.to_image(
-            group['mol'].tolist(),
-            legends=[f"Activity: {act:.2f}" for act in group['activity']],
-            align=True  # Align by common substructure
-        )
+# Executed synthetic example with a failed record and non-contiguous row labels.
+raw = pd.DataFrame({"source_id": ["a", "bad", "b"],
+                    "mol": [dm.to_mol("CCO"), None, dm.to_mol("c1ccccc1")]}, index=[8, 2, 20])
+accepted, rejected = prepare_library(raw)
+selection = select_diverse(accepted, limit=100)
+assert set(selection["source_id"]) == {"a", "b"}
+assert rejected["source_id"].tolist() == ["bad"]
 ```
 
-### Virtual Screening Pipeline
+Export the selected table and an ID-labelled PNG grid explicitly with `use_svg=False`.
+Keep rejected rows separately. Use a project-approved destination before writing artifacts.
+
+## SAR by scaffold series
+
+Illustrative template: `mols`, `activities` and activity units must come from the same rows.
+Do not mix assays, censoring conventions or pActivity versus concentration scales.
 
 ```python
-import numpy as np
-
-# 1. Calculate Tanimoto distances between query actives and library
-distances = dm.cdist(query_actives, library_mols, n_jobs=-1)
-
-# 3. Find closest matches (min distance to any query)
-min_distances = distances.min(axis=0)
-similarities = 1 - min_distances  # Convert distance to similarity
-
-# 4. Rank and select top hits
-top_indices = np.argsort(similarities)[::-1][:100]  # Top 100
-top_hits = [library_mols[i] for i in top_indices]
-top_scores = [similarities[i] for i in top_indices]
-
-# 5. Visualize hits
-dm.viz.to_image(
-    top_hits[:20],
-    legends=[f"Sim: {score:.3f}" for score in top_scores[:20]],
-    outfile="screening_hits.png"
-)
+def sar_table(mols, activities):
+    if len(mols) != len(activities):
+        raise ValueError("Molecules and activities must be row-aligned")
+    return pd.DataFrame({"mol": mols,
+                         "scaffold": [dm.to_smiles(dm.to_scaffold_murcko(m)) for m in mols],
+                         "activity": activities})
 ```
+
+Group this table by scaffold to summarize measured values and visualize related compounds
+with labelled units and `align=True`. An empty Murcko scaffold groups acyclic molecules
+without asserting they form a meaningful SAR series.
+
+## Similarity ranking
+
+```python
+def similarity_ranking(query_actives, library_mols, limit=100):
+    if not query_actives or not library_mols:
+        raise ValueError("Need nonempty query and library molecules")
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("limit must be a positive integer")
+    distances = dm.cdist(query_actives, library_mols, n_jobs=1,
+                         fp_type="ecfp", radius=2, fpSize=2048, includeChirality=True)
+    similarities = 1 - distances.min(axis=0)
+    indices = np.argsort(-similarities, kind="stable")[:limit]
+    return indices, similarities[indices]
+```
+
+This ranks by maximum binary Tanimoto similarity to any query; a hit is a structural
+candidate, not an experimentally confirmed active. Keep the source index alongside score.
+The returned cross-distance matrix uses O(query count × library count) memory. Chunk the
+library and retain top results for large screens, with the same fingerprint settings in every chunk.

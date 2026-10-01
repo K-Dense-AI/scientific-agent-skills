@@ -80,3 +80,54 @@ def test_cli_refinement_provenance_and_replay(tmp_path):
     np.testing.assert_allclose(replay.forward_rate_constants, original.forward_rate_constants, rtol=1e-12)
     assert len((out / "baseline.csv").read_text().splitlines()) == 3002
     assert subprocess.run(command, capture_output=True, text=True, timeout=60).returncode != 0
+
+
+def test_simulation_does_not_mutate_initial_solution(monkeypatch):
+    conditions = config()
+    gas = module.load_gas(conditions)
+    initial = gas.state.copy()
+    monkeypatch.setattr(module, "load_gas", lambda settings: gas)
+    history, _ = module.simulate(conditions)
+    np.testing.assert_array_equal(gas.state, initial)
+    assert history[-1, 1] > gas.T + 1000
+
+
+def test_local_imported_mechanism_snapshot_is_independently_replayable(tmp_path):
+    source_dir = tmp_path / "input"
+    source_dir.mkdir()
+    original = module.load_gas(config())
+    definitions = source_dir / "definitions.yaml"
+    definitions.write_text(original.write_yaml(precision=17), encoding="utf-8")
+    source = source_dir / "local.yaml"
+    source.write_text("""description: Hydrogen provenance check – imported species and reactions
+phases:
+- name: ohmech
+  thermo: ideal-gas
+  kinetics: gas
+  species:
+  - definitions.yaml/species: all
+  reactions:
+  - definitions.yaml/reactions: all
+""", encoding="utf-8")
+    conditions = config()
+    conditions["mechanism"] = "local.yaml"
+    path = source_dir / "config.json"
+    path.write_text(json.dumps(conditions), encoding="utf-8")
+    out = tmp_path / "result"
+    report = module.run(path, out)
+    assert report["numerically_resolved"]
+    assert report["mechanism"]["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    snapshot = out / "mechanism.yaml"
+    assert report["mechanism"]["snapshot_sha256"] == hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    assert "provenance check – imported" in snapshot.read_text(encoding="utf-8")
+    source.unlink()
+    definitions.unlink()
+    # A fresh process avoids Cantera's parsed-YAML cache hiding a residual import.
+    result = subprocess.run(
+        [sys.executable, "-c", "import cantera as ct, json, sys; "
+         "gas = ct.Solution(sys.argv[1], 'ohmech'); "
+         "print(json.dumps(gas.forward_rate_constants.tolist()))", str(snapshot)],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    np.testing.assert_allclose(json.loads(result.stdout), original.forward_rate_constants, rtol=1e-12)

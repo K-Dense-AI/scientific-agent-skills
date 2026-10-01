@@ -1,6 +1,6 @@
 # Optional: TLS for localhost screenpipe access
 
-Screenpipe's HTTP server (Axum, binding `localhost:3030`) speaks plain HTTP. For a Python script running as the same user on the same host, plain HTTP is adequate — loopback traffic never hits a network adapter, so TLS provides no additional confidentiality.
+Screenpipe's HTTP server (Axum, binding `localhost:3030`) speaks plain HTTP. Loopback HTTP is supported for same-host use. Keep the listener on loopback; transport encryption does not replace endpoint authentication or protect against other processes on the host.
 
 TLS on localhost is only useful when:
 
@@ -8,7 +8,7 @@ TLS on localhost is only useful when:
 - The screenpipe endpoint is tunneled or exposed off-host.
 - A browser client requires a "secure context" (Service Workers, WebCrypto).
 
-If you need it, put a one-line Caddy reverse proxy in front. Caddy's `tls internal` generates and trusts a local CA automatically.
+The example below keeps the proxy loopback-only. Caddy's `tls internal` creates a local CA and attempts to install it into local trust stores when permitted. Python's HTTPX may use a different trust store.
 
 ## Caddy
 
@@ -23,6 +23,7 @@ Add to your `Caddyfile`:
 
 ```caddyfile
 screenpipe.local {
+    bind 127.0.0.1
     tls internal
     reverse_proxy localhost:3030
 }
@@ -47,7 +48,16 @@ screenpipe:
   url: https://screenpipe.local
 ```
 
-No code change is required on the autoskill side. `httpx` handles both HTTP and HTTPS transparently.
+HTTPX verifies HTTPS by default and normally uses certifi, which may not include
+Caddy's local CA. Set `SSL_CERT_FILE` to a PEM CA bundle trusted for this service
+(including the Caddy root, and public roots if the same process calls a cloud LLM).
+Do not disable certificate verification to work around trust errors. A Caddy
+proxy bound off-host also needs access controls; TLS alone is not authorization.
+The Screenpipe bearer token is still required for protected API routes.
+
+This configuration was documentation-reviewed, not deployed during maintenance.
+Sources: [Caddy local HTTPS](https://caddyserver.com/docs/automatic-https) and
+[HTTPX SSL configuration](https://www.python-httpx.org/advanced/ssl/).
 
 ## mkcert (alternative)
 

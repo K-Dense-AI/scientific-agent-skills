@@ -22,13 +22,13 @@ CLI_NAMES = (
     "vector_inventory.py",
 )
 PINNED = {
-    "geopandas": "1.1.4",
-    "numpy": "2.5.1",
-    "packaging": "26.2",
-    "pandas": "3.0.5",
-    "pyarrow": "25.0.0",
+    "geopandas": "1.2.0",
+    "numpy": "2.5.3",
+    "packaging": "26.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
     "pyogrio": "0.13.0",
-    "pyproj": "3.7.2",
+    "pyproj": "3.8.0",
     "shapely": "2.1.2",
 }
 
@@ -142,7 +142,7 @@ class ExactPinnedStackTests(unittest.TestCase):
             "3.12.4",
         )
         self.assertEqual(self.shapely.geos_version_string, "3.13.1")
-        self.assertEqual(self.pyproj.proj_version_str, "9.5.1")
+        self.assertEqual(self.pyproj.proj_version_str, "9.8.1")
 
     def test_core_geometry_join_overlay_dissolve_and_arrow_apis(self) -> None:
         from shapely.geometry import Point, Polygon, box
@@ -453,6 +453,8 @@ class LocalCliSyntheticTests(unittest.TestCase):
                 "--id-unique-verified",
                 "--geometry-encoding",
                 "geoarrow",
+                "--schema-version",
+                "1.0.0",
                 cwd=root,
             )
             self.assertEqual(bad_schema.returncode, 2)
@@ -494,6 +496,172 @@ class LocalCliSyntheticTests(unittest.TestCase):
             )
             self.assertEqual(ready.returncode, 0, ready.stderr)
             self.assertTrue(payload(ready)["ok"])
+
+
+class Release120RegressionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.gpd, cls.pa, cls.pyogrio, _, _ = require_stack()
+
+    def test_geoparquet_default_attrs_and_native_point_filter(self) -> None:
+        from pyarrow import parquet
+        from shapely import Point
+
+        frame = self.gpd.GeoDataFrame(
+            {"feature_id": [1, 2], "geometry": [Point(0, 0), Point(2, 2)]},
+            crs="EPSG:3857",
+        )
+        frame.attrs = {"private_note": "DO_NOT_EMIT_STUDY_LOCATION"}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "points.parquet"
+            frame.to_parquet(path, index=False)
+            metadata = json.loads(parquet.read_metadata(path).metadata[b"geo"])
+            self.assertEqual(metadata["version"], "1.1.0")
+            self.assertEqual(self.gpd.read_parquet(path).attrs, frame.attrs)
+            result = run_script("vector_inventory.py", path.name, cwd=root)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue(payload(result)["technical_inventory"]["dataframe_attrs_present"])
+            self.assertNotIn("DO_NOT_EMIT", result.stdout)
+            frame.to_parquet(path, geometry_encoding="geoarrow", schema_version="1.1.0")
+            selected = self.gpd.read_parquet(path, bbox=(-1, -1, 1, 1))
+            self.assertEqual(selected.feature_id.tolist(), [1])
+
+    def test_geoparquet_20_is_explicit_wkb_only(self) -> None:
+        from shapely import box
+
+        frame = self.gpd.GeoDataFrame(
+            {"feature_id": [1, 2], "geometry": [box(0, 0, 1, 1), box(5, 5, 6, 6)]},
+            crs="EPSG:3857",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "logical.parquet"
+            frame.to_parquet(path, schema_version="2.0.0", geometry_encoding="WKB")
+            selected = self.gpd.read_parquet(path, bbox=(0, 0, 0.5, 0.5))
+            self.assertEqual(selected.feature_id.tolist(), [1])
+            with self.assertRaises(ValueError):
+                frame.to_parquet(path, schema_version="2.0.0", geometry_encoding="geoarrow")
+
+    def test_inventory_rejects_absent_primary_geometry(self) -> None:
+        from pyarrow import parquet
+
+        metadata = {"version": "1.1.0", "primary_column": "missing", "columns": {}}
+        table = self.pa.table({"value": [1]}).replace_schema_metadata(
+            {b"geo": json.dumps(metadata).encode()}
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parquet.write_table(table, root / "bad.parquet")
+            result = run_script("vector_inventory.py", "bad.parquet", cwd=root)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("primary geometry", payload(result)["error"])
+
+    def test_crs_bbox_is_degrees_not_projected_units(self) -> None:
+        for source, bbox in (
+            ("EPSG:3857", (0, 0, 1, 1)),
+            ("EPSG:4807", (0, 0, 1, 1)),  # geographic, but grad axes
+            ("EPSG:32631", (500000, 4000000, 501000, 4001000)),
+            ("EPSG:4326", (0, -95, 1, 20)),
+            ("EPSG:4326", (-181, 0, 10, 20)),
+        ):
+            with self.subTest(source=source, bbox=bbox):
+                result = run_script(
+                    "crs_reprojection_plan.py", "--source-crs", source,
+                    "--target-crs", "EPSG:32631", "--bbox", *map(str, bbox),
+                )
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertFalse(payload(result)["network_accessed"])
+
+    def test_fixed_precision_buffer_and_query_orientation(self) -> None:
+        from shapely import Point, box
+
+        polygons = self.gpd.GeoSeries([box(0, 0, 1, 1), box(1, 0, 2, 1)], crs="EPSG:3857")
+        queries = self.gpd.GeoSeries([Point(.5, .5), Point(1, .5), Point(4, 4)])
+        indices = polygons.sindex.query(queries, predicate="intersects", output_format="indices")
+        dense = polygons.sindex.query(queries, predicate="intersects", output_format="dense")
+        self.assertEqual(indices.tolist(), [[0, 1, 1], [0, 0, 1]])
+        self.assertEqual(dense.shape, (2, 3))
+        result = polygons.intersection(box(.46, 0, 1.54, 1), grid_size=.1)
+        self.assertEqual(result.area.tolist(), [.5, .5])
+        buffered = self.gpd.GeoSeries([Point(0, 0)], crs=polygons.crs).buffer(1, quad_segs=4)
+        self.assertEqual(len(buffered.iloc[0].exterior.coords), 17)
+
+    def test_metadata_alias_and_reserved_join_attributes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            points, zones = write_join_fixtures(root)
+            info = self.gpd.read_file_info(points)
+            self.assertEqual(info["features"], 3)
+            detailed = self.pyogrio.read_info(
+                points, force_feature_count=False, force_total_bounds=False,
+            )
+            self.assertEqual(detailed["features"], 3)
+            self.assertIn("GPKG", self.pyogrio.list_drivers(append=True))
+            for path in (points, zones):
+                frame = self.gpd.read_file(path)
+                frame["_audit_left_row"] = 7
+                frame.to_file(path, driver="GeoJSON", engine="pyogrio", index=False)
+            result = run_script(
+                "spatial_join_audit.py", points.name, zones.name,
+                "--on-attribute", "_audit_left_row", cwd=root,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("reserved audit", " ".join(payload(result)["blockers"]))
+
+    def test_plotting_dictionary_palette_and_labels(self) -> None:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import to_rgba
+        from shapely import box
+
+        frame = self.gpd.GeoDataFrame(
+            {"category": ["A", "B"], "geometry": [box(0, 0, 1, 1), box(1, 0, 2, 1)]},
+            crs="EPSG:3857",
+        )
+        fig, ax = plt.subplots()
+        try:
+            frame.plot(
+                ax=ax, column="category", categorical=True,
+                cmap={"A": "#4477AA", "B": "#EE6677"}, legend=True, tiles=False,
+            )
+            colors = [tuple(color) for collection in ax.collections for color in collection.get_facecolors()]
+            self.assertIn(to_rgba("#4477AA"), colors)
+            self.assertIn(to_rgba("#EE6677"), colors)
+            self.assertEqual([item.get_text() for item in ax.get_legend().get_texts()], ["A", "B"])
+            self.assertTrue(ax.get_xlabel())
+            fig.canvas.draw()
+        finally:
+            plt.close(fig)
+
+    def test_join_distance_ties_and_attribute_restriction(self) -> None:
+        from shapely import Point
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            left = self.gpd.GeoDataFrame(
+                {"survey": ["A", "B"], "geometry": [Point(0, 0), Point(10, 0)]},
+                crs="EPSG:3857",
+            )
+            right = self.gpd.GeoDataFrame(
+                {"survey": ["A", "B", "B"],
+                 "geometry": [Point(-1, 0), Point(1, 0), Point(10, 0)]},
+                crs=left.crs,
+            )
+            left.to_file(root / "left.gpkg", engine="pyogrio", index=False)
+            right.to_file(root / "right.gpkg", engine="pyogrio", index=False)
+            for options, expected in (
+                (("--mode", "nearest", "--max-distance", "2"), 3),
+                (("--mode", "nearest", "--max-distance", "2", "--exclusive"), 2),
+                (("--predicate", "dwithin", "--distance", "1", "--on-attribute", "survey"), 2),
+            ):
+                with self.subTest(options=options):
+                    result = run_script(
+                        "spatial_join_audit.py", "left.gpkg", "right.gpkg", *options,
+                        cwd=root,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertEqual(payload(result)["pair_audit"]["pair_count"], expected)
 
 
 if __name__ == "__main__":

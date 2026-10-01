@@ -116,33 +116,33 @@ flowchart TB
 
     subgraph intake ["📥 Order Intake"]
         validate_pay -->|Yes| check_fraud{🔐 Fraud check}
-        validate_pay -->|No| pay_fail[❌ Payment **declined**]
+        validate_pay -->|No| pay_fail[❌ Payment declined]
         check_fraud -->|Clear| check_stock{📦 In stock?}
-        check_fraud -->|Flagged| manual_review[🔍 Manual **review**]
+        check_fraud -->|Flagged| manual_review[🔍 Manual review]
         manual_review --> check_stock
     end
 
     subgraph fulfill ["📦 Fulfillment"]
-        pick[📋 **Pick** items] --> pack[📦 Pack order]
-        pack --> label[🏷️ Generate **shipping** label]
+        pick[📋 Pick items] --> pack[📦 Pack order]
+        pack --> label[🏷️ Generate shipping label]
     end
 
     subgraph ship ["🚚 Shipping"]
-        handoff[🚚 Carrier **handoff**] --> transit[📍 In transit]
+        handoff[🚚 Carrier handoff] --> transit[📍 In transit]
         transit --> deliver{✅ Delivered?}
     end
 
     subgraph notify ["📤 Notifications"]
-        confirm_email[📧 Order **confirmed**]
-        ship_update[📧 Shipping **update**]
-        deliver_email[📧 Delivery **confirmed**]
+        confirm_email[📧 Order confirmed]
+        ship_update[📧 Shipping update]
+        deliver_email[📧 Delivery confirmed]
     end
 
     subgraph exception ["⚠️ Exception Handling"]
         pay_fail --> retry_pay[🔄 Retry payment]
         retry_pay --> validate_pay
-        out_of_stock[📦 **Backorder** created]
-        deliver_fail[🔄 **Reattempt** delivery]
+        out_of_stock[📦 Backorder created]
+        deliver_fail[🔄 Reattempt delivery]
     end
 
     check_stock -->|Yes| pick
@@ -154,7 +154,7 @@ flowchart TB
 
     check_stock -->|Yes| confirm_email
     handoff --> ship_update
-    deliver_email --> complete([✅ Order **complete**])
+    deliver_email --> complete([✅ Order complete])
 
     classDef intake_style fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
     classDef fulfill_style fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
@@ -175,3 +175,8 @@ flowchart TB
 - **Exception handling is its own subgraph** — not scattered across phases. Agents and readers can see all failure paths in one place
 - **Color classes reinforce structure** — blue for intake, purple for fulfillment, green for shipping, amber for notifications, red for exceptions. Even without reading labels, the color pattern tells you which phase you're looking at
 - **Decisions route between subgraphs** — the diamonds (`{Payment valid?}`, `{In stock?}`, `{Delivered?}`) are the points where flow branches, and each branch leads to a clearly-labeled destination
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/flowchart.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

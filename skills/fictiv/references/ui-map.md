@@ -1,6 +1,6 @@
 # Fictiv web app: UI map and browser-automation notes
 
-Mapped live on app.fictiv.com in September 2026. Fictiv ships UI changes often, so treat labels as strong hints rather than guarantees. If something has moved, use `find`/`read_page` with the label text rather than fixed coordinates.
+Retained from an authenticated September 2026 app snapshot; not revalidated in an authenticated session during the 2026-09-30 public-documentation review. Browser URLs below are UI routes, not REST endpoints or a supported API contract. Fictiv ships UI changes often, so treat labels as hints rather than guarantees. If something has moved, use `find`/`read_page` with the label text rather than fixed coordinates.
 
 ## Contents
 1. URL routes
@@ -30,9 +30,9 @@ Mapped live on app.fictiv.com in September 2026. Fictiv ships UI changes often, 
 | Parts Library | `/library/parts` (tabs: Parts, Molds) |
 | My Account | `/pages/my-account` |
 | Help Center | `https://www.fictiv.com/help` (`/help-center` and the old `help.fictiv.com` article links redirect here) |
-| DFM tool Atlas | `https://atlas.fictiv.com` (separate app, early access) |
+| DFM tool Atlas | `https://atlas.fictiv.com` (separate app; public upload/login page observed in documentation extraction) |
 
-IDs are UUIDs. You can deep-link straight to any of these while logged in. Re-opening a quote URL throws away unsaved edits in an open part modal, which is a clean way to back out of a half-finished edit.
+The recorded quote/part IDs were UUIDs. Verify navigation in the current session before relying on these deep links; an HTTP 200 or login redirect does not validate an authenticated route. Re-opening a quote URL throws away unsaved edits in an open part modal, which is a clean way to back out of a half-finished edit.
 
 ## 2. Global layout
 
@@ -53,7 +53,7 @@ Each card shows sub-processes, material count and "As fast as N days". The radio
 
 **Step 2, "Upload your files".** Drag-and-drop zone, "Select files or folder to upload", and "See all supported file types" (a modal with "Most Processes" and "3D Printing" tabs).
 - The upload control is a hidden `<input type=file multiple>`. **Upload by setting files on that input** (e.g. the browser tool's file-upload action with the input's ref). Don't click the button, because a native file picker is invisible to you.
-- The page states that uploading EAR- or ITAR-controlled parts violates the Terms.
+- Read the current export-control declaration. The [project-submission guide](https://www.fictiv.com/help/getting-a-quote/how-to-submit-an-export-controlled-project) permits EAR99/9E991 self-serve, excludes ITAR, and routes other ECCNs through review; do not generalize old upload-banner wording to every EAR classification.
 - "+ New quote from Parts Library" (top right) builds a quote from previously ordered parts.
 
 After an upload the app **creates the quote automatically** and redirects to `/pages/quotes/<id>`. The quote is named `<lastname>_<MMDDYY>`, which you can rename with the pencil icon. A first-time "Upload complete! Next steps…" tour modal may appear. Dismiss it with **"No, I've got this"**.
@@ -159,6 +159,7 @@ Select rows, then click **Bulk configure parts**. This opens "Current configurat
 - **3. How would you like to pay for your order?** Two tabs:
   - **Pay with credit card:** "Your saved cards" list and **Add new card**. Add new card opens a modal with **Card | Google Pay** tabs, Card number, Expiration (MM/YY), Security code (CVC), Country and ZIP, plus "Use this credit card". **These fields are Stripe iframes.** Fictiv never stores card data itself, and neither should you. See checkout-and-payment.md.
   - **Pay with PO:** "PO use will require approval from our finance department. Requesting use of PO will create a Teams Account for any future orders…" plus **Create and Apply for Payment Terms**. Once terms are approved this becomes a PO upload and PO-number entry.
+- **Import choice:** current public guides also document Fictiv DDP versus customer EXW, requiring a customer carrier account for EXW; Canada must use EXW. Confirm this in the rendered checkout (not mapped by the old state helper).
 - **Summary** (right): "Edit quote" link, Part production, Shipping, Tax, **Order total**, **Place order** (disabled until address, shipping and payment are set), Download quote, Forward to purchaser, Ship by.
 
 ## 7. Account, Library, Orders
@@ -178,6 +179,7 @@ Select rows, then click **Bulk configure parts**. This opens "Current configurat
 - **Read state with `scripts/quote_state.js`** in the javascript tool on the quote or checkout page. It returns a compact line-per-item digest (full object on `window.__fictivState`) with parts, configs, prices, tiers, summary, button states and open dialogs, which is cheaper and more reliable than screenshots.
 - **`find` + `ref` clicks** for buttons, links and tabs. Coordinate clicks are fragile because the viewport can be very wide and panels shift after every save.
 - **Searchable selects** (Process, Material, Color, thread size): click the field, **type part of the option text** (e.g. `6061`, `Black`, `3D Printing`), wait about 1 s, then press **Enter**. Then confirm the field shows what you wanted. To see all options, open the field and run `scripts/list_dropdown_options.js`, because the list is virtualized.
+- **Tool compatibility:** use only browser operations supported by the active tool. Names such as `javascript_tool`, `get_page_text` and file-input upload are examples from the original host. If arbitrary JS evaluation is unavailable, use semantic text/snapshots and the tool's documented native file-picker flow. Never infer success solely from empty helper output.
 - **Reading modal text:** `document.querySelectorAll('.ant-modal-content')`. Part-modal content is also in `document.body.innerText` after the main page text, so slice from a known heading such as "Technical drawing (optional)" or "Process and material".
 - **"Show more" in DFM cards:** clicking them via JS (`[...document.querySelectorAll('a,button,span')].filter(e=>e.innerText.trim()==='Show more').forEach(e=>e.click())`) expands the full text. Some cards collapse again, so read immediately.
 - **Waiting:** geometry analysis takes about 10–30 s per part ("Analyzing parts (1/2) 62%", "Analyzing geometry…", "Configuring part…"). Poll the page text or `quote_state.js` → `analyzing:false` every 5–10 s rather than sleeping blindly.

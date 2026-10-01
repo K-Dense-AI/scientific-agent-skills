@@ -98,8 +98,8 @@ sns.pairplot(data=df, hue='species', corner=True)
 - `order`, `hue_order` - Control category ordering
 - `native_scale` - Preserve numeric/datetime scale on the categorical axis
 - `log_scale` - Apply log scaling without dropping down to matplotlib
-- `formatter` - Control categorical tick labels
-- `dodge`, `gap` - Separate hue levels side-by-side and space dodged elements
+- `formatter` - Format categorical values; affects both grouping and tick labels
+- `dodge` - Separate hue levels; `gap` applies to box/violin/boxen/bar/count, not every categorical function
 - `orient` - "x"/"y" or "v"/"h" to specify the categorical axis
 - `legend` - True/False or "auto", "brief", "full"
 - `kind` - Plot type for catplot: "strip", "swarm", "box", "violin", "boxen", "bar", "point", "count"
@@ -176,3 +176,5 @@ sns.heatmap(corr, annot=True, fmt='.2f',
 sns.clustermap(data, cmap='viridis',
                standard_scale=1, figsize=(10, 10))
 ```
+
+These are selected parameters, not a union accepted by every function. Check [function_reference.md](function_reference.md) for estimator, missing-data, regression, and clustering constraints. APIs reviewed against the [stable API index](https://seaborn.pydata.org/api.html), 2026-10-01.

@@ -1,10 +1,15 @@
 # E. coli Protein Expression with His-tag Purification and Yield via A280
 
 **URL:** https://cloud.ginkgo.bio/protocols/ecoli-protein-expression-histag-a280
+**Service terms:** https://cloud.ginkgo.bio/terms/ecoli-histag-a280
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $199/sample
 **Turnaround:** up to 3 weeks
 **Throughput:** Up to 96 constructs in parallel
+
+The catalog says up to 3 weeks, while service terms state 15-20 business days from
+DNA submission. Confirm scheduling in the accepted order.
 
 ## Overview
 

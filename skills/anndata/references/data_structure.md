@@ -5,7 +5,7 @@ The AnnData object stores a data matrix with associated annotations, providing a
 ## Core Components
 
 ### X (Data Matrix)
-The primary data matrix with shape (n_obs, n_vars) storing experimental measurements.
+The primary data matrix has shape `(n_obs, n_vars)` (observations by variables). It may be `None` for metadata-only objects. Record whether values are counts, normalized expression, residuals, or another measurement; names alone do not establish units.
 
 ```python
 import anndata as ad
@@ -16,7 +16,7 @@ adata = ad.AnnData(X=np.random.rand(100, 2000))
 
 # Create with sparse matrix (recommended for large, sparse data)
 from scipy.sparse import csr_matrix
-sparse_data = csr_matrix(np.random.rand(100, 2000))
+sparse_data = csr_matrix(np.random.default_rng(42).binomial(1, 0.01, (100, 2000)))
 adata = ad.AnnData(X=sparse_data)
 ```
 
@@ -71,18 +71,23 @@ print(adata.var.loc['ENSG00001'])
 ```
 
 ### layers (Alternative Data Representations)
-Dictionary storing alternative matrices with the same dimensions as X.
+Mapping of same-shape matrices. In **AnnData 0.13.4**, `layers[None]` aliases `X` and iteration includes this special key. Named layers remain strings; handle `None` explicitly in code that exports or enumerates layers. On disk, native formats still store X under the top-level `X` key.
 
 ```python
-# Store raw counts, normalized data, and scaled data
-adata = ad.AnnData(X=np.random.rand(100, 2000))
-adata.layers['raw_counts'] = np.random.randint(0, 100, (100, 2000))
-adata.layers['normalized'] = adata.X / np.sum(adata.X, axis=1, keepdims=True)
-adata.layers['scaled'] = (adata.X - adata.X.mean()) / adata.X.std()
+# Derive each representation from the SAME synthetic count matrix.
+counts = np.random.default_rng(42).poisson(1, (100, 2000)).astype('float32')
+adata = ad.AnnData(X=counts)
+adata.layers['raw_counts'] = adata.X.copy()
+totals = adata.X.sum(axis=1, keepdims=True)
+adata.layers['normalized'] = adata.X / np.where(totals == 0, 1, totals)
+std = adata.X.std(axis=0)
+adata.layers['scaled'] = (adata.X - adata.X.mean(axis=0)) / np.where(std == 0, 1, std)
 
 # Access layers
 raw_data = adata.layers['raw_counts']
 normalized_data = adata.layers['normalized']
+named_layers = {key: value for key, value in adata.layers.items() if key is not None}
+assert adata.layers[None] is adata.X
 ```
 
 Common layer uses:
@@ -129,7 +134,7 @@ Common varm uses:
 - `gene_modules`: Gene co-expression module assignments
 
 ### obsp (Pairwise Observation Relationships)
-Dictionary storing sparse matrices representing relationships between observations.
+Mapping of dense or sparse arrays whose first two dimensions are `(n_obs, n_obs)`.
 
 ```python
 from scipy.sparse import csr_matrix
@@ -150,7 +155,7 @@ Common obsp uses:
 - `distances`: Pairwise distances between cells
 
 ### varp (Pairwise Variable Relationships)
-Dictionary storing sparse matrices representing relationships between variables.
+Mapping of dense or sparse arrays whose first two dimensions are `(n_vars, n_vars)`.
 
 ```python
 # Store gene-gene correlation matrix
@@ -163,7 +168,7 @@ gene_correlations = adata.varp['correlations']
 ```
 
 ### uns (Unstructured Annotations)
-Dictionary storing arbitrary unstructured metadata.
+Mapping for unstructured metadata. In-memory Python objects are not all serializable; native output requires supported AnnData encodings. Avoid slashes in keys and validate by reopening the saved file.
 
 ```python
 # Store analysis parameters and results
@@ -189,7 +194,7 @@ Common uns uses:
 - Tool-specific metadata
 
 ### raw (Original Data Snapshot)
-Optional attribute preserving the original data matrix and variable annotations before filtering.
+Optional snapshot of the current `X`, `var`, and `varm`; it is not a full backup and is not automatically raw counts. Observation slicing subsets `.raw`, while variable slicing preserves its original variable axis. Layers follow both axes, so a counts layer loses genes when genes are filtered. Record the snapshot transformation in `uns` and keep a separate full-gene counts file when required.
 
 ```python
 # Create AnnData and store raw state
@@ -198,6 +203,7 @@ adata.var['gene_name'] = [f'Gene_{i}' for i in range(5000)]
 
 # Store raw state before filtering
 adata.raw = adata.copy()
+adata.uns['raw_semantics'] = 'synthetic unnormalized values'
 
 # Filter to highly variable genes
 highly_variable_mask = np.random.rand(5000) > 0.5
@@ -300,7 +306,7 @@ t_cells = adata[adata.obs['cell_type'] == 'T cell']
 The AnnData structure is designed for memory efficiency:
 - Sparse matrices reduce memory for sparse data
 - Views avoid copying data when possible
-- Backed mode enables working with data larger than RAM
+- H5AD backed mode leaves X on disk; metadata and named layers can still consume memory
 - Categorical annotations reduce memory for discrete values
 
 ```python
@@ -312,3 +318,7 @@ adata.strings_to_categoricals()
 if adata.is_view:
     adata = adata.copy()  # Create independent copy
 ```
+
+## Verified upstream contract
+
+Reviewed against AnnData 0.13.4 source and the official [object API](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html), [raw semantics](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.raw.html), [on-disk encodings](https://anndata.readthedocs.io/en/stable/fileformat-prose.html), and [0.13 release changes](https://anndata.readthedocs.io/en/stable/release-notes/). Examples with invented metadata and random arrays illustrate structure, not validated biological embeddings or graphs.

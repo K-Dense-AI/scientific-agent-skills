@@ -36,6 +36,8 @@ def _command_preview(plan: dict[str, Any]) -> list[str]:
         str(training["total_timesteps"]),
         "--train.seed",
         str(training["seed"]),
+        "--train.minibatch-size",
+        str(training["minibatch_size"]),
     ]
     if plan["profile"] == "pypi-3.0.0":
         backend_name = {
@@ -47,6 +49,10 @@ def _command_preview(plan: dict[str, Any]) -> list[str]:
             [
                 "--train.device",
                 training["device"],
+                "--train.bptt-horizon",
+                str(training["horizon"]),
+                "--vec.seed",
+                str(training["seed"]),
                 "--vec.backend",
                 backend_name,
                 "--vec.num-envs",
@@ -60,6 +66,10 @@ def _command_preview(plan: dict[str, Any]) -> list[str]:
     else:
         command.extend(
             [
+                "--seed",
+                str(training["seed"]),
+                "--train.horizon",
+                str(training["horizon"]),
                 "--vec.total-agents",
                 str(vector["total_agents"]),
                 "--vec.num-buffers",
@@ -74,8 +84,6 @@ def _command_preview(plan: dict[str, Any]) -> list[str]:
     logger = plan["logging"]["backend"]
     if logger != "none":
         command.append(f"--{logger}")
-    if not plan["logging"]["upload_checkpoints"] and plan["profile"] == "pypi-3.0.0":
-        command.append("--no-model-upload")
     return command
 
 
@@ -262,6 +270,12 @@ def main(argv: list[str] | None = None) -> int:
                 else None
             ),
             "network_used": False,
+            "preview_limitations": [
+                "Historical 3.0/4.0 CLI preview only; not a 5.0 command.",
+                "Set environment-specific rollout batch size and verify agent counts.",
+                "Start method and zero-copy are plan requirements, not applied by this preview.",
+                "For 4.0, the compiled backend selects CPU/CUDA; the plan does not rebuild it.",
+            ],
             "plan": copy.deepcopy(plan),
             "status": "valid" if not errors else "invalid",
         }

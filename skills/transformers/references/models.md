@@ -1,5 +1,7 @@
 # Model Loading and Management
 
+Targets Transformers 5.18.0. Hub/accelerator/export examples are illustrative; tiny local model APIs are exercised by `tests/transformers/`. See [review evidence](review.md).
+
 ## Overview
 
 The transformers library provides flexible model loading with automatic architecture detection, device management, and configuration control.
@@ -14,21 +16,21 @@ Use AutoModel classes for automatic architecture selection:
 from transformers import AutoModel, AutoModelForSequenceClassification, AutoModelForCausalLM
 
 # Base model (no task head)
-model = AutoModel.from_pretrained("bert-base-uncased")
+model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
 
 # Sequence classification
-model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 
 # Causal language modeling (GPT-style)
-model = AutoModelForCausalLM.from_pretrained("gpt2")
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 
 # Masked language modeling (BERT-style)
 from transformers import AutoModelForMaskedLM
-model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")
+model = AutoModelForMaskedLM.from_pretrained("google-bert/bert-base-uncased")
 
 # Sequence-to-sequence (T5-style)
 from transformers import AutoModelForSeq2SeqLM
-model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 ```
 
 ### Common AutoModel Classes
@@ -51,7 +53,8 @@ model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
 - `AutoModelForSpeechSeq2Seq`: Speech recognition
 
 **Multimodal:**
-- `AutoModelForVision2Seq`: Image captioning, VQA
+- `AutoModelForImageTextToText`: Generative image captioning and visual chat, paired with `AutoProcessor`
+- `AutoModelForVisualQuestionAnswering`: Architecture-specific direct VQA models
 
 ## Loading Parameters
 
@@ -59,14 +62,14 @@ model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
 
 **pretrained_model_name_or_path**: Model identifier or local path
 ```python
-model = AutoModel.from_pretrained("bert-base-uncased")  # From Hub
+model = AutoModel.from_pretrained("google-bert/bert-base-uncased")  # From Hub
 model = AutoModel.from_pretrained("./local/model/path")  # From disk
 ```
 
 **num_labels**: Number of output labels for classification
 ```python
 model = AutoModelForSequenceClassification.from_pretrained(
-    "bert-base-uncased",
+    "google-bert/bert-base-uncased",
     num_labels=3
 )
 ```
@@ -82,23 +85,19 @@ model = AutoModel.from_pretrained("model-id", cache_dir="./my_cache")
 ```python
 # Automatically distribute across GPUs and CPU
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-2-7b-hf",
+    "Qwen/Qwen2.5-1.5B",
     device_map="auto"
 )
 
+# Accelerate device maps are for inference, not distributed Trainer training.
 # Sequential placement
 model = AutoModelForCausalLM.from_pretrained(
     "model-id",
     device_map="sequential"
 )
 
-# Custom device map
-device_map = {
-    "transformer.layers.0": 0,      # GPU 0
-    "transformer.layers.1": 1,      # GPU 1
-    "transformer.layers.2": "cpu",  # CPU
-}
-model = AutoModel.from_pretrained("model-id", device_map=device_map)
+# A complete one-device map; split maps must name real model modules and cover all weights.
+model = AutoModel.from_pretrained("model-id", device_map={"": "cpu"})
 ```
 
 Manual device placement:
@@ -129,28 +128,21 @@ model = AutoModel.from_pretrained("model-id", dtype="auto")
 
 **attn_implementation**: Choose attention mechanism
 ```python
-# Scaled Dot Product Attention (PyTorch 2.0+, fastest)
+# SDPA (supported architectures; backend/shape determine speed)
 model = AutoModel.from_pretrained("model-id", attn_implementation="sdpa")
 
 # Flash Attention 2 (requires flash-attn package)
 model = AutoModel.from_pretrained("model-id", attn_implementation="flash_attention_2")
 
-# Eager (default, most compatible)
+# Eager (explicit reference implementation; SDPA is often selected by default)
 model = AutoModel.from_pretrained("model-id", attn_implementation="eager")
 ```
 
 ### Memory Optimization
 
-**low_cpu_mem_usage**: Reduce CPU memory during loading
-```python
-model = AutoModelForCausalLM.from_pretrained(
-    "large-model-id",
-    low_cpu_mem_usage=True,
-    device_map="auto"
-)
-```
+Transformers v5 manages efficient loading internally; legacy `low_cpu_mem_usage` is ignored. `device_map="auto"` can dispatch to accelerators/CPU/disk according to available memory; supply `max_memory` and `offload_folder` when needed, inspect `model.hf_device_map`, and keep inputs on the entry device. Do not call `.to(...)` on an already dispatched model.
 
-**BitsAndBytesConfig**: 8-bit and 4-bit quantization (requires optional `bitsandbytes`; `uv pip install bitsandbytes==0.49.2`)
+**BitsAndBytesConfig**: 8-bit and 4-bit quantization (requires optional `bitsandbytes`; `uv pip install bitsandbytes==0.50.2`)
 ```python
 from transformers import BitsAndBytesConfig
 
@@ -162,6 +154,8 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=quantization_config
 )
 ```
+
+Bitsandbytes is not CUDA-only: release 0.50.2 supplies Linux, Windows, and macOS ARM64 wheels, with backend/feature-specific support. CPU quantization was smoke-tested on this review host; CUDA, ROCm, XPU, Gaudi, and MPS paths were not. Check the [release installation matrix](https://huggingface.co/docs/bitsandbytes/v0.50.2/installation). Quantized inference does not itself train adapters.
 
 **4-bit QLoRA-style loading**: use `BitsAndBytesConfig` instead of direct `load_in_4bit` arguments
 ```python
@@ -189,18 +183,18 @@ model = AutoModelForCausalLM.from_pretrained(
 from transformers import AutoConfig, AutoModel
 
 # Load and modify config
-config = AutoConfig.from_pretrained("bert-base-uncased")
+config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 config.hidden_dropout_prob = 0.2
 config.attention_probs_dropout_prob = 0.2
 
 # Initialize model with custom config
-model = AutoModel.from_pretrained("bert-base-uncased", config=config)
+model = AutoModel.from_pretrained("google-bert/bert-base-uncased", config=config)
 ```
 
 ### Initializing from Config Only
 
 ```python
-config = AutoConfig.from_pretrained("gpt2")
+config = AutoConfig.from_pretrained("openai-community/gpt2")
 model = AutoModelForCausalLM.from_config(config)  # Random weights
 ```
 
@@ -221,7 +215,7 @@ model.train(True)
 model.train(False)
 ```
 
-Evaluation mode disables dropout and uses batch norm statistics. `model.train(False)` is equivalent to `model.eval()` in PyTorch.
+Evaluation mode disables dropout and uses stored batch norm statistics where those layers exist. It does not disable autograd; use `torch.inference_mode()` for inference. `model.train(False)` is equivalent to `model.eval()` in PyTorch.
 
 ## Saving Models
 
@@ -233,7 +227,9 @@ model.save_pretrained("./my_model")
 
 This creates:
 - `config.json`: Model configuration
-- `pytorch_model.bin` or `model.safetensors`: Model weights
+- `model.safetensors` (or shards plus an index): Model weights
+
+Save the matching tokenizer/processor too. v5 saves safetensors; `safe_serialization` is no longer a public control. Legacy pickle-based loading is a separate compatibility/security consideration.
 
 ### Save to Hugging Face Hub
 
@@ -290,8 +286,11 @@ from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("model-id")
 model = AutoModelForSequenceClassification.from_pretrained("model-id")
 
-inputs = tokenizer("Sample text", return_tensors="pt")
-outputs = model(**inputs)
+import torch
+inputs = tokenizer("Sample text", return_tensors="pt").to(model.device)
+model.eval()
+with torch.inference_mode():
+    outputs = model(**inputs)
 
 logits = outputs.logits
 predictions = logits.argmax(dim=-1)
@@ -305,34 +304,29 @@ SafeTensors is faster and safer:
 
 ```python
 # Save as safetensors (recommended)
-model.save_pretrained("./model", safe_serialization=True)
+model.save_pretrained("./model")
 
-# Load either format automatically
+# Reload this local safetensors export
 model = AutoModel.from_pretrained("./model")
 ```
 
 ### ONNX Export
 
-Export for optimized inference:
+The legacy `transformers.onnx` exporter is removed. Use the separate [Optimum ONNX exporter](https://huggingface.co/docs/optimum-onnx/onnx/usage_guides/export_a_model) in its own compatible environment. Illustrative CLI (export/runtime not executed in this review):
 
-```python
-from transformers.onnx import export
-
-# Export to ONNX
-export(
-    tokenizer=tokenizer,
-    model=model,
-    config=config,
-    output=Path("model.onnx")
-)
+```bash
+uv pip install "optimum-onnx[onnxruntime]"
+optimum-cli export onnx --model distilbert/distilbert-base-uncased-finetuned-sst-2-english --task text-classification ./onnx-model
 ```
+
+Check that the chosen architecture/opset is supported and compare ONNX outputs with the original model on representative inputs; successful conversion alone does not validate numerical equivalence.
 
 ## Best Practices
 
 1. **Use AutoModel classes**: Automatic architecture detection
 2. **Specify `dtype` explicitly**: Control precision and memory (avoid deprecated `torch_dtype` in new code)
 3. **Use device_map="auto"**: For large models
-4. **Enable low_cpu_mem_usage**: When loading large models
+4. **Inspect dispatch**: Bound `max_memory` and disk offload; do not use inference dispatch as a training strategy
 5. **Use safetensors format**: Faster and safer serialization
 6. **Check model.training**: Ensure correct mode for task
 7. **Consider quantization**: For deployment on resource-constrained devices
@@ -356,15 +350,11 @@ model = AutoModel.from_pretrained("model-id", quantization_config=quantization_c
 model = AutoModel.from_pretrained("model-id", device_map="cpu")
 ```
 
-**Slow loading:**
-```python
-# Enable low CPU memory mode
-model = AutoModel.from_pretrained("model-id", low_cpu_mem_usage=True)
-```
+**Slow loading:** Reuse an existing cached snapshot, inspect download/disk/dispatch costs, and avoid repeatedly initializing the model. `low_cpu_mem_usage` does not change v5 loading.
 
 **Model not found:**
 ```python
-# Verify model ID on hub.co
+# Verify the exact repository ID on huggingface.co
 # Check authentication for private models
 from huggingface_hub import login
 login()

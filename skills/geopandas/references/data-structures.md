@@ -1,6 +1,6 @@
 # GeoPandas data structures
 
-GeoPandas 1.1.4 extends pandas with a `geometry` extension dtype backed by
+GeoPandas 1.2.0 extends pandas with a `geometry` extension dtype backed by
 Shapely 2. A `GeoSeries` is one geometry-valued pandas Series; a `GeoDataFrame`
 is a DataFrame with one active geometry column and may contain additional
 geometry columns.
@@ -197,7 +197,7 @@ Record, without emitting coordinates or identifiers:
 The bundled `scripts/vector_inventory.py` emits a redacted metadata inventory;
 `scripts/geometry_validity_report.py` adds bounded geometry-state counts.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [GeoPandas data structures](https://geopandas.org/en/stable/docs/user_guide/data_structures.html).
 - [GeoSeries API](https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoSeries.html).

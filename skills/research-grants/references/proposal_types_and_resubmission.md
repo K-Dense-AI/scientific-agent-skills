@@ -1,81 +1,54 @@
-# Proposal Types and Resubmission Strategies
+# Proposal types and resubmission
 
-The common proposal types and their expectations, then how to approach a resubmission,
-including how to respond to a summary statement or reviewer critique.
+Reviewed 2026-10-01. A mechanism name is a starting point for finding the right call,
+not sufficient evidence of current availability, applicant eligibility or a budget cap.
 
-## Common Proposal Types
+## Mechanism selection
 
-### NSF Proposal Types
+- **NSF:** ordinary research, CAREER, RAPID, EAGER and collaborative proposals have
+  different rules. No universal $500,000 ceiling applies to standard research.
+  CAREER award minima are not maxima; it has no general six-year post-PhD cutoff.
+  RAPID/EAGER require their specified advance consultation and proposal procedure.
+- **NIH:** distinguish new, renewal, resubmission and revision applications as well
+  as activity code. R01 has no universal $250,000 budget floor; R21 commonly permits
+  $275,000 over two years with no more than $200,000 in one year. R15 includes distinct
+  AREA/REAP eligibility. R35 is not exclusively MIRA. F awards and mentored K awards
+  need training/career and reference instructions, not only a research narrative.
+- **DOE:** distinguish SC basic research, ARPA-E technology development, applied-office
+  competitions and lab/facility access. Cost share, period and award instrument are
+  opportunity-specific.
+- **DARPA:** inspect the BAA/other solicitation and program or office scope. Do not
+  present a Young Faculty Award option or Director's Fellowship as an always-open,
+  generic grant. Verify stage and submission eligibility in the current notice.
+- **NSTC:** identify year, division, project type, institutional/PI eligibility and
+  project-count rules before adapting CM03 or other forms.
 
-- **Standard Research Proposals**: Most common, up to $500K and 5 years
-- **CAREER Awards**: Early career faculty, integrated research/education, $400-500K over 5 years
-- **Collaborative Research**: Multiple institutions, separately submitted, shared research plan
-- **RAPID**: Urgent research opportunities, up to $200K, no preliminary data required
-- **EAGER**: High-risk, high-reward exploratory research, up to $300K
-- **EArly-concept Grants for Exploratory Research (EAGER)**: Early-stage exploratory work
+## NIH A1
 
-### NIH Award Mechanisms
+Follow [NIH resubmission policy](https://grants.nih.gov/grants-process/submit/submission-policies/resubmission-applications)
+and the active NOFO: one A1 within 37 months of the initial application due date, after
+the summary statement is available, when resubmissions are accepted. A later A0 still
+has to satisfy submission, overlap and application-limit policies.
 
-- **R01**: Research Project Grant, $250K+ per year, 3-5 years, most common
-- **R21**: Exploratory/Developmental Research, up to $275K over 2 years, no preliminary data
-- **R03**: Small Grant Program, up to $100K over 2 years
-- **R15**: Academic Research Enhancement Awards (AREA), for primarily undergraduate institutions
-- **R35**: MIRA (Maximizing Investigators' Research Award), program-specific
-- **P01**: Program Project Grant, multi-project integrated research
-- **U01**: Research Project Cooperative Agreement, NIH involvement in conduct
+For a standard research A1 introduction of up to one page:
 
-**Fellowship Mechanisms**:
-- **F30**: Predoctoral MD/PhD Fellowship
-- **F31**: Predoctoral Fellowship
-- **F32**: Postdoctoral Fellowship
-- **K99/R00**: Pathway to Independence Award
-- **K08**: Mentored Clinical Scientist Research Career Development Award
+1. Summarize the central concerns accurately and courteously.
+2. Explain what the investigators changed, with actual new evidence where relevant.
+3. Give correct final section/page references.
+4. Explain a reasoned disagreement when necessary without claiming reviewers were biased.
 
-### DOE Programs
+Implement changes in methods, aims, budget, timeline and resources, not only the
+introduction. Do not use change-marking typography or tracked changes to flag revisions
+in the final narrative. Check the introduction limit for other application types.
 
-- **Office of Science**: Basic research in physical sciences, biological sciences, computing
-- **ARPA-E**: Transformative energy technologies, requires cost sharing
-- **EERE**: Applied research in renewable energy and energy efficiency
-- **National Laboratories**: Collaborative research with DOE labs
+Create a private revision matrix: reviewer concern -> scientific consequence ->
+response/evidence -> location -> unresolved question. Decide whether to resubmit from
+scientific merit and program fit, not invented score bands or historic success rates.
 
-### DARPA Programs
+## NSF and other agencies
 
-- **Varies by Office**: BTO, DSO, I2O, MTO, STO, TTO
-- **Program-Specific BAAs**: Broad Agency Announcements for specific thrusts
-- **Young Faculty Award (YFA)**: Early career researchers, up to $500K
-- **Director's Fellowship**: High-risk, paradigm-shifting research
-
-
-## Resubmission Strategies
-
-### NIH Resubmission (A1)
-
-**Introduction to Resubmission** (1 page):
-- Summarize major criticisms from previous review
-- Describe specific changes made in response
-- Use bullet points for clarity
-- Be respectful of reviewers' comments
-- Highlight substantial improvements
-
-**Strategies**:
-- Address every major criticism
-- Make changes visible (but don't use track changes in final)
-- Strengthen weak areas (preliminary data, methods, significance)
-- Consider changing aims if fundamentally flawed
-- Get external feedback before resubmitting
-- Use full 37-month window if needed for new data
-
-**When Not to Resubmit**:
-- Fundamental conceptual flaws
-- Lack of innovation or significance
-- Missing key expertise or resources
-- Extensive revisions needed (consider new submission)
-
-### NSF Resubmission
-
-**NSF allows resubmission after revision**:
-- Address reviewer concerns in revised proposal
-- No formal "introduction to resubmission" section
-- May be reviewed by same or different panel
-- Consider program officer feedback
-- May need to wait for next submission cycle
+NSF generally treats revised declined proposals as new submissions, without a standard
+NIH-style response introduction. Revise substantively, respect program restrictions,
+and obtain permitted program feedback. Other agencies may require a new call, restrict
+resubmission, or allow an appeal only on specified grounds. Read those rules before
+preparing a response; no general right to resubmit or obtain an award is implied.

@@ -14,12 +14,12 @@ from typing import Any
 
 
 VERIFIED_VERSIONS = {
-    "qiskit": "2.5.0",
-    "qiskit-ibm-runtime": "0.48.0",
+    "qiskit": "2.5.2",
+    "qiskit-ibm-runtime": "0.50.0",
     "qiskit-aer": "0.17.2",
     "qiskit-algorithms": "0.4.0",
     "qiskit-nature": "0.8.0",
-    "qiskit-machine-learning": "0.9.0",
+    "qiskit-machine-learning": "0.9.1",
     "qiskit-optimization": "0.7.0",
 }
 

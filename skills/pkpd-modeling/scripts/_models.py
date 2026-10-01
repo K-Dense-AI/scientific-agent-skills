@@ -19,11 +19,8 @@ disposition — have no closed form and are integrated with LSODA, which switche
 to a stiff method on its own. TMDD is stiff by construction: binding is orders
 of magnitude faster than elimination.
 
-Parameterisation is always **clearance-based** (CL, V1, Q, V2, ...), never
-micro-constants. Micro-constants are not identifiable across studies, do not
-scale allometrically, and cannot be given a covariate model that means
-anything. ``micro_constants`` converts one way for reporting; nothing in this
-skill fits them.
+Parameterization uses clearances and volumes for interpretation. Microconstants
+are also valid parameterizations; neither choice guarantees identifiability.
 """
 
 from __future__ import annotations
@@ -98,6 +95,8 @@ def disposition(cl: float, v1: float, q: Sequence[float] = (), vp: Sequence[floa
     vp = tuple(float(x) for x in vp)
     if len(q) != len(vp):
         raise ValueError(f"got {len(q)} intercompartmental clearances but {len(vp)} peripheral volumes")
+    if not all(math.isfinite(x) for x in (cl, v1, *q, *vp)):
+        raise ValueError("disposition parameters must be finite")
     if cl <= 0 or v1 <= 0:
         raise ValueError("CL and V1 must be positive")
     if any(x <= 0 for x in q + vp):
@@ -208,7 +207,8 @@ def conc_transit(
     if mtt <= 0 or n < 0:
         raise ValueError("MTT must be positive and n non-negative")
     ktr = (n + 1.0) / mtt
-    ka = ktr if ka is None else ka
+    if ka is not None:
+        raise ValueError("conc_transit models gamma input directly into central; a separate depot ka is not implemented")
     # Input rate into the central compartment, convolved numerically with the
     # analytic disposition on a fine grid: the transit chain has no compact
     # closed form once it is combined with a multi-exponential disposition.
@@ -250,6 +250,12 @@ class Dose:
     def __post_init__(self) -> None:
         if self.route not in {"iv", "oral"}:
             raise ValueError(f"route must be 'iv' or 'oral', got {self.route!r}")
+        if not all(math.isfinite(x) for x in (self.time, self.amount, self.duration)):
+            raise ValueError("dose event values must be finite")
+        if self.time < 0 or self.duration < 0:
+            raise ValueError("dose time and duration must be non-negative")
+        if self.route == "oral" and self.duration:
+            raise ValueError("oral infusion input is not implemented")
         if self.amount < 0:
             raise ValueError("dose amount must not be negative")
 
@@ -329,7 +335,7 @@ def steady_state_metrics(d: Disposition, dose: float, interval: float, f: float 
         "cavg_ss": cavg,
         "cmax_ss_bolus": cmax_ss,
         "cmin_ss_bolus": cmin_ss,
-        "accumulation_ratio_auc": 1.0 / (1.0 - math.exp(d.lam[-1] * interval)),
+        "accumulation_ratio_auc": d.auc_unit_dose / float(np.sum(d.coef * (-np.expm1(d.lam * interval)) / -d.lam)),
         "accumulation_ratio_cmax_bolus": cmax_ss / single_cmax if single_cmax else float("nan"),
         "peak_trough_fluctuation_pct": 100.0 * (cmax_ss - cmin_ss) / cavg if cavg else float("nan"),
         "time_to_90pct_ss": -math.log(0.10) / -d.lam[-1],
@@ -362,6 +368,8 @@ def _integrate_with_doses(
     the integration at every event makes that impossible.
     """
     _require_scipy("ODE-based models")
+    if times.ndim != 1 or not times.size or not np.all(np.isfinite(times)) or np.any(times < 0):
+        raise ValueError("integration times must be nonempty, finite and non-negative")
     events = sorted(regimen, key=lambda x: x.time)
     infusions = [(e.time, e.time + e.duration, e.amount / e.duration) for e in events if e.duration > 0]
 
@@ -424,6 +432,11 @@ def simulate_michaelis_menten(
     times = np.atleast_1d(np.asarray(times, dtype=float))
     q = tuple(q)
     vp = tuple(vp)
+    if len(q) != len(vp) or any(x <= 0 or not math.isfinite(x) for x in (vmax, km, v1, *q, *vp)):
+        raise ValueError("positive finite MM parameters and paired peripherals are required")
+    routes = {event.route for event in regimen}
+    if routes - {"oral" if ka is not None else "iv"}:
+        raise ValueError("MM simulation needs a single route matching ka; mixed routes are not implemented")
     n_periph = len(q)
     depot = 1 if ka is not None else 0
     size = 1 + n_periph + depot
@@ -449,6 +462,17 @@ def simulate_michaelis_menten(
     return states[:, depot] / v1
 
 
+def _qss_free(total_drug, total_target, kss):
+    """Positive quadratic root without cancellation when target greatly exceeds drug."""
+    drug = np.asarray(total_drug, dtype=float)
+    b = drug - np.asarray(total_target, dtype=float) - kss
+    radical = np.hypot(b, 2.0 * np.sqrt(kss) * np.sqrt(drug))
+    direct = 0.5 * (b + radical)
+    denominator = radical - b
+    stable = np.divide(2.0 * kss * drug, denominator, out=np.zeros_like(drug), where=denominator > 0)
+    return np.where(b >= 0, direct, stable)
+
+
 def simulate_tmdd(
     times: Sequence[float],
     regimen: Sequence[Dose],
@@ -466,18 +490,26 @@ def simulate_tmdd(
     """Target-mediated drug disposition.
 
     ``approximation`` is ``full`` (Mager-Jusko) or ``qss`` (quasi-steady-state,
-    Gibiansky). The full model is stiff — binding is typically 10^3 to 10^6
-    times faster than elimination — which is why LSODA is used rather than a
-    fixed-step explicit method.
+    Gibiansky). The system can be stiff; adaptive LSODA integration is used.
+    Verify tolerances against the requested output and kinetic timescales.
 
     Returns free drug, free target, complex, and total drug concentrations. The
-    distinction matters more than it looks: a ligand-binding assay usually
-    measures **total** drug, and fitting a total-drug observation to a free-drug
-    prediction is a standard way to get a badly wrong Kd.
+    assay must be mapped to its actual analyte. Ligand-binding assays can
+    report free, total or operational fractions depending on their design.
     """
     times = np.atleast_1d(np.asarray(times, dtype=float))
     if approximation not in {"full", "qss"}:
         raise ValueError("approximation must be 'full' or 'qss'")
+    if any(event.route != "iv" for event in regimen):
+        raise ValueError("TMDD helper supports IV doses only")
+    if (q is None) != (vp is None):
+        raise ValueError("TMDD peripheral clearance and volume must be paired")
+    if any(not math.isfinite(x) or x <= 0 for x in (cl, v1, kon, kdeg)) or any(not math.isfinite(x) or x < 0 for x in (koff, kint, ksyn)):
+        raise ValueError("invalid TMDD kinetic parameters")
+    if approximation == "qss" and koff + kint <= 0:
+        raise ValueError("QSS needs a positive Kss")
+    if q is not None and (not math.isfinite(q) or not math.isfinite(vp) or q <= 0 or vp <= 0):
+        raise ValueError("TMDD peripheral Q and volume must be finite and positive")
     has_periph = q is not None and vp is not None
     kel = cl / v1
     kd_qss = (koff + kint) / kon
@@ -508,15 +540,13 @@ def simulate_tmdd(
         complex_ = states[:, 2]
         return {"free_drug": free, "free_target": target, "complex": complex_, "total_drug": free + complex_}
 
-    # QSS: binding assumed at equilibrium, solved from the total-drug quadratic.
+    # QSS: quasi-steady complex relation, solved from the total-drug quadratic.
     size = 3 if has_periph else 2
 
     def rhs_qss(_t: float, y: np.ndarray) -> np.ndarray:
         total_drug = max(y[0], 0.0) / v1
         total_target = max(y[1], 0.0)
-        b = total_drug - total_target - kd_qss
-        free = 0.5 * (b + math.sqrt(b * b + 4.0 * kd_qss * total_drug))
-        free = max(free, 0.0)
+        free = float(_qss_free(total_drug, total_target, kd_qss))
         complex_ = total_target * free / (kd_qss + free) if (kd_qss + free) > 0 else 0.0
         dy = np.zeros(size)
         dy[0] = -kel * free * v1 - kint * complex_ * v1
@@ -532,9 +562,7 @@ def simulate_tmdd(
     states = _integrate_with_doses(rhs_qss, y0, times, regimen, dose_compartment=0)
     total_drug = states[:, 0] / v1
     total_target = states[:, 1]
-    b = total_drug - total_target - kd_qss
-    free = 0.5 * (b + np.sqrt(b * b + 4.0 * kd_qss * np.maximum(total_drug, 0.0)))
-    free = np.maximum(free, 0.0)
+    free = _qss_free(np.maximum(total_drug, 0.0), np.maximum(total_target, 0.0), kd_qss)
     complex_ = total_target * free / (kd_qss + free)
     return {
         "free_drug": free,
@@ -575,6 +603,8 @@ def effect_compartment(times: Sequence[float], conc: Sequence[float], ke0: float
     conc = np.asarray(conc, dtype=float)
     if times.shape != conc.shape:
         raise ValueError("times and conc must have the same length")
+    if not np.all(np.isfinite(times)) or not np.all(np.isfinite(conc)) or np.any(np.diff(times) <= 0):
+        raise ValueError("effect-compartment times must increase and inputs must be finite")
     if ke0 <= 0:
         raise ValueError("ke0 must be positive")
     ce = np.zeros_like(times)
@@ -625,6 +655,9 @@ def indirect_response(
         raise ValueError(f"idr_type must be one of {sorted(IDR_TYPES)}")
     if kin <= 0 or kout <= 0 or c50 <= 0:
         raise ValueError("kin, kout and C50 must be positive")
+
+    if max_effect < 0 or hill <= 0 or (idr_type in (1, 2) and max_effect > 1):
+        raise ValueError("IDR inhibition must be in [0,1]; stimulation non-negative and Hill positive")
 
     def drive(t: float) -> float:
         conc = max(float(conc_fn(t)), 0.0)

@@ -1,6 +1,6 @@
 # Documentation and Evidence Architecture
 
-Research basis: **2026-07-23**, extended **2026-07-26** for laboratory lanes. This is a
+Research basis: **2026-10-01**; current-source details are in `references/source-ledger.md`. This is a
 process-oriented planning reference, not a list of copyrighted ISO or IEC requirements.
 
 The five-layer hierarchy below applies to every standard this skill covers. Where the
@@ -227,8 +227,8 @@ rewriting history or backdating records.
 ### MDSAP
 
 Use the current
-[MDSAP AU P0002.010 Audit Approach](https://www.mdsap.global/documents/library/audit-approach),
-dated 2026-02-02, and the current MDSAP document library. Record participating
+[MDSAP AU P0002.011 Audit Approach](https://www.mdsap.global/documents/library/audit-approach),
+dated 2026-08-03, and the current MDSAP document library. Record participating
 jurisdictions, products, sites, recognized Auditing Organization, audit cycle,
 jurisdiction-specific evidence, findings, and action status. Do not substitute an
 ISO-only certificate or FDA inspection checklist.

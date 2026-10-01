@@ -94,7 +94,7 @@ def inspect_sequence_file(
         from Bio.SeqIO.QualityIO import FastqGeneralIterator
     except ImportError as exc:
         raise CliError(
-            'optional dependency missing; install with: uv pip install "biopython==1.87"'
+            'optional dependency missing; install with: uv pip install "biopython==1.88"'
         ) from exc
     is_fastq = suffix in {".fastq", ".fq"}
     lengths: list[int] = []

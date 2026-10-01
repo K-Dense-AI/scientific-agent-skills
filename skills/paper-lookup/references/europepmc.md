@@ -100,9 +100,7 @@ https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7029759/fullTextXML
 Returns a JATS `<article>` (not wrapped in `<pmc-articleset>` the way eFetch is). Pipe it through
 `scripts/jats_to_text.py`, which handles both wrappers.
 
-**404 means not open access** -- verified on PMC1500000, the same article for which eFetch returns a
-200 with no `<body>`. A 404 here is the honest answer, so prefer this endpoint when you need to
-*know* whether full text exists.
+**404 means this endpoint did not supply the requested XML.** Check the PMCID and metadata before attributing it to licensing; an absent/wrong identifier can also fail. The historical PMC1500000 probe returned 404, but a single failure is not a universal OA classifier.
 
 ### 3. Citations and references
 
@@ -121,19 +119,23 @@ https://www.ebi.ac.uk/europepmc/webservices/rest/MED/32117569/citations?format=j
 Returns `hitCount` plus `citationList.citation[]` (or `referenceList.reference[]`). Both wrap the
 list in a corpus-specific key, so parse by endpoint rather than assuming `resultList`.
 
-### 4. Text-mined terms and supplementary files
+### 4. Supplementary files and annotations
 
 ```
-GET /{source}/{id}/textMinedTerms/{semanticType}?format=json
-GET /{source}/{id}/supplementaryFiles
+GET /{PMCID}/supplementaryFiles
 ```
 
-Both are **per-article optional** and return **404** when the article has none. A 404 here means
-"this article has no such data", not a broken request -- do not treat it as an outage or retry it.
+This route takes a **PMCID without a source segment**, e.g.
+`/PMC5998401/supplementaryFiles`, and returns a ZIP archive, not JSON.
+`/MED/32117569/supplementaryFiles` is not the documented route. Its 404
+cannot establish that an article has no supplements. Inspect `hasSuppl` in
+`resultType=core` and the archive content; non-OA images may be excluded.
 
-Verified on MED/32117569: `resultType=core` reports `hasSuppl: "N"`, and `supplementaryFiles` 404s,
-consistent with each other. Read `hasSuppl` from a `core` search first and skip the call when it is
-`"N"`; there is no equivalent pre-check for `textMinedTerms`, which 404s for the same article.
+The previously listed `/textMinedTerms/{semanticType}` route is not in the
+current Articles REST operation list and was not verified as supported.
+Use PubTator3 for this skill's entity workflow, or consult the official
+[Europe PMC Annotations API](https://europepmc.org/AnnotationsApi). Do not
+interpret a legacy-route 404 as evidence that no annotations exist.
 
 ## Query Language
 
@@ -164,7 +166,9 @@ A bare term with no prefix searches title, abstract, and full text together.
 ```bash
 curl -s --get "https://www.ebi.ac.uk/europepmc/webservices/rest/search" \
   --data-urlencode 'query=(SRC:"PPR" AND PUBLISHER:"bioRxiv" AND "organoid")' \
-  --data-urlencode 'format=json&pageSize=2&resultType=lite'
+  --data-urlencode 'format=json' \
+  --data-urlencode 'pageSize=2' \
+  --data-urlencode 'resultType=lite'
 ```
 
 `hitCount` 1972, with `bookOrReportDetails.publisher` confirming `bioRxiv` on each hit. Take the
@@ -212,15 +216,17 @@ cross-reference.
 
 1. `hitCount` on the first response is the total.
 2. Request with `cursorMark=*`, then pass the returned `nextCursorMark` on each subsequent call.
-3. **Stop when `resultList.result` is empty or `nextCursorMark` equals the cursor you sent.** There is
-   no null terminator: at exhaustion Europe PMC returns an empty result list and echoes your own
-   cursor back. Detecting the end therefore costs one extra empty request -- expected, not a fault.
+3. **Stop when `resultList.result` is empty or `nextCursorMark` is absent, null, or equals the cursor you sent.** A historical walk echoed the cursor on an empty final page; a one-hit public query on 2026-09-30 omitted it. Do not assume either termination shape is universal.
 4. Reconcile retrieved count against `hitCount` and report both.
 
-Verified walk (`AUTH:"Doudna J" AND PUB_YEAR:2013 AND SRC:"MED"`, `pageSize=5`): pages of 5, 5, 5, 4,
+Historical verified walk (`AUTH:"Doudna J" AND PUB_YEAR:2013 AND SRC:"MED"`, `pageSize=5`): pages of 5, 5, 5, 4,
 then a 5th request returning 0 results with the cursor unchanged. Retrieved 19, `hitCount` 19.
 
 `scripts/paginate.py --api europepmc` implements this, including the repeated-cursor stop condition.
 
 Deep `page` offsets degrade and are capped; `cursorMark` is the supported path for anything past a
 few pages.
+
+## Official sources reviewed 2026-09-30
+
+- https://europepmc.org/RestfulWebService

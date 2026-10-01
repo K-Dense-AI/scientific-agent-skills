@@ -4,17 +4,19 @@ description: Solves seawater carbonate chemistry with PyCO2SYS for chemical ocea
 license: MIT
 compatibility: Requires Python 3.13 with PyCO2SYS 1.8.3.4 and NumPy. Network access is needed only to install packages or obtain external data; bundled calculations run locally without credentials.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
   upstream-version: "PyCO2SYS 1.8.3.4"
+  last-reviewed: "2026-10-01"
 ---
 
 # Marine Carbonate Chemistry
 
 Turn two independent seawater carbonate measurements into a reproducible speciation
 table, mineral saturation estimates, and a record of the calculation assumptions.
-Targets **PyCO2SYS 1.8.3.4**, tested with Python 3.13 and NumPy 2.5.1. The PyCO2SYS
-v2 beta uses a different implementation; do not mix its examples with this pin.
+Targets **PyCO2SYS 1.8.3.4**, tested with Python 3.13 and NumPy 2.5.3. As reviewed on
+2026-10-01, this remains the stable PyPI release. The [v2 documentation](https://mvdh.xyz/PyCO2SYS/)
+is for a beta with breaking changes; use the v1 documentation for this pin.
 
 ## When to use
 
@@ -62,7 +64,7 @@ Create a dedicated environment in the user's working directory:
 
 ```bash
 uv venv --python 3.13 .venv
-uv pip install --python .venv/bin/python "PyCO2SYS==1.8.3.4" "numpy==2.5.1"
+uv pip install --python .venv/bin/python "PyCO2SYS==1.8.3.4" "numpy==2.5.3"
 ```
 
 On Windows the environment's interpreter is `.venv/Scripts/python.exe`. The commands
@@ -83,11 +85,12 @@ skill's directory. Keep inputs and generated outputs in the working directory.
 3. **Solve with `scripts/solve_carbonate.py`.** It validates the full input table, solves
    the pair, checks finite outputs and DIC species balance, then writes `carbonate.csv`
    and `provenance.json` into a new output directory.
-4. **Review flags and consistency.** Inspect input and output calibration-range flags,
+4. **Review flags and consistency.** Inspect calibration-range and gas-pressure flags,
    carbonate balance, measured-third-parameter residuals when available, and controls.
    A successful solve does not validate the sample, constants, or measurement method.
 5. **Report at the intended conditions.** Results ending `_out` describe the supplied
-   output temperature/pressure. Unsuffixed results describe input conditions. Include
+   output temperature/pressure. Unsuffixed results describe input conditions. Gas results
+   retain the helper's uncorrected hydrostatic gas convention (see below). Include
    parameter pair, pH scale, units, constants, nutrient assumptions, uncertainty scope,
    software versions, and excluded/flagged samples with the result table.
 
@@ -118,6 +121,10 @@ conditions, total pH is **8.241241** and aragonite saturation **2.605691**. Thes
 values are regression checks for this exact setup, not universal seawater benchmarks.
 With independent 2 micromol/kg uncertainties in TA and DIC only, `u_pH_total` is about
 **0.004580**. This excludes equilibrium-constant and other input uncertainty.
+Both rows carry `gas_pressure_correction_disabled_output`: the output pH and mineral
+saturation include pressure effects, but the reported pCO2/fCO2 do not include the
+hydrostatic corrections to CO2 solubility and fugacity. Do not compare those gas values
+directly with a pressure-corrected subsurface sensor measurement.
 
 For TA + measured pH, use `--par2-type ph --ph-scale total` only if the source explicitly
 identifies total-scale pH; replace `par2` and `u_par2` with the measured pH and its absolute
@@ -141,8 +148,12 @@ unmatched samples is not by itself evidence of an anthropogenic acidification tr
 - [PyCO2SYS v1 arguments, units, settings, and result keys](https://pyco2sys.readthedocs.io/en/latest/co2sys_nd/)
 - [Uncertainty propagation](https://pyco2sys.readthedocs.io/en/latest/uncertainty/)
 - [Upstream validation](https://pyco2sys.readthedocs.io/en/latest/validate/)
+- [Stable release](https://github.com/mvdh7/PyCO2SYS/releases/tag/v1.8.3.4)
 - [Humphreys et al. (2022), PyCO2SYS v1.8](https://doi.org/10.5194/gmd-15-15-2022)
 
 Repository tests exercise the pinned solver, independent-pair round trips, carbon balance,
-pH-scale equivalence, condition correction, uncertainty quadrature, CSV errors, and the
-worked example. They establish software behavior, not independent field-data validation.
+pH-scale equivalence, condition correction, Revelle-factor derivatives, gas-pressure
+conventions, uncertainty quadrature, CSV errors, and the worked example. The helper calls
+the local `pyco2.sys` Python API; it has no HTTP endpoints or authentication. Tests establish
+software behavior, not independent field-data validation; upstream's validation page also
+contains historical examples, including a removed `pyco2.test` interface.

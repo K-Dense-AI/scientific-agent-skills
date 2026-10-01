@@ -52,6 +52,12 @@ def _status(value: Any) -> str:
     return "OTHER"
 
 
+def _lossy_status(value: Any) -> str:
+    # PS3.3 C.7.6.1.1.5 uses CS values 00/01, not YES/NO.
+    text = str(value or "").strip()
+    return text if text in {"00", "01"} else "ABSENT" if not text else "OTHER"
+
+
 def allowlisted_record(dataset: Any, *, file_id: str) -> dict[str, Any]:
     """Return only non-identifying technical fields from a metadata-only read."""
 
@@ -80,7 +86,7 @@ def allowlisted_record(dataset: Any, *, file_id: str) -> dict[str, Any]:
             or "WindowWidth" in dataset
         ),
         "high_bit": int(dataset.HighBit) if "HighBit" in dataset else None,
-        "lossy_image_compression": _status(dataset.get("LossyImageCompression")),
+        "lossy_image_compression": _lossy_status(dataset.get("LossyImageCompression")),
         "modality": str(dataset.get("Modality", "UNSPECIFIED")),
         "photometric_interpretation": str(
             dataset.get("PhotometricInterpretation", "UNSPECIFIED")
@@ -102,9 +108,12 @@ def allowlisted_record(dataset: Any, *, file_id: str) -> dict[str, Any]:
         "warnings": frame_warnings,
     }
     if transfer_info is not None:
-        record["transfer_syntax"]["compressed"] = bool(
-            pydicom.uid.UID(transfer_info["uid"]).is_compressed
+        uid = pydicom.uid.UID(transfer_info["uid"])
+        record["transfer_syntax"]["compressed"] = (
+            bool(uid.is_compressed) if uid.is_transfer_syntax else None
         )
+        if not uid.is_transfer_syntax:
+            record["warnings"].append("Transfer Syntax UID is not recognized.")
     return record
 
 

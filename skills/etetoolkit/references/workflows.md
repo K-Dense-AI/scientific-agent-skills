@@ -89,6 +89,7 @@ threshold before checking its scale.
 ## 2. Reproducible Tree Preprocessing
 
 ```python
+from collections import Counter
 from pathlib import Path
 
 from ete4 import Tree
@@ -101,14 +102,15 @@ with input_path.open(encoding="utf-8") as handle:
 
 # Keep a known sample set and preserve retained pairwise distances.
 keep = ["sample_A", "sample_B", "sample_C", "outgroup"]
-missing = sorted(set(keep) - set(tree.leaf_names()))
-if missing:
-    raise ValueError(f"Requested leaves are absent: {missing}")
-
-tree.prune(keep, preserve_branch_length=True)
+counts = Counter(tree.leaf_names())
+invalid = {name: counts[name] for name in keep if counts[name] != 1}
+if invalid:
+    raise ValueError(f"Requested tips must exist exactly once: {invalid}")
+tips = {leaf.name: leaf for leaf in tree.leaves()}
+tree.prune([tips[name] for name in keep], preserve_branch_length=True)
 
 # Prefer a biological outgroup when justified.
-tree.set_outgroup(tree["outgroup"])
+tree.set_outgroup(tips["outgroup"])
 
 # Stable presentation order only; this does not alter clade membership.
 tree.ladderize()
@@ -143,9 +145,12 @@ For auditability:
 tree = Tree("((A:1,B:1):1,(C:2,D:2):1);")
 candidate = tree.get_midpoint_outgroup()
 candidate_id = candidate.id
-tree.set_outgroup(candidate)
+tree.set_midpoint_outgroup()
 print("midpoint candidate:", candidate_id)
 ```
+
+The candidate identifies an edge. Calling `set_outgroup(candidate)` instead
+uses the default cut along that edge and can miss the exact diameter midpoint.
 
 Do not describe midpoint rooting as evidence for the direction of evolution.
 
@@ -165,6 +170,8 @@ def load(path: Path, parser=1) -> Tree:
 
 def assert_unique_leaf_names(tree: Tree, label: str) -> None:
     counts = Counter(tree.leaf_names())
+    if any(not name for name in counts):
+        raise ValueError(f"{label} has unnamed leaves")
     duplicates = sorted(name for name, count in counts.items() if count > 1)
     if duplicates:
         raise ValueError(f"{label} has duplicate leaves: {duplicates}")
@@ -192,7 +199,7 @@ print(
     {
         "rf": rf,
         "max_rf": max_rf,
-        "normalized_rf": rf / max_rf if max_rf else 0.0,
+        "normalized_rf": rf / max_rf if max_rf > 0 else None,
         "common_leaf_count": len(common),
         "discarded_edges_a": len(discarded_a),
         "discarded_edges_b": len(discarded_b),
@@ -204,6 +211,8 @@ Checklist:
 
 - Rooted and unrooted RF answer different questions.
 - ETE compares the intersection when leaf sets differ; report its size.
+- Require at least two shared tips. With no eligible splits (`max_rf <= 0`),
+  normalized RF is undefined, not zero.
 - Duplicate labels violate the usual tip-identity assumption.
 - Support filtering and polytomy expansion materially change results.
 - A high RF distance does not explain which biological split is preferable.
@@ -238,7 +247,11 @@ with Path("metadata.tsv").open(encoding="utf-8", newline="") as handle:
     required = {"sample", "host", "location"}
     if not reader.fieldnames or not required.issubset(reader.fieldnames):
         raise ValueError(f"metadata.tsv must contain columns {sorted(required)}")
+    if len(reader.fieldnames) != len(set(reader.fieldnames)):
+        raise ValueError("metadata.tsv has duplicate column names")
     for row in reader:
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError(f"metadata.tsv has a malformed row at line {reader.line_num}")
         sample = row["sample"].strip()
         if not sample or sample in metadata:
             raise ValueError(f"Empty or duplicate metadata key: {sample!r}")

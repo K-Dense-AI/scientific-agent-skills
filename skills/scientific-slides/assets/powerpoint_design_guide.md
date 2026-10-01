@@ -13,6 +13,12 @@ This guide provides comprehensive instructions for creating professional scienti
 
 **Anti-Pattern Warning**: All-bullet-point slides with black text on white background = instant boredom and forgotten science.
 
+The examples target [PptxGenJS 4.0.1](https://gitbrent.github.io/PptxGenJS/docs/)
+(reviewed 2026-09-30). Use Node.js with `pptxgenjs` installed in a task-local project.
+Code fragments assume supplied images and verified research claims; example numbers
+and citations are placeholders. Native slide composition preserves quantitative
+figures; generative image attachments do not guarantee unchanged data.
+
 ## Using the PPTX Skill
 
 ### Reference
@@ -35,9 +41,24 @@ For complete technical documentation on PowerPoint creation, refer to:
 5. Generate thumbnails and validate visually
 6. Iterate based on visual inspection
 
+**Image dimensions:** `1000, 500` below are illustrative source pixel dimensions.
+Replace them with the actual dimensions of each asset. PptxGenJS 4.0.1 has no
+`imageSizingContain` method; its native `sizing` also relies on supplied source
+`w`/`h`. The small `fitImage` function instead computes explicit placement.
+
 **Example Structure**:
 ```javascript
+const PptxGenJS = require("pptxgenjs");
 const pptx = new PptxGenJS();
+pptx.layout = "LAYOUT_16x9";
+
+// Supply the original pixel dimensions (for example from Pillow/identify).
+// Explicit geometry preserves the source aspect ratio without API sizing helpers.
+function fitImage(widthPx, heightPx, x, y, w, h) {
+  const scale = Math.min(w / widthPx, h / heightPx);
+  const width = widthPx * scale, height = heightPx * scale;
+  return { x: x + (w - width) / 2, y: y + (h - height) / 2, w: width, h: height };
+}
 
 // Add title slide
 const slide1 = pptx.addSlide();
@@ -49,7 +70,7 @@ slide1.addText("Your Title", {
 // Add content slide with figure
 const slide2 = pptx.addSlide();
 slide2.addText("Results", { x: 0.5, y: 0.5, fontSize: 32 });
-slide2.addImage({ path: "figure.png", x: 1, y: 1.5, w: 8, h: 4 });
+slide2.addImage({ path: "figure.png", ...fitImage(1000, 500, 1, 1.5, 8, 4) });
 
 pptx.writeFile({ fileName: "presentation.pptx" });
 ```
@@ -264,7 +285,7 @@ Consider your subject matter and audience:
 - **Medicine/Healthcare**: Teal (#5EA8A7), Coral (#FE4447), White (#FFFFFF)
 - **Environmental Science**: Sage (#87A96B), Terracotta (#E07A5F), Cream (#F4F1DE)
 
-See full palette options in pptx skill SKILL.md (lines 76-94).
+Use your supplied template or a palette whose actual text/background pairs pass contrast checks.
 
 **Step 1: Plan Design System** (With Modern Palette)
 ```javascript
@@ -277,10 +298,10 @@ const DESIGN = {
     background: "FFFFFF"  // White (clean)
   },
   fonts: {
-    title: { size: 40, bold: true, face: "Arial" },
-    heading: { size: 28, bold: true, face: "Arial" },
-    body: { size: 24, face: "Arial" },
-    caption: { size: 16, face: "Arial" }
+    title: { fontSize: 40, bold: true, fontFace: "Arial" },
+    heading: { fontSize: 28, bold: true, fontFace: "Arial" },
+    body: { fontSize: 24, fontFace: "Arial" },
+    caption: { fontSize: 16, fontFace: "Arial" }
   },
   layout: {
     margin: 0.5,
@@ -292,6 +313,14 @@ const DESIGN = {
 
 **Step 2: Create Reusable Functions**
 ```javascript
+// Supply the original pixel dimensions (for example from Pillow/identify).
+// Explicit geometry preserves the source aspect ratio without API sizing helpers.
+function fitImage(widthPx, heightPx, x, y, w, h) {
+  const scale = Math.min(w / widthPx, h / heightPx);
+  const width = widthPx * scale, height = heightPx * scale;
+  return { x: x + (w - width) / 2, y: y + (h - height) / 2, w: width, h: height };
+}
+
 function addTitleSlide(pptx, title, subtitle, author) {
   const slide = pptx.addSlide();
   slide.background = { color: DESIGN.colors.primary };
@@ -329,7 +358,7 @@ function addContentSlide(pptx, title, bullets) {
     color: DESIGN.colors.primary
   });
   
-  slide.addText(bullets, {
+  slide.addText(bullets.join("\n"), {
     x: DESIGN.layout.margin,
     y: DESIGN.layout.contentY,
     w: 9,
@@ -348,8 +377,6 @@ const pptx = new PptxGenJS();
 pptx.layout = "LAYOUT_16x9";
 
 // Title slide with background image or color block
-const titleSlide = pptx.addSlide();
-titleSlide.background = { color: DESIGN.colors.primary }; // Bold color background
 addTitleSlide(
   pptx,
   "Research Title",
@@ -361,14 +388,14 @@ addTitleSlide(
 const introSlide = pptx.addSlide();
 introSlide.addImage({
   path: "concept_image.png",  // Visual representation of concept
-  x: 5, y: 1.5, w: 4, h: 3
+  ...fitImage(1000, 500, 5, 1.5, 4, 3)
 });
 introSlide.addText("Background", { x: 0.5, y: 0.5, fontSize: 36, bold: true });
 introSlide.addText([
   "Key context point 1 (AuthorA, 2023)",
   "Key context point 2 (AuthorB, 2022)",
   "Research gap identified (AuthorC, 2021)"
-], {
+].join("\n"), {
   x: 0.5, y: 1.5, w: 4, h: 2,
   fontSize: 24, bullet: true
 });
@@ -378,11 +405,12 @@ const resultsSlide = pptx.addSlide();
 resultsSlide.addText("Main Finding", { x: 0.5, y: 0.5, fontSize: 32, bold: true });
 resultsSlide.addImage({
   path: "results_figure.png",  // Large, clear figure
-  x: 0.5, y: 1.5, w: 9, h: 4   // Nearly full slide
+  ...fitImage(1000, 500, 0.5, 1.6, 9, 3.7),
+  altText: "Describe the measured comparison and uncertainty from the source figure"
 });
 // Minimal text annotation only
-resultsSlide.addText("34% improvement (p < 0.001)", {
-  x: 7, y: 1, fontSize: 20, color: DESIGN.colors.accent, bold: true
+resultsSlide.addText("Verified effect estimate and uncertainty", {
+  x: 0.5, y: 1, w: 9, h: 0.4, fontSize: 20, color: DESIGN.colors.text, bold: true
 });
 
 // Save
@@ -404,7 +432,7 @@ pptx.writeFile({ fileName: "presentation.pptx" });
 // Then add to slide
 slide.addImage({
   path: "equation.png",
-  x: 2, y: 3, w: 6, h: 1
+  ...fitImage(1000, 500, 2, 3, 6, 1)  // Replace with actual equation image dimensions
 });
 ```
 
@@ -446,7 +474,7 @@ slide.addChart(pptx.ChartType.bar, [
   chartColors: [DESIGN.colors.primary, DESIGN.colors.accent],
   showTitle: false,
   showLegend: true,
-  fontSize: 18
+  catAxisLabelFontSize: 18, valAxisLabelFontSize: 18, legendFontSize: 18
 });
 ```
 

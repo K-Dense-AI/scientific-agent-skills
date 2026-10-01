@@ -78,6 +78,8 @@ def _read_pnm(path: Path, max_pixels: int) -> tuple[int, int, bytes]:
         raise CliError(
             f"PNM pixel payload is {len(pixels)} bytes; expected {expected}"
         )
+    if pixels and max(pixels) > maxval:
+        raise CliError("PNM pixel value exceeds the declared maximum")
     if maxval != 255:
         pixels = bytes(round(value * 255 / maxval) for value in pixels)
     if channels == 1:

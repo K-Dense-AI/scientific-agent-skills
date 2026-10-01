@@ -142,18 +142,24 @@ def _validate_document(value: Any) -> dict[str, Any]:
         required={"id", "title", "subject", "language", "authors", "source_ids"},
     )
     _identifier(document["id"], context="document.id")
-    require_string(document["title"], context="document.title", maximum=500)
-    require_string(document["subject"], context="document.subject", maximum=1_000)
+    # These strings are written verbatim to python-pptx core properties.
+    require_string(document["title"], context="document.title", maximum=255)
+    require_string(document["subject"], context="document.subject", maximum=255)
     language = require_string(
         document["language"], context="document.language", maximum=35
     )
     if not re.fullmatch(r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*", language):
         raise CliError("document.language must be a BCP 47-style language tag")
-    _string_list(
+    authors = _string_list(
         document["authors"],
         context="document.authors",
         minimum=1,
         maximum=50,
+    )
+    require_string(
+        "; ".join(authors),
+        context="document.authors joined with '; ' for core metadata",
+        maximum=255,
     )
     _source_id_list(document["source_ids"], context="document.source_ids")
     return document

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 from typing import Any
 
@@ -19,6 +20,7 @@ from _common import (
     require_object,
     run,
 )
+from validate_manifest import validate_source_manifest
 
 TOOL = "audit_claims"
 REQUIRED_FIELDS = {
@@ -51,6 +53,11 @@ def _split_evidence_ids(value: str) -> list[str]:
 
 def load_sources(path: str) -> dict[str, bool]:
     data = require_object(read_json(path), "source_manifest")
+    if any(
+        item.severity == "error"
+        for item in validate_source_manifest(data, require_verified=False)
+    ):
+        raise InputError("source manifest failed validation")
     sources: dict[str, bool] = {}
     for index, raw_source in enumerate(require_list(data.get("sources"), "sources")):
         source = require_object(raw_source, f"sources[{index}]")
@@ -67,6 +74,15 @@ def load_sources(path: str) -> dict[str, bool]:
             and verification.get("source_opened") is True
         )
     return sources
+
+
+def claim_text_hash(line: str) -> str:
+    """Hash one physical claim line, excluding markers and normalizing whitespace."""
+    text = CLAIM_MARKER_RE.sub("", line)
+    text = EVIDENCE_MARKER_RE.sub("", text)
+    text = CITATION_MARKER_RE.sub("", text)
+    normalized = " ".join(text.split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def load_claims(
@@ -144,6 +160,10 @@ def audit_markdown(
             continue
 
         line_claims = CLAIM_MARKER_RE.findall(line)
+        if len(line_claims) > 1:
+            issues.append(
+                issue("error", "MULTIPLE_CLAIMS_ON_LINE", location=f"line:{line_number}")
+            )
         line_evidence: set[str] = set(CITATION_MARKER_RE.findall(line))
         for group in EVIDENCE_MARKER_RE.findall(line):
             line_evidence.update(part.strip() for part in group.split(","))
@@ -181,6 +201,17 @@ def audit_markdown(
                 )
                 continue
             expected = set(claims[claim_id].get("_evidence_ids", []))
+            if len(line_claims) == 1 and claim_text_hash(line) != claims[claim_id].get(
+                "claim_text_sha256"
+            ):
+                issues.append(
+                    issue(
+                        "error",
+                        "CLAIM_TEXT_HASH_MISMATCH",
+                        location=f"line:{line_number}",
+                        item_id=claim_id,
+                    )
+                )
             if not expected.issubset(line_evidence):
                 issues.append(
                     issue(

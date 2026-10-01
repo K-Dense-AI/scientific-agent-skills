@@ -101,6 +101,7 @@ def _atomic_savefig(
     format_name: str,
     save_kwargs: dict[str, Any],
     overwrite: bool,
+    tiff_rgb: bool = False,
 ) -> None:
     destination = checked_output_file(destination, force=overwrite)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -111,14 +112,31 @@ def _atomic_savefig(
     os.close(descriptor)
     temporary = Path(temporary_name)
     try:
-        # Matplotlib expects to create the target on some backends.
-        temporary.unlink()
         fig.savefig(temporary, format=format_name, **save_kwargs)
+        if tiff_rgb and format_name == "tiff":
+            from PIL import Image
+
+            with Image.open(temporary) as rendered:
+                if "A" in rendered.getbands() and rendered.getchannel("A").getextrema() != (255, 255):
+                    raise CliError("RGB TIFF requires an opaque rendered background")
+                rgb = rendered.convert("RGB")
+                pillow_options = dict(save_kwargs.get("pil_kwargs", {}))
+                pillow_options.setdefault("dpi", rendered.info.get("dpi", (save_kwargs["dpi"],) * 2))
+                if rendered.info.get("icc_profile"):
+                    pillow_options.setdefault("icc_profile", rendered.info["icc_profile"])
+            try:
+                rgb.save(temporary, format="TIFF", **pillow_options)
+            finally:
+                rgb.close()
         if not temporary.exists() or temporary.stat().st_size == 0:
             raise CliError(f"Matplotlib produced no data for {destination}")
-        if destination.exists() and not overwrite:
-            raise CliError(f"refusing to overwrite existing output: {destination}")
-        os.replace(temporary, destination)
+        if overwrite:
+            os.replace(temporary, destination)
+        else:
+            try:
+                os.link(temporary, destination)
+            except FileExistsError as exc:
+                raise CliError(f"refusing to overwrite existing output: {destination}") from exc
     except CliError:
         raise
     except Exception as exc:
@@ -153,6 +171,7 @@ def export_figure(
     formats: Iterable[str] = ("pdf", "png"),
     dpi: float = 300,
     transparent: bool = False,
+    tiff_rgb: bool = False,
     bbox_inches: str | None = None,
     pad_inches: float = 0.1,
     facecolor: str = "white",
@@ -177,6 +196,8 @@ def export_figure(
     if not (float(pad_inches) >= 0 and math.isfinite(float(pad_inches))):
         raise CliError("pad_inches must be finite and non-negative")
     normalized_formats = _normalize_formats(formats)
+    if tiff_rgb and ("tiff" not in normalized_formats or transparent):
+        raise CliError("tiff_rgb requires TIFF output and transparent=False")
     base = _base_output_path(filename)
     parent = base.parent
     if mkdir:
@@ -201,7 +222,7 @@ def export_figure(
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required for figure export; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
 
     provenance_document = _validate_provenance(provenance)
@@ -265,7 +286,10 @@ def export_figure(
             if format_metadata is not None:
                 save_kwargs["metadata"] = format_metadata
             if format_name == "tiff":
-                save_kwargs["pil_kwargs"] = {"compression": "tiff_lzw"}
+                save_kwargs["pil_kwargs"] = {
+                    **save_kwargs.get("pil_kwargs", {}),
+                    "compression": "tiff_lzw",
+                }
 
             _atomic_savefig(
                 fig,
@@ -273,6 +297,7 @@ def export_figure(
                 format_name=format_name,
                 save_kwargs=save_kwargs,
                 overwrite=overwrite,
+                tiff_rgb=tiff_rgb,
             )
             outputs.append(
                 {
@@ -294,6 +319,7 @@ def export_figure(
             "formats": normalized_formats,
             "dpi": float(dpi),
             "transparent": transparent,
+            "tiff_rgb": tiff_rgb,
             "bbox_inches": bbox_inches,
             "pad_inches": float(pad_inches),
             "facecolor": facecolor,
@@ -408,7 +434,8 @@ def check_figure_size(
         "profile": journal,
         "profile_label": profile["label"],
         "profile_scope": profile["scope"],
-        "profile_accessed": document["accessed"],
+        "profile_accessed": profile.get("accessed", document["accessed"]),
+        "source_status": profile.get("source_status", "reviewed"),
         "figure": {
             "width_inches": width_inches,
             "height_inches": height_inches,
@@ -505,7 +532,8 @@ def save_for_journal(
         overwrite=overwrite,
         provenance={
             "publisher_profile": journal,
-            "profile_accessed": document["accessed"],
+            "profile_accessed": profile.get("accessed", document["accessed"]),
+            "source_status": profile.get("source_status", "reviewed"),
             "profile_scope": profile["scope"],
             "caller_confirmed_snapshot": True,
         },
@@ -538,7 +566,7 @@ def _demo_figure() -> Any:
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required for --demo; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
     x_values = [index / 20.0 for index in range(121)]
     first = [math.sin(value) for value in x_values]

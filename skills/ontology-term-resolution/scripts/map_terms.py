@@ -15,7 +15,7 @@ BTO alongside UBERON for ``liver``, all at HIGH confidence.
 Examples:
     uv run map_terms.py PBMC --ontology cl
     uv run map_terms.py liver --ontology uberon --property-type "organism part"
-    uv run map_terms.py --input shorthand.txt --ontology uberon,cl --exact-only
+    uv run map_terms.py --input shorthand.txt --ontology uberon,cl --high-confidence-only
 """
 from __future__ import annotations
 
@@ -176,9 +176,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--top", type=int, default=5, help="candidates to report per query (default 5)"
     )
     parser.add_argument(
-        "--exact-only",
+        "--high-confidence-only", "--exact-only", dest="exact_only",
         action="store_true",
-        help="only HIGH/GOOD confidence hits; report anything else as unresolved",
+        help="only HIGH/GOOD candidates (legacy --exact-only alias; not lexical exactness or validation)",
     )
     parser.add_argument(
         "--format", choices=("tsv", "json"), default="tsv", help="output format"
@@ -189,6 +189,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.top < 1:
+        print("--top must be positive.", file=sys.stderr)
+        return 2
     queries = read_inputs(args)
     if not queries:
         print("No input strings given. See --help.", file=sys.stderr)

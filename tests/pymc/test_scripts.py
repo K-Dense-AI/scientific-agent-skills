@@ -129,6 +129,8 @@ def fitted_models() -> tuple:
                 chains=2,
                 random_seed=seed,
                 progressbar=False,
+                cores=1,
+                nuts_sampler="pymc",
             )
             pm.compute_log_likelihood(idata, progressbar=False)
             pm.sample_posterior_predictive(
@@ -208,7 +210,7 @@ class DiagnosticBranchTests(unittest.TestCase):
         # PyMC's default max_treedepth is 10. This costs sampling efficiency
         # rather than validity, so it is listed as an issue without setting the
         # has_issues flag that divergences and bad R-hat do.
-        results = model_diagnostics.check_diagnostics(synthetic_posterior(tree_depth=10))
+        results = model_diagnostics.check_diagnostics(synthetic_posterior(tree_depth=10), max_treedepth=10)
         self.assertIn("max_treedepth", results["issues"])
 
     def test_a_posterior_without_energy_statistics_is_still_checked(self) -> None:
@@ -358,7 +360,7 @@ class LooReliabilityTests(unittest.TestCase):
 
     def test_the_counts_agree_with_the_threshold_they_were_given(self) -> None:
         pareto_k = np.asarray(self.results["pareto_k"])
-        self.assertEqual(self.results["n_high"], int((pareto_k > 0.7).sum()))
+        self.assertEqual(self.results["n_high"], int((pareto_k > self.results["threshold"]).sum()))
         self.assertEqual(self.results["n_very_high"], int((pareto_k > 1.0).sum()))
         self.assertAlmostEqual(float(self.results["max_k"]), float(pareto_k.max()))
 
@@ -389,34 +391,60 @@ class ModelAveragingTests(unittest.TestCase):
         with_slope, intercept_only, _ = fitted_models()
         cls.models = {"with_slope": with_slope, "intercept_only": intercept_only}
 
-    def test_explicit_weights_are_normalised_and_applied_exactly(self) -> None:
-        averaged, weights = model_comparison.model_averaging(
-            self.models, weights=[3, 1], var_name="y_obs"
-        )
-        np.testing.assert_allclose(weights, [0.75, 0.25])
-        expected = 0.75 * self.models["with_slope"].posterior_predictive["y_obs"].values + (
-            0.25 * self.models["intercept_only"].posterior_predictive["y_obs"].values
-        )
-        np.testing.assert_allclose(averaged, expected)
+    def test_explicit_weights_are_normalised_and_mixture_preserves_variance(self):
+        # The mixture of point masses at -10 and 10 must never create 0.
+        def tree(value):
+            return xr.DataTree.from_dict({'posterior_predictive': xr.Dataset({
+                'y_obs': (('chain', 'draw', 'obs'), np.full((2, 10, 2), value))},
+                coords={'obs': ['a', 'b']})})
+        models = {'negative': tree(-10.), 'positive': tree(10.)}
+        draws, weights = model_comparison.model_averaging(
+            models, weights=[3, 1], n_samples=10000, random_seed=13)
+        np.testing.assert_allclose(weights, [.75, .25])
+        self.assertEqual(draws.shape, (10000, 2))
+        self.assertEqual(set(np.unique(draws)), {-10., 10.})
+        self.assertAlmostEqual(float(draws.mean()), -5, delta=.4)
+        self.assertAlmostEqual(float(draws.var()), 75, delta=4)
+        np.testing.assert_array_equal(draws[:, 0], draws[:, 1])
 
-    def test_derived_weights_come_from_the_comparison_and_sum_to_one(self) -> None:
-        averaged, weights = model_comparison.model_averaging(
-            self.models, var_name="y_obs"
-        )
-        self.assertAlmostEqual(float(np.sum(weights)), 1.0, places=6)
-        self.assertEqual(
-            np.shape(averaged),
-            self.models["with_slope"].posterior_predictive["y_obs"].values.shape,
-        )
-        # Weights are ordered by the comparison, best model first.
-        self.assertGreater(weights[0], 0.95)
+    def test_derived_weights_are_in_input_order(self):
+        models = dict(reversed(list(self.models.items())))
+        draws, weights = model_comparison.model_averaging(models, random_seed=9)
+        self.assertAlmostEqual(float(np.sum(weights)), 1, places=6)
+        self.assertEqual(draws.shape, (500, 40))
+        self.assertGreater(weights[1], .95)
 
-    def test_a_variable_no_model_predicts_is_skipped_rather_than_raising(self) -> None:
-        averaged, weights = model_comparison.model_averaging(
-            self.models, weights=[1, 1], var_name="not_a_variable"
-        )
-        np.testing.assert_allclose(weights, [0.5, 0.5])
-        self.assertEqual(averaged, 0)
+    def test_missing_predictions_raise(self):
+        with self.assertRaisesRegex(ValueError, 'missing'):
+            model_comparison.model_averaging(self.models, weights=[1, 1], var_name='absent')
+
+    def test_invalid_weights_raise(self):
+        for weights in ([1], [0, 0], [-1, 2], [np.nan, 1], [np.inf, 1]):
+            with self.subTest(weights=weights), self.assertRaises(ValueError):
+                model_comparison.model_averaging(self.models, weights=weights)
+
+    def test_coordinate_mismatch_raises(self):
+        first, second = self.models.values()
+        second = second.copy(deep=True)
+        dim = second.posterior_predictive['y_obs'].dims[-1]
+        second['posterior_predictive'] = second.posterior_predictive.to_dataset().assign_coords({dim: np.arange(40)[::-1]})
+        with self.assertRaisesRegex(ValueError, 'coordinates'):
+            model_comparison.model_averaging({'a': first, 'b': second}, weights=[1, 1])
+
+    def test_outcome_mismatch_refuses_model_comparison(self):
+        first, second = self.models.values()
+        second = second.copy(deep=True)
+        second['observed_data']['y_obs'] = second.observed_data['y_obs'] + 1
+        with self.assertRaisesRegex(ValueError, 'identical observed'):
+            model_comparison.compare_models({'a': first, 'b': second}, verbose=False)
+
+    def test_likelihood_coordinate_mismatch_refuses_comparison(self):
+        first, second = self.models.values()
+        second = second.copy(deep=True)
+        dim = second.log_likelihood['y_obs'].dims[-1]
+        second['log_likelihood'] = second.log_likelihood.to_dataset().assign_coords({dim: np.arange(40)[::-1]})
+        with self.assertRaisesRegex(ValueError, 'likelihood dimensions and coordinates'):
+            model_comparison.compare_models({'a': first, 'b': second}, verbose=False)
 
 
 class ComparisonPlotTests(unittest.TestCase):
@@ -448,3 +476,36 @@ class CrossValidationGuidanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnavailableDiagnosticTests(unittest.TestCase):
+    def test_single_chain_is_not_a_convergence_pass(self):
+        result = model_diagnostics.check_diagnostics(synthetic_posterior().isel(chain=[0]))
+        self.assertTrue(result['has_issues'])
+        self.assertIn('insufficient_chains', result['issues'])
+        self.assertIn('nonfinite_diagnostics', result['issues'])
+
+    def test_nan_and_constant_parameters_are_not_a_pass(self):
+        for value in (np.nan, 0.):
+            tree = synthetic_posterior()
+            tree['posterior']['theta'] = xr.full_like(tree.posterior['theta'], value)
+            result = model_diagnostics.check_diagnostics(tree)
+            self.assertIn('nonfinite_diagnostics', result['issues'])
+
+    def test_missing_sampler_statistics_are_explicit(self):
+        tree = synthetic_posterior()
+        del tree['sample_stats']
+        result = model_diagnostics.check_diagnostics(tree)
+        self.assertEqual(set(result['unavailable']), {'divergences', 'max_treedepth', 'bfmi'})
+
+    def test_observed_maximum_is_not_configured_tree_limit(self):
+        result = model_diagnostics.check_diagnostics(synthetic_posterior(tree_depth=12))
+        self.assertNotIn('max_treedepth', result['issues'])
+        self.assertIn('max_treedepth', result['unavailable'])
+
+    def test_low_energy_bfmi_is_flagged(self):
+        tree = synthetic_posterior()
+        tree['sample_stats']['energy'] = xr.DataArray(
+            np.tile(np.arange(DRAWS, dtype=float), (CHAINS, 1)), dims=('chain', 'draw'))
+        result = model_diagnostics.check_diagnostics(tree)
+        self.assertIn('low_bfmi', result['issues'])

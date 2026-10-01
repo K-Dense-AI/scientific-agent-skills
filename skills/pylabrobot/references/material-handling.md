@@ -1,6 +1,6 @@
 # Material handling, pumps, and environmental devices
 
-Verified against **PyLabRobot 0.2.1** on **2026-07-23**. Every operation in
+Verified against **PyLabRobot 0.2.2** on **2026-10-01**. Every operation in
 this domain can create physical motion, pressure, heat, or stored energy. The
 snippets below identify APIs only; they do not connect to devices.
 
@@ -18,17 +18,20 @@ Verified `Pump` methods:
 run_revolutions(num_revolutions)
 run_continuously(speed)
 run_for_duration(speed, duration)
+pump_volume(speed, volume)
 halt()
 ```
 
-The stale methods `start`, `stop` as a pumping command, `pump_volume`, and
-`calibrate(duration=..., speed=..., volume=...)` are not the verified universal
-0.2.1 frontend shown above. `stop()` belongs to machine lifecycle; `halt()` is
-the pump-motion command.
+`pump_volume()` requires a `PumpCalibration`, converting requested volume to
+time or revolutions. It is an open-loop estimate, not a measured delivery.
+`start` and `calibrate(duration=..., speed=..., volume=...)` are not these
+frontend methods. `stop()` closes the backend; `halt()` requests halted flow.
+`run_for_duration()` does not halt in a `finally` block if its sleep is
+cancelled. Review interruption handling with the exact backend before live use.
 
 `MasterflexBackend(com_port)` is transport-specific. Do not instantiate it
-during discovery. Stable supported machines labels Cole-Parmer Masterflex
-L/S listed models and Agrowtek Pump Array as **Full**.
+during discovery. The current development machine table labels listed Masterflex L/S models
+and Agrowtek Pump Array **Full**; this is separate from release/firmware support.
 
 ### Pump safety
 
@@ -77,7 +80,7 @@ unlock_plate(**backend_kwargs)
 ```
 
 The old names `set_shake_rate` and `set_temperature(None)` are not the verified
-0.2.1 frontend signatures. Use the exact device page for deactivation/cooling
+0.2.2 frontend signatures. Use the exact device page for deactivation/cooling
 and do not substitute zero/`None` unless documented for that backend.
 
 `HeaterShaker` construction requires `name`, dimensions, backend, and a
@@ -86,12 +89,10 @@ and do not substitute zero/`None` unless documented for that backend.
 `InhecoThermoshakeBackend(index, control_box)` require approved shared
 interfaces/controllers.
 
-Stable supported machines lists:
-
-- Inheco Thermoshake and Thermoshake AC: **Full**
-- Opentrons Thermoshake: **Full**
-- Hamilton Heater Shaker: **Full**
-- QInstruments BioShake: **Full**
+The current hosted development inventory labels Inheco Thermoshake variants
+**WIP**, Hamilton Heater Shaker and QInstruments BioShake **Full**, and the
+Opentrons Heater-Shaker Module **Full**. The old blanket **Full** claim for
+Inheco was stale. A 0.2.2 import does not establish current device support.
 
 ### Heater/shaker safety
 
@@ -117,10 +118,14 @@ get_temperature()
 deactivate()
 ```
 
-Stable support includes Inheco CPAC (**Full**) and Opentrons Temperature Module
-(**Mostly** in the complete stable table). Validate active cooling, condensation,
+The current development inventory includes Inheco CPAC and the Opentrons
+Temperature Module; these support labels do not establish 0.2.2 compatibility. Validate active cooling, condensation,
 plate/adapter contact, setpoint range, ramp, sensor placement, overshoot, and
-sample-versus-block temperature.
+sample-versus-block temperature. `set_temperature()` does not await thermal
+equilibration; use `wait_for_temperature(timeout=..., tolerance=...)` for the
+block sensor. In 0.2.2 `passive=True` below the current temperature only skips a
+new setpoint command: it does not deactivate prior heating. Do not equate it
+with a verified safe cooling action.
 
 ## Centrifuges
 
@@ -144,17 +149,19 @@ The stable method takes relative centrifugal force `g`, not the stale
 `speed=...` RPM argument. Converting RPM to RCF requires the correct rotor
 radius; never guess it.
 
-Stable supported machines labels:
-
-- Agilent VSpin: **Mostly**
-- Agilent VSpin Access2 Loader: **Full**
+The current development table labels both Agilent VSpin and its Access2 loader
+**Full**; older tables called VSpin **Mostly**. Released constructors are:
 
 `VSpinBackend(device_id=None)` and `Access2Backend(device_id, timeout=60)` are
 device-specific. Do not use placeholder IDs in a live script.
 
-The current changelog lists HighRes Biosolutions MicroSpin under
-**Unreleased**. Although development `main` may expose `MicroSpin`, it is not a
-stable 0.2.1 API and must not be imported in pinned examples.
+The released 0.2.2 wheel includes `MicroSpin(name, host, port=1000, timeout=30.0,
+backend=None)` and `pylabrobot.centrifuge.highres.MicroSpinBackend`. The changelog
+still lists them under `Unreleased`, so it cannot decide release availability.
+The driver speaks ASCII over TCP; `setup()` opens a connection and `stop()`
+closes it without stopping a spinning rotor. `status` can block until spin-down.
+These contracts were source-inspected only; the [review ledger](review.md)
+records framing and limits. No factory or hardware backend was instantiated.
 
 ### Centrifuge safety
 
@@ -167,8 +174,8 @@ verified safe.
 
 ## Storage/incubation
 
-The stable machine inventory includes multiple Thermo Fisher/Heraeus Cytomat
-models as **Full**, and Inheco Incubator Shaker/SCILA as **Mostly**. Their APIs
+The current development inventory includes Thermo Fisher/Heraeus Cytomat
+models with differing support levels and Inheco Incubator Shaker/SCILA. Their APIs
 are model-specific; do not use stale generic examples such as
 `from pylabrobot.incubation import Incubator` without verifying that exact
 symbol in the pinned wheel.
@@ -202,7 +209,7 @@ Default sequence:
 
 ```bash
 python3 skills/pylabrobot/scripts/inspect_backends.py \
-  --expected-version 0.2.1 --strict
+  --expected-version 0.2.2 --strict
 ```
 
 This checks a fixed set of frontend symbols and methods without constructing
@@ -210,20 +217,10 @@ devices or calling `setup()`.
 
 ## Sources
 
-Checked **2026-07-23**:
-
-- [Stable supported machines](https://docs.pylabrobot.org/stable/user_guide/machines.html)
-  — pumps, centrifuges, heater shakers, storage, and temperature controllers
-  with model-specific labels (page metadata surfaced 2025-01-01).
-- [Stable pumps guide](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/pumps/_pumps.html)
-  and [pumps API](https://docs.pylabrobot.org/stable/api/pylabrobot.pumps.html).
-- [Stable heating/shaking guide](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/heating_shaking/heating_shaking.html)
-  and [heating/shaking API](https://docs.pylabrobot.org/stable/api/pylabrobot.heating_shaking.html).
-- [Stable centrifuge guide](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/centrifuge/_centrifuge.html)
-  and [centrifuge API](https://docs.pylabrobot.org/stable/api/pylabrobot.centrifuge.html).
-- [`v0.2.1` pumps](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/pumps),
-  [heating/shaking](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/heating_shaking),
-  and [centrifuge](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/centrifuge)
-  source — exact methods/classes; tag dated 2026-03-23.
-- [Changelog `Unreleased`](https://github.com/PyLabRobot/pylabrobot/blob/main/CHANGELOG.md#unreleased)
-  — development-only MicroSpin.
+Reviewed **2026-10-01**: constructors, methods and transports in the
+[official 0.2.2 source distribution](https://pypi.org/project/PyLabRobot/0.2.2/#files),
+[current machine inventory](https://docs.pylabrobot.org/stable/user_guide/machines.html),
+and [release review](review.md). Source files inspected include `pumps/pump.py`,
+`heating_shaking/heater_shaker.py`, `temperature_controlling/temperature_controller.py`,
+`centrifuge/centrifuge.py`, and `centrifuge/highres/microspin_backend.py`.
+Physical control and transport behavior remain untested.

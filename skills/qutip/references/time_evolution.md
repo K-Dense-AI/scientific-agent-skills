@@ -1,7 +1,7 @@
 # QuTiP 5.3 Time Evolution
 
-Research and API verification date: **2026-07-23**. All signatures and examples
-target `qutip==5.3.0`.
+Research and API verification date: **2026-10-01**. All signatures and examples
+target `qutip==5.3.1`.
 
 ## Solver selection
 
@@ -61,6 +61,11 @@ result = sesolve(
 z = np.asarray(result.e_data["z"])
 ```
 
+For an ODE norm/trace audit, set `options["normalize_output"] = False`:
+`sesolve`/`mesolve` normally normalize an initially normalized state on output,
+which can conceal integrator drift. Quantum-jump trajectory normalization is
+part of the unravelling and is a different operation.
+
 Audit Hamiltonian Hermiticity and state norm. If norm drift is material, tighten
 tolerances or investigate the model; do not normalize away unexplained error.
 
@@ -111,7 +116,7 @@ result = mcsolve(
     },
 )
 
-mean_population = result.expect[0]
+mean_population = result.average_expect[0]
 trajectory_spread = result.std_expect[0]
 seed_manifest = result.seeds
 ```
@@ -189,17 +194,25 @@ result = smesolve(
     e_ops={"signal": measured_quadrature},
     ntraj=200,
     seeds=20260723,
-    options={"dt": 0.001, "store_measurement": True, "progress_bar": ""},
+    options={"dt": 0.001, "store_measurement": "end", "progress_bar": ""},
 )
 ```
 
-- `c_ops` are unmonitored deterministic dissipation channels.
+- `c_ops` are unmonitored deterministic dissipation channels. Even from a ket,
+  use `smesolve` if any such channel is present; `ssesolve` has no `c_ops`.
+- Stochastic methods include `platen`, `rouchon`, and `euler`, each with its
+  own options. Do not pass deterministic `adams`/`bdf` or their `atol`/`rtol`
+  to a fixed-step stochastic integrator; converge `dt` instead.
 - `sc_ops` are monitored stochastic channels.
 - `heterodyne=False` is homodyne; `True` is heterodyne.
 - Legacy integer `noise` selectors are not current API.
 - Measurement records can be much larger than expectation summaries; store
   them only when needed.
 - Converge the stochastic integration step `dt` separately from `ntraj`.
+- `result.measurement` has shape `(ntraj, n_sc_ops, len(tlist)-1)` for homodyne
+  and `(ntraj, n_sc_ops, 2, len(tlist)-1)` for heterodyne. Use
+  `store_measurement="start"` for replay with `run_from_experiment(...,
+  measurement=True)`; the default/end record uses different state timing.
 
 ## Time-dependent systems and QobjEvo
 
@@ -321,7 +334,11 @@ Current solver results can contain:
 Multi-trajectory results add trajectory counts, seeds, standard deviations,
 average states, measurements, and optionally individual run results. Never
 assume `.states` means individual trajectories; inspect
-`keep_runs_results` and the concrete result type.
+`keep_runs_results` and the concrete result type. For multi-trajectory results,
+`.expect`/`.e_data` and `.states` switch to per-run arrays when runs are retained.
+Use `.average_expect`/`.average_e_data` and `.average_states` explicitly for
+ensemble means, and `.runs_expect`/`.runs_states` for individual trajectories.
+Trajectory count is an unravelling sample count, not hardware measurement shots.
 
 QuTiP 5.3 adds `Result.plot_expect()` and `MultiTrajResult.plot_expect()`.
 Prefer explicit axes in reusable code.
@@ -361,7 +378,7 @@ The bundled CLIs use bounded strict JSON and never pickle results.
 - `../scripts/convergence_sweep.py`: deterministic or trajectory convergence.
 - `../scripts/result_audit.py`: portable JSON audit.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [Dynamics API](https://qutip.readthedocs.io/en/stable/apidoc/solver.html)
 - [QobjEvo and coefficients API](https://qutip.readthedocs.io/en/stable/apidoc/time_dep.html)
@@ -369,5 +386,5 @@ The bundled CLIs use bounded strict JSON and never pickle results.
 - [Monte Carlo guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-monte.html)
 - [Stochastic solver guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-stochastic.html)
 - [Bloch-Redfield guide](https://qutip.readthedocs.io/en/stable/guide/dynamics/dynamics-bloch-redfield.html)
-- [QuTiP 5.3.0 release](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5 migration changelog](https://qutip.readthedocs.io/en/stable/changelog.html#qutip-5-0-0-2024-03-28)

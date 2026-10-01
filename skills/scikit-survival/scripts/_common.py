@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import csv
 import io
 import json
 import math
@@ -20,8 +21,8 @@ MAX_FEATURES = 256
 MAX_TIME_POINTS = 512
 DEFAULT_SEED = 20_260_723
 PINNED_INSTALL = (
-    'uv pip install "scikit-survival==0.28.0" "scikit-learn==1.9.0" '
-    '"numpy==2.4.6" "pandas==3.0.5" "scipy==1.17.1"'
+    'uv pip install "scikit-survival==0.28.0" "scikit-learn==1.9.1" '
+    '"numpy==2.5.1" "pandas==3.0.6" "scipy==1.18.1"'
 )
 
 
@@ -269,6 +270,12 @@ def read_csv(value: str | os.PathLike[str]):
             f"pandas is unavailable; install with `{PINNED_INSTALL}`"
         ) from exc
     try:
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            header = next(csv.reader(handle), [])
+        if not header or any(not name.strip() for name in header):
+            raise CliError("CSV column names must be non-empty")
+        if len(header) != len(set(header)):
+            raise CliError("CSV column names must be unique before parsing")
         frame = pd.read_csv(path, nrows=MAX_ROWS + 1)
     except Exception as exc:
         raise CliError(f"cannot parse CSV {path.name}: {exc}") from exc

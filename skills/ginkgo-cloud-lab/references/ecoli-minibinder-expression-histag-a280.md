@@ -1,6 +1,8 @@
 # E. coli Minibinder Expression with His-tag Purification and Yield via A280
 
 **URL:** https://cloud.ginkgo.bio/protocols/ecoli-minibinder-expression-histag-a280
+**Service terms:** https://cloud.ginkgo.bio/terms/ecoli-minibinder-histag-a280
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $199/sample
 **Turnaround:** up to 3 weeks
@@ -12,7 +14,7 @@ Fully automated, end-to-end service that takes designed minibinder candidates fr
 
 ## Input
 
-- **DNA Input:** Minibinder designs (use the E. coli input template, `.xlsx`)
+- **Minibinder input:** AA or DNA sequence in CSV as specified by the intake text; the download is an E. coli `.xlsx` template. Inspect the current template and retain the requested fields when exporting.
 - **His-tag orientation:** N-terminal or C-terminal fusion; linker sequence (default GGGS if unspecified)
 - **Known expression notes:** Disulfide bonds, cofactor requirements, toxicity concerns, or PTM needs
 

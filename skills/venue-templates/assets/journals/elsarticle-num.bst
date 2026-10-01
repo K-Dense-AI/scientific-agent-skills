@@ -1,7 +1,7 @@
 %%
 %% This is file `elsarticle-num.bst' (Version 2.1),
 %% 
-%% Copyright 2007-2024 Elsevier Ltd
+%% Copyright 2007-2026 Elsevier Ltd
 %% 
 %% This file is part of the 'Elsarticle Bundle'.
 %% ---------------------------------------------
@@ -14,7 +14,7 @@
 %% version 1999/12/01 or later.
 %% 
 %% 
-%% $Id: elsarticle-num.bst 254 2024-04-06 10:58:22Z rishi $
+%% $Id: elsarticle-num.bst 288 2026-01-09 06:11:11Z rishi $
 %% 
 %% $URL: https://lenova.river-valley.com/svn/elsarticle/trunk/elsarticle-num.bst $
 %%

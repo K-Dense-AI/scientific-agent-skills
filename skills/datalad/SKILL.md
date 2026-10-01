@@ -1,11 +1,12 @@
 ---
 name: datalad
-description: Retrieve, version, and publish scientific datasets with DataLad and git-annex, and capture computational provenance with datalad run, rerun, and containers-run. Use when cloning or fetching data from OpenNeuro, DANDI, datasets.datalad.org, or any DataLad dataset; when a file in a dataset reads as a broken symlink or a small pointer instead of real data; when an analysis needs a machine-readable record of how each output was produced so it can be re-executed; or when publishing a dataset to siblings such as a GitHub repository plus a storage remote. Also use to decide between DataLad and plain Git for a data-carrying repository.
-compatibility: Needs datalad 1.6.x on Python 3.10+, plus git and git-annex 10.x. git-annex is not written in Python but installs as a prebuilt wheel from PyPI (`uv pip install git-annex`), from a system package manager, or from conda-forge. Container-based provenance also needs datalad-container (1.2.x) and Singularity/Apptainer or Docker. clone, get, and push need network access; credentialed remotes read secrets from the system keyring or from DATALAD_CREDENTIAL_<NAME>_<COMPONENT> environment variables.
+description: Retrieves, versions, and publishes scientific datasets with DataLad and git-annex, and captures computational provenance with datalad run, rerun, and containers-run. Use when cloning or fetching data from OpenNeuro, DANDI, datasets.datalad.org, or any DataLad dataset; when a file in a dataset reads as a broken symlink or a small pointer instead of real data; when an analysis needs a machine-readable record of how each output was produced so it can be re-executed; or when publishing a dataset to siblings such as a GitHub repository plus a storage remote. Also use to decide between DataLad and plain Git for a data-carrying repository.
+compatibility: Requires Python 3.10+, DataLad 1.6.5, Git, and git-annex 10.x. Tested with git-annex 10.20260901 and datalad-container 1.2.6 on macOS ARM64. Containers additionally require Singularity, Apptainer, or Docker. Remote data access needs network access and may need provider credentials. Local filesystem workflows work offline.
 license: MIT
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.1"
+  version: "1.2"
+  last-reviewed: "2026-09-30"
   skill-author: Dylan Pulver
 ---
 
@@ -18,10 +19,10 @@ structure, small text files, and the history. git-annex tracks the *content* of 
 files, storing each file as a key and keeping the bytes somewhere that is not necessarily
 the local repository.
 
-That split is the single most important thing to internalise, because it means a freshly
-cloned dataset contains the full history and the full file listing while containing almost
-none of the data. A 100 TB dataset clones in seconds and occupies a few megabytes. The
-bytes arrive only when asked for, per file, with `datalad get`.
+A normal clone retrieves Git history and the top-level file listing while leaving
+annexed bytes unfetched. Installed subdatasets have their own histories; a clone does not
+automatically populate them. Clone cost depends on Git history and file count, not just
+the data volume. Retrieve annexed bytes selectively with `datalad get`.
 
 The second thing DataLad adds is provenance. `datalad run` executes a command and commits
 the result together with a machine-readable record of the command, its inputs, and its
@@ -55,28 +56,33 @@ uv pip install git-annex
 # You can also install it first from the system
 # (Debian/Ubuntu: apt install git-annex; macOS: brew install git-annex;
 #  conda-forge: conda install -c conda-forge git-annex)
-uv pip install datalad
-uv pip install datalad-container   # only for containers-run
+uv pip install "datalad==1.6.5"
+uv pip install "datalad-container==1.2.6"   # only for containers-run
 
 datalad wtf --section dependencies   # confirm git-annex version is visible
 ```
 
-The PyPI `git-annex` package ships the prebuilt binary as a wheel for Linux, macOS, and
-Windows rather than building the Haskell sources, so it installs like any other Python
-dependency and can be pinned in the same environment as DataLad. It does not bring git
-along with it.
+The PyPI `git-annex` package supplies platform-specific binaries. The reviewed
+10.20260901.post1 wheels cover Linux glibc 2.34+ (x86_64/ARM64), macOS ARM64 14+ and
+x86_64 15+, and Windows x86_64. Use a system package when no wheel matches. Keep its
+environment on `PATH` and verify the executable; the wheel does not supply Git itself.
+Configure Git author name/email before creating or saving a dataset.
 
 `datalad wtf` prints the resolved environment and is the first thing to run when behaviour
 looks impossible. An old or missing git-annex is behind a large share of confusing errors.
 
-DataLad itself is MIT licensed. git-annex is a separate tool under the AGPL, which matters
-only if you redistribute a modified git-annex rather than call it.
+DataLad is MIT licensed; git-annex has a separate AGPL license. Consult the upstream
+license when redistributing either tool.
 
 ## The failure that bites first: pointers are not data
 
 After `datalad clone`, annexed files exist as symlinks into `.git/annex/objects/` (or as
 small pointer files where symlinks are unavailable, such as on Windows or a crippled
 filesystem). Nothing has downloaded the content yet.
+
+Illustrative remote-data example; inspect the selected revision for the exact path and
+install NiBabel before the Python read. The refresh tested equivalent local pointer/get
+behavior without downloading imaging data.
 
 ```bash
 datalad clone https://github.com/OpenNeuroDatasets/ds000001.git
@@ -87,8 +93,8 @@ datalad get sub-01/anat/sub-01_T1w.nii.gz                                   # no
 ```
 
 The failure mode to recognise: a tool reports the file as empty, truncated, corrupt, "not
-a gzip file", or a broken symlink, and the file size on disk is a few hundred bytes. That
-is a pointer, not a corrupted download. **Run `datalad get` before reading data, and treat
+a gzip file", or a broken symlink, and the file size on disk is a few hundred bytes. These symptoms can indicate an unfetched annex pointer; confirm with annex status
+before diagnosing corruption. **Run `datalad get` before reading data, and treat
 "file exists" as insufficient evidence that its content is present.**
 
 Before an analysis touches a directory, fetch it explicitly:
@@ -99,7 +105,7 @@ datalad get -r .                     # everything, including subdatasets
 datalad get -n -r .                  # subdataset structure only, no file content
 ```
 
-`datalad status --annex` reports how much content is present locally, and
+`datalad status --annex availability` checks which content is present locally, and
 `git annex whereis <path>` reports which repositories hold a given file. `whereis` reads
 recorded state and does not contact the remotes, so it tells you what git-annex last
 learned rather than what is true right now.
@@ -112,11 +118,14 @@ behaviour, dropping content safely, and repairing a dataset.
 `datalad run` is the reason to reach for DataLad in a methods context. It saves the
 command alongside its effect, in the same commit:
 
+Illustrative FSL example (requires `bet` and an existing `derivatives/` directory):
+
 ```bash
-datalad run -m "extract brain mask" \
+datalad run -m "extract brain and mask" \
   --input "sub-01/anat/sub-01_T1w.nii.gz" \
   --output "derivatives/sub-01_brain.nii.gz" \
-  "bet {inputs} {outputs} -m"
+  --output "derivatives/sub-01_brain_mask.nii.gz" \
+  "bet {inputs[0]} {outputs[0]} -m"
 ```
 
 What each part does, and why skipping it hurts:
@@ -134,7 +143,8 @@ What each part does, and why skipping it hurts:
 
 `datalad run` refuses to start when the dataset has unsaved modifications, because an
 unclean starting state makes the record unreliable. Save or discard first, or pass
-`--explicit` to declare that the listed inputs and outputs are the complete story. Check a
+`--explicit` to save only declared outputs. This does not capture unsaved input changes;
+save all dependencies before claiming the run is reproducible. Check a
 command before committing to it with `--dry-run basic` or `--dry-run command`.
 
 A run that changes nothing produces no commit, exactly as `datalad save` does.
@@ -150,21 +160,27 @@ datalad rerun --script recompute.sh # extract the commands instead of running th
 datalad rerun --since <commit> -b check <revision>   # replay a range onto a new branch
 ```
 
-Rerunning onto a branch (`-b`) is the safe way to test reproducibility: the replay lands
-somewhere else, and a diff against the original branch answers whether the outputs came
-back identical.
+`--report` only inspects the plan; it does not execute or validate the result. A branch
+(`-b`) preserves the original commits, but uses the same worktree. See the reference for
+a `--since`/`--onto` replay that starts before the first run, and compare annex keys or
+content checksums as well as scientific outputs.
 
 ### Containers
 
 With the `datalad-container` extension, register an image once and every subsequent run
 records which image produced the outputs:
 
+Illustrative container workflow using a previously built local SIF image (not executed
+in this refresh; the runtime and image must be available):
+
 ```bash
-datalad containers-add fsl --url docker://brainlife/fsl:6.0.4
-datalad containers-run -n fsl -m "brain mask in container" \
+datalad containers-add fsl --url /path/to/fsl.sif \
+  --call-fmt 'apptainer exec {img} {cmd}'
+datalad containers-run -n fsl -m "brain and mask in container" \
   --input "sub-01/anat/sub-01_T1w.nii.gz" \
   --output "derivatives/sub-01_brain.nii.gz" \
-  "bet {inputs} {outputs} -m"
+  --output "derivatives/sub-01_brain_mask.nii.gz" \
+  "bet {inputs[0]} {outputs[0]} -m"
 ```
 
 The image itself is tracked in the dataset, so the software environment travels with the
@@ -208,9 +224,13 @@ subdataset of the parent rather than leaving an unrelated repository inside it.
 A DataLad dataset is usually published to two places at once: a Git hosting service for
 the history, and a storage remote for the annexed content.
 
+Illustrative authenticated publication (creates remote resources; requires a GitHub
+token and S3 credentials). Use `myorg/mydataset` only for an organization namespace.
+
 ```bash
-datalad create-sibling-github myaccount/mydataset
-git annex initremote store type=S3 bucket=my-bucket encryption=none autoenable=true
+datalad create-sibling-github mydataset
+git annex initremote store type=S3 bucket=my-bucket protocol=https \
+  encryption=none autoenable=true
 datalad siblings configure -s github --publish-depends store
 datalad push --to github
 ```
@@ -229,8 +249,9 @@ and then find every `datalad get` failing. Declaring the dependency makes the st
 sibling publish first, every time.
 
 `datalad push` sends both the Git history and, by default (`--data auto-if-wanted`), the
-annexed content the target is configured to want. Pass `--data anything` to push all
-content regardless of the target's preferences.
+annexed content selected by a target's wanted settings; without wanted settings it
+transfers all selected current content. `--data anything` bypasses preferred-content
+filtering, but does not recover missing local bytes or archive every historical version.
 
 See [publishing.md](references/publishing.md) for RIA stores, special remotes, credential
 handling, and configuring which sibling holds what.
@@ -238,14 +259,13 @@ handling, and configuring which sibling holds what.
 ## Freeing disk space
 
 ```bash
-git annex whereis sub-01/                 # confirm another copy exists first
+git annex whereis sub-01/                 # inspect recorded locations first
 datalad drop sub-01/                      # remove local content, keep the pointer
-datalad drop --what all --reckless kill <path>   # last resort, destroys data
 ```
 
-`datalad drop` refuses by default when it cannot verify another copy of the content
-exists, which is a safety check rather than an obstacle. `--nocheck` and `--if-dirty` are
-deprecated; the current spelling is `--reckless availability`, and it means what it says.
+`datalad drop` checks required copies and availability by default. `--nocheck` is
+deprecated in favor of `--reckless availability`, which disables those protections.
+`--if-dirty` is deprecated and ignored; it is not an availability-check option.
 `--what` selects between `filecontent` (the default), `allkeys`, `datasets`, and `all`.
 
 ## Failure modes worth knowing
@@ -255,7 +275,7 @@ deprecated; the current spelling is `--reckless availability`, and it means what
 | File reads as empty, truncated, or a broken symlink | Content not retrieved; only the pointer is present | `datalad get <path>` |
 | "Permission denied" writing an existing output | git-annex write-protects annexed content | Declare it with `--output`, or `datalad unlock <path>` |
 | `datalad run` refuses to start | Dataset has unsaved changes | `datalad save` first, or pass `--explicit` |
-| `datalad drop` refuses | No verified second copy of the content | Push to a sibling first, or accept `--reckless availability` |
+| `datalad drop` refuses | No verified second copy of the content | Push to a reachable sibling, then retry the safety check |
 | Collaborator clones but every `get` fails | History published without the content | Publish the storage sibling, and set `--publish-depends` |
 | Clone succeeds, subdataset directories are empty | Subdatasets are not installed by default | `datalad get -n -r .`, then `get` the paths you need |
 | Commands behave impossibly | git-annex missing or too old | `datalad wtf --section dependencies` |
@@ -279,6 +299,14 @@ The `bids` skill covers the Brain Imaging Data Structure that most of the neuroi
 datasets distributed through DataLad are organised in. A typical workflow clones a BIDS
 dataset with DataLad, validates it with the BIDS tooling, then runs a BIDS-App under
 `datalad containers-run` so the derivatives carry provenance.
+
+## Validation scope
+
+Reviewed 2026-09-30 against DataLad 1.6.5 and datalad-container 1.2.6 source and
+current official manuals. Tiny local tests cover clone/get/drop, unlocked saves,
+subdataset installation, run/rerun, default push selection, and RIA publish/clone/get.
+Remote hosting, credentials, FSL, and container execution examples are illustrative;
+no authenticated remote publication or scientific-data downloads were performed.
 
 ## Primary sources
 

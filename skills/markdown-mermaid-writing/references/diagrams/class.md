@@ -70,7 +70,7 @@ classDiagram
 - Relationship arrows:
   - `<|--` inheritance (extends)
   - `<|..` implementation (implements)
-  - `*--` composition · `o--` aggregation · `-->` dependency
+  - `*--` composition · `o--` aggregation · `-->` directed association · `..>` dependency
 
 ---
 
@@ -244,3 +244,8 @@ classDiagram
 - **3 namespaces mirror architectural layers** — Core (orchestration), Channels (delivery implementations), Models (data). A developer can scan one namespace without reading the others.
 - **Color encodes the role** — purple for interfaces/enums, blue for core services, green for concrete implementations, gray for data models. The pattern is instantly recognizable.
 - **Relationship types are deliberate** — composition (`*--`) for "owns and manages", implementation (`<|..`) for "fulfills contract", dependency (`..>`) for "uses at runtime". Each arrow type carries meaning.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/classDiagram.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

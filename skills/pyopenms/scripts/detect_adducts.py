@@ -40,11 +40,13 @@ def main():
     parser.add_argument("--out-consensus", help="Optional consensusXML of adduct groups")
     parser.add_argument("--negative", action="store_true", help="Negative ionization mode")
     parser.add_argument("--adducts", help="Comma-separated potential adducts (overrides defaults)")
-    parser.add_argument("--charge-min", type=int, default=1)
-    parser.add_argument("--charge-max", type=int, default=1)
+    parser.add_argument("--charge-min", type=int, default=1, help="Minimum charge magnitude (positive integer)")
+    parser.add_argument("--charge-max", type=int, default=1, help="Maximum charge magnitude (positive integer)")
     parser.add_argument("--mass-max-diff", type=float, default=0.05, help="Max mass difference (Da)")
     parser.add_argument("--rt-max-diff", type=float, default=10.0, help="Max RT difference (s)")
     args = parser.parse_args()
+    if not 1 <= args.charge_min <= args.charge_max:
+        parser.error("charge magnitudes must satisfy 1 <= min <= max")
 
     if not os.path.exists(args.input):
         print(f"Error: file not found: {args.input}")
@@ -61,8 +63,8 @@ def main():
     mfd = ms.MetaboliteFeatureDeconvolution()
     p = mfd.getDefaults()
     p.setValue("potential_adducts", [a.strip().encode() for a in adducts.split(",")])
-    p.setValue("charge_min", args.charge_min)
-    p.setValue("charge_max", args.charge_max)
+    p.setValue("charge_min", -args.charge_max if args.negative else args.charge_min)
+    p.setValue("charge_max", -args.charge_min if args.negative else args.charge_max)
     p.setValue("mass_max_diff", args.mass_max_diff)
     p.setValue("retention_max_diff", args.rt_max_diff)
     p.setValue("negative_mode", "true" if args.negative else "false")

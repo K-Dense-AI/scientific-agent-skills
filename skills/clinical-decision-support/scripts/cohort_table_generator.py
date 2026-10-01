@@ -24,7 +24,7 @@ MAX_ROWS = 200
 
 
 def _format_count(count: int, denominator: int) -> str:
-    percentage = 100.0 * count / denominator if denominator else 0.0
+    percentage = 100.0 * (count / denominator) if denominator else 0.0
     return f"{count}/{denominator} ({percentage:.1f}%)"
 
 
@@ -41,7 +41,7 @@ def _build_table(
         raise InputError("metadata must be an object")
     for field in ("table_id", "title", "purpose", "population", "data_cut_date"):
         require_nonempty_text(metadata.get(field), f"metadata.{field}")
-    if metadata.get("data_level") not in {"aggregate", "synthetic"}:
+    if not isinstance(metadata.get("data_level"), str) or metadata.get("data_level") not in {"aggregate", "synthetic"}:
         log.errors.append("metadata.data_level must be aggregate or synthetic")
     if metadata.get("raw_rows_supplied") is not False:
         log.errors.append("metadata.raw_rows_supplied must be false")
@@ -78,6 +78,9 @@ def _build_table(
         "monitoring",
     ):
         require_nonempty_text(governance.get(field), f"governance.{field}")
+
+    if not log.ok:
+        return log, headers, output_rows, notes
 
     groups = require_list(document.get("groups"), "groups", maximum=MAX_GROUPS)
     if not groups:
@@ -139,10 +142,6 @@ def _build_table(
             if not isinstance(value, dict):
                 raise InputError(f"{cell_field} must be an object")
             group_n = group["n"]
-            if group_n < minimum:
-                cells[group_id] = "SUPP"
-                primary_suppressed.add(group_id)
-                continue
             if row_type == "categorical":
                 count = nonnegative_int(value.get("count"), f"{cell_field}.count")
                 denominator = nonnegative_int(
@@ -159,7 +158,8 @@ def _build_table(
                         f"{cell_field} denominator plus missing must equal group n"
                     )
                 if (
-                    0 < count < minimum
+                    group_n < minimum
+                    or 0 < count < minimum
                     or 0 < denominator - count < minimum
                     or 0 < missing < minimum
                 ):
@@ -181,7 +181,7 @@ def _build_table(
                 summary = require_nonempty_text(
                     value.get("summary"), f"{cell_field}.summary", max_length=120
                 )
-                if summarized_n < minimum or 0 < missing < minimum:
+                if group_n < minimum or summarized_n < minimum or 0 < missing < minimum:
                     cells[group_id] = "SUPP"
                     primary_suppressed.add(group_id)
                 else:
@@ -204,6 +204,7 @@ def _build_table(
             f"Cells use a minimum threshold of {minimum}. SUPP is primary suppression; SUPP-C is complementary suppression.",
             "Thresholding is an operational disclosure control, not a HIPAA or privacy determination.",
             "Descriptive aggregate table only; no patient-specific or clinical recommendation output.",
+            "Not for patient care or live clinical use.",
         ]
     )
     if log.ok:
@@ -229,10 +230,16 @@ def _to_markdown(
 
 
 def _to_csv(headers: list[str], rows: list[list[str]], notes: list[str]) -> str:
+    def safe_cell(value: str) -> str:
+        # Treat labels/summaries as text when opened by a spreadsheet program.
+        if value.lstrip().startswith(("=", "+", "-", "@")):
+            return "'" + value
+        return value
+
     stream = io.StringIO()
     writer = csv.writer(stream, lineterminator="\n")
-    writer.writerow(headers)
-    writer.writerows(rows)
+    writer.writerow([safe_cell(value) for value in headers])
+    writer.writerows([safe_cell(value) for value in row] for row in rows)
     writer.writerow([])
     writer.writerow(["Disclosure notes"])
     for note in notes:
@@ -262,6 +269,10 @@ def main() -> int:
     try:
         document = load_json_object(args.input)
         log, headers, rows, notes = _build_table(document, args.min_cell_size)
+        if log.errors:
+            for error in log.errors:
+                print(f"ERROR: {error}", file=sys.stderr)
+            return 1
         title = require_nonempty_text(document["metadata"].get("title"), "metadata.title")
         if args.output:
             if args.output.lower().endswith(".csv"):
@@ -274,10 +285,6 @@ def main() -> int:
                 raise InputError("Output must end in .md or .csv")
         else:
             print(_to_markdown(title, headers, rows, notes), end="")
-        if log.errors:
-            for error in log.errors:
-                print(f"ERROR: {error}", file=sys.stderr)
-            return 1
     except InputError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

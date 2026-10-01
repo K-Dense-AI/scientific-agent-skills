@@ -1,6 +1,6 @@
 # ICH M10 — Bioanalytical Criteria, by Modality
 
-Research basis: **2026-07-27**, read from the ICH Harmonised Guideline *Bioanalytical Method
+Research basis: **2026-09-30**, read from the ICH Harmonised Guideline *Bioanalytical Method
 Validation and Study Sample Analysis M10*, Step 4 dated 24 May 2022. ICH licenses its documents for
 reuse with acknowledgement. Confirm the current text and your region's implementation at
 <https://database.ich.org/sites/default/files/M10_Guideline_Step4_2022_0524.pdf>.
@@ -18,11 +18,11 @@ criterion into a chromatographic method is its mirror image.
 
 | | Chromatographic | Ligand binding assay |
 | --- | --- | --- |
-| Calibration levels (minimum) | 6, including LLOQ | 6, including LLOQ |
+| Calibration levels (minimum) | 6, including LLOQ and ULOQ | 6, including LLOQ and ULOQ |
 | Calibration standard tolerance | ±15% | ±20% |
 | … at LLOQ | ±20% | ±25% |
 | … at ULOQ | ±15% | ±25% |
-| Calibration standards that must pass | ≥75% | ≥75%, excluding anchor points |
+| Calibration standards that must pass | ≥75%, and ≥6 passing levels | ≥75%, and ≥6 passing levels; exclude anchors |
 | Accuracy | ±15% | ±20% |
 | … at limits | ±20% at LLOQ | ±25% at LLOQ **and** ULOQ |
 | Precision (%CV) | ≤15% | ≤20% |
@@ -36,8 +36,8 @@ criterion into a chromatographic method is its mirror image.
 | Dilution integrity | mean within ±15% | mean within ±20% |
 | Stability | mean at each QC level within ±15% | mean within ±20% |
 | ISR agreement | within ±20% for ≥2/3 of repeats | within ±30% for ≥2/3 of repeats |
-| Selectivity sources/lots | ≥6 individual sources | ≥6 individual sources |
-| Carry-over in blank | ≤20% of LLOQ analyte response and ≤5% of IS response | per guideline |
+| Selectivity sources/lots | ≥6 individual sources | ≥10 individual sources |
+| Carry-over in blank | ≤20% of LLOQ analyte response and ≤5% of IS response | below LLOQ if platform is prone to carry-over |
 
 Verify any figure against the guideline before using it in a protocol; regional implementation and
 subsequent revisions can change the picture.
@@ -83,7 +83,8 @@ concentrations in real samples are reproducible. It is not a substitute for QCs 
 incurred samples are not, and only incurred samples can reveal metabolite back-conversion, protein
 binding effects, or matrix instability.
 
-- The extent depends on the analyte and the samples and should be justified.
+- The minimum is 10% of samples for studies with up to 1,000 samples; above 1,000,
+  reanalyse 100 plus 5% of the additional samples. Justify the selection and retain identifiers.
 - Objective criteria for choosing the subset should be **predefined**; selecting samples around
   Cmax and the elimination phase is recommended.
 - **Do not pool samples** — pooling masks anomalous findings.
@@ -95,9 +96,11 @@ binding effects, or matrix instability.
 - Acceptance: within ±20% for at least 2/3 of repeats (chromatographic), or within ±30% for at least
   2/3 (LBA).
 
-For nonclinical studies in scope, ISR should in general be performed; the guideline notes incurred
-samples need only be included if available, so inclusion was not felt to be mandatory in every case.
-Confirm the situations requiring ISR against the guideline text for your study type.
+For nonclinical studies in scope, ISR should generally be performed at least once per species.
+Section 5 also identifies pivotal BA/BE studies, first clinical trials in subjects, relevant pivotal
+patient trials, and first or pivotal trials in hepatic/renal impairment. The "if available" condition
+for study samples in cross validation (section 6.2) is not a general ISR exemption. ISR results do
+not replace original study results; passing the aggregate fraction does not rule out systematic bias.
 
 ## Study sample reanalysis is a separate thing
 
@@ -111,9 +114,11 @@ analysis begins.** Deciding after the fact which of two values to report is the 
 M10 addresses partial validation (a change to a validated method — matrix, anticoagulant, species,
 instrument, or a range change) and cross validation (comparing data from two methods or two
 laboratories contributing to the same study). Both are scoped by the change and the risk; consult
-the guideline for what each requires. For a cross validation between sites or methods, the
-statistics in `compare_methods.py` — equivalence testing against a pre-stated margin, and a
-regression that allows error in both measurements — are the appropriate treatment.
+the guideline for what each requires. Section 6.2 calls for the same low/medium/high QCs in at least triplicate and, if available,
+at least 30 study samples spanning the range measured with both methods/laboratories. It names
+Bland–Altman or Deming as options for bias assessment and allows other appropriate approaches.
+TOST in `compare_methods.py` is an optional mean-bias analysis, not an M10-mandated test or a
+replacement for that experimental design.
 
 ## Biomarkers and other contexts
 
@@ -121,3 +126,18 @@ M10's scope centres on drug and metabolite concentration measurement. Biomarker 
 assays, and diagnostic measurements are addressed differently or fall outside scope; do not assume the
 concentration-assay criteria transfer. Where a biomarker assay supports a regulatory decision, the
 fit-for-purpose framework and the applicable regional guidance govern the extent of validation.
+
+## Scope of the bundled checker
+
+`check_bioanalytical_run.py --run` screens one run's reportable calibrator/QC results. It does not
+fit a curve, aggregate wells, audit blanks or internal-standard response, verify sample handling,
+check QC placement/5% study-size counts, or apply multi-plate and multi-batch acceptance rules.
+LLOQ and ULOQ labels are mandatory; after range narrowing retain each calibrator's original
+boundary tolerance and review the revised range separately. A rejected point needs a new fit and
+re-evaluation; do not merely remove its row until the script exits zero. QC levels are grouped by
+nominal concentration, so relabelling one level cannot manufacture three levels.
+
+For `--total-error`, `accuracy_pct` means signed **bias from nominal** (for example 5 for 105%
+recovery), and `precision_pct` is non-negative CV. The checker evaluates supplied summaries; it
+does not establish whether all validation runs, days and levels support those summaries.
+LBA medium QC is near the geometric mean of the range, unlike the chromatographic 30–50% placement.

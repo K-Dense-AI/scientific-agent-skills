@@ -80,6 +80,12 @@ def solve_point(db, settings, bulk, temperature, pdens):
     conditions = {v.T: temperature, v.P: settings["pressure_pa"], v.N: 1}
     conditions.update({v.X(name): value for name, value in settings["independent_mole_fractions"].items()})
     result = pc.equilibrium(db, settings["components"], settings["phases"], conditions, calc_opts={"pdens": pdens})
+    # pycalphad clips independent composition conditions near zero and one.
+    # Preserve the actual imposed coordinates without replacing the requested bulk.
+    solver_bulk = {name: float(result.coords[str(v.X(name))].values.item())
+                   for name in settings["independent_mole_fractions"]}
+    solver_bulk[settings["dependent_component"]] = 1 - sum(solver_bulk.values())
+    condition_adjustment = max(abs(solver_bulk[name] - bulk[name]) for name in bulk)
     energy = float(result.GM.values.item())
     names = result.Phase.values.ravel()
     amounts = result.NP.values.ravel()
@@ -108,6 +114,8 @@ def solve_point(db, settings, bulk, temperature, pdens):
     mass_error = max(abs(reconstructed[c] - bulk[c]) for c in bulk)
     return {"temperature_k": temperature, "gibbs_energy_j_per_mol": energy, "vertices": vertices,
             "phase_totals": phase_sums, "reconstructed_bulk_mole_fractions": reconstructed,
+            "solver_bulk_mole_fractions": solver_bulk,
+            "composition_condition_adjustment_absolute_error": condition_adjustment,
             "phase_fraction_sum_error": amount_error, "mass_balance_absolute_error": mass_error,
             "balance_passed": amount_error <= settings["mass_balance_tolerance"] and mass_error <= settings["mass_balance_tolerance"]}
 
@@ -141,7 +149,7 @@ def run(database_path, settings_path, output_dir):
                   database_sha256=hashlib.sha256(database_path.read_bytes()).hexdigest(),
                   settings_sha256=hashlib.sha256(settings_path.read_bytes()).hexdigest(),
                   phase_fraction_basis="molar, N=1; vacancies excluded from bulk composition",
-                  database_experimental_validity="not_assessed",
+                  database_experimental_validity="not_evaluated_by_helper",
                   refinement="pdens doubled; phase totals and GM compared; not a proof of the global minimum")
     output_dir.mkdir(parents=True)
     (output_dir / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")

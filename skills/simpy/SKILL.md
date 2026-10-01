@@ -1,11 +1,12 @@
 ---
 name: simpy
-description: Build, inspect, test, and analyze bounded process-based discrete-event simulations with SimPy, including events, resources, interrupts, monitoring, replications, warm-up, and reproducible output analysis.
+description: Builds, inspects, tests, and analyzes bounded process-based discrete-event simulations with SimPy. Use for event scheduling, resource queues, interrupts, monitoring, independent replications, warm-up, and reproducible output analysis.
 license: MIT
 compatibility: Upstream SimPy 4.1.2 supports Python 3.8+; bundled CLIs require Python 3.10+, uv, and SimPy 4.1.2. They use only SimPy and the standard library, operate on local bounded inputs, and make no network calls.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.5"
+  version: "1.6"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -24,7 +25,7 @@ methodology, not SimPy API behavior.
 
 ## Current release and installation
 
-Verified **2026-07-23**:
+Reviewed **2026-10-01** against current official documentation and the released source:
 
 - Latest stable: **SimPy 4.1.2**, released on PyPI 2026-05-24; source tag
   `4.1.2` points to commit `f4381649`.
@@ -121,6 +122,10 @@ priority, then a strictly increasing event ID. Same-time, same-priority events a
 therefore processed FIFO in scheduling order. Model processes may represent
 concurrency, but callbacks execute sequentially and deterministically.
 
+This orders the events currently queued. A callback can insert an urgent event at
+the current time, so a valid processing trace need not have globally increasing
+priority or event IDs within a timestamp.
+
 - `env.now`: unitless simulation clock; choose and document one unit.
 - `env.peek()`: next event time or infinity.
 - `env.step()`: process one event; raises `EmptySchedule` when empty.
@@ -214,7 +219,7 @@ Queue measurements are timing-sensitive:
 - A request method's pre-state, post-call state, grant callback, and release
   callback can all differ at the same simulation timestamp.
 - Sample averages weight event observations, not time. Compute area under the
-  left-continuous state path and divide by elapsed time.
+  post-transition state path and divide by elapsed time.
 - Add initial and final samples; close the last interval at the analysis horizon.
 - `env._queue`, resource `_env`, and monkey-patching are implementation details.
   Pin SimPy, isolate the instrumentation, and regression-test after upgrades.
@@ -259,6 +264,12 @@ The replication runner refuses one-replication intervals. Its intervals quantify
 Monte Carlo uncertainty under the configured model; they neither validate the model
 nor identify causal effects. See `references/cli-guide.md`.
 
+Schema 1.2 reports explicit metric windows: throughput counts all departures during
+`[warm_up, horizon)`, loss uses arrivals/rejections in that same window, and customer
+means use post-warm-up arrivals completed before the horizon. These customer means
+remain vulnerable to completion censoring. The scripts require the pinned SimPy
+version because tracing depends on its scheduler internals.
+
 ## Testing
 
 Use deterministic unit tests for ordering, boundary times, conditions, interrupts,
@@ -270,8 +281,8 @@ Run the skill's suite in the exact pinned environment without bytecode artifacts
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 uv run --isolated --no-project \
-  --python 3.13 --with "simpy==4.1.2" \
-  python -m unittest discover -s tests/simpy -v
+  --python 3.13 --with "simpy==4.1.2" --with pytest \
+  python -m pytest tests/simpy -q
 ```
 
 ## References

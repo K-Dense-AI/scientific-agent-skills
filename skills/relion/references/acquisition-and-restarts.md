@@ -32,6 +32,24 @@ disappear. Keep translations in their declared units (`Origin*Angst` versus lega
 For RELION's centered coordinate conventions, follow the official conventions page rather than
 interpreting map array indices as laboratory coordinates.
 
+`_rlnCoordinateX`/`_rlnCoordinateY` are pixels in the aligned, summed micrograph, not the movie's
+super-resolution grid. RELION's Euler angles rotate the reference into the observed particle;
+origin offsets shift the observation into the reference projection, before rotation. The actual
+5.0.1 labels are `_rlnOriginXAngst`/`_rlnOriginYAngst` (the conventions page spells the suffix out
+as `Angstrom`; the [label definitions](https://github.com/3dem/relion/blob/5.0.1/src/metadata_label.h)
+are authoritative). Avoid sign changes or Å-to-pixel conversion by intuition.
+
+When merging optics tables, reconcile group **names** and acquisition settings, then remap IDs;
+the same numeric ID in two projects need not denote the same group. The validator is read-only
+and does not merge tables. RELION distinguishes maps (`.mrc`) from particle stacks (`.mrcs`),
+and the helper supports real-valued MRC modes including float16 mode 12. Native RELION can read
+packed mode 101, but `mrcfile` cannot; convert that input with a suitable native utility first.
+
+RELION uses right-handed coordinates, but reconstruction handedness still requires independent
+assessment (for example, recognizable helix chirality at sufficient resolution or tilt data).
+FSC alone cannot choose the hand. If a justified hand inversion is needed, transform both half
+maps, mask and downstream coordinates consistently, and preserve the original maps.
+
 ## Restart a stopped refinement
 
 A completed iteration's `_optimiser.star` points to the sampling/model/data state required for
@@ -50,9 +68,14 @@ insufficient memory, invalid CTF metadata, an absent external tool, or scientifi
 Change one relevant condition, preserve the old job, and resume that checkpoint. Do not repeatedly
 restart a deterministic invalid-input failure.
 
-The GUI's Continue operation records the new job relationship in the RELION pipeline. A direct
-command does not automatically supply every GUI bookkeeping relationship, so retain the command,
-version/build, output prefix and source checkpoint alongside the results.
+The [GUI's Continue operation](https://relion.readthedocs.io/en/release-5.0/Reference/Using-RELION.html)
+uses the existing job directory; refinement continuations get prefixes such as `run_ct23`.
+The illustrative direct command above instead requests a separate output prefix. It does not
+register a job in `default_pipeline.star`, so retain the command, version/build, output prefix
+and source checkpoint alongside the results. This helper neither submits scheduler jobs nor
+implements RELION's External-job marker/output-node contract. Use the native GUI or
+[Schemes](https://relion.readthedocs.io/en/release-5.0/Reference/Schemes.html) when pipeline tracking
+is required; no remote service, HTTP API, authentication or pagination is involved here.
 
 ## Reporting resolution
 
@@ -61,3 +84,6 @@ processing version. Keep both original half maps, the postprocessing STAR/PDF an
 FSC estimate can hide preferred orientation and regional flexibility; inspect local and directional
 resolution and map-model validation before making structural claims. A high unmasked correlation
 from duplicated or coupled half maps is a failure of independence, not a high-resolution result.
+Independent half-set histories must also survive re-extraction and restart: renumbering particles
+or copying stacks does not create independent observations. The helper detects repeated references,
+not duplicate image content stored under distinct filenames.

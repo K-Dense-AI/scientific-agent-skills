@@ -1,11 +1,15 @@
 # Modal Getting Started Guide
 
+Reviewed against Modal 1.6.0, the [getting started guide](https://modal.com/docs/guide/getting-started)
+and [SDK release notes](https://modal.com/docs/sdk/py/releases). The hello-world handler
+was run locally; cloud execution and the third-party examples remain illustrative.
+
 ## Installation
 
 Install Modal with uv (recommended). The SDK supports Python 3.10–3.14:
 
 ```bash
-uv pip install modal
+uv pip install "modal==1.6.0"
 ```
 
 ## Authentication
@@ -16,7 +20,9 @@ uv pip install modal
 modal setup
 ```
 
-This opens a browser for authentication and stores credentials locally.
+This opens a browser and stores a profile in `.modal.toml`. Reuse an existing profile
+or `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` pair before running setup. Check credential
+presence without printing values; do not dump environment variables or credential files.
 
 ### Headless / CI/CD Setup
 
@@ -38,7 +44,8 @@ modal token set --token-id <id> --token-secret <secret>
 
 ### Free Tier
 
-Modal provides $30/month in free credits. No credit card required for the free tier.
+Check the [pricing page](https://modal.com/pricing) for current credits and plan limits.
+GPU use requires a payment method; credits do not imply every workload is free.
 
 ## Your First App
 
@@ -79,15 +86,15 @@ What happens:
 - `@app.function()` — Marks a function for remote execution
 - `@app.local_entrypoint()` — Defines the local entry point (runs on your machine)
 - `.remote()` — Calls the function in the cloud
-- `.local()` — Calls the function locally (for testing)
+- `.local()` — Calls locally without applying the Image, resource, Secret or Volume configuration
 
 ### Running Modes
 
 | Command | Description |
 |---------|-------------|
-| `modal run script.py` | Run the `@app.local_entrypoint()` function |
+| `modal run script.py` | Run an entrypoint or selected Function in an ephemeral App |
 | `modal serve script.py` | Start a dev server with hot reload (for web endpoints) |
-| `modal deploy script.py` | Deploy to production (persistent) |
+| `modal deploy script.py` | Persist the App definition; containers still scale to zero |
 
 ### A Simple Web Scraper
 
@@ -103,7 +110,8 @@ def scrape(url: str) -> str:
     import httpx
     from bs4 import BeautifulSoup
 
-    response = httpx.get(url)
+    response = httpx.get(url, follow_redirects=True, timeout=30)
+    response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     return soup.get_text()[:1000]
 
@@ -128,8 +136,8 @@ image = (
 @app.function(gpu="L40S", image=image)
 def generate(prompt: str) -> str:
     from transformers import pipeline
-    pipe = pipeline("text-generation", model="gpt2", device="cuda")
-    result = pipe(prompt, max_length=100)
+    pipe = pipeline("text-generation", model="openai-community/gpt2", device=0)
+    result = pipe(prompt, max_new_tokens=100)
     return result[0]["generated_text"]
 
 @app.local_entrypoint()

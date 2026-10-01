@@ -15,8 +15,8 @@ No API key required.
 | `/search?q={query}` | Text search across all entities |
 | `/autocomplete?q={prefix}` | Autocomplete entity names |
 | `/entity/{id}` | Entity details (gene, disease, phenotype) |
-| `/entity/{id}/associations` | Associations for an entity |
-| `/entity/{id}/associations?category={cat}` | Filtered associations |
+| `/association?entity={id}` | Associations for an entity |
+| `/association?entity={id}&category={cat}` | Filtered associations |
 
 ## Entity ID Prefixes
 - `MONDO:` — diseases (e.g. `MONDO:0007947`)
@@ -36,11 +36,11 @@ https://api.monarchinitiative.org/v3/api/search?q=Marfan+syndrome&limit=5
 https://api.monarchinitiative.org/v3/api/entity/MONDO:0007947
 
 # Gene-to-phenotype for FBN1
-https://api.monarchinitiative.org/v3/api/entity/HGNC:3603/associations?category=biolink:GeneToPhenotypicFeatureAssociation&limit=10
+https://api.monarchinitiative.org/v3/api/association?entity=HGNC%3A3603&category=biolink:GeneToPhenotypicFeatureAssociation&limit=10
 ```
 
 ## Response Format
-JSON. Search: `items[]` with `id`, `name`, `category`. Associations: `items[]` with `subject`, `predicate`, `object`, `publications`.
+Paginate search/associations with `limit` and zero-based `offset`. JSON. Search: `items[]` with `id`, `name`, `category`. Associations: `items[]` with `subject`, `predicate`, `object`, `publications`.
 
 ## Rate Limits
 No published limits. Be reasonable.

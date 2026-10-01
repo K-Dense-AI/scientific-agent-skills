@@ -39,7 +39,8 @@ print(motif.counts)
 
 ```python
 # Create position weight matrix
-pwm = motif.counts.normalize(pseudocounts=0.5)
+motif.pseudocounts = 0.5
+pwm = motif.pwm  # Keep the PWM and relative_entropy on the same pseudocount model
 print(pwm)
 
 # Calculate information content
@@ -108,24 +109,13 @@ for pop_idx, pop in enumerate(record.populations):
         print(f"  {individual[0]}: {individual[1]}")
 ```
 
-### Calculating Population Statistics
+### Population Statistics Require Separate Software
 
-```python
-from Bio.PopGen.GenePop.Controller import GenePopController
-
-# Create controller
-ctrl = GenePopController()
-
-# Calculate basic statistics
-result = ctrl.calc_allele_genotype_freqs("data.gen")
-
-# Calculate Fst
-fst_result = ctrl.calc_fst_all("data.gen")
-print(f"Fst: {fst_result}")
-
-# Test Hardy-Weinberg equilibrium
-hw_result = ctrl.test_hw_pop("data.gen", "probability")
-```
+Biopython 1.88 retains GenePop file parsers, but does not ship
+`Bio.PopGen.GenePop.Controller` or `GenePopController`. Do not call the former
+`calc_fst_all`/`test_hw_pop` wrappers. Export validated GenePop data and run the
+chosen population-statistics software separately; its estimates and test settings
+need independent validation. No external GenePop executable was tested here.
 
 ## Sequence Utilities with Bio.SeqUtils
 
@@ -176,11 +166,11 @@ tm_wallace = mt.Tm_Wallace(seq)
 ### GC Skew
 
 ```python
-from Bio.SeqUtils import gc_skew
+from Bio.SeqUtils import GC_skew
 
 # Calculate GC skew
 seq = Seq("ATCGATCGGGCCCAAATTT")
-skew = gc_skew(seq, window=100)
+skew = GC_skew(seq, window=100)
 print(f"GC skew: {skew}")
 ```
 
@@ -198,8 +188,8 @@ print(f"MW: {analyzed_seq.molecular_weight():.2f} Da")
 # Isoelectric point
 print(f"pI: {analyzed_seq.isoelectric_point():.2f}")
 
-# Amino acid composition
-print(f"Composition: {analyzed_seq.get_amino_acids_percent()}")
+# Amino acid composition in percent (0-100), not fractions
+print(f"Composition: {analyzed_seq.amino_acids_percent}")
 
 # Instability index
 print(f"Instability: {analyzed_seq.instability_index():.2f}")
@@ -211,7 +201,7 @@ print(f"Aromaticity: {analyzed_seq.aromaticity():.2f}")
 ss = analyzed_seq.secondary_structure_fraction()
 print(f"Helix: {ss[0]:.2%}, Turn: {ss[1]:.2%}, Sheet: {ss[2]:.2%}")
 
-# Extinction coefficient (assumes Cys reduced, no disulfide bonds)
+# Extinction coefficients: tuple for reduced cysteines and cystines, respectively
 print(f"Extinction coefficient: {analyzed_seq.molar_extinction_coefficient()}")
 
 # Gravy (grand average of hydropathy)
@@ -339,7 +329,8 @@ aligner.gap_score = 0  # Optional: mimic the old globalxx scoring style
 
 alignments = aligner.align("ACCGT", "ACGT")
 
-for alignment in alignments[:3]:
+from itertools import islice
+for alignment in islice(alignments, 3):
     print(alignment)
     print(f"Score: {alignment.score}")
 ```
@@ -358,11 +349,13 @@ handle = Entrez.esearch(db="pccompound", term="aspirin")
 result = Entrez.read(handle)
 handle.close()
 
+if not result["IdList"]:
+    raise ValueError("No compound matched the query")
 compound_id = result["IdList"][0]
 
-# Get compound information
-handle = Entrez.efetch(db="pccompound", id=compound_id, retmode="xml")
-compound_data = handle.read()
+# Get an Entrez compound summary (not a chemical structure download)
+handle = Entrez.esummary(db="pccompound", id=compound_id, retmode="xml")
+compound_data = Entrez.read(handle)
 handle.close()
 ```
 
@@ -375,9 +368,8 @@ from Bio.SeqRecord import SeqRecord
 
 # Create a feature
 feature = SeqFeature(
-    location=FeatureLocation(start=10, end=50),
+    location=FeatureLocation(start=10, end=50, strand=1),
     type="CDS",
-    strand=1,
     qualifiers={"gene": ["ABC1"], "product": ["ABC protein"]}
 )
 
@@ -442,19 +434,26 @@ for record in SeqIO.parse("reads.fastq", "fastq"):
 
 ## Common Use Cases
 
-### Find ORFs
+### Find Stop-Free Translated Segments
 
 ```python
 from Bio import SeqIO
 from Bio.SeqUtils import gc_fraction
 
-def find_orfs(seq, min_length=100):
-    """Find all ORFs in sequence."""
+def find_orfs(seq, min_length=100, table=1):
+    """Return stop-free segments; min_length is nt, coordinates are on input.
+
+    These candidates do not require a start codon and are not validated CDSs.
+    Coordinates are zero-based, half-open; terminal stop codons are excluded.
+    """
+    if min_length < 1:
+        raise ValueError("min_length must be positive")
     orfs = []
 
     for strand, nuc in [(+1, seq), (-1, seq.reverse_complement())]:
         for frame in range(3):
-            trans = nuc[frame:].translate()
+            usable = max(0, len(nuc) - frame) // 3 * 3
+            trans = nuc[frame:frame + usable].translate(table=table)
             trans_len = len(trans)
 
             aa_start = 0
@@ -463,12 +462,15 @@ def find_orfs(seq, min_length=100):
                 if aa_end == -1:
                     aa_end = trans_len
 
-                if aa_end - aa_start >= min_length // 3:
+                if (aa_end - aa_start) * 3 >= min_length:
                     start = frame + aa_start * 3
                     end = frame + aa_end * 3
+                    genomic_start, genomic_end = (
+                        (start, end) if strand == 1 else (len(seq) - end, len(seq) - start)
+                    )
                     orfs.append({
-                        'start': start,
-                        'end': end,
+                        'start': genomic_start,
+                        'end': genomic_end,
                         'strand': strand,
                         'frame': frame,
                         'length': end - start,
@@ -496,8 +498,10 @@ def analyze_codon_usage(fasta_file):
     codon_counts = {}
 
     for record in SeqIO.parse(fasta_file, "fasta"):
-        # Ensure sequence is multiple of 3
-        seq = record.seq[:len(record.seq) - len(record.seq) % 3]
+        # Input must already be an oriented, in-frame coding sequence.
+        seq = record.seq.upper()
+        if len(seq) % 3 or set(str(seq)) - set("ACGT"):
+            raise ValueError(f"Invalid complete DNA codons in {record.id}")
 
         # Count codons
         for i in range(0, len(seq), 3):
@@ -518,6 +522,10 @@ def sequence_complexity(seq, k=2):
     """Calculate k-mer complexity (Shannon entropy)."""
     import math
     from collections import Counter
+
+    if k < 1 or len(seq) < k or set(str(seq).upper()) - set("ACGT"):
+        raise ValueError("Requires k >= 1 and at least k unambiguous DNA bases")
+    seq = str(seq).upper()
 
     # Generate k-mers
     kmers = [str(seq[i:i+k]) for i in range(len(seq) - k + 1)]
@@ -548,15 +556,23 @@ print(f"Sequence complexity: {complexity:.3f}")
 
 ```python
 def extract_promoters(genbank_file, upstream=500):
-    """Extract promoter regions upstream of genes."""
+    """Extract upstream candidates on a linear record, not proven promoters."""
     from Bio import SeqIO
 
     record = SeqIO.read(genbank_file, "genbank")
     promoters = []
+    if upstream < 1 or record.annotations.get("topology") == "circular":
+        raise ValueError("Requires positive upstream length and a linear record")
 
     for feature in record.features:
         if feature.type == "gene":
-            if feature.strand == 1:
+            from Bio.SeqFeature import ExactPosition, SimpleLocation
+            loc = feature.location
+            if (not isinstance(loc, SimpleLocation) or loc.strand not in (-1, 1)
+                    or not isinstance(loc.start, ExactPosition)
+                    or not isinstance(loc.end, ExactPosition)):
+                raise ValueError("Requires exact, simple, stranded gene coordinates")
+            if feature.location.strand == 1:
                 # Forward strand
                 start = max(0, feature.location.start - upstream)
                 end = feature.location.start
@@ -566,7 +582,7 @@ def extract_promoters(genbank_file, upstream=500):
                 end = min(len(record.seq), feature.location.end + upstream)
 
             promoter_seq = record.seq[start:end]
-            if feature.strand == -1:
+            if feature.location.strand == -1:
                 promoter_seq = promoter_seq.reverse_complement()
 
             promoters.append({

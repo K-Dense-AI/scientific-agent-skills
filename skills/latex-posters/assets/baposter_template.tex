@@ -9,6 +9,15 @@
 
 % Packages
 \usepackage{graphicx}
+
+% Missing figures deliberately render as visible draft placeholders.
+% Replace every placeholder and resolve these warnings before delivery.
+\newcommand{\posterfigure}[2]{%
+  \IfFileExists{#2}{\includegraphics[width=#1]{#2}}{%
+    \PackageWarningNoLine{poster}{Draft placeholder: #2}%
+    \fbox{\parbox[c][4cm][c]{\dimexpr#1-2\fboxsep-2\fboxrule\relax}{%
+      \centering\small DRAFT FIGURE\\\texttt{\detokenize{#2}}}}}}
+
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{multicol}
@@ -29,37 +38,37 @@
   % ============================================================================
   % POSTER CONFIGURATION
   % ============================================================================
-  
+%
   % Grid and columns
   grid=false,                    % Set to true for debugging layout
   columns=3,                     % Number of columns
   colspacing=1.5em,              % Space between columns
-  
+%
   % Background
   background=plain,              % plain, shadetb, shadelr
   bgColorOne=white,
   bgColorTwo=white,
-  
+%
   % Borders
   borderColor=blue!50!black,
   linewidth=2pt,
-  
+%
   % Header
   headerColorOne=blue!70!black,
   headerColorTwo=blue!60!black,
   headerFontColor=white,
   headerheight=0.12\textheight,
-  headershape=roundedright,      % rectangle, rounded, roundedright, roundedleft
+  headershape=roundedright,      % See installed baposter class for supported values
   headershade=plain,             % plain, shadetb, shadelr
   headerborder=closed,           % open, closed
-  headerfont=\Large\sf\bf,
-  
+  headerfont=\Large\sffamily\bfseries,
+%
   % Boxes
   boxColorOne=white,
   boxColorTwo=blue!10,
   boxshade=plain,
-  textborder=roundedleft,        % none, rectangle, rounded, roundedleft, roundedright
-  
+  textborder=roundedleft,        % none, rectangle, rounded, roundedleft, roundedsmall
+%
   % Eye catcher
   eyecatcher=true
 }
@@ -68,11 +77,11 @@
 % ============================================================================
 % Eye Catcher (Left Logo)
 {
-  \includegraphics[height=6em]{logo1.pdf}
+  \IfFileExists{logo1.pdf}{\includegraphics[height=6em]{logo1.pdf}}{\fbox{Logo}}
 }
 % Title
 {
-  \sf\bf Your Research Title: Concise and Descriptive
+  \sffamily\bfseries Your Research Title: Concise and Descriptive
 }
 % Authors
 {
@@ -84,7 +93,7 @@
 }
 % University Logo (Right)
 {
-  \includegraphics[height=6em]{logo2.pdf}
+  \IfFileExists{logo2.pdf}{\includegraphics[height=6em]{logo2.pdf}}{\fbox{Logo}}
 }
 
 % ==============================================================================
@@ -122,14 +131,14 @@
   \textbf{Analysis}
   \begin{itemize}
     \item Statistical methods
-    \item Software: R 4.3, Python 3.10
+    \item Software: [software and versions used]
     \item Significance: p < 0.05
   \end{itemize}
   
   \vspace{0.3cm}
   
   \begin{center}
-    \includegraphics[width=0.9\linewidth]{methods_flowchart.pdf}
+    \posterfigure{0.9\linewidth}{methods_flowchart.pdf}
   \end{center}
 }
 
@@ -143,10 +152,10 @@
   \vspace{0.3cm}
   
   \begin{center}
-    \includegraphics[width=0.95\linewidth]{figure1.pdf}
+    \posterfigure{0.95\linewidth}{figure1.pdf}
   \end{center}
   
-  \textbf{Figure 1:} Descriptive caption explaining the main result. Include statistics (Mean ± SD, n=X, **p<0.01).
+  \textbf{Figure 1:} Descriptive caption explaining the main result. Include statistics (Mean $\pm$ SD, n=X, **p<0.01).
 }
 
 % ==============================================================================
@@ -157,7 +166,7 @@
   Brief description of second key result.
   
   \begin{center}
-    \includegraphics[width=0.9\linewidth]{figure2.pdf}
+    \posterfigure{0.9\linewidth}{figure2.pdf}
   \end{center}
   
   \textbf{Figure 2:} Supporting result or comparison.
@@ -171,7 +180,7 @@
   Brief description of third result or validation.
   
   \begin{center}
-    \includegraphics[width=0.9\linewidth]{figure3.pdf}
+    \posterfigure{0.9\linewidth}{figure3.pdf}
   \end{center}
   
   \textbf{Figure 3:} Additional finding.
@@ -181,7 +190,31 @@
 % BOTTOM ROW (SPANS ALL COLUMNS)
 % ==============================================================================
 
-\headerbox{Conclusions}{name=conclusions,column=0,span=2,above=bottom}{
+\headerbox{}{name=footer,column=0,span=3,above=bottom}{
+  \footnotesize
+  \begin{multicols}{2}
+    \textbf{References}
+    \begin{enumerate}
+      \item Author A et al. (2023). Title. \textit{Journal}, 10(2), 123-145.
+      \item Author B et al. (2024). Title. \textit{Conference}.
+      \item Author C et al. (2022). Title. \textit{Journal}, 15(3), 456-478.
+    \end{enumerate}
+
+    \columnbreak
+
+    \textbf{Acknowledgments}
+
+    Funded by Grant Agency (Grant \#12345). Thanks to collaborators at Institution X.
+
+    \vspace{0.3cm}
+
+    \textbf{Contact:} presenter.email@university.edu | labname.university.edu
+  \end{multicols}
+}
+
+
+% row positions the upper edge; above=footer alone would stretch from row=0.
+\headerbox{Conclusions}{name=conclusions,column=0,span=2,row=0.72,above=footer}{
   \begin{multicols}{2}
     \textbf{Key Findings}
     \begin{itemize}
@@ -217,39 +250,17 @@
   \end{multicols}
 }
 
-\headerbox{Scan for More}{name=qr,column=2,above=bottom}{
+\headerbox{Scan for More}{name=qr,column=2,row=0.72,above=footer}{
   \begin{center}
-    \qrcode[height=4cm]{https://doi.org/10.1234/your-paper}\\
+    \qrcode[height=4cm,nolink]{https://example.org/replace-with-paper}\\
     \vspace{0.3cm}
     \small Full paper, code \& data
   \end{center}
 }
 
 % ==============================================================================
-% FOOTER (FULL WIDTH AT BOTTOM)
+% Footer is defined before the boxes that refer to it above.
 % ==============================================================================
-
-\headerbox{}{name=footer,column=0,span=3,above=bottom,below=conclusions}{
-  \footnotesize
-  \begin{multicols}{2}
-    \textbf{References}
-    \begin{enumerate}
-      \item Author A et al. (2023). Title. \textit{Journal}, 10(2), 123-145.
-      \item Author B et al. (2024). Title. \textit{Conference}.
-      \item Author C et al. (2022). Title. \textit{Journal}, 15(3), 456-478.
-    \end{enumerate}
-    
-    \columnbreak
-    
-    \textbf{Acknowledgments}
-    
-    Funded by Grant Agency (Grant \#12345). Thanks to collaborators at Institution X.
-    
-    \vspace{0.3cm}
-    
-    \textbf{Contact:} presenter.email@university.edu | labname.university.edu
-  \end{multicols}
-}
 
 \end{poster}
 

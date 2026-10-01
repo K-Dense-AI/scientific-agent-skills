@@ -1,7 +1,10 @@
 # Policies and Model Contracts
 
-Research snapshot: **2026-07-23**. Policy APIs changed substantially between
-published PufferLib 3.0.0 and current 4.0 source.
+Review: **2026-10-01**. Native 5.0 guidance is in [native-5.md](native-5.md);
+3.0 and the pinned 4.0 snapshot below are historical profiles. Policy APIs changed substantially between
+published PufferLib 3.0.0 and historical 4.0 source. The PyPI sdist was
+hash-verified for this review; moving-branch source can differ. Policy examples
+are illustrative/source-reviewed, not executed neural-network tests.
 
 ## Published 3.0.0
 
@@ -36,8 +39,9 @@ def decode_actions(self, hidden):
 
 The wrapper uses an `LSTMCell` during rollout inference and an `LSTM` over
 time-batched data during training. Do not manually reshape recurrent state
-without checking the source's batch/time convention. Reset hidden state on
-actual terminations and truncations according to the trainer's mask behavior.
+without checking the source's batch/time convention. Verify hidden-state reset on
+actual terminations/truncations; the sdist learner has incomplete truncation and
+inactive-slot mask handling, so adapter correctness alone is insufficient.
 
 ### Structured observations
 
@@ -87,9 +91,9 @@ Inspect the exact 3.0 source before copying signatures. Do not use top-level
 `from pufferlib import PuffeRL`; the trainer is
 `pufferlib.pufferl.PuffeRL`.
 
-## Current 4.0 source
+## Historical 4.0 source
 
-The current PyTorch fallback composes a policy from three modules:
+The historical PyTorch fallback composes a policy from three modules:
 
 ```python
 policy = pufferlib.models.Policy(
@@ -108,7 +112,7 @@ The source contract is:
 - recurrent/network module maps hidden vectors and state
 - decoder maps hidden vectors to action logits and values
 
-Current built-ins include `DefaultEncoder`, `DefaultDecoder`, `MLP`, `MinGRU`,
+Historical built-ins include `DefaultEncoder`, `DefaultDecoder`, `MLP`, `MinGRU`,
 `LSTM`, `GRU`, `NatureEncoder`, and `ImpalaEncoder`. INI config selects the
 Torch fallback components:
 
@@ -171,10 +175,10 @@ settings. Do not claim determinism solely because seeds are fixed.
   — stable implementation; accessed 2026-07-23.
 - [PufferLib 3.0 models](https://github.com/PufferAI/PufferLib/blob/3.0/pufferlib/models.py)
   — stable model classes; accessed 2026-07-23.
-- [PufferLib 4.0 models](https://github.com/PufferAI/PufferLib/blob/4.0/pufferlib/models.py)
-  — current source model contract; accessed 2026-07-23.
-- [PufferLib 4.0 Torch trainer](https://github.com/PufferAI/PufferLib/blob/4.0/pufferlib/torch_pufferl.py)
-  — current fallback and checkpoint loading; accessed 2026-07-23.
+- [PufferLib 4.0 models](https://github.com/PufferAI/PufferLib/blob/25647630e1b15330bb3153a5a0d3ff8d234c3acf/pufferlib/models.py)
+  — reviewed 4.0 source model contract; accessed 2026-07-23.
+- [PufferLib 4.0 Torch trainer](https://github.com/PufferAI/PufferLib/blob/25647630e1b15330bb3153a5a0d3ff8d234c3acf/pufferlib/torch_pufferl.py)
+  — historical fallback and checkpoint loading; accessed 2026-07-23.
 - [PyTorch security policy](https://github.com/pytorch/pytorch/security) —
   untrusted-model guidance; accessed 2026-07-23.
 - [PyTorch `torch.load` documentation](https://docs.pytorch.org/docs/stable/generated/torch.load.html)

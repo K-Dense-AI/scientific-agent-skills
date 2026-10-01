@@ -2,7 +2,7 @@
 
 # Project Documentation Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
 **Use this template for:** Software projects, open-source libraries, internal tools, APIs, platforms, or any product that needs documentation for users and contributors. Designed to take someone from "what is this?" to "I'm contributing" in a single read.
 
@@ -17,14 +17,16 @@
 1. Copy this file as your project's main `README.md` or `docs/index.md`
 2. Replace all `[bracketed placeholders]` with your content
 3. Delete sections that don't apply (a CLI tool might skip API reference; a library might skip deployment)
-4. Add [Mermaid diagrams](../mermaid_style_guide.md) — especially for architecture, data flow, and request lifecycle
+4. Add [Mermaid diagrams](../references/mermaid_style_guide.md) — especially for architecture, data flow, and request lifecycle
 5. Keep the Quick Start brutally simple — if setup takes more than 5 commands, simplify it
 
 ---
 
 ## The Template
 
-Everything below the line is the template. Copy from here:
+Everything below the line is the template. Copy from here; commands, API routes,
+versions, thresholds, and numerical values are illustrative placeholders. Verify them
+against the actual project before publishing. Follow its existing tracker and PR conventions.
 
 ---
 
@@ -34,7 +36,7 @@ Everything below the line is the template. Copy from here:
 
 [One sentence: the key differentiator or value proposition.]
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]() [![License](https://img.shields.io/badge/license-MIT-blue)]()
+[Add real CI and license badges only after verifying their destinations and status.]
 
 ---
 
@@ -216,13 +218,13 @@ sequenceDiagram
 
 ### Authentication
 
-All API requests require a bearer token in the `Authorization` header:
+Illustrative bearer-token example; replace with the actual service authentication contract:
 
 ```
 Authorization: Bearer <token>
 ```
 
-Obtain a token via `POST /auth/login`. Tokens expire after [duration].
+Placeholder only: replace `POST /auth/login`, expiry, scopes, and refresh behavior with verified service documentation. No live service is implied by these routes.
 
 ### Endpoints
 
@@ -405,7 +407,7 @@ git clone https://github.com/[your-fork]/[repo].git
 
 - [Official framework docs](https://example.com) — [What version and which sections are most relevant]
 - [API specification](https://example.com) — [OpenAPI/Swagger link if applicable]
-- [Architecture Decision Records](../adr/) — [Why key decisions were made]
+- Architecture Decision Records (replace with the project link) — [Why key decisions were made]
 
 ---
 

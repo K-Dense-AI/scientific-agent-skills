@@ -62,12 +62,15 @@ if _SIMPY is not None:
             self.processed_events = 0
 
         def step(self) -> None:
+            if self.peek() == float("inf"):
+                super().step()  # Preserve EmptySchedule without consuming budget.
+                return
             if self.processed_events >= self.max_events:
                 raise EventLimitExceeded(
                     f"simulation reached the max_events limit ({self.max_events})"
                 )
-            super().step()
             self.processed_events += 1
+            super().step()  # Include the event whose callback stops run().
 
 else:
 
@@ -186,6 +189,9 @@ class QueueStatistics:
     rejected: int = 0
     completed: int = 0
     observed_completed: int = 0
+    window_arrivals: int = 0
+    window_rejected: int = 0
+    window_departures: int = 0
     wait_times: list[float] = field(default_factory=list)
     service_times: list[float] = field(default_factory=list)
     system_times: list[float] = field(default_factory=list)
@@ -214,6 +220,8 @@ def _customer(
         service_time = service_rng.expovariate(1.0 / mean_service)
         yield env.timeout(service_time)
     stats.completed += 1
+    if env.now >= warm_up:
+        stats.window_departures += 1
     if arrival_time >= warm_up:
         stats.observed_completed += 1
         stats.wait_times.append(service_start - arrival_time)
@@ -237,9 +245,13 @@ def _arrivals(
             return
         yield env.timeout(delay)
         stats.arrivals += 1
+        if env.now >= config.warm_up:
+            stats.window_arrivals += 1
         system_capacity = config.servers + config.queue_capacity
         if resource.count + len(resource.queue) >= system_capacity:
             stats.rejected += 1
+            if env.now >= config.warm_up:
+                stats.window_rejected += 1
             continue
         stats.admitted += 1
         env.process(
@@ -264,6 +276,9 @@ def run_simulation(
 ) -> dict[str, Any]:
     """Run one bounded replication and return a strict-JSON-compatible report."""
 
+    # Dataclasses can be constructed directly; library callers need the same
+    # validation and execution bounds as JSON callers.
+    config = QueueConfig.from_mapping(asdict(config))
     simpy_module = load_simpy()
     replication = integer(
         replication,
@@ -322,7 +337,7 @@ def run_simulation(
         )
 
     loss_probability = (
-        stats.rejected / stats.arrivals if stats.arrivals else None
+        stats.window_rejected / stats.window_arrivals if stats.window_arrivals else None
     )
     report = {
         "config": asdict(config),
@@ -333,6 +348,9 @@ def run_simulation(
             "observed_completed": stats.observed_completed,
             "rejected": stats.rejected,
             "unfinished_at_horizon": unfinished,
+            "window_arrivals": stats.window_arrivals,
+            "window_rejected": stats.window_rejected,
+            "window_departures": stats.window_departures,
         },
         "event_processing": {
             "limit": config.max_events,
@@ -350,11 +368,18 @@ def run_simulation(
                 start=config.warm_up, end=config.horizon
             ),
             "throughput_per_time_unit": (
-                stats.observed_completed / observed_duration
+                stats.window_departures / observed_duration
             ),
         },
         "replication": replication,
-        "schema_version": "1.1",
+        "metric_windows": {
+            "time_weighted": "[warm_up, horizon)",
+            "throughput": "departures in [warm_up, horizon), regardless of arrival time",
+            "loss_probability": "rejected / all arrivals in [warm_up, horizon)",
+            "customer_means": "arrived at/after warm_up and completed before horizon",
+        },
+        "schema_version": "1.2",
+        "simpy_version": simpy_module.__version__,
         "seed_manifest": {
             "algorithm": "BLAKE2b-derived Python random.Random streams",
             "arrival_seed": arrival_seed,

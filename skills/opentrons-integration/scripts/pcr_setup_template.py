@@ -111,8 +111,14 @@ def run(protocol: protocol_api.ProtocolContext) -> None:
 
     with protocol.group_steps(
         name="Run PCR",
-        description="Close the lid and execute the example PCR profile.",
+        description="Confirm the plate seal, close the lid, and run the profile.",
     ):
+        protocol.pause(
+            "Verify the PCR sealing setup and plate seating. Use a compatible "
+            "seal or lid according to its instructions; do not combine a "
+            "disposable auto-sealing lid with the Thermocycler's rubber seal. "
+            "Resume only when ready to close and heat."
+        )
         thermocycler.close_lid()
         thermocycler.set_lid_temperature(temperature=105)
         thermocycler.set_block_temperature(

@@ -195,11 +195,21 @@ explainer = shap.TreeExplainer(
 
 It is not a fix for huge, non-finite, or wrong-unit values.
 
+### Finite values and label-dependent loss
+
+Require finite predictions, base values, contributions, and tolerances before trusting a reconstruction. NaN/Infinity cannot be repaired by larger tolerances. A tree-loss explanation may have callable `base_values`; evaluate `loss_explainer.expected_value(label)` for each row's encoded label before addition. Then check the exact model-specific loss, not just whether the call completed. See [workflows.md](workflows.md) for the explicit callable fallback and 0.52.0 sklearn loss limitations.
+
+### Background size appears ineffective
+
+Inspect `len(explainer.data)` or `len(explainer.masker.data)`. A bare 250-row frame can be internally sampled to 100 rows. Retain a selected sample with `shap.maskers.Independent(background, max_samples=len(background))`; changing the cap can change the baseline as well as runtime.
+
 ## Tree Model Problems
 
 ### Categorical splits
 
 Support differs across XGBoost, LightGBM, CatBoost, and scikit-learn categorical configurations. SHAP 0.49 added categorical-split support in the C++ library, and 0.52 tightened unsupported categorical handling in GPU/sklearn paths.
+
+XGBoost 3.4.1 defaults `enable_categorical=True`. SHAP 0.52.0 rejects that flag in the interventional path even on an all-numeric fixture. For a new numeric-only model, construct it with `enable_categorical=False` and validate predictions/explanations. For actual categorical models, retain the schema and use a supported path-dependent/raw or model-agnostic workflow; changing the flag or arbitrary integer coding is not a general fix. Tiny 3.4.1 numeric fixtures passed raw, probability, log-loss, `predict_proba`, multiclass, and interaction checks.
 
 If an error mentions categorical splits:
 
@@ -220,6 +230,10 @@ print(X_eval.dtypes)
 ```
 
 Prefer upgrading within the project's compatibility window.
+
+### A small constant reconstruction offset
+
+For scikit-learn forests, prediction converts inputs to float32, but that alone does not guarantee native SHAP threshold parity: the 0.52.0 independent-tree implementation stores thresholds as float. The bundled seed-3/150-background-row configuration still has about a 2.8e-5 reconstruction offset after matching float32 inputs. Its baseline agrees with the model's background mean, so changing the baseline or subtracting that offset would conceal an attribution error. The report rejects this configuration. Use a separately validated model-agnostic explainer for the same output/background when exact tree reconstruction fails; do not silently switch the explanation game or relax tolerance.
 
 ### Missing values
 
@@ -248,7 +262,7 @@ def model_fn(array):
     return pipeline.predict_proba(frame)
 ```
 
-This is safe only when all columns can be reconstructed without losing categorical dtypes. Prefer a masker/callable path that preserves DataFrames.
+This numeric-column pattern restores names after delta masking. Mixed categorical/object inputs can fail earlier in the masker's numeric invariance checks; use a tested domain masker or a validated numeric transformed representation. Restoring a DataFrame alone does not solve that failure.
 
 ### Transformed names are wrong
 
@@ -291,7 +305,7 @@ If gradients are needed by the explainer, do not wrap the explainer call itself 
 
 Try:
 
-1. a scalar-output wrapper;
+1. a selected-output wrapper (for PyTorch, retain `(batch, 1)`);
 2. one input row;
 3. a smaller background;
 4. `GradientExplainer`;
@@ -440,3 +454,7 @@ Remove credentials, environment variables, private paths, and sensitive data.
 - DeepExplainer API: https://shap.readthedocs.io/en/latest/generated/shap.DeepExplainer.html
 - Plot API: https://shap.readthedocs.io/en/latest/api.html#plots
 - SHAP GitHub issues: https://github.com/shap/shap/issues
+
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/cext/tree_shap.h
+- Released source / upstream contract: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
+- XGBoost API (live docs may track a newer patch; native target here is 3.4.1): https://xgboost.readthedocs.io/en/stable/python/python_api.html

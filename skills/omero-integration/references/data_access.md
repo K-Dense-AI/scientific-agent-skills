@@ -140,11 +140,11 @@ Filters can further narrow a query:
 
 ```python
 owner_id = conn.getUser().getId()
+conn.SERVICE_OPTS.setOmeroGroup(str(group_id))
 projects = conn.getObjects(
     "Project",
     opts={
         "owner": owner_id,
-        "group": group_id,
         "limit": 20,
         "offset": 0,
         "order_by": "obj.id",
@@ -177,6 +177,9 @@ for dataset_index, dataset in enumerate(project.listChildren()):
         print(image.getId())
 ```
 
+`listChildren()` can materialize the child collection before yielding; these
+loop caps bound output, not the query or memory. Prefer paged `getObjects()`
+with `project`, `dataset`, or `plate` filters for large containers.
 `countChildren()` can help plan a cap but does not replace one. A count may
 change before retrieval.
 
@@ -214,6 +217,9 @@ for well_index, well in enumerate(plate.listChildren()):
         if image is not None:
             print(image.getId())
 ```
+
+A Well may load all WellSamples before `countWellSample()` or `getImage()`
+returns. The field cap above limits output, not the loaded graph.
 
 Well rows/columns and field counts can reveal experiment design. Include them
 only when requested.
@@ -272,6 +278,10 @@ omero download Image:123 ./explicit-empty-directory
 # Original files in one fileset:
 omero download Fileset:456 ./explicit-empty-directory
 ```
+
+The current `omero download` plugin sets cross-group context internally for
+Image/Fileset lookups. Verify the selected object’s group before using it; the
+CLI session group alone does not constrain these lookups.
 
 Authenticate through an already prompted CLI session. Do not add `-w`,
 `--password`, or `-k` to reusable command text. Reject symlinked destinations

@@ -1,8 +1,13 @@
 # Research Poster Design Principles
 
+Reviewed 2026-09-30. Design numbers are starting points, not measured guarantees.
+Code fragments are illustrative; use the bundled tested templates as the executable
+starting point. Replace example names, statistics, citations, URLs, and assets with
+verified project content.
+
 ## Overview
 
-Effective poster design balances visual appeal, readability, and scientific content. This guide covers typography, color theory, visual hierarchy, accessibility, and evidence-based design principles for research posters.
+Effective poster design balances visual appeal, readability, and scientific content. This guide covers typography, color theory, visual hierarchy, accessibility, and practical design starting points for research posters.
 
 ## Core Design Principles
 
@@ -35,11 +40,11 @@ Guide viewers through content in logical order using size, color, position, and 
 
 **Implementation**:
 ```latex
-% Define hierarchy in LaTeX
-\setbeamerfont{title}{size=\VeryHuge,series=\bfseries}        % 90pt+
-\setbeamerfont{block title}{size=\Huge,series=\bfseries}      % 60pt
-\setbeamerfont{block body}{size=\LARGE}                        % 30pt
-\setbeamerfont{caption}{size=\large}                           % 24pt
+% Illustrative Beamer font settings; sizes depend on class and poster scale.
+\setbeamerfont{title}{size=\VeryHuge,series=\bfseries}
+\setbeamerfont{block title}{size=\Huge,series=\bfseries}
+\setbeamerfont{block body}{size=\LARGE}
+\setbeamerfont{caption}{size=\large}
 ```
 
 ### 2. White Space (Negative Space)
@@ -53,7 +58,7 @@ Empty space is not wasted space—it enhances readability and guides attention.
 - **Flow**: Creates visual pathways through content
 
 **Guidelines**:
-- Minimum 5-10% margins on all sides
+- Keep a safe margin required by the printer, then choose padding for readability
 - Consistent spacing between blocks (1-2cm)
 - Space around figures equal to or greater than border width
 - Group related items closely, separate unrelated items
@@ -171,7 +176,7 @@ Weak Fallow      Terminal Area
 \usepackage{helvet}
 \renewcommand{\familydefault}{\sfdefault}
 
-% Arial-like
+% Avant Garde (not Arial)
 \usepackage{avant}
 \renewcommand{\familydefault}{\sfdefault}
 
@@ -195,18 +200,11 @@ Weak Fallow      Terminal Area
 - Read from 2-3 feet distance
 - If legible, full-scale poster will be readable from 8-12 feet
 
-**Size Conversion**:
-| LaTeX Command | Approximate Size | Use Case |
-|---------------|------------------|----------|
-| `\tiny` | 10pt | Avoid on posters |
-| `\small` | 16pt | Minimal use only |
-| `\normalsize` | 20pt | References (scaled up) |
-| `\large` | 24pt | Captions, small text |
-| `\Large` | 28pt | Body text (minimum) |
-| `\LARGE` | 32pt | Body text (recommended) |
-| `\huge` | 36pt | Subheadings |
-| `\Huge` | 48pt | Section headers |
-| `\VeryHuge` | 72pt+ | Title |
+**Font commands are class-dependent.** `\Large`, `\Huge`, and related commands
+change with the document class and poster scale; there is no universal point-size
+conversion table. `\VeryHuge` is provided by beamerposter, not ordinary LaTeX.
+For explicit control, use `\fontsize{30}{36}\selectfont` in the appropriate scope
+and verify the rendered PDF at final size.
 
 ### Text Formatting Best Practices
 
@@ -324,9 +322,9 @@ Ensure readability with sufficient contrast:
 - ❌ Blue on black (hard to read)
 - ❌ Any pure colors on each other
 
-**Contrast Ratio Standards**:
-- Minimum: 4.5:1 (WCAG AA)
-- Recommended: 7:1 (WCAG AAA)
+**Conservative Contrast Targets**:
+- Aim for at least 4.5:1 for text, with 7:1 where practical
+- WCAG AA permits 3:1 for large text; print conditions also need evaluation
 - Test at: https://webaim.org/resources/contrastchecker/
 
 **LaTeX Color Contrast**:
@@ -342,7 +340,7 @@ Ensure readability with sufficient contrast:
 
 ### Color-Blind Friendly Palettes
 
-~8% of males and ~0.5% of females have color vision deficiency.
+Color-vision differences vary across people and populations; test distinctions with redundant encoding.
 
 **Safe Color Combinations**:
 - Blue + Orange (most universally distinguishable)
@@ -358,15 +356,7 @@ Ensure readability with sufficient contrast:
 
 **Recommended Palettes**:
 
-**IBM Color Blind Safe** (excellent accessibility):
-```latex
-\definecolor{ibmblue}{RGB}{100,143,255}
-\definecolor{ibmmagenta}{RGB}{254,97,0}
-\definecolor{ibmpurple}{RGB}{220,38,127}
-\definecolor{ibmcyan}{RGB}{33,191,115}
-```
-
-**Okabe-Ito Palette** (scientifically tested):
+**Okabe-Ito Palette** (use redundant shapes/labels as well):
 ```latex
 \definecolor{okorange}{RGB}{230,159,0}
 \definecolor{okskyblue}{RGB}{86,180,233}
@@ -388,21 +378,9 @@ Ensure readability with sufficient contrast:
 
 ### Institutional Branding
 
-Match university or department colors:
-
-```latex
-% Example: Stanford colors
-\definecolor{stanford-red}{RGB}{140,21,21}
-\definecolor{stanford-gray}{RGB}{83,86,90}
-
-% Example: MIT colors
-\definecolor{mit-red}{RGB}{163,31,52}
-\definecolor{mit-gray}{RGB}{138,139,140}
-
-% Example: Cambridge colors
-\definecolor{cambridge-blue}{RGB}{163,193,173}
-\definecolor{cambridge-lblue}{RGB}{212,239,223}
-```
+Obtain current colors and logo assets from the institution's official brand guide.
+Do not infer official identity from an example palette or regenerate a logo with AI.
+Use xcolor RGB/HTML/CMYK values as specified by that guide and the printer.
 
 ## Accessibility Considerations
 
@@ -432,16 +410,12 @@ Design posters usable by the widest range of people:
 
 ### Alternative Text and Descriptions
 
-Make posters accessible to screen readers (for digital versions):
-
-```latex
-% Add alt text to figures
-\includegraphics[width=\linewidth]{figure.pdf}
-% Alternative: Include detailed caption
-\caption{Bar graph showing mean±SD of treatment outcomes. 
-Control group (blue): 45±5\%; Treatment group (orange): 78±6\%. 
-Asterisks indicate significance: *p<0.05, **p<0.01.}
-```
+A visible caption is useful but does not create a tagged PDF or figure alternative
+text. [CTAN currently marks beamerposter tagging unsupported](https://ctan.org/pkg/beamerposter).
+Do not claim accessible PDF conformance from successful compilation or a comment
+beside `\includegraphics`. Inspect reading order/tags using appropriate validators;
+provide a separate accessible text/HTML summary when the chosen class cannot meet
+the accessibility requirement.
 
 ### Multi-Modal Information
 
@@ -634,10 +608,12 @@ Strategic use of icons enhances comprehension:
 
 % Watermark
 \usepackage{tikz}
-\AddToShipoutPictureBG{
-  \AtPageCenter{
-    \includegraphics[width=0.5\paperwidth,opacity=0.05]{university-seal.pdf}
-  }
+\usepackage{eso-pic}
+\AddToShipoutPictureBG{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[opacity=0.05] at (current page.center)
+      {\includegraphics[width=0.5\paperwidth]{university-seal.pdf}};
+  \end{tikzpicture}%
 }
 ```
 
@@ -679,7 +655,7 @@ Strategic use of icons enhances comprehension:
 - ❌ Pixelated images (<300 DPI)
 - ❌ Tiny axis labels
 - ❌ Unreadable legends
-- ✅ Solution: Vector graphics (PDF/SVG), large labels, clear legends
+- ✅ Solution: Vector graphics (PDF (convert SVG first)), large labels, clear legends
 
 **7. Color Overload**
 - ❌ Too many colors (>5 distinct hues)
@@ -736,34 +712,17 @@ Strategic use of icons enhances comprehension:
 - [ ] Data visualizations are clear and honest
 - [ ] Statistical significance properly indicated
 
-## Evidence-Based Design Recommendations
+## Validate design with readers
 
-Research on poster effectiveness shows:
+Treat word budgets, column counts, and viewing distances as starting assumptions.
+Test the actual poster with representative readers: can they identify the question,
+main result, uncertainty, and limitations? Do not attach numerical claims about
+processing speed, recall, comprehension, or engagement without primary evidence.
 
-**Findings from Studies**:
-1. **Viewers spend 3-5 minutes average** on posters
-   - Design for scanning, not deep reading
-   - Most important info must be visible immediately
-
-2. **Visual content processed 60,000× faster** than text
-   - Use figures, not paragraphs, to convey key findings
-   - Images attract attention first
-
-3. **High contrast improves recall** by 40%
-   - Dark on light > light on dark for comprehension
-   - Color contrast aids memory retention
-
-4. **White space increases comprehension** by 20%
-   - Don't fear empty space
-   - Margins and padding are essential
-
-5. **Three-column layouts most effective** for portrait posters
-   - Balanced visual weight
-   - Natural reading flow
-
-6. **QR codes increase engagement** by 30%
-   - Provide digital access to full paper
-   - Link to videos, code repositories, data
+For digital contrast targets, [WCAG 2.2 SC 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+sets 4.5:1 for ordinary text and 3:1 for large text. These web criteria inform the
+palette; a printed proof is still required for lighting, paper, and color shifts.
+Meeting contrast alone does not establish WCAG or PDF accessibility conformance.
 
 ## Resources and Tools
 

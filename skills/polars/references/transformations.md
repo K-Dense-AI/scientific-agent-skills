@@ -1,6 +1,7 @@
 # Polars Data Transformations
 
-Comprehensive guide to joins, concatenation, and reshaping operations in Polars.
+Polars 1.44.2 patterns. Fragments require the named input columns; see
+[review.md](review.md) for the bounded native checks and untested integrations.
 
 ## Joins
 
@@ -43,6 +44,18 @@ result = df1.join(df2, on="id", how="semi")
 # Keep only left rows that DON'T have a match in right
 result = df1.join(df2, on="id", how="anti")
 ```
+
+### Join correctness
+
+Default `validate="m:m"` does not check uniqueness. Use `validate="m:1"` for
+a sample-to-metadata join or `"1:1"` for paired samples; duplicate keys otherwise
+multiply observations. Audit unmatched keys with anti joins. The current docs
+exclude validation from streaming support: validate keys independently before a
+large streaming join, and test the selected engine.
+
+Null keys do not match unless `nulls_equal=True` (formerly `join_nulls`). Full joins
+retain both key columns by default; choose `coalesce=True` if merged keys are wanted.
+Request `maintain_order="left"` or sort by explicit keys when order matters.
 
 ### Join Syntax Variations
 
@@ -131,7 +144,7 @@ For time-series data, join to nearest timestamp:
 ```python
 # Join to nearest earlier timestamp
 quotes = pl.DataFrame({
-    "timestamp": [1, 2, 3, 4, 5],
+    "timestamp": [1.0, 2.0, 3.0, 4.0, 5.0],
     "stock": ["A", "A", "A", "A", "A"],
     "quote": [100, 101, 102, 103, 104]
 })
@@ -142,13 +155,18 @@ trades = pl.DataFrame({
     "trade": [50, 75, 100]
 })
 
-result = trades.join_asof(
-    quotes,
+result = trades.sort("stock", "timestamp").join_asof(
+    quotes.sort("stock", "timestamp"),
     on="timestamp",
     by="stock",
-    strategy="backward"  # or "forward", "nearest"
+    strategy="backward",  # or "forward", "nearest"
+    tolerance=0.6,  # timestamp units; unmatched rows retain null quote
 )
 ```
+
+As-of keys must have matching dtypes and be sorted within each `by` group. Polars
+cannot verify grouped sortedness automatically in every case. `nearest` may match
+a future observation; choose direction and tolerance according to the study.
 
 ## Concatenation
 
@@ -182,20 +200,28 @@ df1 = pl.DataFrame({"a": [1, 2, 3]})
 df2 = pl.DataFrame({"b": [4, 5, 6]})
 
 # Stack columns
-result = pl.concat([df1, df2], how="horizontal")
+result = pl.concat([df1, df2], how="horizontal_extend")
 # Result: 3 rows, columns a and b
 ```
 
-**Note:** Horizontal concat requires same number of rows.
+**Note:** Horizontal concat aligns by row position and pads shorter frames with nulls
+with `how="horizontal_extend"`. In 1.44.2, `how="horizontal"` also pads but is
+deprecated toward an equal-height contract; `strict` is transitional/deprecated.
+Validate heights explicitly when needed; a keyed join is safer for sample alignment. `vertical` requires matching schemas; the `*_relaxed`
+variants coerce to a common supertype, so inspect the result dtype.
 
-### Concatenation Options
+#As-of keys must have matching dtypes and be sorted within each `by` group. Polars
+cannot verify grouped sortedness automatically in every case. `nearest` may match
+a future observation; choose direction and tolerance according to the study.
+
+## Concatenation Options
 
 ```python
 # Rechunk after concatenation (better performance for subsequent operations)
 result = pl.concat([df1, df2], rechunk=True)
 
-# Parallel execution
-result = pl.concat([df1, df2], parallel=True)
+# Parallel subplans (applies to LazyFrames)
+result = pl.concat([lf1, lf2], parallel=True)
 ```
 
 ### Use Cases
@@ -212,7 +238,7 @@ combined = pl.concat(dfs, how="vertical")
 ```python
 base = pl.DataFrame({"value": [1, 2, 3]})
 computed = pl.DataFrame({"doubled": [2, 4, 6]})
-result = pl.concat([base, computed], how="horizontal")
+result = pl.concat([base, computed], how="horizontal_extend")
 ```
 
 ## Pivoting (Wide Format)
@@ -239,6 +265,18 @@ pivoted = df.pivot(
 # 2023-01  | 100 | 150
 # 2023-02  | 120 | 160
 ```
+
+In 1.44.2, `LazyFrame.pivot` is available with required `on_columns`, which declares
+the output categories before execution (the API is unstable):
+
+```python
+pivoted_lazy = df.lazy().pivot(
+    on="product", on_columns=["A", "B"], values="sales", index="date"
+).collect()
+```
+Validate that observed categories belong to `on_columns`; undeclared levels can be
+excluded. Duplicate cells raise unless an aggregation is supplied. Choose a
+scientifically meaningful aggregation, not `first` merely to silence duplicate data.
 
 ### Pivot with Aggregation
 
@@ -279,6 +317,9 @@ pivoted = df.pivot(
 
 ## Unpivoting/Melting (Long Format)
 
+Use column names or selectors (`import polars.selectors as cs`) for `on`, not a
+general expression. Sort the result explicitly if a particular row order is needed.
+
 Convert multiple columns into rows (opposite of pivot).
 
 ### Basic Unpivot
@@ -298,8 +339,8 @@ unpivoted = df.unpivot(
 # Result:
 # date     | variable   | value
 # 2023-01  | product_A  | 100
-# 2023-01  | product_B  | 150
 # 2023-02  | product_A  | 120
+# 2023-01  | product_B  | 150
 # 2023-02  | product_B  | 160
 ```
 
@@ -329,13 +370,16 @@ df = pl.DataFrame({
 # Unpivot all sales columns
 unpivoted = df.unpivot(
     index="id",
-    on=pl.col("^sales_.*$")
+    on=cs.matches("^sales_.*$")
 )
 ```
 
 ## Exploding (Unnesting Lists)
 
-Convert list columns into multiple rows.
+Convert list columns into multiple rows. Choose `empty_as_null` explicitly: `True`
+retains an empty-list record as one null, `False` drops it. The default changes in
+Polars 2.0. `keep_nulls=True` separately preserves null lists. Check both policies
+against the experimental-unit counts.
 
 ### Basic Explode
 
@@ -346,7 +390,7 @@ df = pl.DataFrame({
 })
 
 # Explode list into rows
-exploded = df.explode("values")
+exploded = df.explode("values", empty_as_null=True)
 # Result:
 # id | values
 # 1  | 1
@@ -366,7 +410,7 @@ df = pl.DataFrame({
 })
 
 # Explode multiple columns (must be same length)
-exploded = df.explode("letters", "numbers")
+exploded = df.explode("letters", "numbers", empty_as_null=True)
 ```
 
 ## Transposing
@@ -422,7 +466,7 @@ df = pl.DataFrame({
 
 # Explode and unnest
 flat = (
-    df.explode("purchases")
+    df.explode("purchases", empty_as_null=True)
     .unnest("purchases")
 )
 ```
@@ -455,7 +499,7 @@ result = (
 df.filter(pl.col("year") >= 2020).pivot(...)
 
 # Unpivot with filtering
-df.unpivot(index="id", on=pl.col("^sales.*$"))
+df.unpivot(index="id", on=cs.matches("^sales.*$"))
 ```
 
 ### Multi-level Transformations
@@ -464,7 +508,7 @@ df.unpivot(index="id", on=pl.col("^sales.*$"))
 # Complex reshaping pipeline
 result = (
     df
-    .unpivot(index="id", on=pl.col("^Q[0-9]_.*$"))
+    .unpivot(index="id", on=cs.matches("^Q[0-9]_.*$"))
     .with_columns(
         quarter=pl.col("variable").str.extract(r"Q([0-9])", 1),
         metric=pl.col("variable").str.extract(r"Q[0-9]_(.*)", 1)
@@ -479,13 +523,12 @@ result = (
 ### Join Performance
 
 ```python
-# 1. Join on indexed/sorted columns when possible
-df1_sorted = df1.sort("id")
-df2_sorted = df2.sort("id")
-result = df1_sorted.join(df2_sorted, on="id")
+# 1. Polars has no row index; pre-sorting equi-joins is not universally faster.
+# Benchmark the optimized lazy plan on representative data.
+result = df1.join(df2, on="id", validate="m:1")
 
 # 2. Use appropriate join type
-# semi/anti are faster than inner+filter
+# semi/anti avoid materializing right-side columns and duplicate matches
 matches = df1.join(df2, on="id", how="semi")  # Better than filtering after inner join
 
 # 3. Filter before joining
@@ -493,7 +536,11 @@ df1_filtered = df1.filter(pl.col("active"))
 result = df1_filtered.join(df2, on="id")  # Smaller join
 ```
 
-### Concatenation Performance
+#As-of keys must have matching dtypes and be sorted within each `by` group. Polars
+cannot verify grouped sortedness automatically in every case. `nearest` may match
+a future observation; choose direction and tolerance according to the study.
+
+## Concatenation Performance
 
 ```python
 # 1. Rechunk after concatenation
@@ -511,8 +558,8 @@ result = pl.concat([lf1, lf2]).collect()
 # 1. Filter before pivoting
 pivoted = df.filter(pl.col("year") == 2023).pivot(...)
 
-# 2. Specify aggregate function explicitly
-pivoted = df.pivot(..., aggregate_function="first")  # Faster than "sum" if only one value
+# 2. Define the scientific aggregation; no aggregation detects duplicate cells.
+pivoted = df.pivot(on="product", values="sales", index="date")
 ```
 
 ## Common Use Cases
@@ -521,14 +568,16 @@ pivoted = df.pivot(..., aggregate_function="first")  # Faster than "sum" if only
 
 ```python
 # Align two time series with different timestamps
-ts1.join_asof(ts2, on="timestamp", strategy="backward")
+ts1.sort("timestamp").join_asof(
+    ts2.sort("timestamp"), on="timestamp", strategy="backward", tolerance="1s"
+)  # Assumes matching Datetime keys; choose the tolerance for the experiment
 ```
 
 ### Feature Engineering
 
 ```python
-# Create lag features
-df.with_columns(
+# Create lag features in timestamp order within each user
+df.sort("user_id", "timestamp").with_columns(
     pl.col("value").shift(1).over("user_id").alias("prev_value"),
     pl.col("value").shift(2).over("user_id").alias("prev_prev_value")
 )

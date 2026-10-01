@@ -8,13 +8,13 @@ https://api.datacommons.org
 
 ## Authentication
 
-**API key required.** Obtain from the Google Cloud Console (enable the Data Commons API).
+**API key required.** Obtain through https://apikeys.datacommons.org/.
 
 Pass as query parameter: `&key=YOUR_KEY`
 
 Or as header: `X-API-Key: YOUR_KEY`
 
-Note: Many endpoints work without a key for light usage, but a key is recommended for reliable access.
+All access to the base Data Commons requires a key. Custom Data Commons instances have their own base URL and do not accept the base-service key.
 
 ## Key Endpoints
 
@@ -28,7 +28,7 @@ GET /v2/observation
 | entity.dcids | Yes     | Place DCID(s) (e.g., `country/USA`, `geoId/06`)          |
 | variable.dcids| Yes    | Statistical variable DCID(s)                               |
 | date         | No       | Specific date or `LATEST`                                 |
-| select       | No       | Fields to select: `entity`, `variable`, `date`, `value`   |
+| select       | Yes       | Fields to select: `entity`, `variable`, `date`, `value`   |
 
 Example:
 ```
@@ -66,27 +66,11 @@ Example (get name of a place):
 https://api.datacommons.org/v2/node?key=YOUR_KEY&nodes=geoId/06&property=->name
 ```
 
-### 4. SPARQL Query
-```
-POST /v2/sparql
-```
-Content-Type: `application/json`
+### 4. Supported V2 operations
 
-Body:
-```json
-{
-  "query": "SELECT ?name WHERE { ?state typeOf State . ?state name ?name . ?state containedInPlace country/USA }"
-}
-```
-
-Pass API key as query param or header.
-
-Example (curl):
-```
-curl -X POST 'https://api.datacommons.org/v2/sparql?key=YOUR_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{"query": "SELECT ?name WHERE { ?place typeOf Country . ?place name ?name } LIMIT 10"}'
-```
+V2 provides `/observation`, `/node` and `/resolve`, each supporting GET and POST.
+It does not expose `/v2/sparql`. For graph queries outside these operations,
+consult the documented Data Commons BigQuery access.
 
 ### 5. Resolve Entities (map names/coords to DCIDs)
 ```
@@ -103,18 +87,17 @@ Example (resolve by name):
 https://api.datacommons.org/v2/resolve?key=YOUR_KEY&nodes=California&property=<-description->dcid
 ```
 
-### 6. Search for Statistical Variables
-```
-GET /v2/variable/search
-```
-| Parameter | Required | Description            |
-|-----------|----------|------------------------|
-| key       | Yes      | API key                |
-| query     | Yes      | Search keywords        |
+### 6. Search for statistical variables
 
-Example:
-```
-https://api.datacommons.org/v2/variable/search?key=YOUR_KEY&query=unemployment+rate
+Use `/v2/resolve` with `resolver=indicator` and `nodes` containing a natural-language
+description. Resolve returns candidate DCIDs and match metadata; inspect the
+candidates and variable definitions before retrieving observations.
+
+```bash
+# Illustrative authenticated request
+curl --fail-with-body --get 'https://api.datacommons.org/v2/resolve' \
+  -H "X-API-Key: $DATACOMMONS_API_KEY" \
+  --data-urlencode 'nodes=unemployment rate' --data-urlencode 'resolver=indicator'
 ```
 
 ## Common DCIDs
@@ -199,32 +182,16 @@ https://api.datacommons.org/v2/variable/search?key=YOUR_KEY&query=unemployment+r
 }
 ```
 
-### SPARQL response
-```json
-{
-  "header": ["?name"],
-  "rows": [
-    { "cells": [{ "value": "Alabama" }] },
-    { "cells": [{ "value": "Alaska" }] }
-  ]
-}
-```
+### Resolve and pagination
 
-### Variable search response
-```json
-{
-  "variables": [
-    {
-      "dcid": "UnemploymentRate_Person",
-      "displayName": "Unemployment Rate"
-    }
-  ]
-}
-```
+Resolve responses contain `entities`, each with the input `node` and a list of
+`candidates`. For any paginated V2 response, repeat the same request with its
+`nextToken` until no continuation token remains. Keep facet provenance with
+observations; dates, units and measurement methods can differ across facets.
 
 ## Rate Limits
 
-- Without API key: very limited (roughly a few requests per minute; may be blocked).
+- Base-service requests require an API key; quota depends on the issued key.
 - With API key: not formally published, but generally generous for normal use.
 - Implement client-side throttling (1-2 requests/second recommended).
 - Bulk data available via the Data Commons data download for large-scale analysis.
@@ -235,3 +202,5 @@ https://api.datacommons.org/v2/variable/search?key=YOUR_KEY&query=unemployment+r
 - Older V1 endpoints (`/v1/bulk/observations/series`, `/stat/value`, etc.) still work but are deprecated.
 - DCID = Data Commons Identifier. Every entity, statistical variable, and concept has a unique DCID.
 - The knowledge graph includes data from US Census, World Bank, CDC, BLS, FBI, and many other sources.
+
+Official contracts: [V2](https://docs.datacommons.org/api/rest/v2/), [resolve](https://docs.datacommons.org/api/rest/v2/resolve.html).

@@ -2,8 +2,7 @@
 
 ## Base URLs
 - **OLS (Ontology Lookup Service) API**: `https://www.ebi.ac.uk/ols4/api`
-- **ChEBI Web Services (SOAP)**: `https://www.ebi.ac.uk/webservices/chebi/2.0/test` (SOAP/XML only)
-- **ChEBI LibChebi REST (limited)**: entity pages at `https://www.ebi.ac.uk/chebi`
+- **ChEBI REST API**: `https://www.ebi.ac.uk/chebi/backend/api/public`
 
 ## Authentication
 None required. All endpoints are public.
@@ -12,7 +11,7 @@ None required. All endpoints are public.
 No published hard limits. EBI general guidance: reasonable usage.
 
 ## Important Note
-ChEBI's primary web service is **SOAP-based** (XML), not REST. For REST-style JSON access, use the **EBI OLS4 API** which indexes ChEBI as an ontology.
+ChEBI 2.0 replaced the deprecated SOAP service with a public REST API. Use ChEBI REST for chemical records and structure searches; OLS4 remains useful for ontology traversal.
 
 ---
 
@@ -80,24 +79,30 @@ GET https://www.ebi.ac.uk/ols4/api/ontologies/chebi
 }
 ```
 
-## ChEBI SOAP Web Service (Alternative)
-If you need chemical-specific data (formula, mass, structure, InChI), use the SOAP service:
-- WSDL: `https://www.ebi.ac.uk/webservices/chebi/2.0/webservice?wsdl`
-- Operations: `getCompleteEntity`, `getLiteEntity`, `getStructureSearch`, `getOntologyChildren`, `getOntologyParents`
-- Returns XML only.
+## ChEBI 2.0 REST endpoints
 
-Example SOAP request for `getCompleteEntity`:
-```xml
-<soapenv:Body>
-  <chebi:getCompleteEntity>
-    <chebi:chebiId>CHEBI:15365</chebi:chebiId>
-  </chebi:getCompleteEntity>
-</soapenv:Body>
+| GET path (relative to the ChEBI REST base) | Parameters / purpose |
+|---|---|
+| `/compound/{chebi_id}/` | Full entity; numeric ID or `CHEBI:` prefix |
+| `/es_search/` | `term` required; `page=1`, `size=15` defaults |
+| `/ontology/parents/{chebi_id}/` | Ontology parents |
+| `/ontology/children/{chebi_id}/` | Ontology children |
+| `/structure_search/` | `smiles`, `search_type=connectivity|similarity|substructure` |
+| `/molfile/{id}/` | Structure file |
+
+For similarity search, use `similarity` between 0.4 and 1.0. The default
+`three_star_only=true` limits structure results to three-star entries; explicitly
+set false when two-star entries are also in scope. Search pagination uses `page`
+and `size`. The current schema leaves several response bodies unspecified;
+inspect the returned JSON before choosing field paths, and do not assume OLS's
+`response.docs` envelope applies to ChEBI REST.
+
+Illustrative request:
+
+```bash
+curl --fail-with-body --get 'https://www.ebi.ac.uk/chebi/backend/api/public/es_search/' \
+  --data-urlencode 'term=aspirin' --data-urlencode 'page=1' --data-urlencode 'size=5'
 ```
-Returns: formula, mass, charge, InChI, InChIKey, SMILES, synonyms, database links, ontology parents/children.
 
-## Notes
-- For programmatic REST access, OLS4 is the easiest path.
-- For chemical structure searches (by InChI, SMILES, substructure), the SOAP service is required.
-- ChEBI IDs are numeric (e.g., 15365) but referenced as "CHEBI:15365" in OBO format.
-- PubChem and UniChem can cross-reference ChEBI IDs to other chemical databases.
+Reviewed 2026-09-30: [ChEBI OpenAPI](https://www.ebi.ac.uk/chebi/backend/api/schema/),
+[ChEBI 2.0 migration](https://www.ebi.ac.uk/about/news/updates-from-data-resources/chebi-2-0-launches/).

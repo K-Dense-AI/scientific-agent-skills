@@ -2,7 +2,15 @@
 
 ## World Coordinate System (astropy.wcs)
 
-The WCS module manages transformations between pixel coordinates in images and world coordinates (e.g., celestial coordinates).
+The WCS module manages transformations between pixel coordinates in images and world coordinates.
+Examples here assume a two-dimensional celestial WCS. Cubes can return multiple
+world objects; inspect `world_axis_physical_types` and select/slice axes explicitly.
+High-level methods use zero-based `(x, y)` pixels; NumPy indexes `(row, column)`
+or `(y, x)`. FITS `CRPIX` remains one-based. Low-level `all_pix2world` and
+`all_world2pix` require explicit `origin=0` or `1`. Preserve distortion HDUs
+with `WCS(header, fobj=hdul)` where needed and check warnings and round trips.
+User-file and GUI snippets are illustrative; synthetic numerical coverage is
+listed in [review evidence](review.md).
 
 ### Reading WCS from FITS
 
@@ -53,11 +61,12 @@ print(wcs)
 # Access key properties
 print(wcs.wcs.crpix)  # Reference pixel
 print(wcs.wcs.crval)  # Reference value (world coords)
-print(wcs.wcs.cd)     # CD matrix
+print(wcs.pixel_scale_matrix)  # Works with either CD or PC/CDELT representation
 print(wcs.wcs.ctype)  # Coordinate types
 
 # Pixel scale
-pixel_scale = wcs.proj_plane_pixel_scales()  # Returns Quantity array
+pixel_scale = wcs.proj_plane_pixel_scales()  # List of axis Quantities at CRPIX
+# Projection-plane scales are not a global angular scale for a distorted image.
 ```
 
 ### Creating WCS
@@ -67,11 +76,12 @@ from astropy.wcs import WCS
 
 # Create new WCS
 wcs = WCS(naxis=2)
-wcs.wcs.crpix = [512.0, 512.0]  # Reference pixel
+wcs.wcs.crpix = [512.0, 512.0]  # One-based; reference is pixel (511, 511) here
 wcs.wcs.crval = [10.5, 41.2]     # RA, Dec at reference pixel
 wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']  # Projection type
 wcs.wcs.cdelt = [-0.0001, 0.0001]  # Pixel scale (degrees/pixel)
 wcs.wcs.cunit = ['deg', 'deg']
+wcs.array_shape = (1024, 1024)  # (rows, columns), needed for footprint/bounds
 ```
 
 ### Footprint and Coverage
@@ -79,7 +89,14 @@ wcs.wcs.cunit = ['deg', 'deg']
 ```python
 # Calculate image footprint (corner coordinates)
 footprint = wcs.calc_footprint()
-# Returns array of [RA, Dec] for each corner
+# Returns [RA, Dec] corners for this celestial WCS; shape must be known.
+
+# Round trip and safe array indexing
+world = wcs.pixel_to_world(511, 511)
+x, y = wcs.world_to_pixel(world)
+assert np.allclose([x, y], [511, 511], atol=1e-7)
+row, col = wcs.world_to_array_index(world)
+assert 0 <= row < wcs.array_shape[0] and 0 <= col < wcs.array_shape[1]
 ```
 
 ## NDData (astropy.nddata)
@@ -100,7 +117,8 @@ ndd = NDData(data)
 # With units
 ndd = NDData(data, unit=u.electron/u.s)
 
-# With uncertainty
+# With an illustrative uncertainty array; replace with a calibrated noise model.
+# sqrt(data) is not a general uncertainty model for calibrated rates.
 from astropy.nddata import StdDevUncertainty
 uncertainty = StdDevUncertainty(np.sqrt(data))
 ndd = NDData(data, uncertainty=uncertainty, unit=u.electron/u.s)
@@ -162,10 +180,11 @@ power_law = models.PowerLaw1D(amplitude=10, x_0=1, alpha=2)
 true_model = models.Gaussian1D(amplitude=10, mean=5, stddev=1)
 x = np.linspace(0, 10, 100)
 y_true = true_model(x)
-y_noisy = y_true + np.random.normal(0, 0.5, x.shape)
+rng = np.random.default_rng(42)
+y_noisy = y_true + rng.normal(0, 0.5, x.shape)
 
 # Fit model
-fitter = fitting.LevMarLSQFitter()
+fitter = fitting.TRFLSQFitter()  # Current recommended bounded nonlinear fitter
 initial_model = models.Gaussian1D(amplitude=8, mean=4, stddev=1.5)
 fitted_model = fitter(initial_model, x, y_noisy)
 
@@ -178,11 +197,11 @@ print(f"Fitted stddev: {fitted_model.stddev.value}")
 
 ```python
 # Add models
-double_gauss = models.Gaussian1D(amp=5, mean=3, stddev=1) + \
-               models.Gaussian1D(amp=8, mean=7, stddev=1.5)
+double_gauss = models.Gaussian1D(amplitude=5, mean=3, stddev=1) + \
+               models.Gaussian1D(amplitude=8, mean=7, stddev=1.5)
 
 # Compose models
-composite = models.Gaussian1D(amp=10, mean=5, stddev=1) | \
+composite = models.Gaussian1D(amplitude=10, mean=5, stddev=1) | \
             models.Scale(factor=2)  # Scale output
 ```
 
@@ -208,6 +227,10 @@ plt.imshow(data, norm=norm, cmap='gray', origin='lower')
 plt.colorbar()
 plt.show()
 ```
+
+Check finite pixels and `vmin <= vmax` before plotting. Nearly constant images
+can produce degenerate ZScale limits; use an explicit scientifically appropriate
+display range in that case. Display normalization never calibrates the data.
 
 ### Stretching and Intervals
 
@@ -329,7 +352,7 @@ robust_scale = biweight_scale(data)
 
 ### Data Downloads
 
-`download_file()` fetches a remote URL and caches it locally. Treat the URL as data you are disclosing to the remote host; do not pass confidential signed URLs or internal file locations unless the workflow explicitly permits it. Use `cache=False` for one-off downloads that should not be retained in Astropy's cache.
+`download_file()` fetches a remote URL; persistent caching is opt-in (`cache=True`). Treat the URL as data you are disclosing to the remote host; do not pass confidential signed URLs or internal file locations unless the workflow explicitly permits it. Use `cache=False` for one-off downloads that should not be retained in Astropy's cache.
 
 ```python
 from astropy.utils.data import download_file
@@ -352,10 +375,13 @@ with ProgressBar(len(data_list)) as bar:
 
 ## SAMP (Simple Application Messaging Protocol)
 
-Interoperability with other astronomy tools.
+Astropy 8 deprecates `astropy.samp`; SAMP moved to `pyvo.samp` in PyVO 1.9.
+The following is an illustrative, unexecuted local-app integration requiring
+PyVO and a running hub. It sends the table URI to every connected SAMP client;
+use it only for an explicitly requested share and keep proprietary data local.
 
 ```python
-from astropy.samp import SAMPIntegratedClient
+from pyvo.samp import SAMPIntegratedClient
 
 # Connect to SAMP hub
 client = SAMPIntegratedClient()

@@ -1,6 +1,6 @@
 # EEG and microstates
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable source/runtime,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable source/runtime,
 the official EEG/microstate APIs, and SPR EEG/MEG guidance.
 
 ## Scope
@@ -193,7 +193,7 @@ Avoid frequency-band mental-state labels such as “beta = anxiety” or
 anesthesia control, seizure detection, or neurofeedback validation without a separate
 validated system and intended-use evidence.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official EEG API](https://neuropsychology.github.io/NeuroKit/functions/eeg.html)
 - [Official microstates API](https://neuropsychology.github.io/NeuroKit/functions/microstates.html)

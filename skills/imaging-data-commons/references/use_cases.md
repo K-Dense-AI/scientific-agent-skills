@@ -2,7 +2,8 @@
 
 **Tested with:** idc-index 0.12.5 (IDC data version v24)
 
-This guide provides complete end-to-end workflow examples for common IDC use cases. Each use case demonstrates the full workflow from query to download with best practices.
+These download and local-file processing examples are illustrative; metadata queries were
+smoke-tested with the pinned IDC release. This guide provides end-to-end workflow examples for common IDC use cases. Each use case demonstrates the full workflow from query to download with best practices.
 
 ## When to Use This Guide
 
@@ -34,7 +35,8 @@ query = """
 SELECT
   PatientID,
   SeriesInstanceUID,
-  SeriesDescription
+  SeriesDescription,
+  crdc_series_uuid, series_aws_url, license_short_name, source_DOI
 FROM index
 WHERE collection_id = 'nlst'
   AND Modality = 'CT'
@@ -92,17 +94,13 @@ for _, row in manufacturers.head(3).iterrows():
     mfr = row['Manufacturer']
     model = row['ManufacturerModelName']
 
-    query = f"""
-    SELECT SeriesInstanceUID
-    FROM index
-    WHERE Manufacturer = '{mfr}'
-      AND ManufacturerModelName = '{model}'
-      AND Modality = 'MR'
-      AND BodyPartExamined LIKE '%BRAIN%'
-    LIMIT 5
-    """
-
-    series = client.sql_query(query)
+    # Use DataFrame equality to handle quotes and missing values in vendor strings.
+    series = client.index[
+        client.index['Manufacturer'].eq(mfr) &
+        client.index['ManufacturerModelName'].eq(model) &
+        client.index['Modality'].eq('MR') &
+        client.index['BodyPartExamined'].str.contains('BRAIN', na=False)
+    ].head(5)
     client.download_from_selection(
         seriesInstanceUID=list(series['SeriesInstanceUID'].values),
         downloadDir=f"./quality_study/{mfr.replace(' ', '_')}"
@@ -152,10 +150,10 @@ SELECT
   SeriesInstanceUID,
   collection_id,
   PatientID,
-  Modality
+  Modality,
+  crdc_series_uuid, series_aws_url, license_short_name, source_DOI
 FROM index
-WHERE license_short_name LIKE 'CC BY%'
-  AND license_short_name NOT LIKE '%NC%'
+WHERE license_short_name IN ('CC BY 3.0', 'CC BY 4.0')
   AND Modality IN ('CT', 'MR')
   AND BodyPartExamined IN ('CHEST', 'BRAIN', 'ABDOMEN')
 LIMIT 200
@@ -238,36 +236,34 @@ print(f"Modality: {ds.Modality}")
 print(f"Image shape: {ds.pixel_array.shape}")
 ```
 
-**Build 3D volume from CT series:**
-```python
-import pydicom
-import numpy as np
-from pathlib import Path
+**Load one conventional CT series with SimpleITK:**
 
-def load_ct_series(series_path):
-    files = sorted(Path(series_path).glob('*.dcm'))
-    slices = [pydicom.dcmread(str(f)) for f in files]
-    slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
-    volume = np.stack([s.pixel_array for s in slices])
-    return volume, slices[0]
+This example requires local DICOM files and is illustrative. Use `volume_geometry_index`
+to screen candidates, then check orientation, spacing, missing/duplicate slices, and pixel
+units in the actual files. Sorting only `ImagePositionPatient[2]` is wrong for oblique or
+sagittal series, and raw `pixel_array` values are not automatically Hounsfield units.
 
-volume, metadata = load_ct_series("./data/lung_ct/series_dir")
-print(f"Volume shape: {volume.shape}")  # (z, y, x)
-```
-
-**Load DICOM series with SimpleITK (recommended for correct geometry):**
 ```python
 import SimpleITK as sitk
 
 series_path = "./data/ct_series"
+series_ids = sitk.ImageSeriesReader.GetGDCMSeriesIDs(series_path)
+if len(series_ids) != 1:
+    raise ValueError(f"Select exactly one CT series; found {len(series_ids)}")
 reader = sitk.ImageSeriesReader()
-dicom_names = reader.GetGDCMSeriesFileNames(series_path)
+dicom_names = reader.GetGDCMSeriesFileNames(series_path, series_ids[0])
 reader.SetFileNames(dicom_names)
 image = reader.Execute()
-
+print(image.GetSize(), image.GetSpacing(), image.GetDirection())
+# Confirm CT rescale/unit semantics before treating intensities as HU.
+image = sitk.Cast(image, sitk.sitkFloat32)
 smoothed = sitk.CurvatureFlow(image1=image, timeStep=0.125, numberOfIterations=5)
 sitk.WriteImage(smoothed, "processed_volume.nii.gz")
 ```
+
+For ML datasets, split by patient (and where needed institution), keep all studies and
+series from one patient in the same split, and document collection/label provenance.
+Selecting 100 series is not equivalent to selecting 100 independent patients.
 
 ## Resources
 

@@ -1,6 +1,6 @@
 # Preprocessing pipelines, masks, stain handling, and QC
 
-This reference describes **PathML 3.0.5 stable**. It corrects older examples that
+This reference describes **PathML 3.0.8 stable**. It corrects older examples that
 called nonexistent `Pipeline.run()`, omitted required mask/label names, or passed
 unsupported transform arguments.
 
@@ -306,7 +306,10 @@ python scripts/plan_pipeline.py \
 ```
 
 The planner never opens the slide or imports PathML. Supply dimensions from a
-trusted technical metadata inspection.
+trusted technical metadata inspection. Its storage estimate uses h5path's
+float16 image/mask payload, excludes counts/labels/metadata, and assumes the
+supplied channel count remains unchanged. It is not peak RAM or a guarantee of
+available disk. At nonzero levels supply exact `--level-width`/`--level-height`.
 
 ## Masks, labels, padding, and overlap
 
@@ -353,7 +356,9 @@ For each run, retain:
 - Dask configuration, worker count, CPU/GPU, and failure/retry policy;
 - code revision, random seeds, split manifest hash, and output hashes.
 
-## Sources, accessed 2026-07-23
+## Sources and further reading
+
+API baseline reviewed 2026-10-01 using the released wheel/tag; hosted docs may lag.
 
 - Stable pipeline guide:
   https://pathml.readthedocs.io/en/stable/creating_pipelines.html
@@ -362,9 +367,9 @@ For each run, retain:
 - Stable preprocessing API:
   https://pathml.readthedocs.io/en/stable/api_preprocessing_reference.html
 - Stable transforms source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/preprocessing/transforms.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/preprocessing/transforms.py
 - Stable pipeline source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/preprocessing/pipeline.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/preprocessing/pipeline.py
 - Macenko et al. (2009):
   https://doi.org/10.1109/ISBI.2009.5193250
 - Vahadane et al. (2016):

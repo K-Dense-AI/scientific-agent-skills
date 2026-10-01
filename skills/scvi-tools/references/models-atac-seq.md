@@ -1,329 +1,111 @@
-# ATAC-seq and Chromatin Accessibility Models
+# Chromatin accessibility models
 
-This document covers models for analyzing single-cell ATAC-seq and chromatin accessibility data in scvi-tools.
+Targets scvi-tools 1.5.1. These source-verified examples are illustrative;
+short PEAKVI/POISSONVI CPU fits and accessibility output shapes were tested.
+Genome downloads, SCBASSET training and motif inference were not executed.
 
-## PeakVI
+## PEAKVI and POISSONVI
 
-**Purpose**: Analysis and integration of single-cell ATAC-seq data using peak counts.
+Use a consistent genome assembly, genomic regions and feature order across samples.
+Apply assay-specific cell QC (library size, TSS enrichment, fragment length, blacklist
+regions) and remove poorly supported peaks before setup. Do not indiscriminately
+remove sex-chromosome peaks when sex-linked biology is relevant.
 
-**Key Features**:
-- Variational autoencoder specifically designed for scATAC-seq peak data
-- Learns low-dimensional representations of chromatin accessibility
-- Performs batch correction across samples
-- Enables differential accessibility testing
-- Integrates multiple ATAC-seq datasets
-
-**When to Use**:
-- Analyzing scATAC-seq peak count matrices
-- Integrating multiple ATAC-seq experiments
-- Batch correction of chromatin accessibility data
-- Dimensionality reduction for ATAC-seq
-- Differential accessibility analysis between cell types or conditions
-
-**Data Requirements**:
-- Peak count matrix (cells × peaks)
-- Binary or count data for peak accessibility
-- Batch/sample annotations (optional, for batch correction)
-
-**Basic Usage**:
 ```python
 import scvi
 
-# Prepare data (peaks should be in adata.X)
-# Optional: filter peaks
-sc.pp.filter_genes(adata, min_cells=3)
-
-# Setup data
-scvi.model.PEAKVI.setup_anndata(
-    adata,
-    batch_key="batch"
-)
-
-# Train model
-model = scvi.model.PEAKVI(adata)
-model.train()
-
-# Get latent representation (batch-corrected)
-latent = model.get_latent_representation()
-adata.obsm["X_PeakVI"] = latent
-
-# Differential accessibility
-da_results = model.differential_accessibility(
-    groupby="cell_type",
-    group1="TypeA",
-    group2="TypeB"
+# atac_adata: cells by peaks; layer counts contains measured accessibility counts.
+scvi.model.PEAKVI.setup_anndata(atac_adata, layer="counts", batch_key="batch")
+peakvi = scvi.model.PEAKVI(atac_adata, n_latent=20)
+peakvi.train()
+atac_adata.obsm["X_PeakVI"] = peakvi.get_latent_representation()
+accessibility = peakvi.get_normalized_accessibility()
+da = peakvi.differential_accessibility(
+    groupby="cell_type", group1="TypeA", group2="TypeB",
+    mode="change", delta=0.05,
 )
 ```
 
-**Key Parameters**:
-- `n_latent`: Dimensionality of latent space (default: 10)
-- `n_hidden`: Number of nodes per hidden layer (default: 128)
-- `n_layers`: Number of hidden layers (default: 1)
-- `region_factors`: Whether to learn region-specific factors (default: True)
-- `latent_distribution`: Distribution for latent space ("normal" or "ln")
+PEAKVI models binarized accessibility, so input counts do not make it a quantitative
+fragment model. `get_normalized_accessibility()` returns accessibility probabilities,
+optionally with cell/region normalization choices. It is not named
+`get_accessibility_estimates`. `n_hidden` and `n_latent` default to `None` and are
+inferred from feature count; encoder and decoder each default to two layers
+(`n_layers_encoder`, `n_layers_decoder`), not a single `n_layers` option.
+`get_region_factors()` exposes the learned region factors when enabled.
 
-**Outputs**:
-- `get_latent_representation()`: Low-dimensional embeddings for cells
-- `get_accessibility_estimates()`: Normalized accessibility values
-- `differential_accessibility()`: Statistical testing for differential peaks
-- `get_region_factors()`: Peak-specific scaling factors
-
-**Best Practices**:
-1. Filter out low-quality peaks (present in very few cells)
-2. Include batch information if integrating multiple samples
-3. Use latent representations for clustering and UMAP visualization
-4. Consider using `region_factors=True` for datasets with high technical variation
-5. Store latent embeddings in `adata.obsm` for downstream analysis with scanpy
-
-## PoissonVI
-
-**Purpose**: Quantitative analysis of scATAC-seq fragment counts (more detailed than peak counts).
-
-**Key Features**:
-- Models fragment counts directly (not just peak presence/absence)
-- Poisson distribution for count data
-- Captures quantitative differences in accessibility
-- Enables fine-grained analysis of chromatin state
-
-**When to Use**:
-- Analyzing fragment-level ATAC-seq data
-- Need quantitative accessibility measurements
-- Higher resolution analysis than binary peak calls
-- Investigating gradual changes in chromatin accessibility
-
-**Data Requirements**:
-- Fragment count matrix (cells × genomic regions)
-- Count data (not binary)
-
-**Basic Usage** (PoissonVI lives in `scvi.external`):
 ```python
+# fragment_adata contains region-level fragment counts, not raw fragments.tsv rows.
 scvi.external.POISSONVI.setup_anndata(
-    adata,
-    batch_key="batch"
+    fragment_adata, layer="counts", batch_key="batch",
 )
-
-model = scvi.external.POISSONVI(adata)
-model.train()
-
-# Get results
-latent = model.get_latent_representation()
-accessibility = model.get_normalized_accessibility()
+poissonvi = scvi.external.POISSONVI(fragment_adata)
+poissonvi.train()
+fragment_latent = poissonvi.get_latent_representation()
+fragment_estimates = poissonvi.get_normalized_accessibility()
 ```
 
-**Key Differences from PeakVI**:
-- **PeakVI**: Best for standard peak count matrices, faster
-- **PoissonVI**: Best for quantitative fragment counts, more detailed
+POISSONVI retains quantitative count information. Do not confuse read counts,
+Tn5 insertions and fragments; document the counting convention and use the
+upstream `reads_to_fragments` helper only when its read-pair assumptions match the
+assay. The 1.5.1 fragment validator requires at least 100 observations; it raises on
+smaller inputs before model construction. Its count-frequency heuristic can warn
+on legitimate count distributions, so verify provenance rather than modifying counts
+to satisfy the heuristic. No universal speed or accuracy ordering between PEAKVI and POISSONVI follows
+from the API. Compare held-out fit and biological preservation.
 
-**When to Choose PoissonVI over PeakVI**:
-- Working with fragment counts rather than called peaks
-- Need to capture quantitative differences
-- Have high-quality, high-coverage data
-- Interested in subtle accessibility changes
+Accessibility DE is not RNA log fold-change: PEAKVI reports an absolute probability
+effect `scale2 - scale1`. Its `delta=0.05` denotes accessibility difference. Apply
+replicate-aware interpretation and the caveats in
+[differential-expression.md](differential-expression.md).
 
-## scBasset
+## SCBASSET: sequence-aware accessibility
 
-**Purpose**: Deep learning approach to scATAC-seq analysis with interpretability and motif analysis.
+SCBASSET has a different orientation: **regions by cells**. The DNA sequence codes
+belong to observations in `.obsm`, and batch annotations for cells belong to `.var`.
+The sequence helper first operates on ordinary cells-by-regions AnnData and writes
+to `.varm`; transposition then moves those arrays to `.obsm`.
 
-**Key Features**:
-- Convolutional neural network (CNN) architecture for sequence-based analysis
-- Models raw DNA sequences, not just peak counts
-- Enables motif discovery and transcription factor (TF) binding prediction
-- Provides interpretable feature importance
-- Performs batch correction
-
-**When to Use**:
-- Want to incorporate DNA sequence information
-- Interested in TF motif analysis
-- Need interpretable models (which sequences drive accessibility)
-- Analyzing regulatory elements and TF binding sites
-- Predicting accessibility from sequence alone
-
-**Data Requirements**:
-- Peak sequences (extracted from genome)
-- Peak accessibility matrix
-- Genome reference (for sequence extraction)
-
-**Basic Usage** (scBasset lives in `scvi.external`):
 ```python
-# scBasset needs per-peak DNA sequences. Add them to the AnnData first;
-# this downloads the genome (once) and stores one-hot codes in adata.varm.
+# Before this block: atac_adata.var has chr, start, end in the correct assembly;
+# the hg38 genome is already installed locally with genomepy.
 scvi.data.add_dna_sequence(
-    adata,
-    genome_name="hg38",
-    install_genome=True,
+    atac_adata, genome_name="hg38", install_genome=False,
 )
-
-# Register the per-peak sequence code, then train
-scvi.external.SCBASSET.setup_anndata(adata, dna_code_key="dna_code")
-
-model = scvi.external.SCBASSET(adata)
-model.train()
-
-# Cell embeddings (low-dimensional latent representation)
-latent = model.get_latent_representation()
+bdata = atac_adata.T.copy()  # regions x cells; varm -> obsm
+scvi.external.SCBASSET.setup_anndata(
+    bdata, dna_code_key="dna_code", layer="counts", batch_key="batch",
+)
+scbasset = scvi.external.SCBASSET(bdata, n_bottleneck_layer=32)
+scbasset.train()
+cell_embeddings = scbasset.get_latent_representation()
+# Rows correspond to bdata.var_names, which are the original cell IDs.
 ```
 
-**Key Parameters**:
-- `n_latent`: Latent space dimensionality
-- `conv_layers`: Number of convolutional layers
-- `n_filters`: Number of filters per conv layer
-- `filter_size`: Size of convolutional filters
+Install the `regseq` extra (`genomepy`, Biopython) for sequence extraction. Explicitly
+check chromosome naming, peak coordinate convention, sequence length (default
+1344), bounds and genome build. The helper's default `install_genome=True` downloads
+a genome; choose it only when the download is intended.
 
-**Advanced Features**:
-- **In silico mutagenesis**: Predict how sequence changes affect accessibility
-- **Motif enrichment**: Identify enriched TF motifs in accessible regions
-- **Batch correction**: Similar to other scvi-tools models
-- **Transfer learning**: Fine-tune on new datasets
+The constructor's cell embedding size is `n_bottleneck_layer`, not `n_latent`.
+Do not supply invented `conv_layers`/`n_filters`/`filter_size` arguments as if they
+were documented high-level constructor parameters.
 
-**Interpretability Tools**:
+`get_tf_activity(tf, genome='human', motif_dir=...)` scores motif injection against
+background sequences and may download its motif library. A TF activity score is
+sequence-model evidence, not direct binding or causal regulatory activity. Validate
+with held-out regions/cells, motif controls and independent experiments.
 
-scBasset learns sequence-aware cell and peak embeddings. Transcription-factor
-activity is assessed by scoring motif sequences against the trained model rather
-than calling a single importance function. See the
-[scBasset user guide](https://docs.scvi-tools.org/en/stable/user_guide/models/scbasset.html)
-for the current motif-injection / TF-activity workflow.
+## Downstream and multimodal analysis
 
-```python
-# Cell embeddings for clustering / visualization
-cell_embedding = model.get_latent_representation()
-```
+Store latent embeddings on the **cell-indexed** object, construct Scanpy neighbors
+using `use_rep`, then visualize/cluster. UMAP layout does not establish integration
+quality. For paired or partially paired RNA/ATAC use MULTIVI's MuData workflow in
+[models-multimodal.md](models-multimodal.md), preserving measurement missingness and
+feature identities. Avoid dense whole-genome probability arrays when only a region
+subset is needed; use `region_list`, `indices` or a justified output threshold.
 
-## Model Selection for ATAC-seq
-
-### PeakVI
-**Choose when**:
-- Standard scATAC-seq analysis workflow
-- Have peak count matrices (most common format)
-- Need fast, efficient batch correction
-- Want straightforward differential accessibility
-- Prioritize computational efficiency
-
-**Advantages**:
-- Fast training and inference
-- Proven track record for scATAC-seq
-- Easy integration with scanpy workflow
-- Robust batch correction
-
-### PoissonVI
-**Choose when**:
-- Have fragment-level count data
-- Need quantitative accessibility measures
-- Interested in subtle differences
-- Have high-coverage, high-quality data
-
-**Advantages**:
-- More detailed quantitative information
-- Better for gradient changes
-- Appropriate statistical model for counts
-
-### scBasset
-**Choose when**:
-- Want to incorporate DNA sequence
-- Need biological interpretation (motifs, TFs)
-- Interested in regulatory mechanisms
-- Have computational resources for CNN training
-- Want predictive power for new sequences
-
-**Advantages**:
-- Sequence-based, biologically interpretable
-- Motif and TF analysis built-in
-- Predictive modeling capabilities
-- In silico perturbation experiments
-
-## Workflow Example: Complete ATAC-seq Analysis
-
-```python
-import scvi
-import scanpy as sc
-
-# 1. Load and preprocess ATAC-seq data
-adata = sc.read_h5ad("atac_data.h5ad")
-
-# 2. Filter low-quality peaks
-sc.pp.filter_genes(adata, min_cells=10)
-
-# 3. Setup and train PeakVI
-scvi.model.PEAKVI.setup_anndata(
-    adata,
-    batch_key="sample"
-)
-
-model = scvi.model.PEAKVI(adata, n_latent=20)
-model.train(max_epochs=400)
-
-# 4. Extract latent representation
-latent = model.get_latent_representation()
-adata.obsm["X_PeakVI"] = latent
-
-# 5. Downstream analysis
-sc.pp.neighbors(adata, use_rep="X_PeakVI")
-sc.tl.umap(adata)
-sc.tl.leiden(adata, key_added="clusters")
-
-# 6. Differential accessibility
-da_results = model.differential_accessibility(
-    groupby="clusters",
-    group1="0",
-    group2="1"
-)
-
-# 7. Save model
-model.save("peakvi_model")
-```
-
-## Integration with Gene Expression (RNA+ATAC)
-
-For paired multimodal data (RNA+ATAC from same cells), use **MultiVI** instead:
-
-```python
-from mudata import MuData
-
-# MultiVI is configured from a MuData object (setup_anndata was removed in v1.3)
-mdata = MuData({"rna": rna_adata, "atac": atac_adata})
-scvi.model.MULTIVI.setup_mudata(
-    mdata,
-    batch_key="sample",
-    modalities={"rna_layer": "rna", "atac_layer": "atac"},
-)
-
-model = scvi.model.MULTIVI(
-    mdata,
-    n_genes=rna_adata.n_vars,
-    n_regions=atac_adata.n_vars,
-)
-model.train()
-
-# Get joint latent space
-latent = model.get_latent_representation()
-```
-
-See `models-multimodal.md` for more details on multimodal integration.
-
-## Best Practices for ATAC-seq Analysis
-
-1. **Quality Control**:
-   - Filter cells with very low or very high peak counts
-   - Remove peaks present in very few cells
-   - Filter mitochondrial and sex chromosome peaks if needed
-
-2. **Batch Correction**:
-   - Always include `batch_key` if integrating multiple samples
-   - Consider technical covariates (sequencing depth, TSS enrichment)
-
-3. **Feature Selection**:
-   - Unlike RNA-seq, all peaks are often used
-   - Consider filtering very rare peaks for efficiency
-
-4. **Latent Dimensions**:
-   - Start with `n_latent=10-30` depending on dataset complexity
-   - Larger values for more heterogeneous datasets
-
-5. **Downstream Analysis**:
-   - Use latent representations for clustering and visualization
-   - Link peaks to genes for regulatory analysis
-   - Perform motif enrichment on cluster-specific peaks
-
-6. **Computational Considerations**:
-   - ATAC-seq matrices are often very large (many peaks)
-   - Consider downsampling peaks for initial exploration
-   - Use GPU acceleration for large datasets
+Sources: [PEAKVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_peakvi.py),
+[POISSONVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/poissonvi/_model.py),
+[SCBASSET](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/scbasset/_model.py),
+[sequence/count preprocessing](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/data/_preprocessing.py).

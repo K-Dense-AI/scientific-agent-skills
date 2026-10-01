@@ -1,5 +1,4 @@
 from pathlib import Path
-import copy
 import csv
 import importlib.util
 import json
@@ -12,7 +11,7 @@ SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "pybamm"
 CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 os.environ["PYBAMM_DISABLE_TELEMETRY"] = "true"
 np = pytest.importorskip("numpy")
-pytest.importorskip("pybamm")
+pybamm = pytest.importorskip("pybamm")
 spec = importlib.util.spec_from_file_location("simulate_battery", SKILL_ROOT / "scripts" / "simulate_battery.py")
 battery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(battery)
@@ -78,3 +77,77 @@ def test_detect_global_limit_before_requested_duration(protocol):
     protocol["steps"] = [{"kind": "discharge", "c_rate": 1., "duration_s": 14400.}]
     with pytest.raises(RuntimeError, match="ended before"):
         battery.solve_protocol(protocol)
+
+
+def test_snapshot_contains_solved_initial_state_and_replays(protocol):
+    protocol["steps"] = [{"kind": "discharge", "c_rate": .5, "duration_s": 60}]
+    result = battery.solve_protocol(protocol)
+    snapshot = pybamm.ParameterValues.from_json(result["parameters"])
+    original = pybamm.ParameterValues("Chen2020")
+    for electrode in ("negative", "positive"):
+        key = f"Initial concentration in {electrode} electrode [mol.m-3]"
+        actual = result["solution"][f"X-averaged {electrode} particle concentration [mol.m-3]"].entries[:, 0]
+        assert snapshot[key] == pytest.approx(actual)
+        assert snapshot[key] != original[key]
+    replay = pybamm.Simulation(
+        pybamm.lithium_ion.SPM(options={"thermal": "isothermal"}),
+        parameter_values=snapshot,
+        experiment=pybamm.Experiment([pybamm.step.current(2.5, duration=60, period=10)]),
+        var_pts={key: 20 for key in ("x_n", "x_s", "x_p", "r_n", "r_p")},
+        solver=pybamm.IDAKLUSolver(rtol=1e-6, atol=1e-8),
+    ).solve()
+    assert replay["Voltage [V]"].entries == pytest.approx(result["solution"]["Voltage [V]"].entries, abs=1e-6, rel=0)
+
+
+@pytest.mark.parametrize("override, message", [
+    ({"Current function [A]": 7.0}, "experiment steps replace"),
+    ({"Initial concentration in negative electrode [mol.m-3]": 10000.}, "initial_soc"),
+    ({"Ambient temperature [K]": 310.}, "temperature_K"),
+    ({"Negative electrode OCP [V]": .1}, "functional parameter"),
+    ({"Number of cells connected in series to make a battery": 2.}, "single cell"),
+    ({"Nominal cell capacity [A.h]": -1.}, "Invalid nominal capacity"),
+])
+def test_reject_ineffective_or_unsupported_overrides(protocol, override, message):
+    protocol["parameter_overrides"] = override
+    with pytest.raises(ValueError, match=message):
+        battery.solve_protocol(protocol)
+
+
+def test_native_capacity_override_changes_step_current(protocol):
+    protocol["parameter_overrides"] = {"Nominal cell capacity [A.h]": 4.}
+    protocol["steps"] = [{"kind": "discharge", "c_rate": .5, "duration_s": 60}]
+    result = battery.solve_protocol(protocol)
+    assert result["nominal_capacity_Ah"] == 4.
+    assert np.asarray(result["rows"])[:, 3] == pytest.approx(2.)
+    assert result["rows"][-1][4] == pytest.approx(2 * 60 / 3600, abs=1e-8)
+
+
+def test_native_output_period_is_not_an_exact_sampling_interval(protocol):
+    protocol["steps"] = [{"kind": "rest", "duration_s": 25}]
+    result = battery.solve_protocol(protocol)
+    assert np.asarray(result["rows"])[:, 1] == pytest.approx([0, 12.5, 25])
+
+
+def test_native_charge_cutoff_and_infeasible_discharge(protocol):
+    protocol["steps"] = [{"kind": "charge", "c_rate": .5, "duration_s": 600, "until_voltage_V": 4.15}]
+    result = battery.solve_protocol(protocol)
+    duration = result["terminations"][0]["end_s"]
+    assert 0 < duration < 600
+    assert result["rows"][-1][2] == pytest.approx(4.15, abs=1e-5)
+    assert result["rows"][-1][4] == pytest.approx(-2.5 * duration / 3600, abs=1e-7)
+    protocol["steps"] = [{"kind": "discharge", "c_rate": .5, "duration_s": 60, "until_voltage_V": 4.1}]
+    with pytest.raises(pybamm.SolverError, match="infeasible"):
+        battery.solve_protocol(protocol)
+
+
+@pytest.mark.parametrize("value", [None, [], "discharge"])
+def test_reject_nonobject_protocol(value):
+    with pytest.raises(ValueError, match="JSON object"):
+        battery.validate_protocol(value)
+
+
+@pytest.mark.parametrize("change", [{"steps": [None]}, {"steps": ["rest"]}, {"parameter_overrides": []}])
+def test_reject_nonobject_nested_fields(protocol, change):
+    protocol.update(change)
+    with pytest.raises(ValueError, match="JSON object"):
+        battery.validate_protocol(protocol)

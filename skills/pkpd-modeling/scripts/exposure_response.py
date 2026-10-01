@@ -51,6 +51,8 @@ QTC_THRESHOLD_MS = 10.0
 
 def fit_emax(exposure: np.ndarray, response: np.ndarray, sigmoid: bool) -> dict:
     """Fit E0 + Emax*C^h/(EC50^h + C^h) by least squares on the log of positive parameters."""
+    if len(exposure) <= (4 if sigmoid else 3) or np.ptp(exposure) <= 0:
+        raise InputError("Emax needs more observations than parameters and varied exposures")
     e0_init = float(np.min(response))
     emax_init = float(np.max(response) - np.min(response)) or 1.0
     ec50_init = float(np.median(exposure[exposure > 0])) if np.any(exposure > 0) else 1.0
@@ -64,8 +66,10 @@ def fit_emax(exposure: np.ndarray, response: np.ndarray, sigmoid: bool) -> dict:
 
     def predict(theta: np.ndarray, x: np.ndarray) -> np.ndarray:
         e0, emax_value, ec50, hill = unpack(theta)
-        powered = np.power(np.maximum(x, 0.0), hill)
-        return e0 + emax_value * powered / (ec50**hill + powered)
+        # Logistic evaluation avoids overflow of C**hill and EC50**hill.
+        z = hill * (np.log(np.maximum(x, np.finfo(float).tiny)) - math.log(ec50))
+        fraction = np.exp(-np.logaddexp(0.0, -z))
+        return e0 + emax_value * np.where(x > 0, fraction, 0.0)
 
     start = [e0_init, emax_init, math.log(max(ec50_init, 1e-9))] + ([0.0] if sigmoid else [])
     result = least_squares(lambda th: predict(th, exposure) - response, start, max_nfev=20000)
@@ -78,7 +82,9 @@ def fit_emax(exposure: np.ndarray, response: np.ndarray, sigmoid: bool) -> dict:
     try:
         _, s, vt = np.linalg.svd(result.jac, full_matrices=False)
         threshold = np.finfo(float).eps * max(result.jac.shape) * s[0]
-        s_inv = np.array([1.0 / x if x > threshold else 0.0 for x in s])
+        if np.count_nonzero(s > threshold) < p:
+            raise np.linalg.LinAlgError("rank-deficient Emax sensitivity")
+        s_inv = 1.0 / s
         cov = (vt.T * s_inv**2) @ vt * sigma2
         se = np.sqrt(np.maximum(np.diag(cov), 0.0))
     except np.linalg.LinAlgError:  # pragma: no cover
@@ -86,6 +92,8 @@ def fit_emax(exposure: np.ndarray, response: np.ndarray, sigmoid: bool) -> dict:
 
     max_observed = float(np.max(exposure))
     return {
+        "converged": bool(result.success),
+        "identifiable_local_covariance": bool(np.all(np.isfinite(se))),
         "e0": e0,
         "emax": emax_value,
         "ec50": ec50,
@@ -113,6 +121,12 @@ def fit_logistic(exposure: np.ndarray, response: np.ndarray) -> dict:
     if not unique <= {0.0, 1.0}:
         raise InputError("logistic exposure-response needs a 0/1 response column")
 
+    if unique != {0.0, 1.0} or np.ptp(exposure) <= 0:
+        raise InputError("logistic regression needs both outcomes and varied exposures")
+    zero, one = exposure[response == 0], exposure[response == 1]
+    if zero.max() <= one.min() or one.max() <= zero.min():
+        raise InputError("complete or quasi-complete separation: unpenalized logistic slope is not finite")
+
     def neg_loglik(theta: np.ndarray) -> float:
         eta = theta[0] + theta[1] * exposure
         # log(1+exp(eta)) computed stably
@@ -128,6 +142,7 @@ def fit_logistic(exposure: np.ndarray, response: np.ndarray) -> dict:
 
     ec50 = -intercept / slope if slope else float("nan")
     return {
+        "converged": bool(result.success),
         "intercept": float(intercept),
         "slope": float(slope),
         "se_slope": float(se[1]),
@@ -145,13 +160,15 @@ def fit_cqtc(conc: np.ndarray, delta_qtc: np.ndarray, cmax: float | None) -> dic
     """Linear concentration-QTc model with the two-sided 90% CI of the predicted effect.
 
     ICH E14 asks whether the **upper bound of the two-sided 90% confidence
-    interval** for placebo-corrected change-from-baseline QTc exceeds 10 ms at
+    interval** for placebo-corrected change-from-baseline QTc is below 10 ms at
     the clinically relevant exposure. Reporting the point estimate, or a 95%
     interval, answers a different question than the guideline asks.
     """
     n = len(conc)
     if n < 4:
         raise InputError("concentration-QTc analysis needs at least 4 observations")
+    if np.ptp(conc) <= 0:
+        raise InputError("concentration-QTc needs varied concentrations")
     design = np.column_stack([np.ones(n), conc])
     coefficients, *_ = np.linalg.lstsq(design, delta_qtc, rcond=None)
     fitted = design @ coefficients
@@ -182,10 +199,10 @@ def fit_cqtc(conc: np.ndarray, delta_qtc: np.ndarray, cmax: float | None) -> dic
                 "predicted_delta_delta_qtc_ms": prediction,
                 "ci90_low_ms": prediction - crit * se_mean,
                 "ci90_high_ms": prediction + crit * se_mean,
-                "upper_bound_exceeds_10ms": float((prediction + crit * se_mean) > QTC_THRESHOLD_MS),
+                "upper_bound_exceeds_10ms": float((prediction + crit * se_mean) >= QTC_THRESHOLD_MS),
             }
         )
-        if cmax > float(np.max(conc)):
+        if cmax > float(np.max(conc)) or cmax < float(np.min(conc)):
             out["extrapolated_beyond_observed"] = 1.0
     return out
 
@@ -238,6 +255,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
+    if args.bins < 1 or (args.cmax is not None and args.cmax < 0):
+        raise InputError("--bins must be positive and --cmax non-negative")
     modes = [m for m in ("emax", "logistic", "cqtc", "quartiles") if getattr(args, m)]
     if len(modes) != 1:
         raise InputError("choose exactly one of --emax, --logistic, --cqtc, --quartiles")
@@ -321,6 +342,10 @@ def run(argv: Sequence[str] | None = None) -> int:
             "dose-response relationship."
         )
 
+    if (args.emax or args.logistic) and not fit["converged"]:
+        report.finding("optimizer did not converge; estimates and Wald intervals are unreliable")
+    if args.emax and not fit["identifiable_local_covariance"]:
+        report.finding("rank-deficient Emax sensitivity; covariance unavailable, use profile likelihood or a simpler model")
     return report.emit(args.format)
 
 

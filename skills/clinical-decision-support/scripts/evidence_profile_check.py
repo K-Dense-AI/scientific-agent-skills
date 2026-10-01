@@ -69,7 +69,7 @@ def check_profile(document: dict[str, Any]) -> tuple[IssueLog, list[dict[str, st
         require_nonempty_text(document.get("schema_version"), "schema_version")
         require_nonempty_text(document.get("profile_id"), "profile_id")
         require_nonempty_text(document.get("title"), "title")
-        if document.get("data_level") not in {"published_aggregate_evidence", "synthetic"}:
+        if not isinstance(document.get("data_level"), str) or document.get("data_level") not in {"published_aggregate_evidence", "synthetic"}:
             log.errors.append(
                 "data_level must be published_aggregate_evidence or synthetic"
             )
@@ -139,7 +139,11 @@ def check_profile(document: dict[str, Any]) -> tuple[IssueLog, list[dict[str, st
                 judgment = require_nonempty_text(
                     domain.get("judgment"), f"{field}.judgment"
                 )
-                if judgment not in DOMAIN_JUDGMENTS:
+                allowed_judgments = DOMAIN_JUDGMENTS
+                if domain_name == "imprecision":
+                    # Current GRADE Book permits a human three-level downgrade.
+                    allowed_judgments = DOMAIN_JUDGMENTS | {"extremely_serious"}
+                if judgment not in allowed_judgments:
                     log.errors.append(f"{field}.judgment is unsupported")
                 if judgment == "unassessed":
                     log.errors.append(f"{field} requires a human judgment")

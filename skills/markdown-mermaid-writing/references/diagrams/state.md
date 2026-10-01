@@ -43,7 +43,7 @@ stateDiagram-v2
 
 ## Tips
 
-- Always start with `[*]` (initial state) and end with `[*]` (terminal)
+- Use `[*]` for initial/final pseudostates when the modeled lifecycle has them; a continuously running process need not have a final state
 - Label transitions with **emoji + action** for visual clarity
 - Use `note right of` / `note left of` for contextual details
 - State names: `CamelCase` (Mermaid convention for state diagrams)
@@ -78,7 +78,7 @@ A CI/CD pipeline modeled as a state machine with 3 composite (nested) states, ea
 ```mermaid
 stateDiagram-v2
     accTitle: CI/CD Pipeline State Machine
-    accDescr: Composite state diagram for a CI/CD pipeline showing source detection, build and test phases with parallel scanning, and a three-stage deployment with approval gate and rollback path
+    accDescr: Composite state diagram for a CI/CD pipeline showing source detection, build and test phases with sequential scanning, and a three-stage deployment with approval gate and rollback path
 
     [*] --> Source: ⚡ Commit pushed
 
@@ -148,3 +148,8 @@ stateDiagram-v2
 - **Failure and rollback are first-class states** — not just transition labels. The Failed and Rollback states have their own internal substates showing what actually happens during recovery
 - **Notes on key states** add operational context — the approval gate has timeout rules, the compile step documents the artifact format. This is the kind of detail operators need.
 - **Transitions between composite states** are the high-level flow (Source → Build → Deploy → Complete), while transitions within composites are the detailed steps. Two levels of reading for two audiences.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/stateDiagram.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

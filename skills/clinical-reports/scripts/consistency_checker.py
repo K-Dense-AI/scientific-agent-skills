@@ -56,7 +56,10 @@ def _array(data: dict[str, Any], field: str, errors: list[str]) -> list[Any]:
 def _finite_number(value: Any, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValidationError(f"{field} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ValidationError(f"{field} must be a finite representable number") from exc
     if not math.isfinite(number):
         raise ValidationError(f"{field} must be finite")
     return number

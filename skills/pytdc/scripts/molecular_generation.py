@@ -141,12 +141,24 @@ def execute_scores(
         )
 
     from tdc import Oracle  # Lazy optional import.
+    from rdkit import Chem
+
+    # Empty SMILES parses as a zero-atom molecule; it is not a scorable structure.
+    valid = []
+    for value in smiles:
+        molecule = Chem.MolFromSmiles(value)
+        valid.append(molecule is not None and molecule.GetNumAtoms() > 0)
+    valid_smiles = [value for value, ok in zip(smiles, valid) if ok]
 
     with _working_directory(runtime_dir):
-        oracle = Oracle(name=oracle_name)
-        scores = oracle(smiles)
-    if not isinstance(scores, list) or len(scores) != len(smiles):
+        if valid_smiles:
+            oracle = Oracle(name=oracle_name, num_max_call=len(valid_smiles))
+            scores = oracle(valid_smiles)
+        else:
+            scores = []
+    if not isinstance(scores, list) or len(scores) != len(valid_smiles):
         raise CliError("PyTDC returned an unexpected oracle result shape")
+    score_iter = iter(scores)
 
     return {
         "action": "executed",
@@ -156,8 +168,13 @@ def execute_scores(
         "package": "PyTDC",
         "package_version": package_version,
         "results": [
-            {"score": truncate_value(score), "smiles": truncate_value(smiles_value)}
-            for smiles_value, score in zip(smiles, scores)
+            {
+                "index": index,
+                "valid": ok,
+                "score": truncate_value(next(score_iter)) if ok else None,
+                "smiles": truncate_value(smiles_value),
+            }
+            for index, (smiles_value, ok) in enumerate(zip(smiles, valid))
         ],
         "runtime_directory": str(runtime_dir),
         "score_direction": "not assumed; results preserve input order",

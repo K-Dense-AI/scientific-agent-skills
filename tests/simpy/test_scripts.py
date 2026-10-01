@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 import pytest
 from pathlib import Path
@@ -148,6 +150,62 @@ class SafetyTests(unittest.TestCase):
 
 
 class CoreSemanticsTests(unittest.TestCase):
+    def test_event_trigger_return_failure_and_anyof_ties(self) -> None:
+        env = simpy.Environment()
+        source = env.event().succeed("ready")
+        target = env.event()
+        self.assertIsNone(target.trigger(source))
+        self.assertEqual(target.value, "ready")
+        first, second = env.timeout(1, "a"), env.timeout(1, "b")
+        result = env.run(until=first | second)
+        self.assertEqual(list(result.items()), [(first, "a"), (second, "b")])
+        failed = env.event().fail(ValueError("invalid model"))
+        with self.assertRaisesRegex(ValueError, "invalid model"):
+            env.run(until=failed)
+
+    def test_interrupt_cancels_abandoned_request(self) -> None:
+        env = simpy.Environment()
+        resource = simpy.Resource(env)
+        holder = resource.request()
+        observed = []
+
+        def blocked():
+            try:
+                with resource.request() as request:
+                    yield request
+            except simpy.Interrupt as interrupt:
+                observed.append(interrupt.cause)
+
+        process = env.process(blocked())
+
+        def controller():
+            yield env.timeout(1)
+            process.interrupt("cancel")
+
+        env.process(controller())
+        env.run()
+        self.assertEqual(observed, ["cancel"])
+        self.assertEqual(resource.queue, [])
+        resource.release(holder)
+        with self.assertRaises(RuntimeError):
+            process.interrupt()
+
+    def test_realtime_sync_and_strict_lag_with_controlled_clock(self) -> None:
+        import simpy.rt
+
+        with patch("simpy.rt.monotonic", return_value=0.0):
+            env = simpy.rt.RealtimeEnvironment(factor=0.1)
+        event = env.timeout(1)
+        with patch("simpy.rt.monotonic", return_value=0.3):
+            with self.assertRaises(RuntimeError):
+                env.step()
+        self.assertFalse(event.processed)
+        with patch("simpy.rt.monotonic", return_value=0.2):
+            env.sync()
+        with patch("simpy.rt.monotonic", return_value=0.31):
+            env.step()
+        self.assertTrue(event.processed)
+
     def test_same_time_events_are_fifo_deterministic(self) -> None:
         env = simpy.Environment()
         order: list[str] = []
@@ -269,8 +327,101 @@ class CoreSemanticsTests(unittest.TestCase):
         self.assertEqual(container.level, 4)
         self.assertEqual(observed, [None, "fifo", {"kind": "keep"}, "first"])
 
+    def test_blocked_container_filter_bypass_and_priority_fifo_key(self) -> None:
+        env = simpy.Environment()
+        tank = simpy.Container(env, capacity=5, init=1)
+        withdrawal = tank.get(3)
+        self.assertFalse(withdrawal.triggered)
+        tank.put(2)
+        env.run()
+        self.assertTrue(withdrawal.processed)
+        self.assertEqual(tank.level, 0)
+
+        store = simpy.FilterStore(env)
+        unmatched = store.get(lambda item: item == "a")
+        matched = store.get(lambda item: item == "b")
+        store.put("b")
+        env.run()
+        self.assertFalse(unmatched.triggered)
+        self.assertEqual(matched.value, "b")
+        unmatched.cancel()
+        self.assertEqual(store.get_queue, [])
+
+        prioritized = simpy.PriorityStore(env)
+        for sequence in (2, 0, 1):
+            prioritized.put(simpy.PriorityItem((4, sequence), {"sequence": sequence}))
+        env.run()
+        retrieved = [prioritized.get().value.item["sequence"] for _ in range(3)]
+        self.assertEqual(retrieved, [0, 1, 2])
+
 
 class MonitoringTests(unittest.TestCase):
+    def test_trace_accepts_urgent_events_scheduled_by_normal_callback(self) -> None:
+        env = simpy.Environment()
+        trace = resource_monitor.EventTraceRecorder(env)
+
+        def child():
+            yield env.timeout(0)
+
+        def parent():
+            yield env.timeout(1)
+            yield env.process(child())
+
+        env.run(until=env.process(parent()))
+        env.step()  # StopSimulation reschedules priority -1 at the same time.
+        priorities = [record["priority"] for record in trace.records]
+        self.assertTrue(any(a > b for a, b in zip(priorities, priorities[1:])))
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "trace.jsonl"
+            trace.export_jsonl(str(output))
+            summary = event_trace_summary.summarize_event_trace(output, max_records=100)
+        self.assertEqual(summary["ordering_violations"], 0)
+
+    def test_monitor_preserves_resource_order_and_time(self) -> None:
+        def run(monitored):
+            env = simpy.Environment()
+            resource = simpy.Resource(env)
+            monitor = resource_monitor.ResourceMonitor(env, resource) if monitored else None
+            completions = []
+
+            def job(number):
+                with resource.request() as request:
+                    yield request
+                    yield env.timeout(1)
+                completions.append((number, env.now))
+
+            for number in range(3):
+                env.process(job(number))
+            env.run(until=4)
+            if monitor:
+                monitor.finalize()
+                self.assertEqual(monitor.summary(end=4)["pending_requests"], 0)
+            return completions, resource.count, len(resource.queue)
+
+        self.assertEqual(run(True), run(False))
+
+    def test_container_monitor_captures_synchronous_change_and_window(self) -> None:
+        env = simpy.Environment(initial_time=3)
+        container = simpy.Container(env, capacity=10, init=1)
+        monitor = resource_monitor.ContainerMonitor(env, container)
+        container.put(4)  # Changes level synchronously, before the event callback.
+        monitor.finalize(at=5)
+        self.assertEqual(monitor.average_level(start=3, end=5), 5)
+        with self.assertRaises(_common.CliError):
+            monitor.average_level(start=0, end=5)
+        with self.assertRaises(_common.CliError):
+            monitor.average_level(start=3, end=math.nan)
+        monitor.detach()
+
+    def test_malformed_resource_csv_rows_fail_cleanly(self) -> None:
+        header = "time,event,count,queue_length,utilization\n"
+        for row in ("0,initial,0\n", "0,initial,0,0,0,extra\n"):
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "bad.csv"
+                path.write_text(header + row)
+                with self.assertRaises(_common.CliError):
+                    event_trace_summary.summarize_resource_csv(path, max_records=10)
+
     def test_resource_monitor_uses_time_weighting(self) -> None:
         env = simpy.Environment()
         resource = simpy.Resource(env, capacity=1)
@@ -336,6 +487,63 @@ class MonitoringTests(unittest.TestCase):
 
 
 class ScenarioTests(unittest.TestCase):
+    def test_warmup_departures_and_loss_use_declared_windows(self) -> None:
+        # Arrivals at 1, 2, 4, 5, 9; admitted jobs depart at 4 and 6.
+        # The t=4 arrival is rejected because its timeout precedes that departure.
+        # At warm_up=3, window loss is 1/3, all-run loss 2/5; two
+        # window departures include one customer that arrived before warm-up.
+        class FixedStream:
+            def __init__(self, values):
+                self.values = iter(values)
+
+            def expovariate(self, rate):
+                return next(self.values)
+
+        config = basic_simulation_template.QueueConfig.from_mapping({
+            "analysis_mode": "steady_state", "warm_up": 3, "horizon": 10,
+            "servers": 1, "queue_capacity": 0,
+        })
+        streams = [FixedStream([1, 1, 2, 1, 4, 2]), FixedStream([3, 1, 3])]
+        with patch.object(basic_simulation_template.random, "Random", side_effect=streams):
+            report = basic_simulation_template.run_simulation(config)
+        self.assertEqual(report["counters"]["window_departures"], 2)
+        self.assertEqual(report["counters"]["observed_completed"], 1)
+        self.assertEqual(report["counters"]["window_arrivals"], 3)
+        self.assertAlmostEqual(report["metrics"]["throughput_per_time_unit"], 2 / 7)
+        self.assertAlmostEqual(report["metrics"]["loss_probability"], 1 / 3)
+        counts = report["counters"]
+        self.assertEqual(counts["arrivals"], counts["admitted"] + counts["rejected"])
+        self.assertEqual(counts["admitted"], counts["completed"] + counts["unfinished_at_horizon"])
+
+    def test_stop_event_consumes_budget_and_zero_delay_loops_stop(self) -> None:
+        env = basic_simulation_template.BoundedEnvironment(max_events=2)
+        env.timeout(1)
+        env.run(until=2)
+        self.assertEqual(env.processed_events, 2)
+        looping = basic_simulation_template.BoundedEnvironment(max_events=10)
+
+        def busy():
+            while True:
+                yield looping.timeout(0)
+
+        looping.process(busy())
+        with self.assertRaises(basic_simulation_template.EventLimitExceeded):
+            looping.run(until=1)
+        self.assertEqual(looping.now, 0)
+
+    def test_library_configs_and_runtime_version_are_validated(self) -> None:
+        with self.assertRaises(_common.CliError):
+            basic_simulation_template.run_simulation(
+                basic_simulation_template.QueueConfig(horizon=math.nan)
+            )
+        with self.assertRaises(_common.CliError):
+            replication_runner.run_experiment(replication_runner.ExperimentConfig(
+                basic_simulation_template.QueueConfig(), replications=1
+            ))
+        with patch.dict(sys.modules, {"simpy": SimpleNamespace(__version__="4.1.1")}):
+            with self.assertRaises(_common.CliError):
+                _common.load_simpy()
+
     def test_queue_run_is_reproducible_and_bounded(self) -> None:
         config = basic_simulation_template.QueueConfig.from_mapping(
             {

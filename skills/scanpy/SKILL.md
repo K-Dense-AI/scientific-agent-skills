@@ -1,9 +1,12 @@
 ---
 name: scanpy
-description: Standard single-cell RNA-seq analysis pipeline. Use for QC, normalization, dimensionality reduction (PCA/UMAP/t-SNE), clustering, differential expression, visualization, and converting R-friendly single-cell formats such as Seurat or SingleCellExperiment RDS files into h5ad for Scanpy. Best for exploratory scRNA-seq analysis with established workflows. For deep learning models use scvi-tools; for data format questions use anndata.
+description: Performs Scanpy single-cell RNA-seq QC, normalization, HVG selection, PCA/UMAP/t-SNE, clustering, exploratory marker ranking, pseudobulk preparation, visualization, and Seurat or SingleCellExperiment RDS conversion to h5ad. Applies to established exploratory scRNA-seq workflows with explicit count and expression provenance; complementary skills cover scvi-tools models and AnnData format details.
 license: BSD-3-Clause
+compatibility: Requires Python 3.12+ and Scanpy; tested with Python 3.13, Scanpy 1.12.4, and AnnData 0.13.4. Optional integrations need separate packages; R conversion needs R. Local analysis needs no credentials or network.
 metadata:
-  version: "1.7"
+  version: "1.8"
+  last-reviewed: "2026-10-01"
+  upstream-version: "1.12.4"
   skill-author: K-Dense Inc.
 ---
 
@@ -11,7 +14,7 @@ metadata:
 
 ## Overview
 
-Scanpy is a scalable Python toolkit for analyzing single-cell RNA-seq data, built on AnnData. Apply this skill for complete single-cell workflows including quality control, normalization, dimensionality reduction, clustering, marker gene identification, visualization, and trajectory analysis. Current stable release: **scanpy 1.12.x** (January 2026).
+Scanpy is a scalable Python toolkit for analyzing single-cell RNA-seq data, built on AnnData. Apply this skill for complete single-cell workflows including quality control, normalization, dimensionality reduction, clustering, marker gene identification, visualization, and trajectory analysis. Targets **Scanpy 1.12.4** (released 2026-08-27), reviewed 2026-10-01. Native synthetic tests establish data/API contracts, not biological validity.
 
 ## Installation
 
@@ -21,7 +24,7 @@ Requires Python **3.12+** (scanpy 1.12 dropped Python ≤3.11) and anndata **≥
 uv pip install "scanpy[leiden]"
 ```
 
-The `[leiden]` extra installs `python-igraph` and `leidenalg`, required for Leiden clustering. For reproducible environments, pin a version: `uv pip install "scanpy[leiden]==1.12.1"`.
+The `[leiden]` extra installs `igraph` and `leidenalg`; the scripts explicitly select `flavor="igraph"`. For reproducible environments, pin a version: `uv pip install "scanpy[leiden]==1.12.4"`.
 
 For large or out-of-core datasets, many functions support [Dask](https://docs.dask.org/) arrays (experimental):
 
@@ -34,6 +37,43 @@ See the [Using dask with Scanpy](https://scanpy.scverse.org/en/stable/tutorials/
 If the input is an R-native single-cell object (`.rds`, `.RData`, Seurat, or SingleCellExperiment), first convert it to `.h5ad` with R tooling, then load it with Scanpy. Read `references/r_interop.md` for agent-run installation and conversion instructions across macOS, Linux, and Windows.
 
 For AnnData structure and I/O details, use the **anndata** skill. For probabilistic models and batch correction, use **scvi-tools**.
+
+## Representation and inference contracts
+
+- Input to QC/preprocessing must be identified raw counts. The scripts reject negative,
+  fractional, nonfinite or zero-total cells. Use `--counts-layer counts` when X is already
+  normalized; never infer provenance from integer-looking values alone.
+- `layers["counts"]` remains unnormalized; `.raw` is an independent full-gene
+  log-normalized snapshot. Gene subsetting also subsets every layer, but does not subset
+  `.raw` genes. Retain a full-gene object for pseudobulk; the full pipeline does so.
+- `seurat`/`cell_ranger` HVGs use log-normalized values; `seurat_v3` and
+  `seurat_v3_paper` use counts and require `scanpy[skmisc]`. Scaling/regression are optional,
+  may densify sparse data, and can remove biology along with covariates.
+- Marker ranking defaults to `.raw` when present; `--no-use-raw` selects X and `--layer`
+  selects an explicit log-normalized layer. `--groups`/`--reference` control contrasts.
+  Wilcoxon/t-test adjusted p-values use BH within each comparison; logreg returns ranking
+  scores without p-values. Clusters chosen from the same data yield exploratory markers.
+- Condition DE requires raw-count sums per sample and cell type, independent biological
+  replicates, aligned condition/donor metadata and a full-rank design. Analyze each cell
+  type separately; repeated donor samples require a suitable paired design. Aggregation
+  cannot fix confounding, missing replication, doublets or incorrect annotations.
+- Harmony (`harmonypy`) changes PCA coordinates; BBKNN (`bbknn`) changes the graph;
+  ComBat changes X. Keep original expression/counts for DE, and assess biological
+  conservation and batch mixing together. Requested integration/doublet failures stop.
+- The toolkit loads files into memory. For backed data, explicitly call `.to_memory()`
+  on a chosen subset and close the file; backed mode is not a general out-of-core
+  pipeline. Copy views before mutation. Dask support varies by function/array layout.
+- `.rds` needs an explicit R conversion stage. Cluster IDs do not determine cell types:
+  all mappings/signature assets are illustrative human marker examples, requiring review.
+
+Harmony 2 returns cells x PCs; the toolkit calls its native API because the
+Scanpy 1.12.4 wrapper still transposes that output and fails with current Harmony.
+
+Optional packages: `scikit-image` for Scrublet automatic thresholding, `loompy` for Loom,
+`scikit-misc` for v3 HVGs, `harmonypy==2.0.2`/`bbknn==1.6.0` for their integration branches, and `louvain`
+for the deprecated Louvain option (separate environment: louvain 0.8.2 requires
+igraph <0.12, conflicting with the tested igraph 1.0). Install only needed branches. R and optional integration
+execution boundaries are recorded in [references/upstream-review.md](references/upstream-review.md).
 
 ## When to Use This Skill
 
@@ -66,14 +106,14 @@ All scripts use a shared `scripts/_common.py` helper (loading, saving, figure co
 | `find_markers.py` | `rank_genes_groups` + per-group CSVs + marker plots | `python scripts/find_markers.py clu.h5ad --groupby leiden -o clu.h5ad` |
 | `annotate.py` | Map clusters → cell types from JSON/CSV; optional marker reference dotplot | `python scripts/annotate.py clu.h5ad -o ann.h5ad --mapping map.json` |
 | `score_genes.py` | Score gene signatures (JSON) and/or cell-cycle phase | `python scripts/score_genes.py ann.h5ad -o scored.h5ad --gene-sets sigs.json` |
-| `pseudobulk.py` | Aggregate counts by sample × cell type → matrix for pydeseq2 | `python scripts/pseudobulk.py ann.h5ad --by sample cell_type --out-prefix pb` |
+| `pseudobulk.py` | Aggregate counts by sample × cell type → matrix for pydeseq2 | `python scripts/pseudobulk.py ann.h5ad --by sample cell_type --metadata condition donor --out-prefix pb` |
 | `subset.py` | Subset by obs values or gene list (optionally clear stale embeddings) | `python scripts/subset.py ann.h5ad -o tcells.h5ad --obs cell_type --keep "T cells"` |
 | `plot.py` | Generate umap/tsne/pca/violin/dotplot/heatmap/etc. from a processed object | `python scripts/plot.py ann.h5ad --kind dotplot --genes CD3D CD14 --groupby cell_type` |
 
 ### One-shot end-to-end run
 
 ```bash
-# Counts → clustered, marker-annotated object + figures + marker CSVs
+# Counts → clustered object and exploratory marker ranks + figures + marker CSVs
 python scripts/run_pipeline.py raw.h5ad -o processed.h5ad \
     --resolution 0.5 --n-top-genes 2000 --scrublet
 # With multi-sample integration:
@@ -89,9 +129,9 @@ python scripts/qc_analysis.py        raw.h5ad  -o qc.h5ad   --scrublet
 python scripts/preprocess.py         qc.h5ad   -o norm.h5ad --n-top-genes 2000
 python scripts/reduce_dimensions.py  norm.h5ad -o red.h5ad  --n-pcs 40
 python scripts/cluster.py            red.h5ad  -o clu.h5ad  --resolution 0.3 0.5 0.8
-python scripts/find_markers.py       clu.h5ad  -o clu.h5ad  --groupby leiden --use-raw
+python scripts/find_markers.py       clu.h5ad  -o clu.h5ad  --groupby leiden_0.5 --use-raw
 # inspect results/markers/*.csv, decide labels, write a mapping JSON, then:
-python scripts/annotate.py           clu.h5ad  -o ann.h5ad  --mapping celltypes.json
+python scripts/annotate.py           clu.h5ad  -o ann.h5ad  --mapping celltypes.json --cluster-key leiden_0.5
 ```
 
 The sections below document the underlying scanpy calls each script performs — read them when customizing beyond the script flags.
@@ -107,7 +147,7 @@ import numpy as np
 
 # Configure settings
 sc.settings.verbosity = 3
-sc.settings.set_figure_params(dpi=80, facecolor='white')
+sc.set_figure_params(dpi=80, facecolor='white')
 sc.settings.figdir = './figures/'
 sc.settings.autosave = True  # Preferred over per-plot save= (deprecated in scanpy 1.12)
 ```
@@ -147,7 +187,7 @@ adata.obs        # Cell metadata (DataFrame)
 adata.var        # Gene metadata (DataFrame)
 adata.uns        # Unstructured annotations (dict)
 adata.obsm       # Multi-dimensional cell data (PCA, UMAP)
-adata.raw        # Raw data backup
+adata.raw        # Snapshot of X/var; here full log-normalized expression, NOT counts
 
 # Access cell and gene names
 adata.obs_names  # Cell barcodes
@@ -182,7 +222,7 @@ file. See also [references/standard_workflow.md](references/standard_workflow.md
 - `pct_counts_mt`: Mitochondrial threshold (typically 5-20%)
 
 ### Normalization
-- `target_sum`: Target counts per cell (default 1e4)
+- `target_sum`: Target counts per cell (scripts use 1e4; Scanpy default None uses a median)
 
 ### Feature Selection
 - `n_top_genes`: Number of HVGs (typically 2000-3000)
@@ -202,7 +242,7 @@ file. See also [references/standard_workflow.md](references/standard_workflow.md
 3. **Use Leiden clustering**: `sc.tl.louvain` is deprecated in scanpy 1.12
 4. **Try multiple clustering resolutions**: Find optimal granularity
 5. **Validate cell type annotations**: Use multiple marker genes
-6. **Use `use_raw=True` for gene expression plots**: Shows normalized counts from `.raw`
+6. **Select plotting values explicitly**: `use_raw=True` reads `.raw` as stored; verify it contains log-normalized expression
 7. **Check PCA variance ratio**: Determine optimal number of PCs
 8. **Save intermediate results**: Long workflows can fail partway through
 9. **Pseudobulk for DE**: Do not treat `rank_genes_groups` p-values as rigorous DE between conditions

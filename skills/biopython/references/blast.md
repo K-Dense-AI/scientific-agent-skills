@@ -8,7 +8,26 @@ Bio.Blast provides tools for running BLAST searches (both locally and via NCBI w
 
 ### Bio.Blast.NCBIWWW
 
-The `qblast()` function submits sequences to NCBI's online BLAST service:
+The `qblast()` function submits to `https://blast.ncbi.nlm.nih.gov/Blast.cgi`
+(`CMD=Put` then `CMD=Get` with the returned RID). The current URL API documents
+`XML2_S` for one XML document; `XML2` can return a ZIP archive. The legacy
+`NCBIWWW` API returns a text handle and `NCBIXML` supports XML1/XML2; keep that
+object model separate from the newer binary-handle `Bio.Blast.qblast`/`Blast.read`.
+
+Set `NCBIWWW.email` and `NCBIWWW.tool` before submission. Entrez settings and its
+3/10 requests-per-second limits do not apply to BLAST: leave at least 10 seconds
+between contacts and 60 seconds between polls of one RID. Coordinate across
+workers; use local BLAST for volume. `qblast` polls internally without a hard
+completion deadline. These remote examples were checked against docs/source and
+mocked transport, not submitted to the public search queue.
+
+```python
+from Bio.Blast import NCBIWWW
+NCBIWWW.email = "your.email@example.com"
+NCBIWWW.tool = "your_tool_name"
+```
+
+Submit a single query:
 
 ```python
 from Bio.Blast import NCBIWWW
@@ -21,7 +40,8 @@ record = SeqIO.read("sequence.fasta", "fasta")
 result_handle = NCBIWWW.qblast(
     program="blastn",           # BLAST program
     database="nt",              # Database to search
-    sequence=str(record.seq)    # Query sequence
+    sequence=str(record.seq),   # Query sequence
+    format_type="XML2_S"        # Single XML document, not a ZIP archive
 )
 
 # Save results
@@ -41,11 +61,12 @@ result_handle.close()
 ### Common Databases
 
 **Nucleotide databases:**
-- `nt` - All GenBank+EMBL+DDBJ+PDB sequences
+- `nt` - NCBI nucleotide collection; the service can substitute `core_nt`
+- `core_nt` - Core nucleotide database; record the actual database in results
 - `refseq_rna` - RefSeq RNA sequences
 
 **Protein databases:**
-- `nr` - All non-redundant GenBank CDS translations
+- `nr` - NCBI nonredundant protein collection (not every possible protein)
 - `refseq_protein` - RefSeq protein sequences
 - `pdb` - Protein Data Bank sequences
 - `swissprot` - Curated UniProtKB/Swiss-Prot
@@ -59,10 +80,9 @@ result_handle = NCBIWWW.qblast(
     sequence=str(record.seq),
     expect=0.001,              # E-value threshold
     hitlist_size=50,           # Number of hits to return
-    alignments=25,             # Number of alignments to show
     word_size=11,              # Word size for initial match
     gapcosts="5 2",            # Gap costs (open extend)
-    format_type="XML"          # Output format (default)
+    format_type="XML2_S"       # Single XML document
 )
 ```
 
@@ -70,14 +90,14 @@ result_handle = NCBIWWW.qblast(
 
 ```python
 # Use FASTA format string
-fasta_string = open("sequence.fasta").read()
-result_handle = NCBIWWW.qblast("blastn", "nt", fasta_string)
+with open("sequence.fasta") as handle:
+    fasta_string = handle.read()
+result_handle = NCBIWWW.qblast("blastn", "nt", fasta_string, format_type="XML2_S")
 
 # Use GenBank ID
-result_handle = NCBIWWW.qblast("blastn", "nt", "EU490707")
+result_handle = NCBIWWW.qblast("blastn", "nt", "EU490707", format_type="XML2_S")
 
-# Use GI number
-result_handle = NCBIWWW.qblast("blastn", "nt", "160418")
+# Prefer accession.version identifiers over historical GI numbers.
 ```
 
 ## Parsing BLAST Results
@@ -262,8 +282,8 @@ from Bio import Entrez, SeqIO
 
 Entrez.email = "your.email@example.com"
 
-def fetch_hit_sequences(blast_record, num_sequences=5):
-    """Fetch sequences for top BLAST hits."""
+def fetch_hit_sequences(blast_record, num_sequences=5, db="nucleotide"):
+    """Fetch hits; choose protein for blastp/blastx targets, nucleotide otherwise."""
     sequences = []
 
     for alignment in blast_record.alignments[:num_sequences]:
@@ -271,7 +291,7 @@ def fetch_hit_sequences(blast_record, num_sequences=5):
 
         # Fetch sequence from GenBank
         handle = Entrez.efetch(
-            db="nucleotide",
+            db=db,
             id=accession,
             rettype="fasta",
             retmode="text"
@@ -356,7 +376,7 @@ record = SeqIO.read("query.fasta", "fasta")
 
 # Run BLAST
 print("Running BLAST search...")
-result_handle = NCBIWWW.qblast("blastn", "nt", str(record.seq))
+result_handle = NCBIWWW.qblast("blastn", "nt", str(record.seq), format_type="XML2_S")
 
 # Parse results
 blast_record = NCBIXML.read(result_handle)
@@ -370,7 +390,7 @@ for i, alignment in enumerate(blast_record.alignments[:5], 1):
     print(f"   E-value: {hsp.expect}, Identity: {identity:.1f}%")
 ```
 
-### Find Orthologs
+### Find Candidate Homologs
 
 ```python
 from Bio.Blast import NCBIWWW, NCBIXML
@@ -386,7 +406,8 @@ result_handle = NCBIWWW.qblast(
     "blastn",
     "nt",
     str(query_record.seq),
-    entrez_query="Mus musculus[Organism]"  # Restrict to mouse
+    entrez_query="Mus musculus[Organism]",  # Restrict to mouse
+    format_type="XML2_S"
 )
 
 blast_record = NCBIXML.read(result_handle)
@@ -394,7 +415,7 @@ blast_record = NCBIXML.read(result_handle)
 # Find best hit
 if blast_record.alignments:
     best_hit = blast_record.alignments[0]
-    print(f"Potential ortholog: {best_hit.title}")
+    print(f"Candidate homolog: {best_hit.title}")
     print(f"Accession: {best_hit.accession}")
 ```
 
@@ -407,44 +428,29 @@ from Bio import SeqIO
 # Read multiple sequences
 sequences = list(SeqIO.parse("queries.fasta", "fasta"))
 
-# Create batch results file
-with open("batch_results.xml", "w") as out_file:
-    for seq_record in sequences:
-        print(f"Searching for {seq_record.id}...")
-
-        result_handle = NCBIWWW.qblast("blastn", "nt", str(seq_record.seq))
-        out_file.write(result_handle.read())
-        result_handle.close()
-
-# Parse batch results
-with open("batch_results.xml") as result_handle:
-    for blast_record in NCBIXML.parse(result_handle):
-        print(f"\n{blast_record.query}: {len(blast_record.alignments)} hits")
+# Illustrative serial batch: save one complete XML2 document per query.
+from pathlib import Path
+from time import sleep
+Path("blast_results").mkdir(exist_ok=True)
+for index, seq_record in enumerate(sequences):
+    if index:
+        sleep(10)  # Coordinate all other callers separately.
+    path = Path("blast_results") / f"query_{index}.xml"
+    with NCBIWWW.qblast("blastn", "nt", str(seq_record.seq), format_type="XML2_S") as result_handle:
+        path.write_text(result_handle.read(), encoding="utf-8")
+    with path.open() as result_handle:
+        for blast_record in NCBIXML.parse(result_handle):
+            print(f"{seq_record.id}: {len(blast_record.alignments)} hits")
 ```
 
 ### Reciprocal Best Hits
 
-```python
-def reciprocal_best_hit(seq1_id, seq2_id, database="nr", program="blastp"):
-    """Check if two sequences are reciprocal best hits."""
-    from Bio.Blast import NCBIWWW, NCBIXML
-    from Bio import Entrez
-
-    Entrez.email = "your.email@example.com"
-
-    # Forward BLAST
-    result1 = NCBIWWW.qblast(program, database, seq1_id)
-    record1 = NCBIXML.read(result1)
-    best_hit1 = record1.alignments[0].accession if record1.alignments else None
-
-    # Reverse BLAST
-    result2 = NCBIWWW.qblast(program, database, seq2_id)
-    record2 = NCBIXML.read(result2)
-    best_hit2 = record2.alignments[0].accession if record2.alignments else None
-
-    # Check reciprocity
-    return best_hit1 == seq2_id and best_hit2 == seq1_id
-```
+For a real reciprocal-best-hit analysis, run local BLAST against each species'
+proteome in turn. Exclude self hits, resolve tied scores explicitly, normalize
+accession versions, and set alignment coverage requirements. Confirm that A's best
+qualified hit in species B is B and B's best qualified hit in species A is A.
+Unrestricted `nr` searches, including self matches, cannot implement this check;
+even a reciprocal best hit is evidence for orthology, not proof.
 
 ## Error Handling
 
@@ -453,7 +459,7 @@ from Bio.Blast import NCBIWWW, NCBIXML
 from urllib.error import HTTPError
 
 try:
-    result_handle = NCBIWWW.qblast("blastn", "nt", "ATCGATCGATCG")
+    result_handle = NCBIWWW.qblast("blastn", "nt", "ATCGATCGATCG", format_type="XML2_S")
     blast_record = NCBIXML.read(result_handle)
     result_handle.close()
 except HTTPError as e:

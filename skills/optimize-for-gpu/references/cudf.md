@@ -1,8 +1,11 @@
 # cuDF Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 cuDF is a GPU DataFrame library that provides a pandas-like API for loading, joining, aggregating, filtering, and manipulating tabular data entirely on the GPU. It's part of the NVIDIA RAPIDS ecosystem and is built on the Apache Arrow columnar memory format.
 
-> **Full documentation:** https://docs.rapids.ai/api/cudf/stable/
+> **Full documentation:** https://docs.nvidia.com/cudf/26.08/
 
 ## Table of Contents
 
@@ -31,11 +34,11 @@ Use `uv add` in standalone examples; follow the user's existing project package 
 is already configured.
 
 ```bash
-uv add "cudf-cu12==26.6.*"    # For CUDA 12.x
-uv add "cudf-cu13==26.6.*"    # For CUDA 13.x
+uv add "cudf-cu12==26.8.*"    # For CUDA 12.x
+uv add "cudf-cu13==26.8.*"    # For CUDA 13.x
 ```
 
-cuDF wheels are now published directly to PyPI — the `--extra-index-url=https://pypi.nvidia.com` extra index is no longer required. Requires Python >= 3.11.
+cuDF wheels are now published directly to PyPI — the `--extra-index-url=https://pypi.nvidia.com` extra index is no longer required. Requires Python 3.11-3.14; 26.08 targets pandas 3, CuPy 14, and NumPy 2.
 
 Verify:
 ```python
@@ -86,7 +89,7 @@ import pandas as pd  # Now GPU-accelerated
 - Every operation is first attempted on GPU (cuDF). If it fails, it automatically falls back to CPU (pandas).
 - Data transfers between GPU and CPU happen only when necessary.
 - Uses managed memory by default — can process datasets larger than GPU memory.
-- Currently passes **93% of pandas' 187,000+ unit tests**.
+- Validate the exact workload; aggregate upstream test pass rates do not establish API equivalence.
 
 ### Profiling GPU vs CPU Execution
 
@@ -187,7 +190,7 @@ cudf.concat([df1, df2])
 df1.merge(df2, on="key")
 df1.merge(df2, on="key", how="left")  # left, right, inner, outer
 
-# Arrow interop (zero-copy)
+# Arrow interop (host/device transfer boundary)
 arrow_table = df.to_arrow()
 df = cudf.DataFrame.from_arrow(arrow_table)
 ```
@@ -439,8 +442,13 @@ def gpu_multiply(in_col, out_col, multiplier):
     if i < in_col.size:
         out_col[i] = in_col[i] * multiplier
 
-df["result"] = 0.0
-gpu_multiply.forall(len(df))(df["a"], df["result"], 10.0)
+import cupy as cp
+# Reject/fill nulls according to the contract before obtaining a dense array.
+in_values = df["a"].to_cupy()
+out_values = cp.empty_like(in_values)
+gpu_multiply.forall(len(df))(in_values, out_values, 10.0)
+cuda.synchronize()
+df["result"] = cudf.Series(out_values, index=df.index)
 ```
 
 ### UDF Limitations
@@ -465,7 +473,7 @@ s = cudf.Series([1, None, 3, None, 5])
 s.isna()                # Boolean mask
 s.notna()
 s.fillna(0)             # Fill with scalar
-s.fillna({"a": 0, "b": 1})  # Fill with dict (per-column)
+df.fillna({"a": 0, "b": 1})  # DataFrame per-column filling
 s.dropna()
 
 # Aggregations skip NA by default
@@ -544,16 +552,17 @@ cuda.set_memory_manager(RMMNumbaManager)
 
 ### Copy-on-Write
 
-```python
-cudf.set_option("copy_on_write", True)
-# or: export CUDF_COPY_ON_WRITE=1
-```
+cuDF 26.08 enables copy-on-write by default for the pandas 3 transition. The old
+`copy_on_write` option and `CUDF_COPY_ON_WRITE` toggle are removed. Avoid mutating
+a borrowed array to update a DataFrame: compute an output and assign it as a column.
 
 Slices, `.head()`, shallow copies, and view-generating methods share memory until one is modified. Reduces memory usage significantly for workflows with many derived DataFrames.
 
 ### Memory Profiling
 
 ```python
+import rmm.statistics
+
 rmm.statistics.enable_statistics()
 stats = rmm.statistics.get_statistics()
 # Returns: current_bytes, current_count, peak_bytes, peak_count, total_bytes, total_count
@@ -563,13 +572,13 @@ stats = rmm.statistics.get_statistics()
 
 ## Interoperability
 
-### CuPy (Zero-Copy)
+### CuPy (Device-Resident Interchange)
 
 ```python
 import cupy as cp
 
 # cuDF → CuPy
-arr = df.to_cupy()             # DataFrame → 2D CuPy array
+arr = df.to_cupy()             # May allocate/copy to combine columns and coerce dtype
 arr = cp.asarray(df["col"])    # Series → 1D CuPy array
 arr = df["col"].values         # Series → 1D CuPy array
 
@@ -581,7 +590,7 @@ s = cudf.Series(cupy_1d_array)
 df = cudf.from_dlpack(cupy_array.__dlpack__())
 ```
 
-### Arrow (Zero-Copy)
+### Arrow (Host Transfer)
 
 ```python
 arrow_table = df.to_arrow()
@@ -596,7 +605,7 @@ df = cudf.DataFrame.from_arrow(arrow_table)
 
 ### CUDA Array Interface
 
-cuDF Series exposes `__cuda_array_interface__` for zero-copy sharing with any compatible library (CuPy, Numba, PyTorch, etc.).
+Non-null numeric Series can expose `__cuda_array_interface__`; dtype, null masks, copy-on-write and ownership constrain interoperability. A DataFrame is columnar, so producing one dense 2D array generally copies.
 
 ---
 
@@ -641,13 +650,13 @@ Key differences from cuDF: `.iloc` not supported, must call `.compute()` to mate
 
 4. **Use pool allocators** via RMM — avoids per-allocation `cudaMalloc` overhead.
 
-5. **Enable copy-on-write** — `cudf.set_option("copy_on_write", True)` reduces memory from slices and views.
+5. **Account for copy-on-write**, enabled in 26.08: mutation can materialize shared buffers.
 
 6. **Reshape data to be long** (more rows, fewer columns) — GPUs parallelize over rows.
 
 7. **Never iterate** — use vectorized operations exclusively. `for row in df.iterrows()` defeats the purpose of GPU acceleration.
 
-8. **Minimum dataset size:** GPUs shine with **10,000-100,000+ rows**. Smaller datasets may be faster on CPU.
+8. **Benchmark actual shapes.** No fixed row-count threshold proves a GPU benefit.
 
 9. **Use vectorized string ops** (`.str.` accessor) instead of row-wise string UDFs.
 
@@ -742,7 +751,7 @@ import cupy as cp
 # Convert to CuPy for operations cuDF doesn't support
 arr = df[["x", "y", "z"]].to_cupy()
 norms = cp.linalg.norm(arr, axis=1)
-df["norm"] = cudf.Series(norms)
+df["norm"] = cudf.Series(norms, index=df.index)
 ```
 
 ---
@@ -750,13 +759,11 @@ df["norm"] = cudf.Series(norms)
 ## Configuration
 
 ```python
-cudf.set_option("copy_on_write", True)            # Enable copy-on-write
 cudf.set_option("mode.pandas_compatible", True)    # Match pandas behavior
 cudf.describe_option()                             # List all options
 ```
 
 | Environment Variable | Purpose |
 |---------------------|---------|
-| `CUDF_COPY_ON_WRITE=1` | Enable copy-on-write |
 | `CUDF_PANDAS_RMM_MODE` | Control memory allocator for cudf.pandas |
 | `CUDF_PANDAS_FALLBACK_MODE=1` | Force CPU-only execution in cudf.pandas |

@@ -36,6 +36,7 @@ from _common import (  # noqa: E402
     add_common_args,
     emit,
     finding,
+    finite_float,
     mean,
     note,
     one_way_components,
@@ -73,17 +74,19 @@ def main() -> int:
         description="Check accuracy and precision from validation data."
     )
     parser.add_argument("--input", "-i", help="CSV/TSV/JSON file, or '-' for stdin")
-    parser.add_argument("--accuracy-limit", type=float, default=None,
+    parser.add_argument("--accuracy-limit", type=finite_float, default=None,
                         help="flag a level whose mean recovery deviates more than this %% "
                              "from 100%%")
-    parser.add_argument("--rsd-limit", type=float, default=None,
+    parser.add_argument("--rsd-limit", type=finite_float, default=None,
                         help="flag repeatability or intermediate precision %%RSD above this")
-    parser.add_argument("--ci-level", type=float, default=0.95,
+    parser.add_argument("--ci-level", type=finite_float, default=0.95,
                         help="confidence level for accuracy intervals (default 0.95)")
-    parser.add_argument("--sd-ci-level", type=float, default=0.90,
+    parser.add_argument("--sd-ci-level", type=finite_float, default=0.90,
                         help="confidence level for SD intervals (default 0.90)")
     parser.add_argument("--design-check", choices=sorted(DESIGN_MINIMA), default=None,
                         help="comment on the design against Q2(R2) recommended minima")
+    parser.add_argument("--test-concentration", type=finite_float,
+                        help="nominal level representing 100%% of test concentration for option (b)")
     parser.add_argument("--require-ci-within-limit", action="store_true",
                         help="require the whole accuracy CI inside the limit, not just the mean")
     add_common_args(parser)
@@ -92,9 +95,20 @@ def main() -> int:
     if not 0.5 <= args.ci_level < 1.0:
         raise InputError("--ci-level must be in [0.5, 1)")
 
+    if not 0.5 <= args.sd_ci_level < 1.0:
+        raise InputError("--sd-ci-level must be in [0.5, 1)")
+    for name in ("accuracy_limit", "rsd_limit", "test_concentration"):
+        value = getattr(args, name)
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            raise InputError(f"--{name.replace('_', '-')} must be finite and > 0")
+    if args.require_ci_within_limit and args.accuracy_limit is None:
+        raise InputError("--require-ci-within-limit needs --accuracy-limit")
+
     rows = parse_rows(read_input(args.input), args.input)
     require_columns(rows, ["level", "measured"])
-    has_group = "group" in rows[0]
+    has_group = any("group" in row for row in rows)
+    if has_group and any(not (r.get("group") or "").strip() for r in rows):
+        raise InputError("group must be present and non-empty on every row")
 
     records = []
     for i, r in enumerate(rows):
@@ -118,11 +132,22 @@ def main() -> int:
             raise InputError("a nominal level of 0 cannot be used for recovery")
         recoveries = [100.0 * v / level for v in vals]
         all_recoveries.extend(recoveries)
-        m = mean(recoveries)
+        independent = recoveries
+        interval_basis = "individual independent preparations"
+        if has_group:
+            accuracy_groups: dict[str, list[float]] = {}
+            for rec in records:
+                if rec["level"] == level:
+                    accuracy_groups.setdefault(rec["group"], []).append(100.0 * rec["measured"] / level)
+            if len(accuracy_groups) > 1:
+                independent = [mean(values) for values in accuracy_groups.values()]
+                interval_basis = "equally weighted independent group means"
+        m = mean(independent)
         n = len(recoveries)
-        if n >= 2:
-            sd = sample_sd(recoveries)
-            half = t_ppf(0.5 + args.ci_level / 2.0, n - 1) * sd / math.sqrt(n)
+        n_independent = len(independent)
+        sd = sample_sd(recoveries)
+        if n_independent >= 2:
+            half = t_ppf(0.5 + args.ci_level / 2.0, n_independent - 1) * sample_sd(independent) / math.sqrt(n_independent)
             lo, hi = m - half, m + half
         else:
             sd, lo, hi = float("nan"), float("nan"), float("nan")
@@ -130,7 +155,9 @@ def main() -> int:
             {
                 "level": level,
                 "n": n,
-                "mean_measured": mean(vals),
+                "n_independent_for_ci": n_independent,
+                "interval_basis": interval_basis,
+                "mean_measured": m * level / 100.0,
                 "mean_recovery_pct": m,
                 "bias_pct": m - 100.0,
                 "sd_recovery_pct": sd,
@@ -144,8 +171,8 @@ def main() -> int:
                     f"level {level:g}: mean recovery {m:.2f}% is {m - 100.0:+.2f}% from nominal, "
                     f"outside +/-{args.accuracy_limit:g}%"
                 )
-            elif args.require_ci_within_limit and math.isfinite(lo):
-                if lo < 100.0 - args.accuracy_limit or hi > 100.0 + args.accuracy_limit:
+            elif args.require_ci_within_limit:
+                if not math.isfinite(lo) or lo < 100.0 - args.accuracy_limit or hi > 100.0 + args.accuracy_limit:
                     findings.append(
                         f"level {level:g}: mean recovery {m:.2f}% is inside "
                         f"+/-{args.accuracy_limit:g}% but its "
@@ -159,17 +186,22 @@ def main() -> int:
     pct = int(args.sd_ci_level * 100)
     precision_rows: list[dict] = []
 
-    def precision_block(label: str, groups: dict[str, list[float]], reference: float | None):
-        """Append rows for one level (or for the normalised all-levels view)."""
+    def precision_block(label: str, groups: dict[str, list[float]]):
+        """Append rows for one concentration level."""
         try:
             comp = one_way_components(groups)
         except InputError as exc:
             vals = [v for vs in groups.values() for v in vs]
             if len(vals) < 2:
                 note(f"{label}: too few values for a precision estimate")
+                if args.rsd_limit is not None:
+                    findings.append(f"{label}: too few determinations to assess precision")
+                return None
+            if len(groups) > 1:
+                findings.append(f"{label}: precision components unidentifiable ({exc})")
                 return None
             sd = sample_sd(vals)
-            base = reference if reference else abs(mean(vals))
+            base = abs(mean(vals))
             rsd = 100.0 * sd / base if base else float("nan")
             lo, hi = sd_confidence_interval(sd, len(vals) - 1, args.sd_ci_level)
             precision_rows.append(
@@ -177,9 +209,11 @@ def main() -> int:
                  "df": len(vals) - 1, f"ci{pct}_low_sd": lo, f"ci{pct}_high_sd": hi}
             )
             note(f"{label}: intermediate precision not estimated ({exc})")
+            if args.rsd_limit is not None and (not math.isfinite(rsd) or rsd > args.rsd_limit):
+                findings.append(f"{label}: repeatability RSD exceeds the limit or is undefined")
             return None
 
-        base = reference if reference else abs(comp.grand_mean)
+        base = abs(comp.grand_mean)
 
         def as_rsd(sd: float) -> float:
             return 100.0 * sd / base if base else float("nan")
@@ -214,7 +248,7 @@ def main() -> int:
                 ("repeatability", as_rsd(comp.sd_repeatability)),
                 ("intermediate precision", as_rsd(comp.sd_intermediate)),
             ):
-                if math.isfinite(value) and value > args.rsd_limit:
+                if not math.isfinite(value) or value > args.rsd_limit:
                     findings.append(
                         f"{label}: {name} {value:.3f}% RSD exceeds the stated "
                         f"{args.rsd_limit:g}% limit"
@@ -227,30 +261,25 @@ def main() -> int:
             for rec in records:
                 if rec["level"] == level:
                     groups.setdefault(rec["group"], []).append(rec["measured"])
-            precision_block(f"{level:g}", groups, reference=abs(level))
+            precision_block(f"{level:g}", groups)
 
-        # Level-independent view: recovery as % of nominal, pooled across levels.
-        norm_groups: dict[str, list[float]] = {}
-        for rec in records:
-            norm_groups.setdefault(rec["group"], []).append(
-                100.0 * rec["measured"] / rec["level"]
-            )
-        if len(norm_groups) >= 2:
-            precision_block("all (% of nominal)", norm_groups, reference=100.0)
+        # Normalized recoveries are not pooled: level-specific bias would inflate precision.
     else:
         for level in levels:
             vals = [rec["measured"] for rec in records if rec["level"] == level]
             if len(vals) < 2:
+                if args.rsd_limit is not None:
+                    findings.append(f"level {level:g}: too few determinations to assess precision")
                 continue
             sd = sample_sd(vals)
             lo, hi = sd_confidence_interval(sd, len(vals) - 1, args.sd_ci_level)
-            rsd = 100.0 * sd / abs(level)
+            rsd = 100.0 * sd / abs(mean(vals)) if mean(vals) else float("nan")
             precision_rows.append(
                 {"level": f"{level:g}", "component": "repeatability (no group column)",
                  "sd": sd, "rsd_pct": rsd, "df": len(vals) - 1,
                  f"ci{pct}_low_sd": lo, f"ci{pct}_high_sd": hi}
             )
-            if args.rsd_limit is not None and rsd > args.rsd_limit:
+            if args.rsd_limit is not None and (not math.isfinite(rsd) or rsd > args.rsd_limit):
                 findings.append(
                     f"{level:g}: repeatability {rsd:.3f}% RSD exceeds {args.rsd_limit:g}%"
                 )
@@ -268,6 +297,8 @@ def main() -> int:
 
     # ---------------- Design commentary ----------------
     if args.design_check:
+        note("design screen checks counts only; confirm independent preparations, coverage of "
+             "the reportable range, and repeatability conditions in the protocol")
         # Q2(R2) 3.3.2.1 offers two alternatives, and either one is sufficient:
         #   (a) >=9 determinations covering the reportable range (e.g. 3 levels x 3), or
         #   (b) >=6 determinations at 100% of the test concentration.
@@ -276,24 +307,24 @@ def main() -> int:
         spec = DESIGN_MINIMA[args.design_check]
         option_a = len(records) >= spec["range_determinations"] and len(levels) >= spec["range_levels"]
         per_level = {lv: sum(1 for r in records if r["level"] == lv) for lv in levels}
-        best_single = max(per_level.values())
+        best_single = per_level.get(args.test_concentration, 0)
         option_b = best_single >= spec["single_level_determinations"]
         if option_a:
             note(
-                f"design satisfies Q2(R2) 3.3.2.1 option (a): {len(records)} determinations "
+                f"count screen matches Q2(R2) 3.3.2.1 option (a): {len(records)} determinations "
                 f"across {len(levels)} levels"
             )
         elif option_b:
             note(
-                f"design satisfies Q2(R2) 3.3.2.1 option (b): {best_single} determinations at a "
-                "single level. Note that option (b) gives no information about precision "
+                f"count screen matches Q2(R2) 3.3.2.1 option (b): {best_single} determinations at "
+                "the declared 100% test concentration. Option (b) gives no information about precision "
                 "across the range"
             )
         else:
             findings.append(
                 f"repeatability design meets neither Q2(R2) 3.3.2.1 option: "
                 f"{len(records)} determinations across {len(levels)} level(s), with at most "
-                f"{best_single} at any one level. Option (a) needs "
+                f"{best_single} at the declared --test-concentration. Option (a) needs "
                 f"{spec['range_determinations']} across at least {spec['range_levels']} levels; "
                 f"option (b) needs {spec['single_level_determinations']} at 100% of the test "
                 "concentration"

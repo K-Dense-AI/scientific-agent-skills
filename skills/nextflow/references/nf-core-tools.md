@@ -1,16 +1,16 @@
 # nf-core Tools CLI Reference
 
-`nf-core` is a Python CLI for creating, linting, testing, and running nf-core-style pipelines, modules, and subworkflows. Source: https://nf-co.re/docs/nf-core-tools
+`nf-core` is a Python CLI for creating, linting, testing, and running nf-core-style pipelines, modules, and subworkflows. Target: **4.1.0**, Python >=3.10,<4. Command signatures were checked against the installed release. Source: https://nf-co.re/docs/nf-core-tools and https://github.com/nf-core/tools/tree/4.1.0 . Remote downloads, scaffolding, schema web GUI and container runs below are illustrative; review before invoking.
 
 ## Install
 
 ```bash
-uv pip install nf-core            # PyPI
+uv tool install "nf-core==4.1.0"
 conda install -c bioconda nf-core
 nf-core --version
 ```
 
-In tools **v3+** the commands are grouped under `pipelines`, `modules`, `subworkflows`, and `test-datasets`. (Older flat commands like `nf-core create`/`nf-core lint` still work but emit deprecation warnings — use the grouped form.) Run `nf-core --help` or `nf-core <group> --help` to see current options, or `nf-core interface` for a graphical TUI command explorer.
+In tools **4.1.0** the commands are grouped under `pipelines`, `modules`, `subworkflows`, and `test-datasets`. (Old flat commands such as `nf-core lint` have been removed and return an error.) Run `nf-core --help` or `nf-core <group> --help` to see current options, or `nf-core interface` for a graphical TUI command explorer.
 
 For `modules`/`subworkflows`, group-level options go **before** the subcommand, e.g. to target a non-default component repo: `nf-core modules -g <git-url> -b <branch> install fastqc`.
 
@@ -19,7 +19,7 @@ For `modules`/`subworkflows`, group-level options go **before** the subcommand, 
 | Command | Purpose |
 |---------|---------|
 | `nf-core pipelines list [keywords]` | List/search nf-core pipelines (`--json`, `--sort`) |
-| `nf-core pipelines create` | Scaffold a new pipeline from the template (interactive TUI; `--name --description --author` for non-interactive) |
+| `nf-core pipelines create` | Scaffold a new pipeline from the template (interactive TUI; `--name --description --author` supply identity; use `--template-yaml` for reproducible options) |
 | `nf-core pipelines launch <name>` | Interactive, schema-validated run command + params file |
 | `nf-core pipelines download <name>` | Download pipeline + containers for offline use (`--revision`, `--container-system singularity`, `--outdir`) |
 | `nf-core pipelines lint` | Lint the pipeline in the current dir against nf-core standards (`--release`, `--fix`, `--dir`) |
@@ -68,7 +68,7 @@ Manage reusable process modules from the central [nf-core/modules](https://githu
 | `nf-core modules patch <tool>` | Record local changes to an installed module as a patch |
 | `nf-core modules create [tool]` | Scaffold a new module (`main.nf`, `meta.yml`, `tests/`) |
 | `nf-core modules lint <tool>` | Lint a module against module specs |
-| `nf-core modules test <tool>` | Run the module's nf-test suite |
+| `nf-core modules test <tool>` | Run tests twice for snapshot stability in a modules repository; not a pipeline repository |
 | `nf-core modules bump-versions` | Bump tool versions in modules |
 
 ```bash
@@ -76,11 +76,13 @@ Manage reusable process modules from the central [nf-core/modules](https://githu
 nf-core modules install fastqc
 nf-core modules install samtools/sort
 
-# Author a new one, then lint + test it
+# In a modules repository: author a new one, then lint + test it
 nf-core modules create mytool
 nf-core modules lint mytool
 nf-core modules test mytool
 ```
+
+In a pipeline repository, run `nf-test test <test-path>` directly for local/modified components. `nf-core modules test` is scoped to nf-core/modules-like repositories and rejects pipeline repositories.
 
 Tool naming uses `tool` or `tool/subtool` (e.g. `samtools/sort`). Installed modules are pinned by git SHA in `modules.json`.
 
@@ -108,7 +110,8 @@ nf-core subworkflows test align_bwa
 ## Test datasets
 
 ```bash
-nf-core test-datasets list              # list test-data branches
+nf-core test-datasets list-branches     # list test-data branches
+nf-core test-datasets list              # list files on a selected branch
 nf-core test-datasets search <term>     # find small test files in nf-core/test-datasets
 ```
 
@@ -120,7 +123,7 @@ Use these tiny, version-controlled files in module/pipeline tests (see `referenc
 nf-core pipelines create                       # scaffold
 nf-core modules install fastqc                 # reuse community modules
 nf-core modules create mytool                  # add a custom one
-nf-core modules test mytool                    # nf-test it
+nf-test test path/to/main.nf.test               # test a local component in a pipeline
 nf-core subworkflows install bam_sort_stats_samtools
 nf-core pipelines schema build                 # keep schema in sync with params
 nf-core pipelines lint                          # validate everything

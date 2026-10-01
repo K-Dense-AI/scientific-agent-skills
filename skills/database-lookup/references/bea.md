@@ -159,7 +159,7 @@ The main data retrieval method. Parameters vary by dataset.
 |------------|--------|----------|-------------|
 | `TableName`| string | Yes      | NIPA table identifier (e.g., `T10101`). |
 | `Frequency`| string | Yes      | `A` (annual), `Q` (quarterly), `M` (monthly). |
-| `Year`     | string | Yes      | Comma-separated years, or `ALL`, or `X` for latest. |
+| `Year`     | string | Yes      | Comma-separated years, or `ALL`/`X` for all years; prefer an explicit bounded range. |
 
 **Example (Real GDP percent change, quarterly, 2022-2024):**
 ```
@@ -228,7 +228,7 @@ https://apps.bea.gov/api/data?method=GetData&DatasetName=NIPA&TableName=T10105&F
 **Parameters:**
 | Parameter     | Type   | Required | Description |
 |--------------|--------|----------|-------------|
-| `TableName`  | string | Yes      | Regional table (e.g., `CAGDP1` for GDP by state). |
+| `TableName`  | string | Yes      | Regional table (e.g., `CAGDP1` for GDP by county and metropolitan area). |
 | `LineCode`   | int    | Yes      | Line number within the table (specifies the data series). |
 | `GeoFips`    | string | Yes      | FIPS code: `STATE` (all states), `COUNTY` (all counties), `MSA` (all MSAs), or specific FIPS (e.g., `06000` for California). |
 | `Year`       | string | Yes      | Comma-separated years or `ALL` or `LAST5`. |
@@ -236,9 +236,9 @@ https://apps.bea.gov/api/data?method=GetData&DatasetName=NIPA&TableName=T10105&F
 **Common Regional Tables:**
 | Table | Description |
 |-------|-------------|
-| `CAGDP1` | GDP summary by state |
-| `CAGDP2` | GDP by component by state |
-| `CAGDP9` | Real GDP by state |
+| `CAGDP1` | GDP summary by county/metropolitan area |
+| `CAGDP2` | GDP by county/metropolitan area; check current table description |
+| `CAGDP9` | Real GDP by county/metropolitan area |
 | `CAINC1` | Personal income summary by state |
 | `CAINC4` | Personal income and employment by state |
 | `CAINC5N` | Personal income by type by state |
@@ -371,7 +371,7 @@ https://apps.bea.gov/api/data?method=GetData&DatasetName=FixedAssets&TableName=F
 | `T10101` | Percent change in real GDP |
 | `T10105` | GDP (current dollars) |
 | `T10106` | Real GDP (chained 2017 dollars) |
-| `T10107` | GDP price index (percent change) |
+| `T10107` | Percent change in prices for GDP |
 | `T10110` | GDP price deflator |
 | `T20100` | Personal income and its disposition |
 | `T20301` | Personal consumption expenditures by type |
@@ -407,3 +407,5 @@ https://apps.bea.gov/api/data?method=GetData&DatasetName=FixedAssets&TableName=F
 - BEA also provides bulk download files at https://apps.bea.gov/iTable/ for interactive use.
 - Time periods for quarterly data use format `2024Q1`, `2024Q2`, etc.
 - All monetary values are in U.S. dollars unless otherwise specified. Units are indicated in `CL_UNIT` and `UNIT_MULT` fields.
+
+Use `GetParameterValues` for current table/line labels and `GetParameterValuesFiltered` for valid combinations; special year values are dataset-specific. State GDP tables use the `SAGDP` family. Source: https://apps.bea.gov/api/_pdf/bea_web_service_api_user_guide.pdf

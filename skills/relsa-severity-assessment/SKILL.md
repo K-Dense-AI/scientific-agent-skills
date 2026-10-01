@@ -1,36 +1,34 @@
 ---
 name: relsa-severity-assessment
-description: Multivariate severity assessment and humane endpoint prediction for laboratory animal studies using the RELSA (RELative Severity Assessment) score and ARIMA-based foRcast forecasting. Use when combining welfare readouts — body weight or weight loss, body temperature, clinical or nesting scores, biomarkers, activity, heart rate, burrowing, wheel running — into one severity score per animal per day, when asking which animals are at risk of reaching a humane endpoint or when one will be reached, when defining attention/danger zones or thresholds on a severity scale by kernel density estimation, or when reporting severity for a 3Rs, refinement, animal-welfare, or EU Directive 2010/63/EU severity-assessment context. Covers directionality ("turned" variables), baseline normalization, reference sets, RELSA weights, ARIMA prediction intervals, and RMSE/PICP/MPIW evaluation.
+description: Supports multivariate severity assessment and exploratory endpoint-time score forecasting for laboratory animal studies using the RELSA (RELative Severity Assessment) score and ARIMA-based foRcast forecasting. Use when combining welfare readouts — body weight or weight loss, body temperature, clinical or nesting scores, biomarkers, activity, heart rate, burrowing, wheel running — into one severity score per animal per day, when asking which animals are at risk of reaching a humane endpoint at a specified future observation time, when defining attention/danger zones or thresholds on a severity scale by kernel density estimation, or when reporting severity for a 3Rs, refinement, animal-welfare, or EU Directive 2010/63/EU severity-assessment context. Covers directionality ("turned" variables), baseline normalization, reference sets, RELSA weights, ARIMA prediction intervals, and RMSE/PICP/MPIW evaluation.
 license: MIT
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python >=3.10 with numpy, pandas, and scipy; statsmodels >=0.14 for forecasting and matplotlib for figures. Tested with numpy 2.5, pandas 3.0, scipy 1.18, statsmodels 0.14.6. No network access needed.
+compatibility: Requires Python >=3.12 with numpy, pandas, scipy, statsmodels and matplotlib. Local analysis needs no network or credentials; installation and upstream review need network access.
 metadata:
-  version: "1.2"
+  version: "1.3"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
-# RELSA severity assessment and humane endpoint forecasting
+# RELSA severity assessment and exploratory score forecasting
 
 ## Overview
 
-Severity assessment in animal research is legally mandatory and scientifically load-bearing:
-it drives humane endpoint decisions, and poor welfare monitoring degrades reproducibility.
-The usual practice evaluates each readout in isolation — weight loss here, a clinical score
-there — which makes it hard to say how badly an individual animal is actually doing.
+This skill computes reference-relative multivariate scores and exploratory ARIMA forecasts.
+It targets the equations and printed example of [RELSA 0.0.1.9000](https://github.com/mytalbot/RELSA)
+(commit `e68e8451e8719ccc3600179f55900cd7254ede9d`, current upstream at review), plus the
+published [foRcast methodology](https://doi.org/10.3389/fphys.2026.1869563).
+The Python forecast helper is an independent nonseasonal approximation, not an exact R port.
 
-This skill implements two published procedures that address that:
+RELSA is the RMS of directional deviations divided by each variable's reference maximum
+**deviation**. Zero means no measured worsening in those directions; it does not establish
+normal welfare. One is a reference scale unit, not a universal endpoint or an upper bound.
+Different variables may attain their reference extrema in different animals or at different
+times, so the reference cohort need not contain a score of exactly one.
 
-- **RELSA** (Talbot et al., 2022) combines several outcome measures into one score per animal
-  per time point, expressed *relative to a reference set of known burden*. RELSA = 0 is
-  baseline; RELSA = 1 means the animal has reached the reference set's maximum deviation.
-- **foRcast** (Lutscher et al., 2026) fits an ARIMA model to an individual animal's RELSA
-  trajectory and forecasts the next score with a 95% prediction interval, so animals heading
-  for a humane endpoint can be identified before they get there. Kernel density estimation on
-  the RELSA scale supplies candidate *attention* and *danger* zones for interpretation.
-
-The point is **refinement**: give at-risk animals attention earlier, and avoid euthanising
-animals that would have recovered. Both procedures are aids to severity assessment, not
-decision rules — see [Boundaries](#boundaries-state-these-when-you-report).
+Forecasts estimate a **score at a specified time**, not time-to-endpoint or probability of death.
+Keep the approved study's observation schedule and humane endpoint criteria separate from
+these exploratory outputs. See [Boundaries](#boundaries-state-these-when-you-report).
 
 ## When to use this skill
 
@@ -51,10 +49,13 @@ For general forecasting of a time series that is not a severity score, use
 ## Installation
 
 ```bash
-uv pip install "numpy>=1.26" "pandas>=2.0" "scipy>=1.11" "statsmodels>=0.14" matplotlib
+uv venv --python 3.13 .venv-relsa
+uv pip install --python .venv-relsa/bin/python numpy==2.5.3 pandas==3.0.6 scipy==1.18.1 statsmodels==0.15.0 matplotlib==3.11.2
+source .venv-relsa/bin/activate
 ```
 
-`relsa_score.py` and `kde_thresholds.py` need only numpy/pandas/scipy; statsmodels is required
+Run the examples from this skill directory. `relsa_score.py` needs numpy/pandas;
+`kde_thresholds.py` additionally needs scipy; statsmodels is required
 for forecasting and matplotlib only for figures.
 
 ## Data format
@@ -69,11 +70,13 @@ One row per animal per time point, in a CSV:
 
 - `id` and a time column (`day`, `time`, `hour`, …) are required; `treatment` and `condition`
   are optional labels used for grouping and for selecting the reference set.
-- Time may be days, hours, or minutes — just keep it monotonic per animal. The RELSA
+- Time must be finite, with one consistent unit and origin across cohorts. Forecast training and
+  target times must align with the chosen regular grid; disable interpolation only on regular observations. The RELSA
   convention codes the baseline time point as `-1`.
 - **One row per animal per time point.** Average hourly telemetry to one value per interval
   first (the published models average heart rate, HRV, and temperature, and sum activity).
-- Leave missing measurements empty. They are dropped from the score, never imputed — a
+- Preserve lexical animal IDs (including leading zeros). Duplicate IDs/times, nonnumeric
+  measurements and infinities are rejected. Leave missing measurements empty. They are dropped from the score, never imputed — a
   missing value treated as "no deviation" biases severity downward.
 
 `assets/example_cohort.csv` is a small synthetic cohort (6 mice, 9 days, temperature, body
@@ -95,23 +98,24 @@ in the published sepsis model activity legitimately swings further above baselin
 so only a variable that *never once* moves the declared way is detectable, and
 `build_reference()` warns about exactly that case.
 
-**2. The reference set — relative to what?** RELSA scores mean nothing without it. Use the
-group assumed to carry the greatest burden in your model (the published studies use the
-highest-dose or endpoint-reaching treatment group). Too mild a reference pushes every score
+**2. The reference set — relative to what?** RELSA scores mean nothing without it. Choose a scientifically characterized reference and document its burden; the 2026
+forecasting study uses the group assumed to carry the greatest burden in each model. A mild reference can push new scores
 above 1; too severe compresses everything toward 0. Save it with `--save-reference` and reuse
-it with `--load-reference` so later cohorts stay on the same scale.
+it with `--load-reference` so later cohorts stay on the same scale. New CLI reference files
+also store and reuse normalization, ordinal mappings, baseline selection and rounding; conflicting
+options are rejected. Legacy references lack that contract and require the original options.
 
 **3. Scores with a zero baseline.** A clinical score of 0 in a healthy animal cannot be
 ratio-normalized — `0/0` is undefined. Use `--score-scale score=8` to map the score's scale
-instead (healthy → 100%, worst possible → 200%), which also marks it as turned. This mapping
-is a modelling choice about how much one score point is worth relative to one percent of body
-weight; state it. The alternative is to keep the score out of RELSA and use it as an
+instead (healthy → 100%, worst possible → 200%), which also marks it as turned. This assumes meaningful numeric spacing between ordinal categories. An affine rescaling
+applied identically to reference and target cancels in the weight ratio before rounding; the
+category encoding, healthy anchor and reference cohort still matter. State those choices. The alternative is to keep the score out of RELSA and use it as an
 independent endpoint criterion.
 
 **4. Which variables are measured throughout.** Because the score averages over whichever
 variables are available, a variable that appears or disappears mid-trajectory moves the score
-by itself. In the published sepsis data, adding body weight — recorded only on the day of
-euthanasia — drops that animal's endpoint score from 0.93 to 0.83 for no biological reason.
+by itself. An intermittent measure joining only at the endpoint can lower or raise the composite
+without any change in the other observed measures.
 `relsa_scores()` warns when composition changes; score the variables present throughout.
 
 ## Workflow
@@ -177,53 +181,42 @@ reference = build_reference(prepared[prepared.condition == "endpoint"],
 scores    = relsa_scores(prepared, reference)
 ```
 
-### Step 2 — forecast the endpoint
+### Step 2 — forecast a score at a known evaluation time
 
-Train on everything up to the time point *before* the endpoint, predict the score at the
-endpoint, and score the prediction:
+For retrospective evaluation, use recorded endpoint times and train only on earlier
+observations. This synthetic example predicts scores at designated times; it does not
+validate humane endpoint detection:
 
 ```bash
 python scripts/forecast_relsa.py relsa_scores.csv \
     --animals M01,M02 --endpoints M01=5 --endpoints M02=6 \
-    --group-col condition --plot-dir figs --endpoint-line 1.0
+    --group-col condition --plot-dir figs \
+    --out forecasts.csv --summary-out forecast_metrics.csv
 ```
 
-```
- id  time  predicted    lower    upper        model  actual
-M01   5.0   0.932585 0.670443 1.194728 ARIMA(1,1,0)    1.00
-M02   6.0   0.955696 0.748309 1.163084 ARIMA(1,1,0)    0.94
-
-   group             id        model  n   rmse  picp  mpiw
-endpoint            M01 ARIMA(1,1,0)  1 0.0674 100.0 0.524
-endpoint            M02 ARIMA(1,1,0)  1 0.0157 100.0 0.415
-endpoint -- endpoint --               2 0.0489 100.0 0.470
-                OVERALL               2 0.0489 100.0 0.470
-```
-
-Report all three metrics together. **RMSE** is point accuracy, **PICP** the percentage of
-actual values inside the interval, and **MPIW** the mean interval width in RELSA units — a
-model can reach PICP = 100% by making the interval so wide it says nothing, which is exactly
-what the paper's pancreatic cancer row (PICP 100%, MPIW 7.35, i.e. 735% of the RELSA range)
-shows.
+The CSV includes the selected order, point forecast and bounds. Numerical values can change
+with the fitted model and library release. Report RMSE, PICP and MPIW together, including
+counts and forecast failures. High coverage with wide intervals can be uninformative.
 
 For prospective evaluation, freeze the RELSA reference set and any KDE thresholds using a separate development cohort before forecasting held-out animals. Do not estimate normalization maxima or thresholds from their future endpoint observations. Label analyses that reuse endpoint data to define the scale as retrospective; use an animal-level split so repeated observations from one animal do not cross evaluation partitions.
 
-For live monitoring, forecast one step ahead at every time point instead:
+For rolling retrospective evaluation, forecast each next observed time using only its history:
 
 ```bash
 python scripts/forecast_relsa.py relsa_scores.csv --mode rolling --animals M03
 ```
 
-Two things to know before trusting a forecast:
+Interpolation defaults to 0.1 **input time units** for published-method exploration. It creates
+no independent information, changes autocorrelation and can narrow intervals without valid
+calibration. Use `--interpolate-step 0` for regular observed data and compare interpolation
+sensitivity on held-out animals. Off-grid targets and irregular uninterpolated observations
+are rejected rather than silently relabeled. Unconverged fits are not selected. Bounds are
+Gaussian model intervals clipped at zero, conditional on fitted parameters and the frozen
+scale; they exclude reference, preprocessing and model-selection uncertainty.
 
-- **Interpolation is on by default** (`--interpolate-step 0.1`), because one measurement per
-  day is far too sparse for ARIMA. It buys usable model selection and narrower intervals at
-  the cost of honest uncertainty. Set `--interpolate-step 0` when measurement frequency
-  allows.
-- **ARIMA cannot predict a cliff.** It assumes stationarity and linearity, so an abrupt
-  collapse in the last hours before an endpoint will not be forecast from a smooth prior
-  trajectory — the paper's own failure case. Act on the *upper* bound of the interval, and
-  never let a low forecast override an animal that looks unwell.
+ARIMA represents linear dependence after differencing; it does not anticipate abrupt
+unobserved deterioration. Inspect both interval width and upper bound alongside observed
+welfare signs and approved criteria. No bound is an automatic intervention rule.
 
 ### Step 3 — put the score in context with severity zones
 
@@ -240,34 +233,32 @@ KDE on 33 RELSA scores  (bandwidth = 0.1502)
   danger    >= 0.703  n=8 (24.2%)
 ```
 
+The example deliberately filters to treated animals; choose the target population explicitly.
 Thresholds are the *minima* of the score density — the sparse valleys between clusters of
-scores. Include endpoint animals, survivors, and shams: the zones are meant to separate
-those states, so all of them must be represented.
+scores. A development population may include endpoint animals, survivors and shams, but sampling
+frequency, follow-up duration and their proportions change the density. Freeze that choice
+before evaluation; do not pool incompatible reference frames.
 
-**Check the bandwidth before believing a threshold.** On the published sepsis data this
-implementation finds minima at 0.355 and 0.655 (published: 0.337 and 0.643) — but a 10%
-larger bandwidth removes both minima entirely. Run the sweep in
-`references/thresholds-and-zones.md` and report the sweep, not a bare pair of numbers. An
-empty threshold list is a legitimate answer: the scores form one cluster and there is no
-data-driven place to cut.
+**Check bandwidth and sampling sensitivity.** See `references/thresholds-and-zones.md`.
+An empty threshold list is legitimate. Minima are properties of the sampled score density;
+zone names do not establish welfare states. The thin-zone filter is this implementation's
+heuristic, not a published validated threshold rule.
 
 ## Boundaries: state these when you report
 
-- **RELSA is an aid to severity assessment, not a decisive parameter.** An animal with a low
-  RELSA score that shows other signs of distress must still be handled accordingly. Neither
-  procedure is a validated predictor of death.
-- **KDE zones are not regulatory severity gradings.** EU Directive 2010/63/EU's categories
-  (non-recovery, mild, moderate, severe) are assigned prospectively by a different process.
-  The paper is explicit that its thresholds "should not be confused with regulatory severity
-  gradings" and are not directly translatable to them.
-- **Scores are not comparable across reference sets or models.** RELSA is relative by
-  construction, and clinical scoring is not harmonized between laboratories. Always report
-  the reference set with the score.
-- **The published evidence is a proof of concept**: 13 animals across seven models, five of
-  those rows resting on one or two animals. The overall RMSE of 0.069 and PICP of 96% come
-  from 13 endpoint predictions.
-- **An underestimated score is the dangerous error**, because it discourages attention and can
-  delay a euthanasia decision, whereas an overestimate merely prompts extra care.
+- RELSA and forecasts support assessment; observed distress and approved humane endpoint
+  criteria take precedence. No low score authorizes delaying care or extending a procedure.
+- KDE zones are not EU severity categories. The [Commission severity framework](https://environment.ec.europa.eu/topics/chemicals/animals-science_en)
+  distinguishes prospective classification, monitoring and actual experienced severity;
+  there is no official RELSA-to-category conversion.
+- Comparisons require the same frozen reference, variable panel, encoding, baseline and
+  measurement methods. The original paper explored cross-model comparisons in a common
+  frame; independently scaled models cannot be ranked by their raw RELSA numbers.
+- The 2026 paper evaluates 13 endpoint-time forecasts. Its reported 96% PICP is consistent
+  with averaging seven model rows (six 100%, one 75%), not pooled animal coverage:
+  12/13 is 92.3%. Its 1.69 MPIW is likewise a model-row mean; this helper pools predictions.
+- False negatives and false positives can both matter. Predefine monitoring responses with
+  the study's responsible personnel; do not turn a candidate KDE minimum into an endpoint.
 
 ## Reporting checklist
 
@@ -291,21 +282,22 @@ A severity analysis is reproducible only if all of this is stated:
    zero, silently, and no warning is possible unless it never once falls. Check the reference
    model table yourself: `max reached` should be below 100 for a falling variable and above 100
    for a turned one, and `max delta` should be a plausible size for that measure.
-2. **Normalizing a percentage twice** — `bwc [%]` and mapped scores are already on the percent
-   scale; passing them to `--normalize` flattens them.
+2. **Confusing percent encodings** — 90% of baseline, -10% change and 10% loss differ.
+   RELSA needs baseline 100: convert change with `100 + change`, loss with `100 - loss`.
+   Re-normalizing baseline-100 values is redundant; using a zero-centered change as baseline is invalid.
 3. **A zero baseline** — a clinical score of 0 makes the ratio undefined; the variable becomes
    all-NaN with a warning. Use `--score-scale`.
 4. **A reference set that does not express the burden** — a variable that never deviates in it
    raises an error rather than dividing by zero, and one that barely deviates inflates every
-   score.
+   score. Reference extrema are sensitive to outliers and measurement errors.
 5. **Changing variable composition along a trajectory** — see decision 4 above.
 6. **Reading MPIW as a good thing** — a wide interval raises PICP while destroying the
    forecast's usefulness.
-7. **Reporting a KDE threshold without its bandwidth** — thresholds can vanish under a 10%
-   bandwidth change.
+7. **Reporting a KDE threshold without its bandwidth** — thresholds can appear or vanish as
+   bandwidth changes.
 8. **Treating the forecast as permission to wait** — the model cannot see abrupt
    deterioration, and the humane endpoint criteria of the protocol always take precedence.
-9. **Comparing RELSA scores between models** — only valid within one reference frame.
+9. **Comparing RELSA scores between models** — requires one reference frame and harmonized measurements.
 
 ## Resources
 
@@ -313,22 +305,21 @@ A severity analysis is reproducible only if all of this is stated:
 
 - `scripts/relsa_score.py` — the RELSA procedure: `prepare()`, `build_reference()`,
   `relsa_scores()`, `relsa_weights()`, and a `ReferenceModel` that serialises to JSON.
-  Reproduces the R package's published worked example to two decimals.
-- `scripts/forecast_relsa.py` — the foRcast tool: `auto_arima()` (Hyndman–Khandakar stepwise
+  Matches the R package's printed worked example to two decimals; native R was not run.
+- `scripts/forecast_relsa.py` — the independent foRcast-style helper: `auto_arima()` (Hyndman–Khandakar stepwise
   AICc selection), `forecast_animal()`, `predict_endpoint()`, `rolling_forecast()`,
-  `forecast_indirect()`, `summarize()`, and Figure-1-style plots.
+  `forecast_indirect()`, `summarize()`, and trajectory plots.
 - `scripts/kde_thresholds.py` — severity zones: `bw_nrd0()` (R's bandwidth), `density_curve()`,
-  `find_thresholds()`, zone assignment, and Figure-3-style density plots.
+  `find_thresholds()`, zone assignment, and density plots.
 - `scripts/_common.py` — RELSA-format I/O, validation, `score_to_percent()`,
   `percent_of_baseline()`, and `forecast_metrics()` (RMSE/PICP/MPIW).
 
 ### References
 
 - `references/relsa-method.md` — the four steps in full, the score/zero-baseline problem, the
-  variable-composition trap, parity notes against the R package, and the outcome measures and
-  endpoint criteria of all seven published models.
+  variable-composition trap, parity notes against the R package, and current upstream API/source limitations.
 - `references/forecasting.md` — ARIMA selection, why interpolation is a distortion, direct vs
-  indirect prediction, the metrics, the published Table 1, and what this port reproduces.
+  indirect prediction, the metrics, the published Table 1, and the limits of this implementation.
 - `references/thresholds-and-zones.md` — KDE method, published thresholds, the bandwidth
   sensitivity sweep, the regulatory boundary, and alternatives when KDE gives nothing.
 

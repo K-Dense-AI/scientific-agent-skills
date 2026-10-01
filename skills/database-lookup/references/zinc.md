@@ -8,7 +8,7 @@ https://zinc.docking.org
 
 ## Auth
 
-No API key required. Fully open public API.
+The documented ZINC15-style interface is public, but automated requests may be redirected to a human-verification page. A 2026-09-30 lookup returned such HTML instead of JSON. Detect this response and report the access limitation; do not bypass the challenge or interpret it as a compound record.
 
 ## URL Pattern
 
@@ -194,8 +194,8 @@ No documented rate limits. The API is publicly funded (NIH NIGMS GM71896). Be re
 
 ## Special Notes
 
-- ZINC contains **2+ billion** commercially available compounds — always use `count=` to limit results
-- ZINC IDs have the format `ZINC000000000053` (15-digit zero-padded after "ZINC")
+- These routes describe the official ZINC15-style syntax. Coverage is not interchangeable with ZINC22/CartBlanche or bulk tranche releases; record the interface and release actually used.
+- ZINC IDs have the format `ZINC000000000053` (12-digit zero-padded after "ZINC" in this interface)
 - The `.smi` format returns SMILES strings, useful for cheminformatics pipelines
 - The `.sdf` format returns 3D structures suitable for docking software
 - Subsets can be combined with `+` (e.g., `fda+in-stock` = FDA-approved AND in-stock)

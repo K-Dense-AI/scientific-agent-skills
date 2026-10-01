@@ -1,6 +1,9 @@
 # FITS File Handling (astropy.io.fits)
 
-The `astropy.io.fits` module provides comprehensive tools for reading, writing, and manipulating FITS (Flexible Image Transport System) files.
+The `astropy.io.fits` module reads and writes FITS images and tables. File paths
+and instrument-specific arrays in these fragments are illustrative; select the
+actual science HDU after inspecting `.info()`. Synthetic checks cover the same
+local I/O operations, sections, headers and checksums on Astropy 8.0.1.
 
 ## Opening FITS Files
 
@@ -31,23 +34,29 @@ fits.open('file.fits', mode='append')     # Add HDUs to file
 
 ### Memory Mapping
 
-For large files, use memory mapping (default behavior):
+Memory mapping defaults to enabled for compatible local files. Scaled image
+data (`BSCALE`/`BZERO`/`BLANK`) can require `memmap=False`; compression and
+column conversions can allocate memory. A retained `.data` reference keeps the
+mmap/file handle alive after `hdul.close()`. Copy only the needed cutout inside
+the context when independent data are required:
 
 ```python
-hdul = fits.open('large_file.fits', memmap=True)
-# Only loads data chunks as needed
+with fits.open('large_file.fits', memmap=True) as hdul:
+    cutout = hdul['SCI'].data[100:200, 100:200].copy()
 ```
 
 ### Remote Files
 
-Access cloud-hosted FITS files:
+Access cloud-hosted FITS files (illustrative; requires `fsspec` and the relevant
+backend, e.g. `s3fs` for S3). HTTP servers must support range requests for efficient
+partial reads; backend buffering/compression can increase transfer sizes:
 
 **Network note:** Remote FITS reads disclose the target URI to the storage provider and may use credentials from the configured filesystem backend. Use anonymous reads only for public data, and prefer local files for proprietary observations.
 
 ```python
 uri = "s3://bucket-name/image.fits"
 with fits.open(uri, use_fsspec=True, fsspec_kwargs={"anon": True}) as hdul:
-    # Use .section to get cutouts without downloading entire file
+    # .section requests a cutout; do not access .data or guarantee exact network bytes
     cutout = hdul[1].section[100:200, 100:200]
 ```
 
@@ -169,7 +178,8 @@ data = data * gain + bias  # Calibration
 
 # Mathematical operations
 log_data = np.log10(data)
-smoothed = scipy.ndimage.gaussian_filter(data, sigma=2)
+from scipy.ndimage import gaussian_filter
+smoothed = gaussian_filter(data, sigma=2)
 ```
 
 ### Cutouts and Sections
@@ -283,7 +293,7 @@ Common FITS table column formats:
 ### Update Mode
 
 ```python
-with fits.open('file.fits', mode='update') as hdul:
+with fits.open('file.fits', mode='update', save_backup=True) as hdul:
     # Modify header
     hdul[0].header['NEWKEY'] = 'value'
 
@@ -364,7 +374,7 @@ table.write('output.fits', format='fits', overwrite=True)
 1. **Always use context managers** (`with` statements) for safe file handling
 2. **Avoid modifying structural keywords** (SIMPLE, BITPIX, NAXIS, etc.)
 3. **Use memory mapping** for large files to conserve RAM
-4. **Use .section** for remote files to avoid full downloads
+4. **Use .section** for remote cutouts, then check backend transfer behavior
 5. **Check HDU structure** with `.info()` before accessing data
 6. **Verify data types** before operations to avoid unexpected behavior
 7. **Use convenience functions** for simple one-off operations
@@ -376,14 +386,31 @@ table.write('output.fits', format='fits', overwrite=True)
 Some files violate FITS standards:
 
 ```python
-# Ignore verification warnings
-hdul = fits.open('bad_file.fits', ignore_missing_end=True)
+# Diagnose the original; do not silently accept or rewrite broken observations.
+with fits.open('bad_file.fits') as hdul:
+    hdul.verify('exception')
 
-# Fix non-standard files
-hdul = fits.open('bad_file.fits')
-hdul.verify('fix')  # Try to fix issues
-hdul.writeto('fixed_file.fits')
+# Illustrative recovery only: ignore_missing_end handles a missing END card,
+# not arbitrary verification errors. Preserve original and review every change.
+with fits.open('bad_file.fits', ignore_missing_end=True) as hdul:
+    hdul.verify('fix')
+    hdul.writeto('fixed_file.fits', checksum=True)
 ```
+
+### Checksums, units and nulls
+
+`hdul.verify('exception')` checks FITS structure, not scientific validity.
+Write `checksum=True`, read with `checksum=True`, and inspect warnings or the
+HDU `verify_checksum()`/`verify_datasum()` results when integrity matters.
+Record input hash, selected HDU, `BUNIT`, calibration and header changes; FITS
+image arrays do not automatically carry a `Quantity` unit.
+
+Astropy 8 adds `logical_as_bytes=True` to preserve FITS logical NULL (`b'\x00'`)
+separately from false (`b'F'`). Default boolean conversion can lose that distinction.
+`PL`/`QL` variable-length logical arrays now write standard FITS T/F bytes.
+`Table.read(..., strip_spaces=False)` preserves trailing string spaces when
+needed; the current default strips them. Test a write/read round trip if these
+representations affect the analysis.
 
 ### Large File Performance
 
@@ -393,6 +420,6 @@ hdul = fits.open('huge_file.fits', memmap=True)
 
 # For write operations with large arrays, use Dask
 import dask.array as da
-large_array = da.random.random((10000, 10000))
+large_array = da.ones((64, 64), chunks=(16, 16))  # Small executable example; scale deliberately
 fits.writeto('output.fits', large_array)
 ```

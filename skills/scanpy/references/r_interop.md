@@ -2,6 +2,9 @@
 
 Many single-cell datasets arrive as R objects (`.rds`, `.RData`, Seurat, or SingleCellExperiment) even when the downstream analysis should happen in Scanpy. Agents should convert these inputs to AnnData `.h5ad` first, then continue with normal Scanpy workflows.
 
+Reviewed 2026-10-01 against the linked official R/Seurat/zellkonverter interfaces.
+R installation and conversions below are illustrative; this refresh did not execute an R environment.
+
 ## Operating Principles
 
 1. **Do not parse Seurat `.rds` directly in Python.** Use R to deserialize R objects and write `.h5ad`.
@@ -49,7 +52,7 @@ Prefer existing system package managers. If installation requires GUI approval, 
 Use Homebrew when available:
 
 ```bash
-brew install --cask r
+brew install --cask r-app
 ```
 
 For packages with compiled code, install command-line build tools if the system asks for compilers:
@@ -148,7 +151,9 @@ For `.RData`/`.rda` files:
 Rscript -e 'e <- new.env(parent = emptyenv()); load("input.RData", envir = e); print(ls(e)); print(lapply(as.list(e), class))'
 ```
 
-If multiple objects are present, choose the object with class `Seurat`, `SingleCellExperiment`, or `SummarizedExperiment`. If there is ambiguity, ask the user which object to convert.
+The script below takes one `.rds`, not an `.RData` workspace. Select the intended
+Seurat or SingleCellExperiment object from `e`, then `saveRDS(e[["object_name"]], "input.rds")`.
+A bare SummarizedExperiment must first be explicitly converted to SingleCellExperiment. If there is ambiguity, ask the user which object to convert.
 
 ## Convert `.rds` to `.h5ad`
 
@@ -194,13 +199,13 @@ if (inherits(obj, "SingleCellExperiment")) {
   ensure_pkg("Seurat")
   ensure_pkg("SeuratObject")
 
-  obj <- Seurat::UpdateSeuratObject(obj, verbose = FALSE)
+  obj <- SeuratObject::UpdateSeuratObject(obj)
   if (is.null(assay)) {
     assay <- SeuratObject::DefaultAssay(obj)
   }
 
   if ("JoinLayers" %in% getNamespaceExports("SeuratObject")) {
-    obj <- tryCatch(SeuratObject::JoinLayers(obj, assay = assay), error = function(e) obj)
+    obj <- SeuratObject::JoinLayers(obj, assay = assay)
   }
 
   sce <- Seurat::as.SingleCellExperiment(obj, assay = assay)
@@ -208,7 +213,10 @@ if (inherits(obj, "SingleCellExperiment")) {
   stop("Unsupported RDS class: ", paste(class(obj), collapse = ", "), call. = FALSE)
 }
 
-x_name <- if ("counts" %in% SummarizedExperiment::assayNames(sce)) "counts" else NULL
+if (!("counts" %in% SummarizedExperiment::assayNames(sce))) {
+  stop("No counts assay: select an explicit assay and document its representation before conversion.")
+}
+x_name <- "counts"
 zellkonverter::writeH5AD(sce, output, X_name = x_name)
 message("Wrote: ", normalizePath(output, mustWork = FALSE))
 ```
@@ -250,7 +258,11 @@ After conversion, always validate with Scanpy before continuing:
 import scanpy as sc
 
 adata = sc.read_h5ad("output.h5ad")
-adata.var_names_make_unique()
+assert adata.obs_names.is_unique
+assert adata.var_names.is_unique  # resolve duplicate IDs with provenance, not silent renaming
+# Compare dimensions, exact cell/gene IDs, selected values and count sums to the R source.
+# Only after confirming X_name="counts" was written from the original count assay:
+adata.layers["counts"] = adata.X.copy()
 
 print(adata)
 print(adata.obs.head())
@@ -284,6 +296,12 @@ For very large datasets, avoid dense CSV expression exports unless the user expl
 - **Memory pressure**: Convert on a machine with enough RAM, avoid dense exports, and write compressed `.h5ad` checkpoints after successful conversion.
 
 ## Sources Checked
+
+- Current Homebrew cask: https://formulae.brew.sh/cask/r-app (the former token was `r`).
+- Winget manifest IDs: https://github.com/microsoft/winget-pkgs/tree/master/manifests/r/RProject
+
+- Current signatures: https://theislab.github.io/zellkonverter/reference/writeH5AD.html, https://satijalab.github.io/seurat-object/reference/UpdateSeuratObject.html, https://satijalab.github.io/seurat-object/reference/SplitLayers.html, https://satijalab.org/seurat/reference/as.singlecellexperiment
+- SeuratDisk matrix choice: https://mojaveazure.github.io/seurat-disk/reference/Convert.html
 
 - R Project and CRAN installation pages: `https://www.r-project.org/`, `https://cran.r-project.org/bin/macosx`, `https://cran.r-project.org/bin/windows/base/rw-FAQ.html`
 - Bioconductor install guidance and BiocManager documentation: `https://www.bioconductor.org/install/`, `https://cran.r-project.org/web/packages/BiocManager/vignettes/BiocManager.html`

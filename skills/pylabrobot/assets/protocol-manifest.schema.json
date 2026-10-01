@@ -294,7 +294,8 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1000000
-          }
+          },
+          "description": "Declared initial volumes, including explicit zero for every empty destination. The planner rejects any source or destination well absent from this map."
         }
       }
     },

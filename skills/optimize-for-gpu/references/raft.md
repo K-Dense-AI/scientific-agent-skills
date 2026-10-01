@@ -1,8 +1,11 @@
 # RAFT (pylibraft) Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 RAFT (Reusable Accelerated Functions and Tools) is a RAPIDS library of GPU-accelerated building blocks for machine learning and information retrieval. It provides low-level primitives — sparse eigensolvers, device memory management, random graph generation, and multi-GPU communication — that higher-level libraries like cuML and cuGraph are built on. Use `pylibraft` directly when you need these primitives without the overhead of a full ML framework.
 
-> **Full documentation:** https://docs.rapids.ai/api/raft/stable/
+> **Full documentation:** https://docs.nvidia.com/raft/26.08/
 > **Note:** Vector search and clustering algorithms have been migrated to [cuVS](https://github.com/rapidsai/cuvs). Use cuVS for nearest neighbor search, not RAFT.
 
 ## Table of Contents
@@ -26,12 +29,12 @@ is already configured.
 
 ```bash
 # pylibraft (core library)
-uv add --extra-index-url=https://pypi.nvidia.com "pylibraft-cu12==26.6.*"   # For CUDA 12.x
-uv add --extra-index-url=https://pypi.nvidia.com "pylibraft-cu13==26.6.*"   # For CUDA 13.x
+uv add --extra-index-url=https://pypi.nvidia.com "pylibraft-cu12==26.8.*"   # For CUDA 12.x
+uv add --extra-index-url=https://pypi.nvidia.com "pylibraft-cu13==26.8.*"   # For CUDA 13.x
 
 # raft-dask (multi-node multi-GPU support, optional)
-uv add --extra-index-url=https://pypi.nvidia.com "raft-dask-cu12==26.6.*"   # For CUDA 12.x
-uv add --extra-index-url=https://pypi.nvidia.com "raft-dask-cu13==26.6.*"   # For CUDA 13.x
+uv add --extra-index-url=https://pypi.nvidia.com "raft-dask-cu12==26.8.*"   # For CUDA 12.x
+uv add --extra-index-url=https://pypi.nvidia.com "raft-dask-cu13==26.8.*"   # For CUDA 13.x
 ```
 
 pylibraft and raft-dask wheels (including the companion `libraft` wheel) are also published directly to PyPI, so the extra index is optional.
@@ -135,7 +138,7 @@ pylibraft.config.set_output_as(lambda arr: arr.copy_to_host())  # Return numpy
 
 ### eigsh — Sparse Symmetric Eigenvalue Decomposition
 
-GPU-accelerated Lanczos method for finding eigenvalues/eigenvectors of large sparse symmetric matrices. Drop-in replacement for `scipy.sparse.linalg.eigsh`.
+GPU-accelerated Lanczos method for finding eigenvalues/eigenvectors of large sparse symmetric matrices. A narrower interface than SciPy: the 26.08 implementation accepts real float32/float64 CSR values and int32/int64 indices. It does not implement SciPy generalized/shift-invert parameters such as M or sigma.
 
 ```python
 import cupy as cp
@@ -196,7 +199,8 @@ theta_len = max(r_scale, c_scale) * 4
 # Output: edge list as (src, dst) pairs
 out = cp.empty((n_edges, 2), dtype=cp.int32)
 # Probability distribution at each R-MAT level
-theta = cp.random.random_sample(theta_len, dtype=cp.float32)
+theta = cp.tile(cp.asarray([0.57, 0.19, 0.19, 0.05], dtype=cp.float32),
+                max(r_scale, c_scale))  # Each four-probability level sums to one
 
 handle = DeviceResources()
 rmat(out, theta, r_scale, c_scale, seed=42, handle=handle)
@@ -242,6 +246,7 @@ futures = [
 # Wait for results
 from dask.distributed import wait
 wait(futures, timeout=60)
+results = client.gather(futures)  # Propagate worker failures, not just completion
 
 # Clean up
 comms.destroy()
@@ -264,6 +269,7 @@ RAFT's `device_ndarray` implements `__cuda_array_interface__`, enabling zero-cop
 ```python
 import cupy as cp
 import torch
+import numpy as np
 from pylibraft.common import device_ndarray
 
 # pylibraft -> CuPy (zero-copy)
@@ -291,7 +297,7 @@ RAFT functions accept any object implementing `__cuda_array_interface__` as inpu
 
 2. **Batch your syncs.** RAFT calls are asynchronous. Queue multiple operations before calling `handle.sync()` rather than syncing after each one.
 
-3. **Use float32.** GPU throughput for float32 is 2x-32x higher than float64. Only use float64 when precision demands it.
+3. **Choose precision by residual and conditioning checks.** Throughput ratios are hardware-specific; float32 is not automatically adequate for spectral problems.
 
 4. **Pre-allocate outputs.** Many RAFT functions accept an `out` parameter. Pre-allocating avoids repeated GPU memory allocation.
 
@@ -307,6 +313,6 @@ RAFT functions accept any object implementing `__cuda_array_interface__` as inpu
 
 - **Wrong sparse format.** `eigsh()` requires `cupyx.scipy.sparse.csr_matrix`. Other sparse formats (COO, CSC) must be converted first.
 
-- **Non-symmetric matrix with eigsh.** `eigsh` is for real symmetric / Hermitian matrices only. For general eigenvalue problems, you'll need a different solver.
+- **Matrix contract.** The 26.08 Python implementation supports real symmetric float32/float64 CSR matrices. Despite broad Hermitian wording in the docstring, complex values raise an unsupported-dtype error. Validate symmetry, residuals and orthogonality; compare eigenspaces for repeated eigenvalues rather than vector signs.
 
 - **dtype mismatch.** RAFT functions are picky about dtypes. Use `float32` or `float64` explicitly — don't rely on implicit conversion.

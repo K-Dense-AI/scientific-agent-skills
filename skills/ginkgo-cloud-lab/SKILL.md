@@ -1,10 +1,11 @@
 ---
 name: ginkgo-cloud-lab
-description: Submit and manage protocols on Ginkgo Bioworks Cloud Lab (cloud.ginkgo.bio), a web-based interface for autonomous lab execution on Reconfigurable Automation Carts (RACs). Use when the user wants to run protein expression and purification (cell-free, E. coli, or Pichia), HiBiT or A280 or LabChip quantification, IVT mRNA/circRNA synthesis, thermal shift / developability assays, Echo-MS enzyme or analyte methods, SPR target onboarding, fluorescent pixel art, or otherwise interact with Ginkgo Cloud Lab services. Covers protocol selection, input preparation, pricing, and ordering workflows.
+description: Guides protocol selection, input preparation, pricing checks, and browser ordering on Ginkgo Bioworks Cloud Lab (cloud.ginkgo.bio). Applies to cell-free, E. coli, and Pichia protein expression; HiBiT, A280, and LabChip readouts; IVT mRNA/circRNA synthesis; thermal shift assays; Echo-MS methods; SPR target onboarding; plate-reader assay onboarding; and fluorescent pixel art.
 license: MIT license
-allowed-tools: Read
+compatibility: Requires network access and a browser for Ginkgo Cloud Lab; account access may be needed for ordering and results.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -12,13 +13,18 @@ metadata:
 
 ## Overview
 
-Ginkgo Cloud Lab (https://cloud.ginkgo.bio) provides remote access to Ginkgo Bioworks' autonomous lab infrastructure. Protocols are executed on Reconfigurable Automation Carts (RACs) -- modular units with robotic arms, maglev sample transport, and industrial-grade software spanning 70+ instruments.
+Ginkgo Cloud Lab (https://cloud.ginkgo.bio) provides remote access to Ginkgo Bioworks' autonomous lab infrastructure. Protocols use Reconfigurable Automation Carts (RACs), modular units with robotic arms and plate transport, across a catalog-advertised fleet of 70+ integrated instruments.
 
-The platform also includes **EstiMate**, an AI agent that accepts human-language protocol descriptions and returns feasibility assessments and pricing for custom workflows beyond the listed protocols.
+The platform also includes **EstiMate**, a compatibility and pricing assistant that accepts protocol descriptions, files, or links and returns preliminary estimates for custom workflows.
 
 The catalog is organized into **Expression & Purification** (in vitro / cell-free / E. coli / Pichia), **Characterization & Assay**, **Method & Target Onboarding**, and **Specialty**. Pick a protocol below, then read its reference file for inputs, outputs, the automated workflow, and ordering details.
 
 ## Available Protocols
+
+The following prices, availability labels, and turnaround text are a **2026-09-30
+catalog snapshot**, not a configured quote. References link to the corresponding
+service terms. Catalog and terms sometimes disagree on days versus business days,
+input format, or readout scope; resolve those differences in the service order.
 
 ### Expression & Purification - In vitro
 
@@ -34,7 +40,7 @@ The catalog is organized into **Expression & Purification** (in vitro / cell-fre
 | [Optimize expression conditions](references/cell-free-protein-expression-optimization.md) | DoE across 24 conditions | $199/sample | up to 11 days | Certified |
 | [Express + quantify (HiBiT)](references/cell-free-protein-expression-hibit.md) | Luminescence, no purification | $39/sample | up to 11 days | Certified |
 | [Express + purify (A280)](references/cfps-strep-tag-purification-a280.md) | Strep-tag, A280 yield | $149/sample | up to 11 days | Certified |
-| [Express + purify minibinder](references/minibinder-strep-tag-a280.md) | Strep-tag, A280, LabChip | $149/sample | up to 11 days | Certified |
+| [Express + purify minibinder](references/minibinder-strep-tag-a280.md) | Strep-tag, A280; confirm LabChip separately | $149/sample | up to 11 days | Certified |
 | [Express + purify (A280 + LabChip)](references/cfps-expression-purification-quantification.md) | Strep-tag, A280 + purity/size | $159/sample | up to 12 days | Certified |
 
 ### Expression & Purification - E. coli
@@ -50,7 +56,7 @@ The catalog is organized into **Expression & Purification** (in vitro / cell-fre
 
 | Protocol | Readout | Price | Turnaround | Status |
 |---|---|---|---|---|
-| [Express + quantify (LabChip)](references/pichia-protein-expression-labchip.md) | Secreted protein, size/purity (up to 96) | $89/sample | up to 4 weeks | Certified (New) |
+| [Express + quantify (LabChip)](references/pichia-protein-expression-labchip.md) | Secreted protein, size/purity (up to 96) | $89/sample | up to 4 weeks | Certified |
 
 ### Characterization & Assay
 
@@ -65,6 +71,7 @@ The catalog is organized into **Expression & Purification** (in vitro / cell-fre
 |---|---|---|---|---|
 | [Onboard Echo-MS method](references/echo-ms-method-onboarding.md) | Calibration curve, LOD/LOQ | $799/molecule | up to 3 weeks | Certified |
 | [Onboard SPR target](references/spr-target-onboarding.md) | Validated SPR capture method | $1,399/target | up to 4 weeks | Beta |
+| [Onboard plate-reader assay](references/plate-reader-assay-onboarding.md) | Qualification data; customer assesses performance | $399/assay | up to 4 weeks | Certified |
 
 ### Specialty
 
@@ -80,10 +87,11 @@ The catalog is organized into **Expression & Purification** (in vitro / cell-fre
 - **Need purified protein + yield?** A280 tiers (cell-free or E. coli); add LabChip for purity/size.
 - **Difficult / membrane / disulfide / cofactor targets?** Cell-free Optimize (24-condition DoE).
 - **Secreted or eukaryotic targets?** Pichia expression.
-- **Screening de novo binders/minibinders?** Cell-free or E. coli minibinder tiers, then SPR onboarding for kinetics.
+- **Screening de novo binders/minibinders?** Expression tiers screen yield; SPR onboarding qualifies the target. Confirm availability of the separate downstream binding service before planning kinetics.
 - **Enzyme activity / biocatalysis?** Echo-MS enzymatic detection (onboard the analyte method first).
 - **Stability / developability ranking?** Thermal shift assay.
 - **RNA (mRNA/circRNA)?** IVT synthesis + qPCR.
+- **Transfer an existing plate-reader assay?** Plate-reader onboarding; check its single-factor, 96-well, fluorescence scope before preparing the intake.
 
 ## General Ordering Workflow
 
@@ -97,20 +105,35 @@ results passed QC.
 
 1. Select a protocol at https://cloud.ginkgo.bio/protocols
 2. Configure parameters (number of proteins/samples/molecules/targets, replicates, plates)
-3. Download the protocol's input template and upload inputs (FASTA/CSV/XLSX for sequence protocols; Design Tool for pixel art; vendor catalog numbers for onboarding)
+3. Download the template linked on that protocol page and inspect its actual format and fields. Broad upload extensions do not define the intake schema. Keep construct IDs, sequence type, tag/linker, replicate count, and plate mapping explicit; distinguish technical replicates from independent expression reactions.
 4. Add any special requirements in the Additional Details field
-5. Provide an email, agree to the protocol terms, and add to cart / submit to receive a feasibility report and price quote
+5. For an authorized order, provide the order email, complete required fields, review the service terms, and add the configured service to the cart. Preserve the configured total and order acknowledgment; an added cart item is not an accepted or executed run.
 
-For protocols not listed above, use the **EstiMate** chat (https://cloud.ginkgo.bio/estimate) to describe a custom protocol in plain language and receive a compatibility assessment and pricing.
+For custom workflows, use [EstiMate](https://cloud.ginkgo.bio/estimate). Its preliminary estimate is separate from ordering a catalog service. Do not report submission, payment, acceptance, execution, or QC success without the corresponding confirmation.
 
-## Authentication
+## Access and automation boundary
 
-Access Ginkgo Cloud Lab at https://cloud.ginkgo.bio. Account creation or institutional access may be required. Contact Ginkgo at cloud@ginkgo.bio for access questions.
+Use the public [catalog](https://cloud.ginkgo.bio/protocols) and the site's sign-in flow when account access is needed. For access or template discrepancies, use the official [contact page](https://www.ginkgo.bio/contact-us).
+
+This skill covers the browser storefront. No public Cloud Lab submission API, SDK,
+CLI, authentication-token contract, or pagination contract was identified in the
+official material reviewed on 2026-09-30. The `/protocols`, `/estimate`, `/art`,
+and `/gallery` URLs are web pages, not documented REST endpoints. Ginkgo's
+[Catalyst software](https://www.ginkgo.bio/product/software) advertises REST
+integration for installed automation systems; that is not a published Cloud Lab
+ordering contract. Do not invent programmatic order calls.
+
+## Interpreting results
+
+- A280 concentration depends on the construct's extinction coefficient and eluate background; it does not establish purity or binding activity. Use the LabChip tier when size/purity data are required.
+- HiBiT reports a tag-associated signal relative to a standard. Preserve background subtraction, calibration units, matrix controls, and QC flags when comparing constructs.
+- Do not equate an expression, onboarding, or thermal-stability result with functional activity. Record the specific assay readout and its controls alongside any ranking.
+- Keep RNA spectrophotometric concentration separate from relative or absolute RT-qPCR results; the calibration-standard requirement applies to absolute qPCR, and RNA integrity assessment is outside the IVT service scope.
 
 ## Key Infrastructure
 
-- **RACs (Reconfigurable Automation Carts):** Modular robotic units with high-precision arms and maglev transport
-- **Catalyst Software:** Protocol orchestration, scheduling, parameterization, and real-time monitoring
+- **[RACs (Reconfigurable Automation Carts)](https://www.ginkgo.bio/product/hardware):** Modular robotic units with dedicated arms and plate transport tracks
+- **Catalyst Orchestrator:** Protocol orchestration, scheduling, parameterization, and real-time monitoring
 - **70+ integrated instruments:** Agilent Bravo liquid handlers, Beckman/Labcyte Echo acoustic dispensers, BMG PHERAstar / Tecan Spark readers, Revvity LabChip, Bio-Rad CFX Opus, Nicoya Alto SPR, SciEx Echo-MS, Inheco/Cytomat incubators, and more
 - **Nebula:** Ginkgo's autonomous lab facility in Boston, MA
 

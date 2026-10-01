@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any
 
 PINNED_STACK = {
-    "geopandas": "1.1.4",
-    "numpy": "2.5.1",
-    "packaging": "26.2",
-    "pandas": "3.0.5",
-    "pyarrow": "25.0.0",
+    "geopandas": "1.2.0",
+    "numpy": "2.5.3",
+    "packaging": "26.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
     "pyogrio": "0.13.0",
-    "pyproj": "3.7.2",
+    "pyproj": "3.8.0",
     "shapely": "2.1.2",
 }
 DEFAULT_MAX_INPUT_BYTES = 64 * 1024 * 1024
@@ -341,6 +341,14 @@ def inspect_geoparquet(path: Path) -> dict[str, Any]:
     columns = geo.get("columns", {}) if geo else {}
     if columns is not None and not isinstance(columns, dict):
         raise CliError("GeoParquet columns metadata must be an object")
+    if geo is not None:
+        if not isinstance(geo.get("version"), str):
+            raise CliError("GeoParquet metadata requires a version string")
+        primary = geo.get("primary_column")
+        if not isinstance(primary, str) or not columns or primary not in columns:
+            raise CliError("GeoParquet metadata requires a declared primary geometry column")
+        if any(name not in parquet_file.schema_arrow.names for name in columns):
+            raise CliError("GeoParquet geometry metadata refers to an absent column")
     crs_states = {"missing": 0, "null": 0, "present": 0}
     covering_columns = 0
     geometry_types: dict[str, int] = {}
@@ -376,6 +384,7 @@ def inspect_geoparquet(path: Path) -> dict[str, Any]:
         "covering_geometry_columns": covering_columns,
         "bounds_redacted": True,
         "feature_data_loaded": False,
+        "dataframe_attrs_present": b"PANDAS_ATTRS" in key_values,
     }
 
 
@@ -480,6 +489,8 @@ def load_geodataframe(
         raise CliError("GeoPandas could not read the bounded local layer") from exc
     if not isinstance(frame, gpd.GeoDataFrame):
         raise CliError("selected layer has no geometry column")
+    if not frame.columns.is_unique:
+        raise CliError("duplicate input column names are not accepted")
     if len(frame) > max_features:
         raise CliError(f"input exceeds the {max_features}-feature limit")
     return frame

@@ -1,10 +1,12 @@
 # Training and Fine-Tuning
 
+Targets Transformers 5.18.0 / Datasets 5.0.1 / Accelerate 1.15.0 / PEFT 0.21.2. Tiny CPU training, evaluation, checkpoint resume, collators, and LoRA are tested locally; Hub dataset/model downloads, distributed runs, trackers, and hyperparameter services are illustrative. See [review evidence](review.md).
+
 ## Overview
 
 Fine-tune pre-trained models on custom datasets using the Trainer API. The Trainer handles training loops, gradient accumulation, mixed precision, logging, and checkpointing.
 
-**Metrics:** use `evaluate.load("metric_name")` — the old `datasets.load_metric` API was removed.
+**Metrics:** `datasets.load_metric` is removed. Compute simple metrics locally; optional `evaluate.load("accuracy")` loads an external metric implementation, requires the Evaluate package/network or cache, and should be reviewed/pinned for reproducibility.
 
 **Hub uploads:** `trainer.push_to_hub()` requires authentication (`hf auth login` or `HF_TOKEN`).
 
@@ -16,19 +18,21 @@ Fine-tune pre-trained models on custom datasets using the Trainer API. The Train
 from datasets import load_dataset
 
 # Load dataset
-dataset = load_dataset("yelp_review_full")
-train_dataset = dataset["train"]
-eval_dataset = dataset["test"]
+dataset = load_dataset("Yelp/yelp_review_full")
+# Tune only on a validation partition of training data, keeping test untouched.
+split = dataset["train"].train_test_split(test_size=0.1, seed=42, stratify_by_column="label")
+train_dataset = split["train"]
+eval_dataset = split["test"]
+test_dataset = dataset["test"]
 
 # Tokenize
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 def tokenize_function(examples):
     return tokenizer(
         examples["text"],
-        padding="max_length",
         truncation=True,
         max_length=512
     )
@@ -43,7 +47,7 @@ eval_dataset = eval_dataset.map(tokenize_function, batched=True)
 from transformers import AutoModelForSequenceClassification
 
 model = AutoModelForSequenceClassification.from_pretrained(
-    "bert-base-uncased",
+    "google-bert/bert-base-uncased",
     num_labels=5  # Number of classes
 )
 ```
@@ -51,15 +55,12 @@ model = AutoModelForSequenceClassification.from_pretrained(
 ### Step 3: Define Metrics
 
 ```python
-import evaluate
 import numpy as np
-
-metric = evaluate.load("accuracy")
 
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
-    return metric.compute(predictions=predictions, references=labels)
+    return {"accuracy": float(np.mean(predictions == labels))}
 ```
 
 ### Step 4: Configure Training
@@ -76,7 +77,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=8,
     num_train_epochs=3,
     weight_decay=0.01,
-    logging_dir="./logs",
+    report_to="none",  # Opt in to external trackers explicitly.
     logging_steps=10,
     load_best_model_at_end=True,
     metric_for_best_model="accuracy",
@@ -86,7 +87,7 @@ training_args = TrainingArguments(
 ### Step 5: Create Trainer and Train
 
 ```python
-from transformers import Trainer
+from transformers import Trainer, DataCollatorWithPadding
 
 trainer = Trainer(
     model=model,
@@ -94,6 +95,8 @@ trainer = Trainer(
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     compute_metrics=compute_metrics,
+    processing_class=tokenizer,
+    data_collator=DataCollatorWithPadding(tokenizer),
 )
 
 # Start training
@@ -110,8 +113,9 @@ print(results)
 trainer.save_model("./fine_tuned_model")
 tokenizer.save_pretrained("./fine_tuned_model")
 
-# Or push to Hub
-trainer.push_to_hub("username/my-finetuned-model")
+# Optional external upload, only when intended:
+# Set hub_model_id="username/my-finetuned-model" in TrainingArguments first.
+# trainer.push_to_hub(commit_message="Upload fine-tuned model")
 ```
 
 ## TrainingArguments Parameters
@@ -139,7 +143,7 @@ learning_rate=2e-5  # Common for BERT-style models
 learning_rate=5e-5  # Common for smaller models
 ```
 
-**weight_decay**: L2 regularization
+**weight_decay**: Optimizer weight decay (AdamW decouples this from the gradient; it is not generally equivalent to adding an L2 loss penalty)
 ```python
 weight_decay=0.01
 ```
@@ -169,7 +173,7 @@ metric_for_best_model="accuracy"  # Metric to compare
 
 **gradient_accumulation_steps**: Accumulate gradients over multiple steps
 ```python
-gradient_accumulation_steps=4  # Effective batch size = batch_size * 4
+gradient_accumulation_steps=4  # Effective batch = per-device batch * accumulation * data-parallel workers (except partial final groups)
 ```
 
 **fp16**: Enable mixed precision (NVIDIA GPUs without native bfloat16)
@@ -189,7 +193,7 @@ gradient_checkpointing=True  # Slower but uses less memory
 
 **optim**: Optimizer choice
 ```python
-optim="adamw_torch"  # Default
+optim="adamw_torch"  # Explicit portable choice; current Torch>=2.8 default is adamw_torch_fused
 optim="adamw_8bit"    # 8-bit Adam (requires bitsandbytes)
 optim="adafactor"     # Memory-efficient alternative
 ```
@@ -204,19 +208,16 @@ lr_scheduler_type="constant"     # No decay
 lr_scheduler_type="constant_with_warmup"
 ```
 
-**warmup_steps** or **warmup_ratio**: Warmup period
+**warmup_steps**: Integer step count or fractional ratio in [0, 1). `warmup_ratio` was removed in v5.
 ```python
 warmup_steps=500
 # Or
-warmup_ratio=0.1  # 10% of total steps
+warmup_steps=0.1  # 10% of total steps
 ```
 
 ### Logging
 
-**logging_dir**: TensorBoard logs directory
-```python
-logging_dir="./logs"
-```
+**TensorBoard directory**: `logging_dir` was removed from TrainingArguments. Set `TENSORBOARD_LOGGING_DIR=./logs` in the environment before creating Trainer and install TensorBoard if using it.
 
 **logging_steps**: Log every N steps
 ```python
@@ -225,6 +226,7 @@ logging_steps=10
 
 **report_to**: Logging integrations
 ```python
+report_to="none"  # Local-only default used here
 report_to=["tensorboard"]
 report_to=["wandb"]
 report_to=["tensorboard", "wandb"]
@@ -259,6 +261,8 @@ trainer = Trainer(
     args=training_args,
     train_dataset=train_dataset,
     data_collator=data_collator,
+    eval_dataset=eval_dataset,
+    processing_class=tokenizer,
 )
 ```
 
@@ -292,21 +296,25 @@ data_collator = DataCollatorForSeq2Seq(
 
 ### Custom Trainer
 
-Override methods for custom behavior:
+Accept `num_items_in_batch` in the current override signature. This example uses a per-microbatch weighted mean and explicitly disables automatic loss-kwargs normalization; use accumulation=1 for its direct weighted-batch interpretation. Unequal microbatch weights/sizes need a deliberately derived accumulated denominator.
 
 ```python
+import torch
 from transformers import Trainer
 
-class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.pop("labels")
-        outputs = model(**inputs)
+class WeightedTrainer(Trainer):
+    def __init__(self, *args, class_weights, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.class_weights = torch.as_tensor(class_weights, dtype=torch.float32)
+        self.model_accepts_loss_kwargs = False
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = inputs["labels"]
+        outputs = model(**{key: value for key, value in inputs.items() if key != "labels"})
         logits = outputs.logits
-
-        # Custom loss computation
-        loss_fct = torch.nn.CrossEntropyLoss(weight=class_weights)
-        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
-
+        loss = torch.nn.functional.cross_entropy(
+            logits, labels, weight=self.class_weights.to(device=logits.device, dtype=logits.dtype)
+        )
         return (loss, outputs) if return_outputs else loss
 ```
 
@@ -327,6 +335,9 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+    processing_class=tokenizer,
+    data_collator=DataCollatorWithPadding(tokenizer),
     callbacks=[CustomCallback],
 )
 ```
@@ -335,7 +346,7 @@ trainer = Trainer(
 
 ### Parameter-Efficient Fine-Tuning (PEFT)
 
-Use LoRA for efficient fine-tuning:
+Use LoRA for efficient fine-tuning. The `query`/`value` targets below match BERT, not every architecture; inspect `named_modules()` and confirm trainable parameters. Adapter checkpoints require the correct base checkpoint and revision to reload.
 
 ```python
 from peft import LoraConfig, get_peft_model
@@ -353,7 +364,9 @@ model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows reduced parameter count
 
 # Train normally with Trainer
-trainer = Trainer(model=model, args=training_args, ...)
+trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset,
+                  eval_dataset=eval_dataset, processing_class=tokenizer,
+                  data_collator=DataCollatorWithPadding(tokenizer))
 trainer.train()
 ```
 
@@ -365,8 +378,9 @@ Reduce memory at cost of speed:
 model.gradient_checkpointing_enable()
 
 training_args = TrainingArguments(
+    output_dir="./checkpointed-results",
     gradient_checkpointing=True,
-    ...
+    report_to="none",
 )
 ```
 
@@ -374,41 +388,32 @@ training_args = TrainingArguments(
 
 ```python
 training_args = TrainingArguments(
-    fp16=True,  # For NVIDIA GPUs with Tensor Cores
-    # or
-    bf16=True,  # For newer GPUs (A100, H100)
-    ...
+    output_dir="./mixed-precision-results",
+    bf16=True,  # Only on a backend that supports it; use fp16=True as an alternative.
+    report_to="none",
 )
 ```
 
 ### DeepSpeed Integration
 
-For very large models:
+Optional backend-dependent path, not run on this CPU audit. Save the following as `ds_config.json`; install a compatible DeepSpeed build and launch under its distributed runner. Auto fields let Trainer supply matching values. `device_map="auto"` is not a replacement for distributed training.
 
-```python
-# ds_config.json
+```json
 {
-  "train_batch_size": 16,
-  "gradient_accumulation_steps": 1,
-  "optimizer": {
-    "type": "AdamW",
-    "params": {
-      "lr": 2e-5
-    }
-  },
-  "fp16": {
-    "enabled": true
-  },
-  "zero_optimization": {
-    "stage": 2
-  }
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "gradient_accumulation_steps": "auto",
+  "optimizer": {"type": "AdamW", "params": {"lr": "auto"}},
+  "bf16": {"enabled": "auto"},
+  "zero_optimization": {"stage": 2}
 }
 ```
 
 ```python
 training_args = TrainingArguments(
+    output_dir="./distributed-results",
     deepspeed="ds_config.json",
-    ...
+    report_to="none",
 )
 ```
 
@@ -422,12 +427,12 @@ Common starting points:
 - **Epochs**: 2-4 for fine-tuning, more for domain adaptation
 - **Warmup**: 10% of total steps
 
-Use Optuna for hyperparameter search:
+Illustrative local Optuna search (`uv pip install optuna`); do not tune against the held-out test dataset:
 
 ```python
 def model_init():
     return AutoModelForSequenceClassification.from_pretrained(
-        "bert-base-uncased",
+        "google-bert/bert-base-uncased",
         num_labels=5
     )
 
@@ -438,7 +443,9 @@ def optuna_hp_space(trial):
         "num_train_epochs": trial.suggest_int("num_train_epochs", 2, 5),
     }
 
-trainer = Trainer(model_init=model_init, args=training_args, ...)
+trainer = Trainer(model_init=model_init, args=training_args, train_dataset=train_dataset,
+                  eval_dataset=eval_dataset, compute_metrics=compute_metrics,
+                  processing_class=tokenizer, data_collator=DataCollatorWithPadding(tokenizer))
 best_trial = trainer.hyperparameter_search(
     direction="maximize",
     backend="optuna",
@@ -451,17 +458,17 @@ best_trial = trainer.hyperparameter_search(
 
 Use TensorBoard:
 ```bash
-tensorboard --logdir ./logs
+tensorboard --logdir ./logs  # Match TENSORBOARD_LOGGING_DIR used by training
 ```
 
-Or Weights & Biases:
+Optional Weights & Biases integration (`uv pip install wandb`); this sends run metadata to the configured service unless explicitly configured offline:
 ```python
 import wandb
 wandb.init(project="my-project")
 
 training_args = TrainingArguments(
+    output_dir="./tracked-results",
     report_to=["wandb"],
-    ...
 )
 ```
 
@@ -502,3 +509,12 @@ trainer.train(resume_from_checkpoint="./results/checkpoint-1000")
 6. **Use warmup**: Helps training stability
 7. **Enable mixed precision**: Faster training
 8. **Consider PEFT**: For large models with limited resources
+
+## Label and evaluation checks
+
+- Preserve the dataset's integer-label mapping in `model.config.id2label`/`label2id`; a resized/random classification head requires training before meaningful predictions.
+- For token classification, align words/subtokens and mask ignored positions with -100. For seq2seq, tokenize targets with `text_target` and pad labels with -100 through `DataCollatorForSeq2Seq`.
+- `DataCollatorForLanguageModeling(mlm=False)` masks every occurrence of `pad_token_id` in labels. If EOS doubles as PAD, genuine EOS labels are lost; use a distinct pad token (resize embeddings) or mask by `attention_mask` in a task-specific collator.
+- Best-checkpoint loading requires compatible evaluation/save schedules; for step schedules, `save_steps` must be a multiple of `eval_steps`.
+- A model/tokenizer export is not a resumable Trainer checkpoint with optimizer/scheduler/RNG state. Resume from an actual `checkpoint-*` directory with matching data and training settings.
+- Report class-specific metrics/calibration and leakage controls as appropriate; one tiny successful training step is only a mechanics check.

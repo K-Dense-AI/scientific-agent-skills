@@ -1,208 +1,127 @@
 ---
 name: vaex
-description: Use this skill for processing and analyzing large tabular datasets (billions of rows) that exceed available RAM. Vaex excels at out-of-core DataFrame operations, lazy evaluation, fast aggregations, efficient visualization of big data, and machine learning on large datasets. Apply when users need to work with large CSV/HDF5/Arrow/Parquet files, perform fast statistics on massive datasets, create visualizations of big data, or build ML pipelines that do not fit in memory.
+description: Processes large tabular scientific datasets with Vaex expressions, filtered views, streamed statistics, binned visualizations, and file conversion. Use for larger-than-RAM HDF5, Arrow, CSV, or Parquet analysis, virtual feature engineering, or Vaex ML preprocessing; distinguishes these operations from estimators and conversions that materialize data.
 allowed-tools: Read Write Edit Bash Grep Glob
 license: MIT license
+compatibility: Requires Python 3.9-3.12 for vaex-core 4.19.0; tested on Python 3.12. Install vaex-core plus vaex-hdf5, vaex-viz, or vaex-ml as needed. Package installation and remote data need network access; local workflows need no credentials.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
-compatibility: Requires Python 3.10+ (3.12+ recommended with vaex 4.19.0). Install with uv pip install vaex. Optional s3fs/gcsfs/adlfs for cloud I/O.
+  last-reviewed: "2026-10-01"
 ---
 
 # Vaex
 
-## Overview
+## When to use
 
-Vaex is a high-performance Python library designed for lazy, out-of-core DataFrames to process and visualize tabular datasets that are too large to fit into RAM. Vaex can process over a billion rows per second, enabling interactive data exploration and analysis on datasets with billions of rows.
+Use Vaex for columnar analysis on a single machine when data exceeds RAM, especially
+repeated reductions and histograms over local Vaex HDF5 or Arrow files. Expressions
+and virtual columns defer computation; reductions normally execute immediately.
+Out-of-core storage does not make every operation memory bounded: sorting, joins,
+large group dictionaries, materialization, and many estimator fits need substantial RAM.
 
-## Installation
+## Installation and verified scope
 
-Install the full meta-package (recommended):
-
-```bash
-uv pip install vaex
-```
-
-Minimal install (pick only what you need):
+Use a separate environment; the repository's default Python is newer than this release supports:
 
 ```bash
-uv pip install vaex-core vaex-viz vaex-hdf5 vaex-ml
+uv venv --python 3.12 .venv-vaex
+uv pip install --python .venv-vaex/bin/python "vaex-core==4.19.0" "vaex-hdf5==0.15.0" "vaex-viz==0.6.0"
+# Optional ML (also installs its declared estimator dependencies):
+uv pip install --python .venv-vaex/bin/python "vaex-ml==0.19.0"
 ```
 
-The `vaex` package is a meta-package that pulls in `vaex-core`, `vaex-viz`, `vaex-hdf5`, `vaex-ml`, and other sub-packages. Arrow support is built into `vaex-core` (the separate `vaex-arrow` package is deprecated). `vaex-distributed` is deprecated in favor of vaex-enterprise.
+On Windows use `.venv-vaex\Scripts\python.exe` as the interpreter path. The `vaex`
+4.19.0 metapackage installs more integrations; it is not needed for the core workflow.
+Core 4.19.0 declares Python `>=3.9,<3.13`, pandas `<3`, Dask `<2024.9`, and NumPy
+`<3`. Do not upgrade these constraints independently. Arrow support is in core;
+FITS needs `vaex-astro`. Compatible binary wheels determine platform availability;
+compiling the optional `annoy` dependency requires a C++ toolchain, not just Python headers.
 
-**Version notes (vaex 4.19.0+):** Python 3.12 and NumPy v2 require vaex >= 4.19.0. On Windows, you may need Python dev headers to build the `annoy` dependency.
+Native checks used Python 3.12, core 4.19.0, HDF5 0.15.0, viz 0.6.0, ML 0.19.0,
+NumPy 2.5.3, pandas 2.3.3, PyArrow 25.0.1 and Matplotlib 3.11.2 on macOS ARM.
+See [review and verification](references/review.md) for evidence and optional-integration limits.
+These are correctness checks on small synthetic inputs, not performance benchmarks.
 
-## When to Use This Skill
+## Workflow
 
-Use Vaex when:
-- Processing tabular datasets larger than available RAM (gigabytes to terabytes)
-- Performing fast statistical aggregations on massive datasets
-- Creating visualizations and heatmaps of large datasets
-- Building machine learning pipelines on big data
-- Converting between data formats (CSV, HDF5, Arrow, Parquet)
-- Needing lazy evaluation and virtual columns to avoid memory overhead
-- Working with astronomical data, financial time series, or other large-scale scientific datasets
+1. Establish row identity, units, schema, missing-value codes, and expected counts.
+   Inspect CSV raw headers before parsers rename duplicates; supply explicit types
+   for IDs and late-appearing values. Keep dates, time zones, and sampling cadence explicit.
+2. Open files with `vaex.open`. HDF5 must use a compatible table layout; arbitrary
+   HDF5 scientific arrays are not automatically a Vaex table. CSV opening performs
+   indexing/schema work; Parquet must decode compressed data. Neither is an instant,
+   zero-memory operation.
+3. Select needed columns and use expressions for derived values. A virtual column
+   avoids a full stored array but still needs expression metadata and evaluation buffers.
+4. Record filters/selections and missingness before reductions. Batch independent
+   statistics with `delay=True`, then `df.execute()` and each promise's `.get()`.
+5. Validate counts, units, join cardinality, and numerical results against a small
+   independently computed subset. Binned or approximate summaries need explicit limits/resolution.
+6. Plot aggregated grids or a bounded sample. A count heatmap and a mean heatmap
+   answer different questions; show coverage and avoid hiding rare/extreme observations silently.
+7. Export directly in chunks; exporting evaluates virtual columns without needing
+   `materialize()` first. Reopen and check counts/schema/values before replacing source data.
 
-**Vaex vs alternatives:** Use **polars** when data fits in RAM and you need maximum in-memory speed. Use **dask** when you need distributed pandas/NumPy across a cluster. Use **vaex** for single-machine, out-of-core analytics on tabular data that exceeds RAM via memory-mapped HDF5/Arrow files.
+## Small executable example
 
-## Core Capabilities
-
-Vaex provides six primary capability areas, each documented in detail in the references directory:
-
-### 1. DataFrames and Data Loading
-
-Load and create Vaex DataFrames from various sources including files (HDF5, CSV, Arrow, Parquet), pandas DataFrames, NumPy arrays, and dictionaries. Reference `references/core_dataframes.md` for:
-- Opening large files efficiently
-- Converting from pandas/NumPy/Arrow
-- Working with example datasets
-- Understanding DataFrame structure
-
-### 2. Data Processing and Manipulation
-
-Perform filtering, create virtual columns, use expressions, and aggregate data without loading everything into memory. Reference `references/data_processing.md` for:
-- Filtering and selections
-- Virtual columns and expressions
-- Groupby operations and aggregations
-- String operations and datetime handling
-- Working with missing data
-
-### 3. Performance and Optimization
-
-Leverage Vaex's lazy evaluation, caching strategies, and memory-efficient operations. Reference `references/performance.md` for:
-- Understanding lazy evaluation
-- Using `delay=True` for batching operations
-- Materializing columns when needed
-- Caching strategies
-- Asynchronous operations
-
-### 4. Data Visualization
-
-Create interactive visualizations of large datasets including heatmaps, histograms, and scatter plots. Reference `references/visualization.md` for:
-- Creating 1D and 2D plots
-- Heatmap visualizations
-- Working with selections
-- Customizing plots and subplots
-
-### 5. Machine Learning Integration
-
-Build ML pipelines with transformers, encoders, and integration with scikit-learn, XGBoost, and other frameworks. Reference `references/machine_learning.md` for:
-- Feature scaling and encoding
-- PCA and dimensionality reduction
-- K-means clustering
-- Integration with scikit-learn/XGBoost/CatBoost
-- Model serialization and deployment
-
-### 6. I/O Operations
-
-Efficiently read and write data in various formats with optimal performance. Reference `references/io_operations.md` for:
-- File format recommendations
-- Export strategies
-- Working with Apache Arrow
-- CSV handling for large files
-- Server and remote data access
-
-## Quick Start Pattern
-
-For most Vaex tasks, follow this pattern:
+Run in a writable working directory; output names must not refer to existing data.
 
 ```python
+from pathlib import Path
+import numpy as np
 import vaex
 
-# 1. Open or create DataFrame
-df = vaex.open('large_file.hdf5')  # or .csv, .arrow, .parquet
-# OR
-df = vaex.from_pandas(pandas_df)
-
-# 2. Explore the data
-print(df)  # Shows first/last rows and column info
-df.describe()  # Statistical summary
-
-# 3. Create virtual columns (no memory overhead)
-df['new_column'] = df.x ** 2 + df.y
-
-# 4. Filter with selections
-df_filtered = df[df.age > 25]
-
-# 5. Compute statistics (fast, lazy evaluation)
-mean_val = df.x.mean()
-stats = df.groupby('category').agg({'value': 'sum'})
-
-# 6. Visualize (df.viz is the recommended accessor since vaex 4.0)
-df.viz.heatmap(df.x, df.y, limits='99.7%', show=True)
-# Legacy: df.plot1d() and df.plot() still work on the DataFrame
-
-# 7. Export if needed
-df.export_hdf5('output.hdf5')
+out = Path('vaex-example.hdf5')
+if out.exists():
+    raise FileExistsError(out)
+df = vaex.from_arrays(
+    x=np.arange(1., 7.), y=np.arange(6.) ** 2,
+    category=np.array(['A', 'B', 'A', 'B', 'A', 'B']),
+)
+df['energy'] = df.x ** 2 + df.y
+selected = df[df.x >= 3]
+mean_task = selected.energy.mean(delay=True)
+count_task = selected.count(delay=True)
+selected.execute()
+assert count_task.get() == 4
+assert np.isclose(mean_task.get(), 35.0)
+summary = df.groupby('category', agg={
+    'rows': vaex.agg.count(), 'energy_sum': vaex.agg.sum('energy'),
+})
+assert int(summary.rows.sum()) == len(df)
+df.export_hdf5(str(out), chunk_size=2)
+reopened = vaex.open(str(out))
+assert reopened.get_column_names() == df.get_column_names()
+assert np.allclose(reopened.energy.to_numpy(), df.energy.to_numpy())
 ```
 
-## Working with References
+For a large real input, replace the in-memory fixture with `vaex.open('input.hdf5')`.
+The small `.to_numpy()` comparison above is a fixture check; do not apply it to a
+whole larger-than-RAM dataset. Compare sampled rows and streamed summaries instead.
 
-The reference files contain detailed information about each capability area. Load references into context based on the specific task:
+## Reference map
 
-- **Basic operations**: Start with `references/core_dataframes.md` and `references/data_processing.md`
-- **Performance issues**: Check `references/performance.md`
-- **Visualization tasks**: Use `references/visualization.md`
-- **ML pipelines**: Reference `references/machine_learning.md`
-- **File I/O**: Consult `references/io_operations.md`
+- [Core DataFrames](references/core_dataframes.md): loaders, expression/array distinctions, inspection and schema.
+- [Data processing](references/data_processing.md): filtering, missingness, strings/dates, grouped statistics and joins.
+- [Performance](references/performance.md): delayed/async execution, caching, buffers, materialization and profiling.
+- [Visualization](references/visualization.md): supported `df.viz` methods, grid geometry, finite plotting limits and widgets.
+- [Machine learning](references/machine_learning.md): train-only fitting, native transformers, estimator memory and state transfer.
+- [I/O](references/io_operations.md): chunked CSV conversion, HDF5/Arrow/Parquet round trips and remote boundaries.
 
-## Best Practices
+## Failure checks
 
-1. **Use HDF5 or Apache Arrow formats** for optimal performance with large datasets
-2. **Leverage virtual columns** instead of materializing data to save memory
-3. **Batch operations** using `delay=True` when performing multiple calculations
-4. **Export to efficient formats** rather than keeping data in CSV
-5. **Use expressions** for complex calculations without intermediate storage
-6. **Profile with `df.describe()` and `df.nbytes`** to understand data shape and memory usage
-
-## Common Patterns
-
-### Pattern: Converting Large CSV to HDF5
-```python
-import vaex
-
-# Open large CSV lazily (vaex 4.14+), or use from_csv to convert to HDF5
-df = vaex.open('large_file.csv')
-# df = vaex.from_csv('large_file.csv', convert='large_file.hdf5')
-
-# Export to HDF5 for faster future access
-df.export_hdf5('large_file.hdf5')
-
-# Future loads are instant
-df = vaex.open('large_file.hdf5')
-```
-
-### Pattern: Efficient Aggregations
-Illustrative pattern: use an existing numeric DataFrame `df`.
-```python
-# Use delay=True to batch multiple operations
-mean_x = df.x.mean(delay=True)
-std_y = df.y.std(delay=True)
-sum_z = df.z.sum(delay=True)
-
-# Execute all at once
-df.execute()  # Execute the queued operations on this DataFrame
-results = [task.get() for task in (mean_x, std_y, sum_z)]
-```
-
-### Pattern: Virtual Columns for Feature Engineering
-```python
-# No memory overhead - computed on the fly
-df['age_squared'] = df.age ** 2
-df['full_name'] = df.first_name + ' ' + df.last_name
-df['is_adult'] = df.age >= 18
-```
-
-## Resources
-
-This skill includes reference documentation in the `references/` directory:
-
-- `core_dataframes.md` - DataFrame creation, loading, and basic structure
-- `data_processing.md` - Filtering, expressions, aggregations, and transformations
-- `performance.md` - Optimization strategies and lazy evaluation
-- `visualization.md` - Plotting and interactive visualizations
-- `machine_learning.md` - ML pipelines and model integration
-- `io_operations.md` - File formats and data import/export
+- `df.x.mean()` returns a computed result; it is not a lazy expression.
+- Use `df.percentile_approx('x', percentage=50)` for approximate percentiles;
+  `Expression.quantile` is not a core 4.19.0 API.
+- Use explicit `vaex.agg` objects to name grouped outputs. Do not assume pandas
+  dictionary aggregation or arbitrary group callbacks have the same contract.
+- `join` defaults to left; declare `how`, validate keys, and extract filtered inputs
+  when the filter must define join membership. Joins accept one key expression per side.
+- `.values`, `.to_numpy()`, unchunked `.to_pandas_df()`, `.materialize()`, and
+  ordinary sklearn `Predictor.fit()` can allocate full arrays.
+- State files carry transformations and potentially serialized executable objects;
+  load only trusted artifacts. They do not carry the original dataset or prove its provenance.
 
 ## Citing Scientific Agent Skills
 

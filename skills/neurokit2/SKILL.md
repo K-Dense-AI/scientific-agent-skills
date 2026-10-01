@@ -1,11 +1,12 @@
 ---
 name: neurokit2
-description: Use NeuroKit2 to build or audit reproducible research workflows for physiological time-series preprocessing, event/interval analysis, multimodal alignment, variability, and complexity. Trigger when code imports neurokit2 or needs its current APIs, schemas, and method-aware validation—not for diagnosis or device validation.
+description: Builds and audits reproducible NeuroKit2 research workflows for physiological time-series preprocessing, event/interval analysis, multimodal alignment, variability, and complexity. Use when code imports neurokit2 or needs its current APIs, schemas, and method-aware validation—not for diagnosis or device validation.
 license: MIT
-compatibility: Python 3.10+ and uv; pinned workflows use NeuroKit2 0.2.13. Core processing needs NumPy, SciPy, pandas, scikit-learn, matplotlib, PyWavelets, requests, and setuptools; selected EEG, cvxEDA, plotting, file-format, and RQA features need separately locked optional packages.
+compatibility: Python 3.10+ and uv; pinned workflows use NeuroKit2 0.2.13. Core processing needs NumPy, SciPy, pandas<3, scikit-learn, matplotlib, PyWavelets, requests, and setuptools; selected EEG, cvxEDA, plotting, file-format, and RQA features need separately locked optional packages.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -14,7 +15,7 @@ metadata:
 ## Scope and evidence cutoff
 
 Use this skill for method-aware, reproducible biosignal research with NeuroKit2. The
-snapshot was checked on **2026-07-23** against:
+snapshot was checked on **2026-10-01** against:
 
 - stable PyPI **0.2.13**, released 2026-03-02;
 - Python metadata (`>=3.10`; classifiers 3.10–3.14) and wheel dependencies;
@@ -22,6 +23,12 @@ snapshot was checked on **2026-07-23** against:
 - official API pages/examples (the live site identified itself as
   `0.2.13.dev214`); and
 - pinned 0.2.13 runtime signatures and synthetic output schemas.
+
+The current wheel requires `pandas<3.0.0`. The refreshed core checks use Python 3.13,
+NumPy 2.5.3, and pandas 2.3.3; forcing pandas 3 conflicts with upstream metadata.
+API fragments below assume caller-provided arrays and imports. Optional MNE source
+reconstruction, cvxEDA, EMD, and pyRQA paths are source-reviewed, not runtime-validated
+by this refresh. Synthetic checks establish software behavior, not empirical validity.
 
 The live documentation can be ahead of the stable wheel. Prefer the pinned runtime
 for reproducible work and name both versions if consulting development docs.
@@ -150,6 +157,12 @@ python skills/neurokit2/scripts/ecg_hrv_pipeline.py \
   --domains time,frequency,nonlinear
 ```
 
+The helper gates frequency analysis using the first-to-last corrected-peak span,
+separately from recording duration. It uses Welch, 4 Hz interval interpolation, and
+`normalize=False`; absolute band powers are in ms². Its numerical gates do not
+establish valid NN intervals or adequate data for every returned metric. ULF remains
+unsupported by this short-recording workflow; VLF needs separate justification.
+
 ### EDA with explicit decomposition
 
 The stable default `eda_process(method="neurokit")` uses high-pass tonic/phasic
@@ -167,7 +180,8 @@ markers, info = nk.eda_peaks(
 ```
 
 For `neurokit`/`kim2004`, `amplitude_min` is relative to the largest detected response;
-it is not an absolute microsiemens threshold. cvxEDA needs optional `cvxopt`.
+it is not an absolute microsiemens threshold. Other supported detectors ignore that
+argument, which the helper records explicitly. cvxEDA needs optional `cvxopt`.
 
 ```bash
 python skills/neurokit2/scripts/eda_pipeline.py \
@@ -220,6 +234,10 @@ Validate a strict local manifest before calling it:
 python skills/neurokit2/scripts/validate_multimodal.py \
   --manifest streams.json --root . --deidentified
 ```
+
+The validator checks every observed timestamp against the declared regular grid and
+the reference stream, with a half-sample tolerance. Matching starts alone cannot rule
+out drift. Without time columns, it can only check the declared grid, not clock accuracy.
 
 After independent modality QC and alignment:
 
@@ -310,7 +328,7 @@ All bundled Markdown paths below are under `references/`; this skill has no
 | `references/bio_module.md` | Multimodal alignment and `bio_*` schemas |
 | `references/complexity.md` | Tuple returns, parameter sensitivity, RQA |
 
-## Primary sources checked 2026-07-23
+## Primary sources checked 2026-10-01
 
 - [PyPI 0.2.13](https://pypi.org/project/neurokit2/)
 - [Official documentation](https://neuropsychology.github.io/NeuroKit/)

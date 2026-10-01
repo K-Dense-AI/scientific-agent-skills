@@ -17,7 +17,12 @@ TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(TESTS))
 
-from _common import CliError, atomic_write_bytes, load_json_file  # noqa: E402
+from _common import (  # noqa: E402
+    CliError,
+    atomic_write_bytes,
+    load_json_file,
+    resolve_local_asset,
+)
 from _manifest import (  # noqa: E402
     manifest_content_hash,
     validate_manifest_document,
@@ -92,6 +97,50 @@ def write_minimal_pptx(
 
 
 class ManifestTests(unittest.TestCase):
+    def test_core_metadata_string_limits_fail_before_generation(self) -> None:
+        for field in ("title", "subject", "authors"):
+            with self.subTest(field=field):
+                manifest = build_manifest(manifest_content_hash)
+                manifest["document"][field] = (
+                    ["A" * 127, "B" * 127] if field == "authors" else "A" * 256
+                )
+                if field == "title":
+                    manifest["elements"][0]["text"] = manifest["document"][field]
+                manifest["approval"]["content_sha256"] = manifest_content_hash(manifest)
+                with self.assertRaisesRegex(CliError, "255 characters"):
+                    validate_manifest_document(
+                        manifest,
+                        manifest_path=Path("poster.json"),
+                        verify_assets=False,
+                    )
+
+    def test_core_metadata_boundary_is_accepted_verbatim(self) -> None:
+        manifest = build_manifest(manifest_content_hash)
+        manifest["document"].update(
+            title="A" * 255, subject="B" * 255, authors=["A" * 126, "B" * 127]
+        )
+        manifest["elements"][0]["text"] = manifest["document"]["title"]
+        manifest["approval"]["content_sha256"] = manifest_content_hash(manifest)
+        report = validate_manifest_document(
+            manifest, manifest_path=Path("poster.json"), verify_assets=False
+        )
+        self.assertTrue(report["valid"])
+        self.assertEqual(len("; ".join(manifest["document"]["authors"])), 255)
+
+    def test_asset_final_symlink_is_rejected_even_within_manifest_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = root / "original.png"
+            original.write_bytes(b"local test asset")
+            linked = root / "linked.png"
+            linked.symlink_to(original.name)
+            with self.assertRaisesRegex(CliError, "symlink"):
+                resolve_local_asset(root / "poster.json", linked.name, suffixes={".png"})
+            self.assertEqual(
+                resolve_local_asset(root / "poster.json", original.name, suffixes={".png"}),
+                original.resolve(),
+            )
+
     def test_complete_synthetic_manifest_passes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "poster.json"
@@ -402,6 +451,30 @@ class OutputSafetyTests(unittest.TestCase):
 
 
 class PaletteAndPlanTests(unittest.TestCase):
+    def test_scaled_pdf_plan_separates_canvas_from_final_artboard(self) -> None:
+        manifest = build_manifest(manifest_content_hash)
+        manifest["physical_output"].update(trim_width_in=20.0, trim_height_in=16.0)
+        manifest["requirements"]["conference"].update(
+            max_width_in=20.0, max_height_in=16.0, required_delivery_format="PDF"
+        )
+        manifest["requirements"]["printer"].update(
+            trim_width_in=20.0, trim_height_in=16.0, scaling_allowed=True
+        )
+        manifest["approval"]["content_sha256"] = manifest_content_hash(manifest)
+        validation = validate_manifest_document(
+            manifest, manifest_path=Path("poster.json"), verify_assets=False
+        )
+        plan = build_export_plan(manifest, validation)
+        self.assertEqual(plan["dimensions"]["uniform_print_scale_percent"], 200.0)
+        self.assertEqual(plan["pdf_preflight"], {
+            "exported_by_tool": False,
+            "canvas_width_pt": 720.0,
+            "canvas_height_pt": 576.0,
+            "final_artboard_width_pt": 1440.0,
+            "final_artboard_height_pt": 1152.0,
+            "full_size_pdf_requires_scaling": True,
+        })
+
     def test_palette_reports_reference_contrast(self) -> None:
         manifest = build_manifest(manifest_content_hash)
         report = audit_palette(manifest)

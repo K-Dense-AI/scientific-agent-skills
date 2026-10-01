@@ -21,13 +21,15 @@ def get_skill_path():
 
 def find_template(template_name):
     """Find template file in assets directory."""
+    if Path(template_name).name != template_name or not template_name.endswith('.tex'):
+        return None
     skill_path = get_skill_path()
     assets_path = skill_path / "assets"
     
     # Search in all subdirectories
     for subdir in ["journals", "posters", "grants"]:
         template_path = assets_path / subdir / template_name
-        if template_path.exists():
+        if template_path.is_file():
             return template_path
     
     return None
@@ -36,23 +38,24 @@ def customize_template(template_path, output_path, **kwargs):
     """Customize a template with provided information."""
     
     # Read template
-    with open(template_path, 'r') as f:
+    with open(template_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
     # Replace placeholders
     replacements = {
         'title': (
-            [r'Insert Your Title Here[^}]*', r'Your [^}]*Title[^}]*Here[^}]*'],
+            [r'Insert Your Title Here[^}]*', r'Your [^}]*Title[^}]*Here[^}]*',
+             r'Your Paper Title: Concise and Descriptive \\\\ \(Maximum Two Lines\)'],
             kwargs.get('title', '')
         ),
         'authors': (
-            [r'First Author\\textsuperscript\{1\}, Second Author[^}]*',
-             r'First Author.*Second Author.*Third Author'],
+            [re.escape(r'First Author\textsuperscript{1}, Second Author\textsuperscript{1,2}, Third Author\textsuperscript{2,*}'),
+             re.escape(r'First Author\inst{1}, Second Author\inst{1,2}, Third Author\inst{2}')],
             kwargs.get('authors', '')
         ),
         'affiliations': (
-            [r'Department Name, Institution Name, City, State[^\\]*',
-             r'Department of [^,]*, University Name[^\\]*'],
+            [r'Department Name, Institution Name, City, State[^\\}\n]*',
+             r'Department of [^,}\n]*, University Name[^\\}\n]*'],
             kwargs.get('affiliations', '')
         ),
         'email': (
@@ -68,12 +71,15 @@ def customize_template(template_path, output_path, **kwargs):
         if replacement:
             for pattern in patterns:
                 if re.search(pattern, content):
-                    content = re.sub(pattern, replacement, content, count=1)
+                    # A function replacement preserves literal LaTeX backslashes;
+                    # a replacement string would interpret \1, \t, or \n.
+                    content = re.sub(pattern, lambda _match: replacement, content, count=1)
                     modified = True
                     print(f"[OK] Replaced {key}")
+                    break
     
     # Write output
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write(content)
     
     if modified:
@@ -172,13 +178,13 @@ Examples:
     # Interactive mode
     if args.interactive:
         interactive_mode()
-        return
+        return 0
     
     # Command-line mode
     if not args.template or not args.output:
         print("Error: --template and --output are required (or use --interactive)")
         parser.print_help()
-        return
+        return 2
     
     # Find template
     template_path = find_template(args.template)
@@ -188,7 +194,7 @@ Examples:
         skill_path = get_skill_path()
         for subdir in ["journals", "posters", "grants"]:
             print(f"  - {skill_path}/assets/{subdir}/")
-        return
+        return 2
     
     # Customize
     output_path = Path(args.output)
@@ -200,7 +206,7 @@ Examples:
         affiliations=args.affiliations,
         email=args.email
     )
+    return 0
 
 if __name__ == "__main__":
-    main()
-
+    raise SystemExit(main())

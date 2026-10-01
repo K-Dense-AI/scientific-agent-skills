@@ -1,594 +1,184 @@
-# PyDESeq2 Workflow Guide
+# Normalization, QC, and downstream use
 
-This document provides detailed step-by-step workflows for common PyDESeq2 analysis patterns.
+## Importing counts from AnnData
 
-## Table of Contents
-1. [Complete Differential Expression Analysis](#complete-differential-expression-analysis)
-2. [Data Loading and Preparation](#data-loading-and-preparation)
-3. [Single-Factor Analysis](#single-factor-analysis)
-4. [Multi-Factor Analysis](#multi-factor-analysis)
-5. [Result Export and Visualization](#result-export-and-visualization)
-6. [Common Patterns and Best Practices](#common-patterns-and-best-practices)
-7. [Troubleshooting](#troubleshooting)
-
----
-
-## Complete Differential Expression Analysis
-
-### Overview
-A standard PyDESeq2 analysis consists of 12 main steps across two phases:
-
-**Phase 1: Read Counts Modeling (Steps 1-7)**
-- Normalization and dispersion estimation
-- Log fold-change fitting
-- Outlier detection
-
-**Phase 2: Statistical Analysis (Steps 8-12)**
-- Wald testing
-- Multiple testing correction
-- Optional LFC shrinkage
-
-### Full Workflow Code
+`obs` indexes samples and `var` indexes genes. Establish which matrix contains
+counts from preprocessing provenance: neither `.X`, `.raw.X`, nor a layer named
+`counts` guarantees that values are unnormalized. PyDESeq2's `adata=` constructor
+reads `.X`; it has no `layer=` argument. For a small dataset with a verified counts
+layer, this conversion was tested with dense and CSR inputs:
 
 ```python
-import pandas as pd
-from pydeseq2.dds import DeseqDataSet
-from pydeseq2.default_inference import DefaultInference
-from pydeseq2.ds import DeseqStats
-
-# Load data
-counts_df = pd.read_csv("counts.csv", index_col=0).T  # Transpose if needed
-metadata = pd.read_csv("metadata.csv", index_col=0)
-
-# Filter low-count genes
-genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
-counts_df = counts_df[genes_to_keep]
-
-# Remove samples with missing metadata
-samples_to_keep = ~metadata.condition.isna()
-counts_df = counts_df.loc[samples_to_keep]
-metadata = metadata.loc[samples_to_keep]
-
-# Initialize DeseqDataSet
-metadata["condition"] = pd.Categorical(
-    metadata["condition"], categories=["control", "treated"]
-)
-inference = DefaultInference(n_cpus=4)
-dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~condition",
-    refit_cooks=True,
-    inference=inference,
-)
-
-# Run normalization and fitting
-dds.deseq2()
-
-# Perform statistical testing
-ds = DeseqStats(
-    dds,
-    contrast=["condition", "treated", "control"],
-    alpha=0.05,
-    cooks_filter=True,
-    independent_filter=True,
-    inference=inference,
-)
-ds.summary()
-
-# Optional: Apply LFC shrinkage for visualization
-ds.lfc_shrink(coeff="condition[T.treated]")
-
-# Access results
-results = ds.results_df
-print(results.head())
-```
-
----
-
-## Data Loading and Preparation
-
-### Loading CSV Files
-
-Count data typically comes in genes × samples format but needs to be transposed:
-
-```python
-import pandas as pd
-
-# Load count matrix (genes × samples)
-counts_df = pd.read_csv("counts.csv", index_col=0)
-
-# Transpose to samples × genes
-counts_df = counts_df.T
-
-# Load metadata (already in samples × variables format)
-metadata = pd.read_csv("metadata.csv", index_col=0)
-```
-
-### Loading from Other Formats
-
-**From TSV:**
-```python
-counts_df = pd.read_csv("counts.tsv", sep="\t", index_col=0).T
-metadata = pd.read_csv("metadata.tsv", sep="\t", index_col=0)
-```
-
-**From saved AnnData/H5AD:**
-```python
-import anndata as ad
-
-adata = ad.read_h5ad("counts_and_metadata.h5ad")
-counts_df = pd.DataFrame(adata.X, index=adata.obs_names, columns=adata.var_names)
-metadata = adata.obs
-```
-
-Do not load pickle files from untrusted sources. Use CSV/TSV or `.h5ad` for portable data exchange.
-
-**From AnnData:**
-```python
-import anndata as ad
-
-adata = ad.read_h5ad("data.h5ad")
-counts_df = pd.DataFrame(
-    adata.X,
-    index=adata.obs_names,
-    columns=adata.var_names
-)
-metadata = adata.obs
-```
-
-### Data Filtering
-
-**Filter genes with low counts:**
-```python
-# Remove genes with fewer than 10 total reads
-genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 10]
-counts_df = counts_df[genes_to_keep]
-```
-
-**Filter samples with missing metadata:**
-```python
-# Remove samples where 'condition' column is NA
-samples_to_keep = ~metadata.condition.isna()
-counts_df = counts_df.loc[samples_to_keep]
-metadata = metadata.loc[samples_to_keep]
-```
-
-**Filter by multiple criteria:**
-```python
-# Keep only samples that meet all criteria
-mask = (
-    ~metadata.condition.isna() &
-    (metadata.batch.isin(["batch1", "batch2"])) &
-    (metadata.age >= 18)
-)
-counts_df = counts_df.loc[mask]
-metadata = metadata.loc[mask]
-```
-
-### Data Validation
-
-**Check data structure:**
-```python
-print(f"Counts shape: {counts_df.shape}")  # Should be (samples, genes)
-print(f"Metadata shape: {metadata.shape}")  # Should be (samples, variables)
-print(f"Indices match: {all(counts_df.index == metadata.index)}")
-
-# Check for negative values
-assert (counts_df >= 0).all().all(), "Counts must be non-negative"
-
-# Check for non-integer values
-assert counts_df.applymap(lambda x: x == int(x)).all().all(), "Counts must be integers"
-```
-
----
-
-## Single-Factor Analysis
-
-### Simple Two-Group Comparison
-
-Compare treated vs control samples:
-
-```python
-from pydeseq2.dds import DeseqDataSet
-from pydeseq2.default_inference import DefaultInference
-from pydeseq2.ds import DeseqStats
-
-# Design: model expression as a function of condition
-inference = DefaultInference(n_cpus=4)
-dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~condition",
-    inference=inference,
-)
-
-dds.deseq2()
-
-# Test treated vs control
-ds = DeseqStats(
-    dds,
-    contrast=["condition", "treated", "control"],
-    inference=inference,
-)
-ds.summary()
-
-# Results
-results = ds.results_df
-significant = results[results.padj < 0.05]
-print(f"Found {len(significant)} significant genes")
-```
-
-### Multiple Pairwise Comparisons
-
-When comparing multiple groups:
-
-```python
-# Test each treatment vs control
-treatments = ["treated_A", "treated_B", "treated_C"]
-all_results = {}
-
-for treatment in treatments:
-    ds = DeseqStats(
-        dds,
-        contrast=["condition", treatment, "control"]
-    )
-    ds.summary()
-    all_results[treatment] = ds.results_df
-
-# Compare results across treatments
-for name, results in all_results.items():
-    sig = results[results.padj < 0.05]
-    print(f"{name}: {len(sig)} significant genes")
-```
-
----
-
-## Multi-Factor Analysis
-
-### Two-Factor Design
-
-Account for batch effects while testing condition:
-
-```python
-# Design includes both batch and condition
-dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~batch + condition"
-)
-
-dds.deseq2()
-
-# Test condition effect while controlling for batch
-ds = DeseqStats(
-    dds,
-    contrast=["condition", "treated", "control"]
-)
-ds.summary()
-```
-
-### Interaction Effects
-
-Test whether treatment effect differs between groups:
-
-```python
-# Design includes interaction term
-dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~group + condition + group:condition"
-)
-
-dds.deseq2()
-
-# Test interaction terms with an explicit numpy contrast vector matching the design matrix
-print(dds.obsm["design_matrix"].columns)
-interaction_contrast_vector = ...  # e.g., np.array([...]) with one value per design column
-ds = DeseqStats(dds, contrast=interaction_contrast_vector)
-ds.summary()
-```
-
-### Continuous Covariates
-
-Include continuous variables like age:
-
-```python
-# Ensure age is numeric in metadata
-metadata["age"] = pd.to_numeric(metadata["age"])
-
-dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~age + condition"
-)
-
-dds.deseq2()
-```
-
----
-
-## Result Export and Visualization
-
-### Saving Results
-
-**Export as CSV:**
-```python
-# Save statistical results
-ds.results_df.to_csv("deseq2_results.csv")
-
-# Save significant genes only
-significant = ds.results_df[ds.results_df.padj < 0.05]
-significant.to_csv("significant_genes.csv")
-
-# Save with sorted results
-sorted_results = ds.results_df.sort_values("padj")
-sorted_results.to_csv("sorted_results.csv")
-```
-
-**Save DeseqDataSet:**
-```python
-# Save as AnnData/H5AD for later inspection
-dds.to_picklable_anndata().write_h5ad("dds_result.h5ad")
-```
-
-**Load saved results:**
-```python
-# Load results
-results = pd.read_csv("deseq2_results.csv", index_col=0)
-
-# Load AnnData
-import anndata as ad
-adata = ad.read_h5ad("dds_result.h5ad")
-```
-
-### Basic Visualization
-
-**Volcano plot:**
-```python
-import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from scipy import sparse
 
-results = ds.results_df.copy()
-results["-log10(padj)"] = -np.log10(results.padj)
+matrix = adata.layers['counts']  # verified count provenance, not inferred from name
+# Dense storage is needed downstream; check the memory cost before materializing.
+if sparse.issparse(matrix):
+    matrix = matrix.toarray()
+counts_df = pd.DataFrame(matrix, index=adata.obs_names, columns=adata.var_names)
+metadata = adata.obs.copy()
+assert counts_df.index.is_unique and counts_df.columns.is_unique
+assert np.isfinite(counts_df.to_numpy()).all()
+```
 
-# Plot
-plt.figure(figsize=(10, 6))
-plt.scatter(
-    results.log2FoldChange,
-    results["-log10(padj)"],
-    alpha=0.5,
-    s=10
+Resolve missing annotations across **all** design variables before fitting.
+Explicitly log any sample exclusions, then perform gene filtering. Never infer
+transposition from whether the number of genes exceeds the number of samples.
+
+AnnData 0.13 exposes `layers[None]` as an alias for `.X`. Avoid loops assuming every
+layer key is a string, and never delete the alias as a workaround. A fitted
+PyDESeq2 0.5.4 object was successfully exported with
+`dds.to_picklable_anndata().write_h5ad(...)` and reloaded under AnnData 0.13.4.
+
+## Size factors and count normalization
+
+For the ratio method, positive-in-every-sample genes define geometric reference
+counts. PyDESeq2 computes each sample's factor as the exponential of its median
+log count/reference ratio. `normed_counts = X / size_factors[:, None]`. This is
+within-gene library/composition normalization; it is not cross-gene length correction.
+
+Size factors need not cluster near one. Inspect library totals, composition,
+replicate structure and external controls together; a wide factor range is a QC
+lead, not an automatic failure. Broad unidirectional expression shifts can violate
+the default reference assumption. Use prespecified invariant control genes only
+when they have defensible experimental support.
+
+```python
+from pydeseq2.dds import DeseqDataSet
+
+normalization_dds = DeseqDataSet(
+    counts=counts_df, metadata=metadata, design='~condition',
+    size_factors_fit_type='ratio', n_cpus=1,
 )
-plt.axhline(-np.log10(0.05), color='red', linestyle='--', label='padj=0.05')
-plt.axvline(1, color='gray', linestyle='--')
-plt.axvline(-1, color='gray', linestyle='--')
-plt.xlabel("Log2 Fold Change")
-plt.ylabel("-Log10(Adjusted P-value)")
-plt.title("Volcano Plot")
-plt.legend()
-plt.savefig("volcano_plot.png", dpi=300)
+normalization_dds.fit_size_factors()
+sf = normalization_dds.obs['size_factors'].to_numpy()
+assert np.isfinite(sf).all() and (sf > 0).all()
+np.testing.assert_allclose(normalization_dds.layers['normed_counts'], counts_df.to_numpy() / sf[:, None])
 ```
 
-**MA plot:**
-```python
-plt.figure(figsize=(10, 6))
-plt.scatter(
-    np.log10(results.baseMean + 1),
-    results.log2FoldChange,
-    alpha=0.5,
-    s=10,
-    c=(results.padj < 0.05),
-    cmap='bwr'
-)
-plt.xlabel("Log10(Base Mean + 1)")
-plt.ylabel("Log2 Fold Change")
-plt.title("MA Plot")
-plt.savefig("ma_plot.png", dpi=300)
-```
+Normalization options in 0.5.4:
 
----
+- `ratio` is default. If every gene contains a zero, `DeseqDataSet` warns and
+  switches to iterative estimation. The standalone `preprocessing.deseq2_norm`
+  does **not** provide that fallback.
+- `poscounts` uses positive entries, replacing zeros' log contribution with zero
+  when calculating gene log means, then centers size factors to geometric mean one.
+  The released implementation additionally selects genes with `logmeans > 0`:
+  all-zero **and all-zero/one** genes are excluded. A binary-only native fixture
+  produced missing factors. Check factors explicitly; do not treat this as a
+  general per-cell single-cell DE method.
+- `iterative` estimates factors with an intercept-only fit. In the released source,
+  the `control_genes` mask is not passed into this branch, including automatic
+  fallback. Do not claim control-only normalization if iteration was used.
+- `control_genes` accepts valid AnnData gene indexers for ratio/poscounts. Ensure
+  selected controls survived filtering and contain usable positive counts for
+  every sample; checking only that names exist is insufficient.
 
-## Common Patterns and Best Practices
+Record the actual method and fallback warnings. Changing normalization to obtain
+more significant genes is not a validation strategy.
 
-### 1. Data Preprocessing Checklist
+## Dispersion and model diagnostics
 
-Before running PyDESeq2:
-- ✓ Ensure counts are non-negative integers
-- ✓ Verify samples × genes orientation
-- ✓ Check that sample names match between counts and metadata
-- ✓ Remove or handle missing metadata values
-- ✓ Filter low-count genes (typically < 10 total reads)
-- ✓ Verify experimental factors are properly encoded
+For a negative-binomial count with mean `mu`, the dispersion convention is
+`variance = mu + dispersion * mu**2`. PyDESeq2 estimates gene-wise dispersions,
+fits a parametric trend or a mean trend, and obtains MAP dispersions. This is
+dispersion shrinkage; it is separate from optional LFC shrinkage after testing.
 
-### 2. Design Formula Best Practices
-
-**Order matters:** Put adjustment variables before the variable of interest
-```python
-# Correct: control for batch, test condition
-design = "~batch + condition"
-
-# Less ideal: condition listed first
-design = "~condition + batch"
-```
-
-**Use categorical for discrete variables:**
-```python
-# Ensure proper data types
-metadata["condition"] = metadata["condition"].astype("category")
-metadata["batch"] = metadata["batch"].astype("category")
-```
-
-**Use current formulaic design syntax:**
-```python
-# Preferred in PyDESeq2 0.5.x
-design = "~batch + condition"
-
-# Avoid deprecated constructor arguments:
-# design_factors, continuous_factors, ref_level
-```
-
-### 3. Statistical Testing Guidelines
-
-**Set appropriate alpha:**
-```python
-# Standard significance threshold
-ds = DeseqStats(dds, contrast=["condition", "treated", "control"], alpha=0.05)
-
-# More stringent for exploratory analysis
-ds = DeseqStats(dds, contrast=["condition", "treated", "control"], alpha=0.01)
-```
-
-**Use independent filtering:**
-```python
-# Recommended: filter low-power tests
-ds = DeseqStats(dds, contrast=["condition", "treated", "control"], independent_filter=True)
-
-# Only disable if you have specific reasons
-ds = DeseqStats(dds, contrast=["condition", "treated", "control"], independent_filter=False)
-```
-
-### 4. LFC Shrinkage
-
-**When to use:**
-- For visualization (volcano plots, heatmaps)
-- For ranking genes by effect size
-- When prioritizing genes for follow-up
-
-**When NOT to use:**
-- For reporting statistical significance (use unshrunken p-values)
-- For gene set enrichment analysis (typically uses unshrunken values)
+The parametric trend can fail and fall back to a mean trend. This occurred in the
+small Poisson-like regression fixture and is reported, not hidden. Tiny panels
+provide little information for global dispersion estimation. Inspect nonfinite
+estimates, convergence fields, the trend and mean/count distributions. A plausible
+plot or convergence flag does not establish model adequacy or biological validity.
 
 ```python
-# Save both versions
-ds.results_df.to_csv("results_unshrunken.csv")
-ds.lfc_shrink(coeff="condition[T.treated]")
-ds.results_df.to_csv("results_shrunken.csv")
-```
-
-### 5. Memory Management
-
-For large datasets:
-```python
-# Use parallel processing
-inference = DefaultInference(n_cpus=4)
-dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~condition",
-    inference=inference,  # Adjust based on available cores
-)
-
-# Process in batches if needed
-# (split genes into chunks, analyze separately, combine results)
-```
-
----
-
-## Troubleshooting
-
-### Error: Index mismatch between counts and metadata
-
-**Problem:** Sample names don't match
-```
-KeyError: Sample names in counts and metadata don't match
-```
-
-**Solution:**
-```python
-# Check indices
-print("Counts samples:", counts_df.index.tolist())
-print("Metadata samples:", metadata.index.tolist())
-
-# Align if needed
-common_samples = counts_df.index.intersection(metadata.index)
-counts_df = counts_df.loc[common_samples]
-metadata = metadata.loc[common_samples]
-```
-
-### Error: All genes have zero counts
-
-**Problem:** Data might need transposition
-```
-ValueError: All genes have zero total counts
-```
-
-**Solution:**
-```python
-# Check data orientation
-print(f"Counts shape: {counts_df.shape}")
-
-# If genes > samples, likely needs transpose
-if counts_df.shape[1] < counts_df.shape[0]:
-    counts_df = counts_df.T
-```
-
-### Warning: Many genes filtered out
-
-**Problem:** Too many low-count genes removed
-
-**Check:**
-```python
-# See distribution of gene counts
-print(counts_df.sum(axis=0).describe())
-
-# Visualize
 import matplotlib.pyplot as plt
-plt.hist(counts_df.sum(axis=0), bins=50, log=True)
-plt.xlabel("Total counts per gene")
-plt.ylabel("Frequency")
-plt.show()
+
+dds.plot_dispersions(save_path='dispersion_plot.png')
+plt.close('all')
+print(dds.var[['genewise_dispersions', 'dispersions', '_LFC_converged']].head())
+print(dds.obs['size_factors'])
 ```
 
-**Adjust filtering if needed:**
+The model requires independent biological replication and residual degrees of
+freedom. The library warns on rank deficiency; the bundled driver explicitly
+stops. An interaction cannot recover information absent from a confounded design.
+
+Cook replacement and Cook test filtering are different operations. Default
+`min_replicates=7` governs eligible replacement; a three-versus-three experiment
+may still have Cook-filtered results without replacement. Do not delete samples
+because one gene has a large Cook distance. Inspect sample-wide QC and preserve the
+reason for any scientifically justified exclusion.
+
+## Missing tests, adjusted p-values, and plots
+
+All-zero genes lack estimable coefficients/tests. Extreme Cook outliers can have
+missing p-values; the original statistic may still be present. Independent
+filtering uses normalized mean count to select a rejection threshold for the
+specified `alpha`, leaving some adjusted p-values missing. It differs from the
+manual prefilter and does not remove those genes' rows from the result table.
+
+A p-value histogram need not be flat: true effects, discrete low-count tests,
+filtering, model errors and sample structure all affect it. Uniform null behavior
+is an idealization, not a required shape for a mixed real dataset. Compare with
+QC and study design rather than using the histogram alone to certify the analysis.
+
+For a volcano plot, omit missing y values and cap exact zero adjusted p-values
+only in the plotting copy:
+
 ```python
-# Try lower threshold
-genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 5]
+plot_results = wald_results.copy()
+plot_results['minus_log10_padj'] = -np.log10(plot_results.padj.clip(lower=np.finfo(float).tiny))
+ax = plot_results.plot.scatter(x='log2FoldChange', y='minus_log10_padj')
+ax.axhline(-np.log10(alpha), linestyle='--', color='gray')
+ax.figure.savefig('volcano_plot.png')
+plt.close(ax.figure)
 ```
 
-### Error: Design matrix is not full rank
+For MA plots, display normalized mean versus effect; distinguish missing tests from
+significant results. Shrunk LFCs can be useful for visualization, but their updated
+SE is not the SE that produced the retained Wald statistic.
 
-**Problem:** Confounded design (e.g., all treated samples in one batch)
+## VST and memory
 
-**Solution:** Inspect the condition-by-batch contingency table and the design-matrix rank. If batch and condition are perfectly confounded, their effects cannot be separated from these data: adding an interaction does not restore identifiability, and dropping batch produces an unadjusted, confounded condition estimate. Obtain a balanced design or restrict conclusions to an estimable comparison. Remove a redundant term only when scientifically justified; distinguish this from unused factor levels or empty interaction cells. See the [DESeq2 full-rank guidance](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#model-matrix-not-full-rank).
-
-### Issue: No significant genes found
-
-**Possible causes:**
-1. Small effect sizes
-2. High biological variability
-3. Insufficient sample size
-4. Technical issues (batch effects, outliers)
-
-**Diagnostics:**
 ```python
-# Check dispersion estimates
-import matplotlib.pyplot as plt
-dispersions = dds.var["dispersions"]
-plt.hist(dispersions, bins=50)
-plt.xlabel("Dispersion")
-plt.ylabel("Frequency")
-plt.show()
-
-# Check size factors (should be close to 1)
-print("Size factors:", dds.obs["size_factors"])
-
-# Look at top genes even if not significant
-top_genes = ds.results_df.nsmallest(20, "pvalue")
-print(top_genes)
+dds.vst(use_design=True)
+vst_values = dds.layers['vst_counts']
+assert vst_values.shape == dds.shape and np.isfinite(vst_values).all()
 ```
 
-### Memory errors on large datasets
+VST is for exploratory PCA, clustering and sample QC. `use_design=False` uses an
+intercept-only dispersion model; it is not synonymous with batch correction.
+`use_design=True` accounts for the model while estimating the transformation; it
+does not subtract fitted batch effects. Never feed VST output back as count input.
+Fit transformations on training data for predictive evaluations and explicitly
+validate the held-out transformation path for the selected normalization method.
 
-**Solutions:**
+Do not fit independent gene batches and combine results: normalization, dispersion
+trends/priors, independent filtering and BH families change. Reduce `n_cpus`, use
+`low_memory=True`, and assess dense memory requirements. Low-memory mode removes
+some diagnostics, so decide what must be retained before discarding them.
+
+## Enrichment handoff
+
+For a standard two-sided zero-null Wald analysis, preserve gene IDs and select
+finite tests without thresholding on significance:
+
 ```python
-# 1. Use fewer CPUs (paradoxically can help)
-inference = DefaultInference(n_cpus=1)
-dds = DeseqDataSet(..., inference=inference)
-
-# 2. Filter more aggressively
-genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= 20]
-
-# 3. Process in batches
-# Split analysis by gene subsets and combine results
+eligible = np.isfinite(wald_results['stat']) & np.isfinite(wald_results['pvalue'])
+ranked = wald_results.loc[eligible, 'stat'].sort_values(ascending=False)
+assert ranked.index.is_unique
+ranked.to_csv('signed_wald_ranking.csv', header=['stat'])
 ```
+
+This excludes Cook-filtered p-values while keeping genes with finite p-values and
+missing `padj` from independent filtering. State that eligibility policy. Resolve
+one-to-many/many-to-one identifier mappings before ranking and preserve the tested
+universe for ORA. These are handoff semantics; no enrichment service was called
+as part of this skill's refresh.
+
+Sources: [released normalization source](https://github.com/scverse/PyDESeq2/blob/v0.5.4/pydeseq2/preprocessing.py),
+[released dataset source](https://github.com/scverse/PyDESeq2/blob/v0.5.4/pydeseq2/dds.py),
+[step-by-step tutorial](https://pydeseq2.readthedocs.io/en/stable/auto_examples/plot_step_by_step.html),
+[DESeq2 statistical guidance](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html).

@@ -46,7 +46,7 @@ Do not apply the phrase mechanically. The responsible privacy/legal reviewer det
 
 1. Define purpose, recipient, authority, jurisdiction, and data class.
 2. Exclude fields not needed for the purpose.
-3. Keep source records in the authorized system; use field-path references and hashes in the draft workspace.
+3. Keep source records in the authorized system; use authorized opaque locators and integrity hashes in the draft workspace. A locator, value hash, or aggregate can still disclose information: hashing an identifier is not a Safe Harbor substitute, and predictable values can be guessed. Include the manifest itself in privacy review.
 4. Select Safe Harbor, Expert Determination, or a documented synthetic/aggregate-data rationale through the responsible reviewer.
 5. Review structured fields, free text, attachments, images, headers, filenames, metadata, and linked data.
 6. Review combinations and small-cell/rare-case risk.
@@ -63,7 +63,7 @@ Do not apply the phrase mechanically. The responsible privacy/legal reviewer det
 - do not output detected identifiers;
 - do not label a document `COMPLIANT`, `SAFE`, or `DEIDENTIFIED`;
 - do not substitute for Expert Determination or legal review;
-- remain blocked when required human review is missing.
+- block missing process declarations and retain a review-required status even when the declarations are complete.
 
 The strongest successful result is `PROCESS_DOCUMENTED_REVIEW_REQUIRED`.
 

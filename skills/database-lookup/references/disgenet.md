@@ -1,52 +1,22 @@
-# DisGeNET (Gene-Disease Associations)
+# DISGENET — Gene/variant–disease associations
 
-## Base URL
-```
-https://www.disgenet.org/api
-```
+Use the current [DISGENET documentation](https://www.disgenet.com/docs) and
+[API/tools page](https://www.disgenet.com/Tools). The old disgenet.org API and
+email/password login recipes are not the current integration contract.
 
-## Auth
-**API key required.** Register at disgenet.org, then authenticate:
-```bash
-curl -X POST https://www.disgenet.org/api/auth/ \
-  -d 'email=you@example.com&password=yourpassword'
-# Returns: {"token": "abc123..."}
-```
-Pass as: `Authorization: Bearer <token>`
+Access is plan-dependent: the [Academic plan](https://www.disgenet.com/Plans)
+exposes the curated subset; full-dataset API access requires an appropriate
+subscription. Obtain a key and the current base URL, authorization-header
+syntax and endpoint schema from the account's API documentation before running
+requests. These authenticated details could not be independently verified in
+this review, so no speculative URL or token exchange is provided.
 
-Load token from `.env` as `DISGENET_API_KEY`.
+For a reproducible retrieval, choose gene–disease (GDA) or variant–disease (VDA),
+resolve the input identifier, and save source filters, release, evidence rows,
+PMIDs, score fields and pagination metadata. Summary rows aggregate evidence;
+inspect supporting evidence before making a mechanistic claim.
 
-## Key Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/gda/gene/{gene_id}` | Gene-disease associations (NCBI gene ID) |
-| `/gda/disease/{disease_id}` | Gene-disease associations (UMLS CUI) |
-| `/gda/evidences/gene/{gene_id}` | Evidence-level data |
-| `/vda/gene/{gene_id}` | Variant-disease associations for a gene |
-| `/vda/variant/{rsid}` | Variant-disease associations (dbSNP rsID) |
-
-## Parameters
-- `source` — `CURATED`, `BEFREE`, `ALL`
-- `min_score` — GDA score threshold (0-1)
-- `min_ei` — evidence index threshold
-- `format` — `json` or `tsv`
-- `limit`, `offset` — pagination
-
-## Example Calls
-```
-# Gene-disease for TP53 (gene ID 7157)
-/gda/gene/7157?source=CURATED&min_score=0.3&limit=10&format=json
-
-# Disease-gene for Breast Cancer (UMLS CUI C0006142)
-/gda/disease/C0006142?limit=10
-
-# Variant-disease for rs1042522
-/vda/variant/rs1042522
-```
-
-## Rate Limits
-Free academic tier: ~few hundred requests/day. Paid tiers available.
-
-## Free alternative
-If no API key: use **Open Targets** for disease-gene associations.
+[Current score guidance](https://support.disgenet.com/support/solutions/articles/202000100283-what-are-the-gda-score-vda-score-disgenet-score-)
+removes the former cap at 1. Do not treat the raw DISGENET score as a probability,
+clamp it to [0,1], or confuse it with a normalized score. DSI measures disease
+specificity and DPI pleiotropy; neither is causal evidence.

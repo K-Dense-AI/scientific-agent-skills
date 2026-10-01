@@ -1,11 +1,13 @@
 ---
 name: scikit-learn
-description: Machine learning in Python with scikit-learn. Use when working with supervised learning (classification, regression), unsupervised learning (clustering, dimensionality reduction), model evaluation, hyperparameter tuning, preprocessing, or building ML pipelines. Provides comprehensive reference documentation for algorithms, preprocessing techniques, pipelines, and best practices.
+description: Supports machine learning in Python with scikit-learn. Applies when working with supervised learning (classification, regression), unsupervised learning (clustering, dimensionality reduction), model evaluation, hyperparameter tuning, preprocessing, or building ML pipelines. Provides comprehensive reference documentation for algorithms, preprocessing techniques, pipelines, and best practices.
 license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.11+ and scikit-learn 1.7+. NumPy and SciPy are required dependencies. Optional matplotlib/seaborn for bundled example scripts that save plots.
+compatibility: Requires Python 3.11+ and scikit-learn 1.9.1. NumPy, SciPy, and joblib are dependencies; bundled scripts also require pandas and matplotlib. Installation needs network access; bundled examples use local datasets without credentials.
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
+  upstream-version: "1.9.1"
   skill-author: K-Dense Inc.
 ---
 
@@ -17,16 +19,16 @@ This skill provides comprehensive guidance for machine learning tasks using scik
 
 ## Installation
 
-Tested against **scikit-learn 1.8.0** (stable; December 2025). Requires **Python 3.11–3.14** (free-threaded CPython 3.14 wheels available in 1.8+).
+Targets **scikit-learn 1.9.1**, verified with Python 3.13. The release requires Python 3.11+; use its published wheels for your interpreter/platform. See the [1.9 release notes](https://scikit-learn.org/stable/whats_new/v1.9.html). The bundled scripts and regression tests are executable examples. Reference snippets using caller-provided `X`, `y`, columns, or placeholders are illustrative adaptations, not complete standalone programs.
 
 Install the PyPI package **`scikit-learn`** (not the deprecated `sklearn` package on PyPI). Import in code as `sklearn`.
 
 ```bash
 # Install scikit-learn using uv
-uv pip install "scikit-learn>=1.7"
+uv pip install "scikit-learn==1.9.1"
 
 # Optional: plotting utilities and bundled script dependencies
-uv pip install "scikit-learn[plots]" matplotlib seaborn
+uv pip install "scikit-learn[plots]==1.9.1" matplotlib pandas
 
 # Commonly used with
 uv pip install pandas numpy
@@ -147,33 +149,36 @@ Two worked workflows are in
 
 ## Example Scripts
 
+Run these commands from this skill directory; the clustering demo writes PNGs into the working directory. Its synthetic noise is seeded. The classification script assumes independent rows with enough observations per class for stratified CV; adapt both splits for grouped or temporal data.
+
 ### Classification Pipeline
 
 Run a complete classification workflow with preprocessing, model comparison, hyperparameter tuning, and evaluation:
 
 ```bash
-uv run python scripts/classification_pipeline.py
+uv run --no-project --with scikit-learn==1.9.1 --with pandas --with matplotlib python scripts/classification_pipeline.py
 ```
 
 This script demonstrates:
 - Handling mixed data types (numeric and categorical)
-- Model comparison using cross-validation
+- Model comparison using stratified cross-validation and balanced accuracy by default
 - Hyperparameter tuning with GridSearchCV
 - Comprehensive evaluation with multiple metrics
-- Feature importance analysis
+- Impurity feature importances, with their high-cardinality bias made explicit
 
 ### Clustering Analysis
 
 Perform clustering analysis with algorithm comparison and visualization:
 
 ```bash
-uv run python scripts/clustering_analysis.py
+uv run --no-project --with scikit-learn==1.9.1 --with pandas --with matplotlib python scripts/clustering_analysis.py
 ```
 
 This script demonstrates:
-- Finding optimal number of clusters (elbow method, silhouette analysis)
+- Exploring candidate cluster counts (inertia/elbow and silhouette analysis)
 - Comparing multiple clustering algorithms (K-Means, DBSCAN, Agglomerative, Gaussian Mixture)
-- Evaluating clustering quality without ground truth
+- Reporting undefined metrics for degenerate clusterings and DBSCAN noise coverage
+- Assessing internal geometry without treating it as proof of scientific clusters
 - Visualizing results with PCA projection
 
 ## Reference Documentation
@@ -271,18 +276,18 @@ model = RandomForestClassifier(n_estimators=100, random_state=42)
 
 ### Choose Appropriate Metrics
 - Balanced data: Accuracy, F1-score
-- Imbalanced data: Precision, Recall, ROC AUC, Balanced Accuracy
+- Imbalanced data: Per-class Precision/Recall, Average Precision, Balanced Accuracy; include prevalence and threshold
 - Cost-sensitive: Define custom scorer
 
-### Scale Features When Required
-Algorithms requiring feature scaling:
+### Scale Features When Appropriate
+Algorithms commonly sensitive to feature scale (scaling changes the modeled geometry):
 - SVM, KNN, Neural Networks
 - PCA, Linear/Logistic Regression with regularization
 - K-Means clustering
 
 Algorithms not requiring scaling:
 - Tree-based models (Decision Trees, Random Forest, Gradient Boosting)
-- Naive Bayes
+- Gaussian Naive Bayes; preserve the nonnegative count/proportion input expected by MultinomialNB
 
 ## Troubleshooting Common Issues
 
@@ -294,8 +299,8 @@ model = LogisticRegression(max_iter=1000)
 ```
 
 ### Poor Performance on Test Set
-**Issue:** Overfitting
-**Solution:** Use regularization, cross-validation, or simpler model
+**Possible causes:** Overfitting, distribution shift, leakage during selection, or an unsuitable metric
+**Solution:** Diagnose using training/validation results and the deployment split; do not repeatedly tune on the final test set. Use regularization, cross-validation, or a simpler model as appropriate
 ```python
 # Add regularization
 model = Ridge(alpha=1.0)

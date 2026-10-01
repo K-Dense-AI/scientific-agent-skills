@@ -1,5 +1,7 @@
 # Dask Best Practices
 
+Reviewed with Dask/distributed 2026.8.0. File paths, deployment settings, and undefined application functions are illustrative; executed local checks and current official sources are in [review.md](review.md).
+
 ## Performance Optimization Principles
 
 ### Start with Simpler Solutions First
@@ -16,7 +18,7 @@ These alternatives often provide better returns than distributed systems and sho
 
 **Critical Rule**: Chunks should be small enough that many fit in a worker's available memory at once.
 
-**Recommended Target**: Size chunks so workers can hold 10 chunks per core without exceeding available memory.
+**Starting estimate**: Allow several chunks per active thread plus outputs, temporary buffers, Python overhead, and shuffle data. Ten chunks per core is a heuristic, not a safe universal limit.
 
 **Why It Matters**:
 - Too large chunks: Memory overflow and inefficient parallelization
@@ -24,7 +26,7 @@ These alternatives often provide better returns than distributed systems and sho
 
 **Example Calculation**:
 - 8 cores with 32 GB RAM
-- Target: ~400 MB per chunk (32 GB / 8 cores / 10 chunks)
+- 400 MB per chunk (32 GB / 8 cores / 10) would consume the entire nominal budget; start smaller to leave workspace and OS headroom. Measure uncompressed memory, not file size.
 
 ### Monitor with the Dashboard
 
@@ -99,7 +101,8 @@ results = dask.compute(*computations)  # Single compute for all
 **Example Using map_partitions**:
 ```python
 # Instead of applying function to each row
-ddf['result'] = ddf.apply(complex_function, axis=1)  # Many tasks
+ddf['result'] = ddf.apply(complex_function, axis=1, meta=('result', 'float64'))
+# Python row calls within partitions, not one Dask task per row
 
 # Apply to entire partitions at once
 ddf = ddf.map_partitions(lambda df: df.assign(result=complex_function(df)))
@@ -136,7 +139,7 @@ ddf = ddf.map_partitions(lambda df: df.assign(result=complex_function(df)))
 
 ### Memory Management
 
-**Persist Strategically**:
+**Persist Strategically**: Persist reusable intermediates only after filtering and selecting columns; persistence blocks later optimizer pushdown. Distributed persistence stays on workers, while local persistence occupies local memory. It is not an automatic cure for memory errors.
 ```python
 # Persist intermediate results that are reused
 intermediate = expensive_computation(data).persist()
@@ -195,8 +198,9 @@ results = client.gather(futures)
 Use Bags for initial ETL, then convert to structured formats:
 ```python
 import dask.bag as db
+import json
 
-# Process raw JSON
+# Process raw JSON Lines
 bag = db.read_text('logs/*.json').map(json.loads)
 bag = bag.filter(lambda x: x['status'] == 'success')
 
@@ -209,7 +213,7 @@ ddf = bag.to_dataframe()
 Persist data between iterations:
 ```python
 data = dd.read_parquet('data.parquet')
-data = data.persist()  # Keep in memory across iterations
+data = data.persist()  # Only when reusable partitions fit worker memory
 
 for iteration in range(num_iterations):
     data = update_function(data)

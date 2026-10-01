@@ -1,8 +1,9 @@
 # Source Ledger
 
-Research date: **2026-07-24**
+Current review date: **2026-10-01** (initial research: 2026-07-24)
 
-Method: targeted `parallel-cli search` and `parallel-cli extract` queries restricted to
+Method: current official-page reads plus `parallel-cli extract` (600-second maximum
+cache age, no stale fallback), restricted to
 official guideline organizations, standards bodies, government sites, and original
 statement publications. No search-result artifacts are bundled. Re-check every source
 and the target journal immediately before submission because policies can change.
@@ -32,24 +33,24 @@ IDs for a user's manuscript.
 ### SW-S03 — COPE position on authorship and AI tools
 
 - Organization: Committee on Publication Ethics
-- Formal position last reviewed: 2023; current page retrieved 2026-07-24
+- Formal position last reviewed: 2023; current page rechecked 2026-10-01
 - URL: https://publicationethics.org/guidance/cope-position/authorship-and-ai-tools
 - Used for: AI cannot be an author; authors disclose use and remain responsible.
 
 ### SW-S04 — COPE Code of Conduct status
 
 - Organization: COPE
-- Current page date surfaced by search: 2026-07-15
+- Version history: current version published 2026-07-21
 - URL: https://publicationethics.org/membership/code-of-conduct
-- Used for: as of the research date, the 2017 Core Practices had been retired in 2024
-  and COPE stated that a replacement Code of Conduct would be published in 2026.
+- Used for: published Code of Conduct for Members, replacing the retired Core
+  Practices, with a 12-month implementation transition from first publication.
 
 ### SW-S05 — COPE history of Code and Core Practices
 
 - Organization: COPE
 - URL: https://publicationethics.org/about/what-we-do/our-story/history-code-conduct
-- Used for: historical context only; archived Core Practices must not be presented as
-  current membership standards.
+- Used for: Core Practices retired in 2024; new Code published July 2026 alongside
+  Core Principles (2026). Archived practices are not current membership standards.
 
 ## Reporting guidelines
 
@@ -106,7 +107,8 @@ IDs for a user's manuscript.
 ### SW-S13 — STARD-AI
 
 - Original consensus statement publication: Nature Medicine
-- Date: 2025
+- Date: 2025-09-15; author correction dated 2026-07-13 adds a consortium member
+- Correction: https://www.nature.com/articles/s41591-026-04570-9
 - URL: https://www.nature.com/articles/s41591-025-03953-8
 - Used for: diagnostic-accuracy studies evaluating AI systems.
 
@@ -221,8 +223,9 @@ IDs for a user's manuscript.
 
 - Journal: JAMA
 - URL: https://jamanetwork.com/journals/jama/pages/instructions-for-authors
-- Used for: an example of venue-specific article types, limits, statements, and
-  submission requirements.
+- Used for: venue-specific article types, limits, statements, and submission
+  requirements; current restrictions on AI drafting of Opinion/Letters/Online Comments
+  and AI generation/formatting of references.
 
 ### SW-S26 — PLOS Biology data availability policy
 
@@ -266,3 +269,18 @@ IDs for a user's manuscript.
 - URL: https://www.cos.io/initiatives/top-guidelines
 - Used for: study registration, protocols, analysis plans, materials, data, code,
   reporting transparency, and verification-oriented policy practices.
+
+## Verification boundaries for this refresh
+
+The current official statements still identify CONSORT/SPIRIT 2025, PRISMA 2020,
+STROBE 2007, STARD 2015 v1.1, STARD-AI 2025, TRIPOD+AI 2024, TRIPOD-LLM 2025,
+CARE 2013, ARRIVE 2.0, SQUIRE 2.0, CHEERS 2022 and SRQR 2014. The bundled topics
+remain original routing prompts, not reproduced official checklists. Extensions
+are not exhaustive; use EQUATOR and the parent statement for the actual study.
+
+NLM Bookshelf returned a browser challenge for *Citing Medicine* during this refresh;
+its continued role is corroborated by the current NLM sample-references page and
+ICMJE Recommendations. No claim is made to have inspected every book chapter.
+Journal policy examples were rechecked at their official pages; they do not establish
+compliance for any particular manuscript. No authenticated submissions were made.
+The bundled scripts have no external API endpoints, authentication, or pagination.

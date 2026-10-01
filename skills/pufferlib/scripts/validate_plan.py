@@ -430,8 +430,8 @@ def _validate_logging(
     if backend not in LOGGER_CREDENTIAL_ENV:
         errors.append("$.logging.backend must be none, wandb, or neptune")
         return
-    if profile == "source-4.0" and backend == "neptune":
-        errors.append("Neptune is not a current source-4.0 integration")
+    if backend == "neptune":
+        errors.append("Neptune hosted service shut down on 2026-03-05; use local logging")
     opt_in = _boolean(
         logging.get("external_opt_in"),
         path="$.logging.external_opt_in",
@@ -452,6 +452,11 @@ def _validate_logging(
     if backend != "none" and (opt_in is not True or disclosure is not True):
         errors.append(
             "external logging requires external_opt_in=true and disclosure_ack=true"
+        )
+    if backend == "wandb" and upload is not True:
+        errors.append(
+            "reviewed upstream W&B training uploads model artifacts at close; "
+            "upload_checkpoints=true is required (no supported CLI upload opt-out)"
         )
 
 
@@ -517,6 +522,8 @@ def validate_plan(plan: Any) -> list[str]:
 
     _validate_package(package, profile, errors)
     _validate_environment(environment, errors)
+    if profile == "source-4.0" and environment.get("adapter") in {"gymnasium", "pettingzoo"}:
+        errors.append("source-4.0 has no Gymnasium/PettingZoo emulation adapter")
     _validate_training(training, errors)
     _validate_vectorization(vectorization, profile, training, errors)
     _validate_evaluation(evaluation, training, errors)

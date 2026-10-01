@@ -1,198 +1,145 @@
-# Performance, Patterns, and Troubleshooting
+# Performance, patterns, and validation
 
-Performance optimization, array introspection and storage sizing, common patterns
-(appendable time series, large matrices, format conversion), and common issues with
-their fixes.
-
-## Performance Optimization
-
-### Checklist for Optimal Performance
-
-1. **Chunk Size**: Aim for 1-10 MB per chunk
-   ```python
-   # For float32: 1MB = 262,144 elements
-   chunks = (512, 512)  # 512×512×4 bytes = ~1MB
-   ```
-
-2. **Chunk Shape**: Align with access patterns
-   ```python
-   # Row-wise access → chunk spans columns: (small, large)
-   # Column-wise access → chunk spans rows: (large, small)
-   # Random access → balanced: (medium, medium)
-   ```
-
-3. **Compression**: Choose based on workload
-   ```python
-   # Interactive/fast: BloscCodec(cname='lz4')
-   # Balanced: BloscCodec(cname='zstd', clevel=5)
-   # Maximum compression: GzipCodec(level=9)
-   ```
-
-4. **Storage Backend**: Match to environment
-   ```python
-   # Local: LocalStore (default)
-   # Cloud: fsspec URIs or FsspecStore + consolidated metadata
-   # Temporary: MemoryStore
-   ```
-
-5. **Sharding**: Use for large-scale datasets
-   ```python
-   # When you have millions of small chunks
-   shards=(10*chunk_size, 10*chunk_size)
-   ```
-
-6. **Parallel I/O**: Use Dask for large operations
-   ```python
-   import dask.array as da
-   dask_array = da.from_zarr('data.zarr')
-   result = dask_array.compute(scheduler='threads', num_workers=8)
-   ```
-
-### Profiling and Debugging
+## Storage sizing
 
 ```python
-# Print detailed array information
-print(z.info)
-
-# Output includes:
-# - Type, shape, chunks, dtype
-# - Serializer and compressors
-# - Storage size (compressed vs uncompressed)
-# - Storage location
-
-# Check storage size
-print(f"Compressed size: {z.nbytes_stored / 1e6:.2f} MB")
-print(f"Uncompressed size: {z.nbytes / 1e6:.2f} MB")
-print(f"Compression ratio: {z.nbytes / z.nbytes_stored:.2f}x")
-```
-
-## Common Patterns and Best Practices
-
-### Pattern: Time Series Data
-
-```python
-# Store time series with time as first dimension
-# This allows efficient appending of new time steps
-z = zarr.open('timeseries.zarr', mode='a',
-              shape=(0, 720, 1440),  # Start with 0 time steps
-              chunks=(1, 720, 1440),  # One time step per chunk
-              dtype='f4')
-
-# Append new time steps
-new_data = np.random.random((1, 720, 1440))
-z.append(new_data, axis=0)
-```
-
-### Pattern: Large Matrix Operations
-
-```python
-import dask.array as da
-
-# Create large matrix in Zarr
-z = zarr.open('matrix.zarr', mode='w',
-              shape=(100000, 100000),
-              chunks=(1000, 1000),
-              dtype='f8')
-
-# Use Dask for parallel computation
-dask_z = da.from_zarr('matrix.zarr')
-result = (dask_z @ dask_z.T).compute()  # Parallel matrix multiply
-```
-
-### Pattern: Cloud-Native Workflow
-
-```python
-import zarr
-
-path = "s3://my-bucket/data.zarr"
-z = zarr.create_array(
-    store=path,
-    shape=(10000, 10000),
-    chunks=(500, 500),
-    dtype="f4",
-    storage_options={"anon": False},
-)
-z[:] = data
-
-zarr.consolidate_metadata(path)
-z_read = zarr.open_consolidated(path, storage_options={"anon": False})
-subset = z_read[0:100, 0:100]
-```
-
-### Pattern: Format Conversion
-
-```python
-# HDF5 to Zarr
-import h5py
-import zarr
-
-with h5py.File('data.h5', 'r') as h5:
-    dataset = h5['dataset_name']
-    z = zarr.array(dataset[:],
-                   chunks=(1000, 1000),
-                   store='data.zarr')
-
-# NumPy to Zarr
 import numpy as np
-data = np.load('data.npy')
-z = zarr.array(data, chunks='auto', store='data.zarr')
+import zarr
 
-# Zarr to NetCDF (via Xarray)
-import xarray as xr
-ds = xr.open_zarr('data.zarr')
-ds.to_netcdf('data.nc')
+z = zarr.create_array(None, data=np.ones((8, 8), dtype="f4"), chunks=(4, 4))
+print(z.info)             # Cheap metadata summary.
+print(z.info_complete())  # May list/read storage to compute complete information.
+stored = z.nbytes_stored()  # Method, not a numeric property.
+assert stored > 0
+print({"logical_bytes": z.nbytes, "stored_bytes": stored, "logical_to_stored": z.nbytes / stored})
 ```
 
-## Common Issues and Solutions
+Stored bytes include metadata and initialized objects; uninitialized fill chunks may
+consume no chunk bytes. The logical/stored ratio is not a pure codec compression ratio,
+especially for tiny or sparse arrays. Record dtype, chunk/shard shape, codec settings,
+backend, actual read selections, cold/warm cache state and concurrent workers when
+benchmarking. Remove unsupported claims of universal codec or layout superiority.
 
-### Issue: Slow Performance
+## Appendable time series
 
-**Diagnosis**: Check chunk size and alignment
 ```python
-print(z.chunks)  # Are chunks appropriate size?
-print(z.info)    # Check compression ratio
+import numpy as np
+import zarr
+
+root = zarr.open_group("timeseries.zarr", mode="w-", zarr_format=3)
+data = root.create_array("value", shape=(0, 4), chunks=(2, 4), dtype="f4")
+time = root.create_array("time", shape=(0,), chunks=(2,), dtype="i8")
+time.attrs["units"] = "seconds since 2026-01-01T00:00:00Z"
+# A single coordinator owns both appends; they are not an atomic pair.
+new_time = np.array([0, 60], dtype="i8")
+new_values = np.arange(8, dtype="f4").reshape(2, 4)
+assert len(new_time) == len(new_values) and np.all(np.diff(new_time) > 0)
+data.append(new_values, axis=0)
+time.append(new_time, axis=0)
+assert data.shape[0] == time.shape[0]
+np.testing.assert_array_equal(root["value"][:], new_values)
 ```
 
-**Solutions**:
-- Increase chunk size to 1-10 MB
-- Align chunks with access pattern
-- Try different compression codecs
-- Use Dask for parallel operations
+For real streams, check the previous last timestamp too, stage batches and retain a
+completion manifest. Recover interrupted batches before readers treat them as complete.
+Do not compress missing time intervals by dropping observations and relabeling positions.
 
-### Issue: High Memory Usage
+## Bounded numeric HDF5 conversion
 
-**Cause**: Loading entire array or large chunks into memory
+This worked example copies one homogeneous numeric dataset and selected metadata. It
+is not a general HDF5 hierarchy, reference, compound/vlen type, dimension-scale, link,
+or compression-filter converter. Validate such cases explicitly before conversion.
 
-**Solutions**:
 ```python
-# Don't load entire array
-# Bad: data = z[:]
-# Good: Process in chunks
-for i in range(0, z.shape[0], 1000):
-    chunk = z[i:i+1000, :]
-    process(chunk)
+import h5py
+import numpy as np
+import zarr
 
-# Or use Dask for automatic chunking
-import dask.array as da
-dask_z = da.from_zarr('data.zarr')
-result = dask_z.mean().compute()  # Processes in chunks
+expected = np.arange(96, dtype="f4").reshape(12, 8)
+with h5py.File("input.h5", "w") as h5:
+    source = h5.create_dataset("measurements", data=expected, chunks=(4, 4))
+    source.attrs["units"] = "K"
+with h5py.File("input.h5", "r") as h5:
+    source = h5["measurements"]
+    dest = zarr.create_array(
+        "converted.zarr", shape=source.shape, dtype=source.dtype, chunks=(4, 4),
+        attributes={"units": str(source.attrs["units"])},
+        dimension_names=("sample", "feature"),
+    )
+    for row in range(0, source.shape[0], 4):
+        for col in range(0, source.shape[1], 4):
+            selection = (slice(row, row + 4), slice(col, col + 4))
+            dest[selection] = source[selection]
+reopened = zarr.open_array("converted.zarr", mode="r")
+np.testing.assert_array_equal(reopened[:], expected)
+assert reopened.dtype == expected.dtype and reopened.attrs["units"] == "K"
 ```
 
-### Issue: Cloud Storage Latency
+Do not use `dataset[:]` for a large input. HDF5 handles must stay open while being read;
+process workers cannot share a serialized h5py dataset safely. Attribute conversion must
+preserve meaning: don't blindly stringify arrays, units or identifiers.
 
-**Solutions**:
+## NumPy and NetCDF
+
 ```python
-# 1. Consolidate metadata
-zarr.consolidate_metadata(store)
-z = zarr.open_consolidated(store)
+import numpy as np
+import zarr
 
-# 2. Use appropriate chunk sizes (5-100 MB for cloud)
-chunks = (2000, 2000)  # Larger chunks for cloud
-
-# 3. Enable sharding
-shards = (10000, 10000)  # Groups many chunks
+np.save("input.npy", np.arange(96, dtype="f4").reshape(12, 8))
+source = np.load("input.npy", mmap_mode="r", allow_pickle=False)
+dest = zarr.create_array("from-numpy.zarr", shape=source.shape, dtype=source.dtype, chunks=(4, 4))
+for row in range(0, source.shape[0], 4):
+    for col in range(0, source.shape[1], 4):
+        selection = (slice(row, row + 4), slice(col, col + 4))
+        dest[selection] = source[selection]
+np.testing.assert_array_equal(dest[:], source)
 ```
 
-### Issue: Concurrent Write Conflicts
+For NetCDF, start with a labeled Xarray group and a separately selected NetCDF engine.
+`xr.open_zarr` cannot recover missing dimensions/coordinates from a bare numeric array.
+`Dataset.to_netcdf` is illustrative here: engine-specific dtypes, calendars, fill encodings
+and roundtrip equality must be checked before claiming a faithful conversion.
 
-**Solution**: Design workflows so each process/thread writes to separate chunks. Zarr-Python 3 does not yet support `ThreadSynchronizer` / `ProcessSynchronizer`; see `references/v3_migration.md`.
+## Missing chunks and scientific validity
+
+Default fill reads are valid for deliberately sparse/unwritten arrays, but can hide an
+incomplete transfer. Keep expected object counts/checksums or a write-coverage manifest.
+For an array required to have every chunk physically stored, create with
+`config={"write_empty_chunks": True}` and open under a runtime configuration context:
+
+```python
+import numpy as np
+import zarr
+
+zarr.create_array("complete.zarr", data=np.zeros(8, dtype="i4"), chunks=(4,),
+                  config={"write_empty_chunks": True})
+with zarr.config.set({"array.read_missing_chunks": False}):
+    strict = zarr.open_array("complete.zarr", mode="r")
+    np.testing.assert_array_equal(strict[:], np.zeros(8))
+```
+
+In 3.4.0, `open_array(..., config={"read_missing_chunks": False})` silently ignores
+that keyword on an existing array; the context above is the tested alternative. This
+policy intentionally rejects absent fill chunks and is inappropriate for ordinary
+sparse stores. It is not a transaction or proof that all expected samples exist.
+
+Verify representative edge chunks, shapes/dtypes, NaNs, signedness, valid zeros, IDs,
+axis order, units, coordinates, and provenance. Exact lossless value equality verifies
+storage mechanics, not calibration or biological correctness. Lossy codecs need
+application-specific numerical and scientific checks.
+
+## Troubleshooting
+
+- **High memory:** count task outputs and concurrent chunk/shard buffers; reduce both
+  worker count and async concurrency before increasing object sizes.
+- **Slow queries:** measure chunk overlap and request count for the actual slices;
+  changing compressors cannot repair a poor axis layout.
+- **Stale hierarchy:** reopen with `use_consolidated=False`, then reconsolidate after
+  writers finish.
+- **Conflicting writes:** partition by whole stored chunks/shards and serialize metadata;
+  distinct element slices are not enough.
+- **Unknown codec:** inspect metadata and install the known codec package in the target
+  environment; do not reinterpret encoded bytes or silently substitute another codec.
+
+Source: [released Array API](https://github.com/zarr-developers/zarr-python/blob/v3.4.0/src/zarr/core/array.py),
+[h5py datasets](https://docs.h5py.org/en/stable/high/dataset.html).

@@ -16,13 +16,14 @@ description -- which drifts as sublineages accumulate substitutions.
 
 ``proportion`` is over ``coverage`` -- the sequences that actually resolved that
 site -- not over every matching sequence. A site with poor coverage can show a
-high proportion on very few reads, so read the coverage column before quoting a
+high proportion on very few sequences, so read the coverage column before quoting a
 proportion.
 """
 from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date
 
 from lapis_client import (
     LapisError,
@@ -35,11 +36,13 @@ from lapis_client import (
     pick_date_field,
     pick_lineage_field,
     range_keys,
+    request,
     resolve_base_url,
+    surveillance_filters,
 )
 
 PROFILE_COLUMNS = ("mutation", "gene", "position", "from", "to", "proportion", "count", "coverage")
-DIFF_COLUMNS = ("mutation", "gene", "position", "verdict", "prop_a", "prop_b", "n_a", "n_b")
+DIFF_COLUMNS = ("mutation", "gene", "position", "verdict", "prop_a", "prop_b", "n_a", "n_b", "coverage_a", "coverage_b")
 
 
 def parse_where(pairs: list[str], schema: dict) -> dict[str, str]:
@@ -93,19 +96,29 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
+        if not 0 < args.min_proportion <= 1:
+            raise LapisError("--min-proportion must be in (0, 1]")
         base_url = resolve_base_url(args.instance, args.base_url)
         schema = describe_instance(base_url)
         lineage_field, has_index = pick_lineage_field(schema, args.lineage_field)
-        where = parse_where(args.where, schema)
+        where = surveillance_filters(schema, parse_where(args.where, schema))
+        if lineage_field in where:
+            raise LapisError("set the lineage with the positional argument, not --where")
         if args.since:
+            date.fromisoformat(args.since)
             date_field = pick_date_field(schema, "collection", args.date_field)
             where[range_keys(date_field)[0]] = args.since
+        if args.gene:
+            reference = request(base_url, "sample/referenceGenome")
+            names = [r["name"] for r in reference["nucleotideSequences" if args.nucleotide else "genes"]]
+            matches = [n for n in names if n.upper() == args.gene.upper()]
+            if len(matches) != 1:
+                raise LapisError(f"unknown {'segment' if args.nucleotide else 'gene'} {args.gene!r}; choose from {names}")
+            args.gene = matches[0]
 
-        # A diff must fetch below the reporting threshold on both sides,
-        # otherwise a mutation pruned out of one side is indistinguishable from
-        # one genuinely absent there and gets misreported as gained or lost.
-        # The floor tracks --min-proportion so lowering it stays correct.
-        diff_floor = min(0.05, args.min_proportion)
+        # Fetch unpruned mutation rows for comparisons. A missing row still
+        # has unknown coverage and cannot establish a zero proportion.
+        diff_floor = 0.0
 
         primary = lineage_filter(args.lineage, has_index, args.sublineages)
         base_filters = {**where, lineage_field: primary}
@@ -144,7 +157,6 @@ def main(argv: list[str] | None = None) -> int:
                     key=lambda r: (str(r.get("sequenceName")), int(r.get("position") or 0)),
                 )
             ]
-            print(emit(rows, PROFILE_COLUMNS, args.format))
             summary = (
                 f"\n# {schema['name']} via {base_url} | data version {data_version(base_url)}"
                 f"\n# {lineage_field}={primary} | {n_primary} sequences"
@@ -170,14 +182,18 @@ def main(argv: list[str] | None = None) -> int:
             for mutation in sorted(set(first) | set(second)):
                 a = first.get(mutation, {})
                 b = second.get(mutation, {})
-                pa = float(a.get("proportion") or 0.0)
-                pb = float(b.get("proportion") or 0.0)
-                if pa >= args.min_proportion and pb < args.min_proportion:
-                    verdict = "gained"
+                pa = float(a["proportion"]) if a and a.get("coverage", 0) > 0 else None
+                pb = float(b["proportion"]) if b and b.get("coverage", 0) > 0 else None
+                if max(pa or 0.0, pb or 0.0) < args.min_proportion:
+                    continue
+                if pa is None or pb is None:
+                    verdict = "not_comparable"
+                elif pa >= args.min_proportion and pb < args.min_proportion:
+                    verdict = "above_a_only"
                 elif pb >= args.min_proportion and pa < args.min_proportion:
-                    verdict = "lost"
+                    verdict = "above_b_only"
                 elif pa >= args.min_proportion and pb >= args.min_proportion:
-                    verdict = "shared"
+                    verdict = "above_both"
                 else:
                     continue
                 source = a or b
@@ -187,27 +203,29 @@ def main(argv: list[str] | None = None) -> int:
                         "gene": source.get("sequenceName", ""),
                         "position": source.get("position", ""),
                         "verdict": verdict,
-                        "prop_a": f"{pa:.3f}",
-                        "prop_b": f"{pb:.3f}",
-                        "n_a": a.get("count", 0),
-                        "n_b": b.get("count", 0),
+                        "prop_a": f"{pa:.3f}" if pa is not None else None,
+                        "prop_b": f"{pb:.3f}" if pb is not None else None,
+                        "n_a": a.get("count"),
+                        "n_b": b.get("count"),
+                        "coverage_a": a.get("coverage"),
+                        "coverage_b": b.get("coverage"),
                     }
                 )
-            rows.sort(key=lambda r: ({"gained": 0, "lost": 1, "shared": 2}[r["verdict"]],
-                                     str(r["gene"]), int(r["position"] or 0)))
-            print(emit(rows, DIFF_COLUMNS, args.format))
+            rows.sort(key=lambda r: (str(r["gene"]), int(r["position"] or 0)))
             summary = (
                 f"\n# {schema['name']} via {base_url} | data version {data_version(base_url)}"
                 f"\n# A = {primary} ({n_primary} sequences), B = {secondary} ({n_secondary})"
-                f"\n# verdict is relative to a {args.min_proportion} proportion threshold"
+                f"\n# verdict is relative to a {args.min_proportion} proportion threshold; not evolutionary gain/loss"
+                f"\n# absent rows have unknown proportion/coverage, never an inferred zero"
             )
-    except LapisError as exc:
+        summary += f"\n# filters {where} | gene/segment {args.gene or 'all'} | lineage field {lineage_field}"
+    except (LapisError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    print(emit(rows, DIFF_COLUMNS if args.versus else PROFILE_COLUMNS, args.format))
     sys.stdout.flush()
-    if args.format != "json":
-        print(summary, file=sys.stderr)
+    print(summary, file=sys.stderr)
     return 0
 
 

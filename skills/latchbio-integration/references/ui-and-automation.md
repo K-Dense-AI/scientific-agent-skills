@@ -117,9 +117,11 @@ def rnaseq_qc(
 ```
 
 Metadata parameter keys must match the signature. The SDK adds default metadata
-for signature parameters omitted from the metadata object.
+for signature parameters omitted from the metadata object, and 2.77.1 silently
+drops unknown keys. Validate the keys before decoration so a misspelling does
+not silently replace a scientific label or validation rule.
 
-Although `about_page_path` is documented, SDK 2.76.8 can fail while serializing
+Although `about_page_path` is documented, SDK 2.77.1 can fail while serializing
 its `Path` value. Prefer `documentation=` and a descriptive workflow docstring
 until that defect is fixed.
 
@@ -196,7 +198,7 @@ LaunchPlan(
 
 Constructor:
 
-```python
+```text
 LaunchPlan(
     workflow,
     name,
@@ -249,7 +251,10 @@ def validate_columns(columns: list[str]) -> bool:
 ```
 
 Valid message types are `info`, `warning`, and `error`. The data dictionary
-requires `title` and `body`.
+requires `title` and `body`. Since 2.76.10, message-delivery errors do not
+terminate the task. An `error` message alone is not task failure: raise an
+exception after reporting invalid scientific inputs, as above. Delivery is
+best-effort; do not treat a successful `message()` return as delivery confirmation.
 
 Do not put secrets, signed URLs, patient identifiers, or excessive raw data in
 messages.

@@ -3,7 +3,9 @@
 Transfer Syntax UID `(0002,0010)` identifies the encoding rules for the
 dataset, including VR encoding, byte order, and pixel compression. This guide
 targets stable pydicom 3.0.2. Always use the applicable DICOM PS3.5/PS3.6 and
-the deployment's conformance statements for interoperability decisions.
+the deployment's conformance statements for interoperability decisions. Snippets
+with file paths, `encoded_frames`, or callback placeholders are illustrative;
+repository tests exercise these APIs with small synthetic data.
 
 ## Inspect before decoding
 
@@ -85,26 +87,27 @@ all registered UIDs are supported.
 
 ## Stable 3.0.2 decompression plugins
 
-The stable pydicom matrix reports these main choices:
+The pydicom 3.0.2 `pixels` backend and plugin source expose these main choices
+(the older general handler guide includes legacy backend entries):
 
 | Transfer-syntax family | Typical pydicom plugin dependencies |
 |---|---|
 | Native/deflated | pydicom + NumPy |
-| RLE Lossless | built-in pydicom; `pylibjpeg-rle`; GDCM |
+| RLE Lossless | built-in pydicom; `pylibjpeg-rle` |
 | JPEG Baseline/Extended | `pylibjpeg-libjpeg`; GDCM; Pillow with JPEG support |
 | JPEG Lossless | `pylibjpeg-libjpeg`; GDCM |
 | JPEG-LS | `pyjpegls`; `pylibjpeg-libjpeg`; GDCM |
 | JPEG 2000 | `pylibjpeg-openjpeg`; GDCM; Pillow with OpenJPEG |
 | HTJ2K | `pylibjpeg-openjpeg` |
 
-Pinned reviewed installations:
+Pinned reviewed installations (Python 3.12+ for NumPy 2.5.3):
 
 ```bash
-uv pip install "pydicom==3.0.2" "numpy==2.5.1"
+uv pip install "pydicom==3.0.2" "numpy==2.5.3"
 
 uv pip install "pylibjpeg==2.1.0" \
   "pylibjpeg-libjpeg==2.4.0" \
-  "pylibjpeg-openjpeg==2.5.0" \
+  "pylibjpeg-openjpeg==2.6.0" \
   "pylibjpeg-rle==2.2.0"
 
 uv pip install "pyjpegls==1.5.1"
@@ -125,6 +128,14 @@ Important stable documentation limitations include:
   combinations for older GDCM releases.
 - `pylibjpeg-openjpeg` and other plugins have their own maximum bit depths.
 - pydicom's built-in RLE implementation is slower than compiled alternatives.
+
+Runtime check on macOS arm64, Python 3.13, pydicom 3.0.2 and GDCM 3.2.6:
+`pixel_array(..., decoding_plugin="gdcm")` correctly decoded the synthetic
+signed 12-bit JPEG-LS fixture, but `Dataset.decompress(decoding_plugin="gdcm")`
+failed with a read-only-array error during sign correction. Use the tested
+`decoding_plugin="pyjpegls"` for that decompression case. This is a scoped
+runtime finding, not a claim that every GDCM JPEG-LS image fails. RLE encoding
+also exposes a GDCM plugin in this release; new-backend RLE decoding does not.
 
 Never silently fall back in a validated workflow. Pin a plugin explicitly with
 `decoding_plugin=...`, record versions, and compare results against independent
@@ -247,22 +258,28 @@ For encapsulated Pixel Data:
 - Pixel Data VR is `OB`;
 - the dataset is explicit VR little endian at the dataset-structure level;
 - a Basic Offset Table may be empty;
-- Extended Offset Table/Lengths can locate large/multi-fragment frames.
+- Extended Offset Table/Lengths support large offsets, but require one fragment
+  per frame and an empty Basic Offset Table; they do not index multi-fragment frames.
 
 Access existing encapsulated data:
 
 ```python
 from pydicom.encaps import generate_frames, get_frame
 
+extended = None
+if "ExtendedOffsetTable" in ds and "ExtendedOffsetTableLengths" in ds:
+    extended = (ds.ExtendedOffsetTable, ds.ExtendedOffsetTableLengths)
 frame0 = get_frame(
     ds.PixelData,
     0,
     number_of_frames=int(ds.get("NumberOfFrames", 1)),
+    extended_offsets=extended,
 )
 
 for encoded_frame in generate_frames(
     ds.PixelData,
     number_of_frames=int(ds.get("NumberOfFrames", 1)),
+    extended_offsets=extended,
 ):
     inspect_bounded_codestream(encoded_frame)
 ```
@@ -277,6 +294,7 @@ ds.PixelData = pixel_data
 ds.ExtendedOffsetTable = offsets
 ds.ExtendedOffsetTableLengths = lengths
 ds["PixelData"].VR = "OB"
+ds["PixelData"].is_undefined_length = True
 ```
 
 Set a matching Transfer Syntax UID and consistent Image Pixel metadata.
@@ -310,6 +328,19 @@ Likewise, `Dataset.save_as()` does not automatically convert between little and
 big endian. Use the documented pixel and writer APIs, then validate the
 derived instance.
 
+For a new integer pixel array, prefer `Dataset.set_pixel_data(array,
+photometric_interpretation="MONOCHROME2", bits_stored=12)` to manually editing
+`PixelData` and shape/bit tags. In 3.0.2 this accepts uint8/uint16/int8/int16,
+sets the Image Pixel attributes and a fresh SOP Instance UID by default, and
+sets Explicit VR Little Endian if the old syntax is absent or compressed.
+It rejects big-endian input datasets; it is not a float-pixel or boolean-array
+writer. A different image size still requires updates to geometry and other
+IOD attributes; the method does not supply a complete IOD.
+
+`LossyImageCompression` uses `00`/`01`, not YES/NO. A decompressed dataset can
+still have a lossy history: never infer that history from the current Transfer
+Syntax alone or reset `01` after decompressing/recompressing losslessly.
+
 ## Validation checklist
 
 - Transfer Syntax UID is present, valid, and matches the encoded dataset.
@@ -325,10 +356,15 @@ derived instance.
   independently verified.
 - No diagnostic or conformance conclusion is based only on pydicom success.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [pydicom 3.0.2 pixel plugin matrix](https://pydicom.github.io/pydicom/stable/guides/user/image_data_handlers.html)
+- [RLE decoder plugins](https://pydicom.github.io/pydicom/stable/reference/generated/pydicom.pixels.decoders.RLELosslessDecoder.html)
+- [RLE encoder plugins](https://pydicom.github.io/pydicom/stable/reference/generated/pydicom.pixels.encoders.RLELosslessEncoder.html)
+- [Lossy-compression history](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.4.9.html)
 - [pydicom 3.0.2 Pixel Data API](https://pydicom.github.io/pydicom/stable/reference/pixels.html)
+- [Dataset pixel setter and UID behavior](https://pydicom.github.io/pydicom/stable/reference/generated/pydicom.dataset.Dataset.html)
+- [DICOM file writer contract](https://pydicom.github.io/pydicom/stable/reference/generated/pydicom.filewriter.dcmwrite.html)
 - [Pixel access tutorial](https://pydicom.github.io/pydicom/stable/tutorials/pixel_data/introduction.html)
 - [Compression/decompression tutorial](https://pydicom.github.io/pydicom/stable/tutorials/pixel_data/compressing.html)
 - [pydicom 3.0 release notes](https://pydicom.github.io/pydicom/stable/release_notes/index.html)
@@ -336,7 +372,7 @@ derived instance.
 - [DICOM PS3.5, Data Structures and Encoding](https://dicom.nema.org/medical/dicom/current/output/chtml/part05/PS3.5.html)
 - [DICOM PS3.5 encapsulated pixel transfer syntaxes](https://dicom.nema.org/medical/dicom/current/output/chtml/part05/sect_A.4.html)
 - [DICOM PS3.6, Data Dictionary and UID registry](https://dicom.nema.org/medical/dicom/current/output/chtml/part06/PS3.6.html)
-- PyPI versions reviewed 2026-07-23:
+- PyPI versions reviewed 2026-10-01:
   [pydicom](https://pypi.org/project/pydicom/),
   [NumPy](https://pypi.org/project/numpy/),
   [Pillow](https://pypi.org/project/Pillow/),

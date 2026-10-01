@@ -1,376 +1,142 @@
-# Advanced GIS Topics
+# Advanced GIS: 3D, time, topology and networks
 
-Advanced spatial analysis techniques: 3D GIS, spatiotemporal analysis, topology, and network analysis.
+Local geometry/network contracts are covered by small synthetic tests. Native GDAL
+viewshed and external trajectory datasets remain illustrative; see [review.md](review.md).
 
-## 3D GIS
+## 3D geometry and volume
 
-### 3D Vector Operations
+Shapely stores Z but its geometric predicates, buffers and areas are planar: a point
+buffer with a height tuple is not a 3D solid. Use a true 3D engine for volumetric
+intersection. For Euclidean XYZ distance both horizontal/vertical coordinates must
+share units and compatible datums. Polygon coordinates belong to exterior/interior
+rings; `polygon.coords` is not implemented.
 
-```python
-import geopandas as gpd
-from shapely.geometry import Point, LineString, Polygon
-import pyproj
-import numpy as np
+For DSM-minus-DEM volume, align CRS, affine, shape, pixel registration, vertical datum
+and masks first. Convert to floating point before subtraction. A cell's planimetric
+area is `abs(transform.a*transform.e - transform.b*transform.d)` in squared CRS units.
+Sum valid positive height differences only if that is the defined estimand, and retain
+negative differences for QA rather than silently hiding datum/registration errors.
+Height bins must cover the intended range; report omitted/nodata area.
 
-# Create 3D geometries (with Z coordinate)
-point_3d = Point(0, 0, 100)  # x, y, elevation
-line_3d = LineString([(0, 0, 0), (100, 100, 50)])
+## Viewshed
 
-# Load 3D data
-gdf_3d = gpd.read_file('buildings_3d.geojson')
+Use the documented algorithm, not a ray sketch that compares each target to itself.
+For a projected metric DEM and observer coordinates in that same CRS (illustrative):
 
-# Access Z coordinates
-gdf_3d['height'] = gdf_3d.geometry.apply(lambda g: g.coords[0][2] if g.has_z else None)
-
-# 3D buffer (cylinder)
-def buffer_3d(point, radius, height):
-    """Create a 3D cylindrical buffer."""
-    base = Point(point.x, point.y).buffer(radius)
-    # Extrude to 3D (conceptual)
-    return base, point.z, point.z + height
-
-# 3D distance (Euclidean in 3D space)
-def distance_3d(point1, point2):
-    """Calculate 3D Euclidean distance."""
-    dx = point2.x - point1.x
-    dy = point2.y - point1.y
-    dz = point2.z - point1.z
-    return np.sqrt(dx**2 + dy**2 + dz**2)
+```bash
+gdal_viewshed -ox 500000 -oy 4200000 -oz 1.7 -tz 0 -md 5000 dem.tif viewshed.tif
 ```
 
-### 3D Raster Analysis
+GDAL's implementation requires projected coordinates for meaningful results and does
+not specially handle input nodata. Resolve voids/extent beforehand. Observer and
+target heights, Earth curvature/refraction and DSM versus bare-earth DEM change the
+meaning; output visibility is conditional on those assumptions.
+[GDAL viewshed](https://gdal.org/en/stable/programs/gdal_viewshed.html).
 
-```python
-import rasterio
-import numpy as np
-
-# Voxel-based analysis
-def voxel_analysis(dem_path, dsm_path):
-    """Analyze volume between DEM and DSM."""
-    with rasterio.open(dem_path) as src_dem:
-        dem = src_dem.read(1)
-        transform = src_dem.transform
-
-    with rasterio.open(dsm_path) as src_dsm:
-        dsm = src_dsm.read(1)
-
-    # Height difference
-    height = dsm - dem
-
-    # Volume calculation
-    pixel_area = transform[0] * transform[4]  # Usually negative
-    volume = np.sum(height[height > 0]) * abs(pixel_area)
-
-    # Volume per height class
-    height_bins = [0, 5, 10, 20, 50, 100]
-    volume_by_class = {}
-
-    for i in range(len(height_bins) - 1):
-        mask = (height >= height_bins[i]) & (height < height_bins[i + 1])
-        volume_by_class[f'{height_bins[i]}-{height_bins[i+1]}m'] = \
-            np.sum(height[mask]) * abs(pixel_area)
-
-    return volume, volume_by_class
-```
-
-### Viewshed Analysis
-
-```python
-def viewshed(dem, observer_x, observer_y, observer_height=1.7, max_distance=5000):
-    """
-    Calculate viewshed using line-of-sight algorithm.
-    """
-
-    # Convert observer to raster coordinates
-    observer_row = int((observer_y - dem_origin_y) / cell_size)
-    observer_col = int((observer_x - dem_origin_x) / cell_size)
-
-    rows, cols = dem.shape
-    viewshed = np.zeros_like(dem, dtype=bool)
-
-    observer_z = dem[observer_row, observer_col] + observer_height
-
-    # For each direction
-    for angle in np.linspace(0, 2*np.pi, 360):
-        # Cast ray
-        for r in range(1, int(max_distance / cell_size)):
-            row = observer_row + int(r * np.sin(angle))
-            col = observer_col + int(r * np.cos(angle))
-
-            if row < 0 or row >= rows or col < 0 or col >= cols:
-                break
-
-            target_z = dem[row, col]
-
-            # Line-of-sight calculation
-            dist = r * cell_size
-            line_height = observer_z + (target_z - observer_z) * (dist / max_distance)
-
-            if target_z > line_height:
-                viewshed[row, col] = False
-            else:
-                viewshed[row, col] = True
-
-    return viewshed
-```
-
-## Spatiotemporal Analysis
-
-### Trajectory Analysis
+## Trajectories
 
 ```python
 import movingpandas as mpd
-import geopandas as gpd
 import pandas as pd
 
-# Create trajectory from point data
-gdf = gpd.read_file('gps_points.gpkg')
-
-# Convert to trajectory
-traj_collection = mpd.TrajectoryCollection(gdf, 'track_id', t='timestamp')
-
-# Split trajectories (e.g., by time gap)
-traj_collection = mpd.SplitByObservationGap(traj_collection, gap=pd.Timedelta('1 hour'))
-
-# Trajectory statistics
-for traj in traj_collection:
-    print(f"Trajectory {traj.id}:")
-    print(f"  Length: {traj.get_length() / 1000:.2f} km")
-    print(f"  Duration: {traj.get_duration()}")
-    print(f"  Speed: {traj.get_speed() * 3.6:.2f} km/h")
-
-# Stop detection
-stops = mpd.stop_detection(
-    traj_collection,
-    max_diameter=100,  # meters
-    min_duration=pd.Timedelta('5 minutes')
-)
-
-# Generalization (simplify trajectories)
-traj_generalized = mpd.DouglasPeuckerGeneralizer(traj_collection, tolerance=10).generalize()
-
-# Split by stop
-traj_moving, stops = mpd.StopSplitter(traj_collection).split()
+# gdf is valid point data with known CRS, track_id and parsed timestamps.
+collection = mpd.TrajectoryCollection(gdf, 'track_id', t='timestamp')
+segments = mpd.ObservationGapSplitter(collection).split(gap=pd.Timedelta(hours=1))
+smoothed = mpd.DouglasPeuckerGeneralizer(segments).generalize(tolerance=10)
+stops = mpd.TrajectoryStopDetector(collection).get_stop_points(
+    max_diameter=100, min_duration=pd.Timedelta(minutes=5))
+moving = mpd.StopSplitter(collection).split(
+    max_diameter=100, min_duration=pd.Timedelta(minutes=5), min_length=0)
+for trajectory in segments:
+    trajectory.add_speed(overwrite=True)
+    print(trajectory.id, trajectory.get_length(), trajectory.get_duration())
 ```
 
-### Space-Time Cube
+Sort/check duplicate timestamps, timezones, sample gaps and implausible movement.
+The splitter returns a trajectory collection, not a `(moving, stops)` pair.
+Use metre-based projected coordinates for the tolerance shown and verify each API's
+geographic-unit behavior. `get_speed()` is not a scalar trajectory mean; speed is a
+per-observation attribute and a mean requires an explicit time/distance weighting.
+[MovingPandas API](https://movingpandas.readthedocs.io/en/main/api/trajectorysplitter.html).
+
+## Space-time bins and local statistics
+
+Bin projected x/y and parsed time using a unit-consistent grid. Use lowercase hourly
+frequency `h`; check timestamp gaps and empty spatial cells. The cube's row order
+must match the spatial weight object. An illustrative per-time local statistic:
 
 ```python
-def create_space_time_cube(gdf, time_column='timestamp', grid_size=100, time_step='1H'):
-    """
-    Create a 3D space-time cube for hotspot analysis.
-    """
+import numpy as np
+from libpysal.weights import KNN
+from esda.getisord import G_Local
 
-    # 1. Spatial binning
-    gdf['x_bin'] = (gdf.geometry.x // grid_size).astype(int)
-    gdf['y_bin'] = (gdf.geometry.y // grid_size).astype(int)
-
-    # 2. Temporal binning
-    gdf['t_bin'] = gdf[time_column].dt.floor(time_step)
-
-    # 3. Create cube (x, y, time)
-    cube = gdf.groupby(['x_bin', 'y_bin', 't_bin']).size().unstack(fill_value=0)
-
-    return cube
-
-def emerging_hot_spot_analysis(cube, k=8):
-    """
-    Emerging Hot Spot Analysis (as implemented in ArcGIS).
-    Simplified version using Getis-Ord Gi* statistic.
-    """
-    from esda.getisord import G_Local
-
-    # Calculate Gi* statistic for each time step
-    hotspots = {}
-    for timestep in cube.columns:
-        data = cube[timestep].values.reshape(-1, 1)
-        g_local = G_Local(data, k=k)
-        hotspots[timestep] = g_local.p_sim < 0.05  # Significant hotspots
-
-    return hotspots
+# coords are projected centroids, rows aligned with values; choose k scientifically.
+w = KNN.from_array(coords, k=4)
+local = G_Local(np.asarray(values, dtype=float), w, transform='B', star=True,
+                permutations=999, seed=42, n_jobs=1, alternative='two-sided')
 ```
 
-## Topology
+`G_Local` requires a weight object; `k=` is not a substitute. This example uses binary neighbour weights, includes self, and explicitly requests
+two-sided permutation p-values. Adjust for multiplicity,
+inspect islands/duplicates and check positive versus negative statistic direction.
+Repeated independent Gi* tests are not ArcGIS Emerging Hot Spot Analysis, which
+includes a specified space-time neighbourhood/trend classification.
 
-### Topological Relationships
+## Planar topology
 
-```python
-from shapely.geometry import Point, LineString, Polygon
-from shapely.ops import unary_union
-
-# Planar graph
-def build_planar_graph(lines_gdf):
-    """Build a planar graph from line features."""
-    import networkx as nx
-
-    G = nx.Graph()
-
-    # Add nodes at intersections
-    for i, line1 in lines_gdf.iterrows():
-        for j, line2 in lines_gdf.iterrows():
-            if i < j:
-                if line1.geometry.intersects(line2.geometry):
-                    intersection = line1.geometry.intersection(line2.geometry)
-                    G.add_node((intersection.x, intersection.y))
-
-    # Add edges
-    for _, line in lines_gdf.iterrows():
-        coords = list(line.geometry.coords)
-        G.add_edge(coords[0], coords[-1],
-                   weight=line.geometry.length,
-                   geometry=line.geometry)
-
-    return G
-
-# Topology validation
-def validate_topology(gdf):
-    """Check for topological errors."""
-
-    errors = []
-
-    # 1. Check for gaps
-    if gdf.geom_type.iloc[0] == 'Polygon':
-        dissolved = unary_union(gdf.geometry)
-        for i, geom in enumerate(gdf.geometry):
-            if not geom.touches(dissolved - geom):
-                errors.append(f"Gap detected at feature {i}")
-
-    # 2. Check for overlaps
-    for i, geom1 in enumerate(gdf.geometry):
-        for j, geom2 in enumerate(gdf.geometry):
-            if i < j and geom1.overlaps(geom2):
-                errors.append(f"Overlap between features {i} and {j}")
-
-    # 3. Check for self-intersections
-    for i, geom in enumerate(gdf.geometry):
-        if not geom.is_valid:
-            errors.append(f"Self-intersection at feature {i}: {geom.is_valid}")
-
-    return errors
-```
-
-## Network Analysis
-
-### Advanced Routing
+For an actual planar line network, node intersections before adding edges:
 
 ```python
-import osmnx as ox
+from shapely import node, get_parts
+from shapely.geometry import MultiLineString
 import networkx as nx
 
-# Download and prepare network
-G = ox.graph_from_place('Portland, Maine, USA', network_type='drive')
-G = ox.add_edge_speeds(G)
-G = ox.add_edge_travel_times(G)
-
-# Multi-criteria routing
-def multi_criteria_routing(G, orig, dest, weights=['length', 'travel_time']):
-    """
-    Find routes optimizing for multiple criteria.
-    """
-    # Normalize weights
-    for w in weights:
-        values = [G.edges[e][w] for e in G.edges]
-        min_val, max_val = min(values), max(values)
-        for e in G.edges:
-            G.edges[e][f'{w}_norm'] = (G.edges[e][w] - min_val) / (max_val - min_val)
-
-    # Combined weight
-    for e in G.edges:
-        G.edges[e]['combined'] = sum(G.edges[e][f'{w}_norm'] for w in weights) / len(weights)
-
-    # Find path
-    route = nx.shortest_path(G, orig, dest, weight='combined')
-    return route
-
-# Isochrone (accessibility area)
-def isochrone(G, center_node, time_limit=600):
-    """
-    Calculate accessible area within time limit.
-    """
-    # Get subgraph of reachable nodes
-    subgraph = nx.ego_graph(G, center_node,
-                            radius=time_limit,
-                            distance='travel_time')
-
-    # Get node geometries
-    nodes = ox.graph_to_gdfs(subgraph, edges=False)
-
-    # Create polygon of accessible area
-    from shapely.geometry import MultiPoint
-    points = MultiPoint(nodes.geometry.tolist())
-    isochrone_polygon = points.convex_hull
-
-    return isochrone_polygon, subgraph
-
-# Betweenness centrality (importance of nodes)
-def calculate_centrality(G):
-    """
-    Calculate betweenness centrality for network analysis.
-    """
-    centrality = nx.betweenness_centrality(G, weight='length')
-
-    # Add to nodes
-    for node, value in centrality.items():
-        G.nodes[node]['betweenness'] = value
-
-    return centrality
+def planar_graph(lines):
+    # Single-part, valid LineStrings in one metric CRS; crossings truly connect.
+    noded = node(MultiLineString(lines))
+    graph = nx.MultiGraph()
+    for line in get_parts(noded):
+        coords = list(line.coords)
+        graph.add_edge(coords[0], coords[-1], length=line.length, geometry=line)
+    return graph
 ```
 
-### Service Area Analysis
+A road bridge crossing is not a planar junction; preserve grade/access attributes
+when that topology matters. For polygon coverage, validate individual geometries,
+interior overlap, and gaps relative to an explicit intended boundary. `touches` of a
+polygon against the union of all others cannot diagnose gaps. Containment can be an
+overlap even when `.overlaps()` is false. Shapely coverage validation can help, but
+its gap-width rule and intended extent must be specified.
 
-```python
-def service_area(G, facilities, max_distance=1000):
-    """
-    Calculate service areas for facilities.
-    """
+## Routing, service areas and facility location
 
-    service_areas = []
+Use OSMnx 2.x `ox.routing.add_edge_speeds` followed by `add_edge_travel_times`.
+NetworkX shortest paths need nonnegative finite weights and a route-reachability
+check; edge lengths are metres and travel times seconds. MultiDiGraph parallel
+edges require retaining the selected edge identity for route geometry/cost totals.
 
-    for facility in facilities:
-        # Find nearest node
-        node = ox.distance.nearest_nodes(G, facility.x, facility.y)
+Do not normalize each edge to [0,1] then silently claim a distance/time tradeoff:
+subtracting a minimum per edge penalizes routes with different edge counts in an
+arbitrary way. Define additive generalized costs with explicit unit conversion and
+positive coefficients, then sensitivity-test the weights.
 
-        # Get nodes within distance
-        subgraph = nx.ego_graph(G, node, radius=max_distance, distance='length')
+`nx.ego_graph(G, origin, radius=600, distance='travel_time')` gives reachable nodes
+under the graph model. A hull over their geometry is only a display envelope, not
+proof every enclosed location is reachable. Project before reporting hull area.
+KMeans centres snapped to candidate sites can duplicate sites and do not solve the
+p-median problem; see [specialized-topics.md](specialized-topics.md).
 
-        # Create convex hull
-        nodes = ox.graph_to_gdfs(subgraph, edges=False)
-        service_area = nodes.geometry.unary_union.convex_hull
+Sources: [Shapely node](https://shapely.readthedocs.io/en/stable/reference/shapely.node.html),
+[PySAL G_Local](https://pysal.org/esda/generated/esda.G_Local.html),
+[OSMnx](https://osmnx.readthedocs.io/en/stable/user-reference.html).
 
-        service_areas.append({
-            'facility': facility,
-            'area': service_area,
-            'nodes_served': len(subgraph.nodes())
-        })
+## Point clouds
 
-    return service_areas
-
-# Location-allocation (facility location)
-def location_allocation(demand_points, candidate_sites, n_facilities=5):
-    """
-    Solve facility location problem (p-median).
-    """
-    from scipy.spatial.distance import cdist
-
-    # Distance matrix
-    coords_demand = [[p.x, p.y] for p in demand_points]
-    coords_sites = [[s.x, s.y] for s in candidate_sites]
-    distances = cdist(coords_demand, coords_sites)
-
-    # Simple heuristic: K-means clustering
-    from sklearn.cluster import KMeans
-
-    kmeans = KMeans(n_clusters=n_facilities, random_state=42)
-    labels = kmeans.fit_predict(coords_demand)
-
-    # Find nearest candidate site to each cluster center
-    facilities = []
-    for i in range(n_facilities):
-        cluster_center = kmeans.cluster_centers_[i]
-        nearest_site_idx = np.argmin(cdist([cluster_center], coords_sites))
-        facilities.append(candidate_sites[nearest_site_idx])
-
-    return facilities
-```
-
-For more advanced examples, see [code-examples.md](code-examples.md).
+LAS/LAZ interpretation requires point-format/version, CRS, XYZ scale/offset, vertical
+datum, classification/return flags and acquisition provenance. Laspy reads the file
+structure; use its scaled coordinates rather than raw integer XYZ for metric
+calculations. PDAL pipelines need the native PDAL library and matching plugins.
+Open3D0.20.0 has Python3.13 wheels, but geometry conversion alone does not preserve
+LAS attributes/CRS automatically. Keep a separate metadata record, and validate point
+count, bounds, units and flags through any conversion. No point-cloud binaries were
+installed or processed in this review.

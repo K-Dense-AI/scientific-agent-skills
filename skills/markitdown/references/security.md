@@ -51,7 +51,7 @@ Before `convert_local()`:
 
 Do not build a path by concatenating an untrusted filename with a directory string.
 
-The bundled batch and literature scripts use `convert_local()` and skip symlink inputs by default.
+The bundled batch and literature scripts use `convert_local()` and skip symlink inputs by default. Their type/size checks are input controls, not network enforcement: detected formats, nested archive members, or reviewed plugins can invoke external processing. For a strict offline run, deny network access at the process/container boundary.
 
 ## HTTP(S) and SSRF Controls
 
@@ -79,9 +79,9 @@ MarkItDown's own HTTP path calls a Requests session and buffers the complete res
 
 ## `file:` and `data:` URIs
 
-`file:` URIs can read anything the process user can read. MarkItDown permits an empty authority or `localhost`; this is not a path allowlist.
+`file:` URIs can read local files the process user can read. Version 0.1.8 rejects UNC and Windows device paths in this URI path. MarkItDown permits an empty authority or `localhost`; this is not a path allowlist.
 
-`data:` URIs can contain arbitrarily large base64 payloads. Decode size grows beyond encoded size, and conversion can create additional copies.
+`data:` URIs can contain arbitrarily large base64 payloads. Base64 decoding allocates another buffer (normally smaller than the encoded text), and conversion can create additional copies.
 
 Prefer `convert_local()` or a bounded `convert_stream()` path instead of accepting arbitrary URI strings.
 
@@ -114,7 +114,7 @@ MarkItDown does not turn an archive into a safe bundle merely because it process
 Use a pinned MarkItDown release:
 
 ```bash
-uv pip install "markitdown[all]==0.1.6"
+uv pip install "markitdown[all]==0.1.8"
 ```
 
 Relevant release history:
@@ -122,7 +122,7 @@ Relevant release history:
 - 0.1.2 moved XML/OMML parsing to `defusedxml`.
 - 0.1.3 required safe ExifTool usage at version 12.24 or later.
 - 0.1.4 updated Mammoth and `pdfminer.six` for published vulnerabilities.
-- 0.1.6 clarified the project's I/O security posture.
+- 0.1.6 clarified the project's I/O security posture; 0.1.8 tightened `file:` URI paths.
 
 For production:
 
@@ -241,6 +241,6 @@ Useful safe provenance:
 
 ## Sources
 
-- MarkItDown security guidance: https://github.com/microsoft/markitdown/blob/v0.1.6/README.md#security-considerations
-- MCP security guidance: https://github.com/microsoft/markitdown/blob/v0.1.6/packages/markitdown-mcp/README.md#security-considerations
+- MarkItDown security guidance: https://github.com/microsoft/markitdown/blob/v0.1.8/README.md#security-considerations
+- MCP security guidance: https://github.com/microsoft/markitdown/blob/v0.1.8/packages/markitdown-mcp/README.md#security-considerations
 - Release history: https://github.com/microsoft/markitdown/releases

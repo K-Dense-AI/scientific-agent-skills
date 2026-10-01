@@ -56,7 +56,8 @@ def _metric(successes: int, total: int) -> dict[str, Any]:
 
 
 def _calibration_summary(
-    bins: list[Any], group_name: str, minimum: int, expected_events: int
+    bins: list[Any], group_name: str, minimum: int, expected_events: int,
+    expected_n: int,
 ) -> tuple[dict[str, Any], bool]:
     total = 0
     events = 0
@@ -93,6 +94,8 @@ def _calibration_summary(
         )
     if total == 0:
         raise InputError(f"Calibration bins for {group_name} are empty")
+    if total != expected_n:
+        raise InputError(f"Calibration bins for {group_name} must sum to group n")
     if sensitive:
         return (
             {
@@ -158,7 +161,7 @@ def evaluate(
             "data_cut_date",
         ):
             require_nonempty_text(metadata.get(field), f"metadata.{field}")
-        if metadata.get("data_level") not in {"aggregate", "synthetic"}:
+        if not isinstance(metadata.get("data_level"), str) or metadata.get("data_level") not in {"aggregate", "synthetic"}:
             log.errors.append("metadata.data_level must be aggregate or synthetic")
         if metadata.get("person_level_output") is not False:
             log.errors.append("metadata.person_level_output must be false")
@@ -196,6 +199,9 @@ def evaluate(
             "rollback_and_retirement",
         ):
             require_nonempty_text(governance.get(field), f"governance.{field}")
+
+        if not log.ok:
+            raise InputError("Evaluation stopped before processing aggregate counts")
 
         groups = require_list(document.get("groups"), "groups", maximum=MAX_GROUPS)
         if not groups:
@@ -246,9 +252,18 @@ def evaluate(
                 sensitivity = metrics["sensitivity"]["estimate"]
                 specificity = metrics["specificity"]["estimate"]
                 metrics["balanced_accuracy"] = {
-                    "estimate": round((sensitivity + specificity) / 2.0, 6),
+                    "estimate": (
+                        round((sensitivity + specificity) / 2.0, 6)
+                        if sensitivity is not None and specificity is not None
+                        else None
+                    ),
                     "ci95": None,
                 }
+                if sensitivity is None or specificity is None:
+                    log.warnings.append(
+                        f"Group {name} lacks one observed outcome class; balanced "
+                        "accuracy and the corresponding class metric are undefined"
+                    )
                 group_result.update(
                     {"suppressed": False, "n": n, "metrics": metrics}
                 )
@@ -265,10 +280,8 @@ def evaluate(
                 maximum=MAX_BINS,
             )
             calibration, _ = _calibration_summary(
-                bins, name, minimum, expected_events=tp + fn
+                bins, name, minimum, expected_events=tp + fn, expected_n=n
             )
-            if not calibration.get("suppressed") and calibration["n"] != n:
-                raise InputError(f"{field}.calibration_bins counts must sum to n")
             group_result["calibration"] = calibration
             report["groups"].append(group_result)
 
@@ -295,6 +308,10 @@ def evaluate(
             )
     except InputError as exc:
         log.errors.append(str(exc))
+
+    if not log.ok:
+        report["groups"] = []
+        report["subgroup_performance_differences"] = {}
 
     report["disclosure_threshold"] = minimum
     report["limitations"] = [

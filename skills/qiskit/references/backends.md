@@ -1,5 +1,6 @@
 # Backends, Runtime Modes, Simulation, and Noise Management
 
+Cloud authentication, QPU, session, and batch snippets are illustrative and were not executed in this refresh. Local evidence is listed in [sources.md](sources.md).
 ## BackendV2
 
 Qiskit 2.x providers expose hardware and simulators through `BackendV2`. Important public attributes include:
@@ -114,7 +115,7 @@ Runtime V2 primitives do not perform this conversion automatically.
 Use job mode for independent one-off primitive calls:
 
 ```python
-from qiskit_ibm_runtime import SamplerV2 as Sampler
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 sampler = Sampler(mode=backend)
 job = sampler.run([isa_circuit], shots=1024)
@@ -144,7 +145,8 @@ job.cancel()
 Batch mode is for independent jobs that can be submitted together. It is available to Open Plan users.
 
 ```python
-from qiskit_ibm_runtime import Batch, SamplerV2 as Sampler
+from qiskit_ibm_runtime import Batch
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 with Batch(backend=backend, max_time="10m") as batch:
     sampler = Sampler(mode=batch)
@@ -164,7 +166,8 @@ Batch jobs are scheduled as a group, but do not assume an application-level resu
 Session mode is for iterative workloads such as VQE parameter updates:
 
 ```python
-from qiskit_ibm_runtime import EstimatorV2 as Estimator, Session
+from qiskit_ibm_runtime import Session
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 with Session(backend=backend, max_time="20m") as session:
     estimator = Estimator(mode=session)
@@ -178,7 +181,7 @@ Open Plan users cannot submit session jobs; use job or batch mode. Sessions have
 
 Creating `Estimator(mode=backend)` inside a session context still selects job mode. Use `mode=session`.
 
-## Exact Local Primitives
+## Ideal Local Primitives
 
 For small ideal circuits:
 
@@ -189,7 +192,7 @@ sampler = StatevectorSampler(seed=23)
 estimator = StatevectorEstimator(seed=23)
 ```
 
-These implementations use local statevector simulation and do not model backend noise.
+These implementations use local statevector simulation and do not model backend noise. Sampler is finite-shot; zero-precision Estimator is exact only for unitary state preparation.
 
 Memory for a dense statevector grows as \(2^n\). Use an algorithm-appropriate Aer method or tensor-network tooling for larger circuits.
 
@@ -213,7 +216,7 @@ Run through Runtime's local-testing primitive interface:
 
 ```python
 from qiskit.transpiler import generate_preset_pass_manager
-from qiskit_ibm_runtime import SamplerV2 as Sampler
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 pass_manager = generate_preset_pass_manager(
     backend=aer,
@@ -229,7 +232,7 @@ sampler = Sampler(
 result = sampler.run([isa_circuit], shots=1024).result()
 ```
 
-Most Runtime options other than shots and simulator settings are ignored in local testing. Do not infer that mitigation was simulated merely because an options object accepted the field.
+The Runtime 0.50 client-side primitives perform preprocessing and postprocessing locally, including enabled mitigation/twirling paths. This differs from deprecated server-side primitives whose local mode ignored many options. Use `resilience_level=0` for an unmitigated Estimator baseline and inspect finalized options. Local results still do not verify service limits, scheduling, costs, or QPU mitigation effectiveness. `dry_run=True` on a remote backend is a server job returning random mock data, not Aer simulation.
 
 ## Approximate a Real Backend in Aer
 
@@ -270,7 +273,7 @@ Use them to test target-aware transpilation and Runtime local mode. Fake-backend
 Runtime Estimator exposes increasing levels of built-in mitigation:
 
 ```python
-from qiskit_ibm_runtime import EstimatorV2 as Estimator
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 estimator = Estimator(
     mode=backend,
@@ -315,7 +318,7 @@ sampler.options.dynamical_decoupling.sequence_type = "XpXm"
 sampler.options.twirling.enable_gates = True
 ```
 
-Measurement and gate-twirling defaults differ between Sampler and Estimator and can change. Record the resolved options for every experiment.
+Measurement and gate-twirling defaults differ between Sampler and Estimator. Record `primitive.finalize_options().model_dump()` for the client-side implementation. Measurement mitigation forces measurement twirling; gate-based mitigation can force both. Explicitly enabled methods can override the meaning of `resilience_level=0`.
 
 ## Feature Compatibility
 
@@ -328,7 +331,7 @@ Some combinations are restricted. Current examples include incompatibilities amo
 - gate-folding zero-noise extrapolation (ZNE),
 - some dynamic-circuit features.
 
-Always consult the current Estimator/Sampler options and backend target. Do not copy a mitigation configuration between Runtime versions without revalidation.
+Client-side Sampler 0.50 rejects input `BoxOp` circuits (including with twirling enabled in the tested wheel); dynamical decoupling rejects dynamic control flow. This is stricter than the current Sampler page, which only mentions boxes when twirling is disabled. Always consult the current Estimator/Sampler options and backend target. Do not copy a mitigation configuration between Runtime versions without revalidation.
 
 ## Fractional Gates
 

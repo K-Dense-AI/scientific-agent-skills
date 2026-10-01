@@ -1,6 +1,6 @@
 # Multiparametric imaging, spatial data, and Mesmer integration
 
-This reference targets **PathML 3.0.5 stable**. It distinguishes generic loading
+This reference targets **PathML 3.0.8 stable**. It distinguishes generic loading
 support from a dedicated analysis implementation and corrects older examples that
 invented MERFISH decoders, spectral unmixing options, named-channel arguments, or
 a DeepCell cloud prediction endpoint.
@@ -90,6 +90,12 @@ Perform and validate those operations upstream with a protocol appropriate to th
 acquisition system. Record the exact flattened `(cycle, channel) → output index`
 mapping.
 
+The actual C-order reshape maps `(channel, cycle)` to
+`output_index = channel * n_cycles + cycle` (cycle varies fastest). Verify it
+with a channel-coded synthetic array; do not assume cycle-major order. The
+released Z-index assertion checks the flattened channel axis by mistake, so
+validate `0 <= z < image.shape[2]` yourself before calling it.
+
 ## Vectra collapse
 
 Stable signature:
@@ -115,7 +121,7 @@ reviewed, checksummed local model and network disabled. PathML's generic local
 ONNX `Inference` can run compatible models, but Mesmer-specific pre/postprocessing
 must match the model card exactly.
 
-PathML 3.0.5 has no fully offline, nondeprecated Mesmer convenience class that
+PathML 3.0.8 has no fully offline, nondeprecated Mesmer convenience class that
 accepts a pre-provisioned model without trying a network download. Plan this
 constraint before choosing PathML's Mesmer wrapper.
 
@@ -135,14 +141,14 @@ SegmentMIFRemote(
 )
 ```
 
-Despite the name, v3.0.5 does not send images to a DeepCell prediction service.
+Despite the name, v3.0.8 does not send images to a DeepCell prediction service.
 At construction it performs an HTTP GET from:
 
 ```text
 https://huggingface.co/pathml/test/resolve/main/mesmer.onnx
 ```
 
-It writes the response to `model_path`, loads that ONNX model, and runs pixels
+It writes the response to `temp.onnx`, loads that ONNX model, and runs pixels
 locally with ONNX Runtime. The outbound request discloses ordinary connection
 metadata (for example IP address and request headers) to Hugging Face; image
 pixels, channel data, and PathML metadata are not uploaded by this stable source.
@@ -151,12 +157,25 @@ Security and reproducibility limitations:
 
 - construction has a network side effect;
 - there is no built-in checksum, signature, offline flag, timeout, or size cap;
-- the default filename is shared and easy to overwrite;
+- inherited `local=False` forces `temp.onnx`, even if `SegmentMIFRemote` receives
+  a different `model_path`; a supplied destination does not prevent overwriting
+  that working-directory file;
 - the model supports 256×256 input and 0.5 µm/pixel in stable code;
 - `nuclear_channel` and `cytoplasm_channel` are integer indices, not names.
 
+Validate HWC input (despite a contradictory channel-first wrapper docstring),
+both spatial dimensions equal to 256, distinct valid channel indices, and
+0.5 µm/pixel before constructing/running the wrapper. The source only prints for
+other resolutions and its shape check uses `and`, so one incorrect spatial axis
+can escape that check; it does not resample to the model resolution for you.
+
 Do not instantiate it until the user explicitly consents to that endpoint and
 download. Do not use it in a network-disabled workflow.
+
+On 2026-10-01 the public Hugging Face model metadata listed both artifacts and
+HEAD requests followed download redirects successfully (Mesmer 104,218,552 bytes;
+HoVer-Net test model 151,068,601 bytes). These were unauthenticated metadata/HEAD
+probes only, not weight downloads, checksum verification, or inference tests.
 
 ### Deprecated `SegmentMIF`
 
@@ -192,6 +211,11 @@ data needs a new disclosure; do not infer permission from consent to download a
 model. Never upload PHI by default.
 
 ## Quantification
+
+Read Bio-Formats tiles with `normalize=False` for measurement. Its default
+normalization casts to 8-bit and can destroy quantitative dynamic range; h5path
+then separately stores images/masks as float16. Keep authoritative raw channels
+and integer instance maps outside that lossy storage path.
 
 Stable transform:
 
@@ -248,6 +272,9 @@ y_um = y_selected_level * level_downsample * mpp_y
 Record whether coordinates are pixel centers, integer-rounded centroids, or
 continuous region centroids. Preserve source level and MPP. Do not combine slides
 with different resolutions in a shared coordinate space without conversion.
+The scalar-downsample formula assumes a validated series/pyramid transform and
+correct region origins; Bio-Formats series need not form a pyramid, and PathML's
+OpenSlide fractional-downsample origin issue must be excluded first.
 
 ## Spatial/multiplex schema
 
@@ -332,16 +359,18 @@ Not present as stable APIs:
 - automatic marker names in `QuantifyMIF`;
 - automatic cell-type annotation.
 
-## Sources, accessed 2026-07-23
+## Sources and further reading
+
+API baseline reviewed 2026-10-01 using the released wheel/tag; hosted docs may lag.
 
 - Stable loading guide:
   https://pathml.readthedocs.io/en/stable/loading_slides.html
 - Stable preprocessing API:
   https://pathml.readthedocs.io/en/stable/api_preprocessing_reference.html
 - Stable transforms source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/preprocessing/transforms.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/preprocessing/transforms.py
 - Stable inference source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/inference/inference.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/inference/inference.py
 - Stable multiplex tutorial:
   https://pathml.readthedocs.io/en/stable/examples/link_multiplex_if.html
 - Stable CODEX tutorial:

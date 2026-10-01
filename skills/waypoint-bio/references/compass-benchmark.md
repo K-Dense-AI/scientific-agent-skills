@@ -4,12 +4,17 @@
 Hub configurations. Eight tasks are derived from those four configurations by filtering and by
 choosing different target columns.
 
+Hub card schemas/counts were checked on 2026-10-01 at revision
+`370f857265cab6756bb06c72451c083b13e2418f`; gated data rows were not downloaded.
+The benchmark definitions/scoring were reviewed in the 1.0.2 wheel and matching GitHub source.
+
 Every configuration exposes `train` / `validation` / `test` splits and carries a `Split` column
 recording the same assignment.
 
 ```python
 from datasets import load_dataset
-ds = load_dataset("outpost-bio/Compass", "mgnify-biomes")   # requires access + HF_TOKEN
+ds = load_dataset("outpost-bio/Compass", "mgnify-biomes",
+                  revision="370f857265cab6756bb06c72451c083b13e2418f")   # requires access + HF_TOKEN
 ```
 
 ## The four source datasets
@@ -17,9 +22,9 @@ ds = load_dataset("outpost-bio/Compass", "mgnify-biomes")   # requires access + 
 | Config | Source | Rows (train/val/test) | Extra columns |
 | --- | --- | --- | --- |
 | `mgnify-biomes` | MGnify metagenomic profiles across gut, skin, oral, marine, freshwater, soil, engineered systems | 33,121 / 4,139 / 4,139 | `Biome 1`–`Biome 5`, `Run Accession`, `Data Type`, `Sequencing Method`, `Pipeline Version`, `Study Accession` |
-| `handuo` | Han, Duo et al. — 16S amplicon study of drug–microbiome interactions in stool-derived communities | 3,168 / 396 / 396 | `SIC Name`, `Control`, `ATC Class`, `Sample ID` |
+| `handuo` | Shi et al. — 16S amplicon study of drug–microbiome interactions in stool-derived communities | 3,168 / 396 / 396 | `SIC Name`, `Control`, `ATC Class`, `Sample ID` |
 | `mastrorilli` | Mastrorilli et al. — drug degradation by gut communities | 9,282 / 3,084 / 3,053 | `Degradation Rate`, `Drug`, `Sample ID` |
-| `roswall` | Roswall et al. — longitudinal infant gut cohort | 2,031 total | `Timepoint`, `Delivery Mode`, `Sample ID` |
+| `roswall` | Roswall et al. — longitudinal infant gut cohort | 1,625 / 203 / 203 | `Timepoint`, `Delivery Mode`, `Sample ID` |
 
 All configs carry `Taxa` and `Relative Abundances` as aligned list columns.
 
@@ -91,17 +96,19 @@ Example:
 ```json
 {
   "model": "outpost-bio/Waypoint-6m",
-  "final_score": 0.71,
+  "final_score": 0.545,
   "results": [
     {"task": "1_biome", "task_type": "classification", "score": 0.65,
      "metrics": {"f1_macro_mean": 0.65, "roc_auc_mean": 0.81, "pr_auc_mean": 0.74}},
-    {"task": "6_drug_degradation", "task_type": "regression", "score": 0.42,
+    {"task": "6_drug_degradation", "task_type": "regression", "score": 0.44,
      "metrics": {"mse_Degradation Rate": 0.019, "r2_Degradation Rate": 0.44, "r2_mean": 0.44}}
   ]
 }
 ```
 
-The numbers above are the illustrative values from the upstream README, not measured results.
+The numbers above are synthetic, not measured results. They illustrate a two-task subset,
+whose mean is `(0.65 + 0.44) / 2 = 0.545`; this is not an eight-task Compass score.
+The upstream README example has inconsistent numbers, so do not treat it as output validation.
 
 ## Interpreting a benchmark run
 
@@ -109,16 +116,23 @@ The numbers above are the illustrative values from the upstream README, not meas
 baselines (random forest and logistic regression on relative abundances) and against MGM, the prior
 microbiome foundation model. Two findings shape how a Compass number should be read:
 
-- Waypoint beats the random-forest baseline from roughly **10,000 training examples upward**, and
-  *loses* to it below about 1,000. Report the training-set size next to any score.
+- In the paper, Waypoint beats the random-forest baseline from roughly **10,000 training examples upward**, and
+  was weaker in some small-data settings. This is not a universal threshold. Report training-set
+  size and held-out study/subject composition next to any score.
 - Baselines can use every taxon; the transformer sees only its fixed vocabulary. The paper's fair
   comparison is the `(no unk)` baseline, with out-of-vocabulary taxa stripped from the baseline's
-  input too. Compare against that, not against a baseline given the full table.
+  input too. Report both vocabulary-matched baselines for representation comparisons and
+  full-table baselines for practical method selection; clearly state each input restriction.
 
 **Scale does not monotonically help.** Pretraining loss falls all the way to 170M, but the best
 Compass score in the paper came from the **45M** model. Non-pretrained transformers get *worse* as
 they grow — the gain from scale is a property of pretraining, not of capacity.
 
-**Reproducibility.** Use the bundled `configs/benchmark.yaml` unchanged, do not pass `--max_samples`,
-and run at least three seeds. Comparing a run that changed the learning rate or capped splits against
-published numbers is not a comparison.
+**Reproducibility.** The bundled config uses one epoch; the paper describes up to 300 epochs
+with early stopping. Matching the YAML alone does not reproduce the paper. Record the protocol,
+avoid `--max_samples` for a full benchmark, and report repeated independent seeds plus uncertainty.
+However, the reviewed CLI seeds Torch/NumPy once but does not pass `--seed` into
+`TrainingArguments`, which defaults to 42; YAML `seed` is unused.
+A seed study requires an explicit local correction and disclosure. The CLI also loads unpinned
+Compass revisions internally. Record actual revisions, task subset and software versions; a run
+with changed hyperparameters or capped splits must be labelled as a different protocol.

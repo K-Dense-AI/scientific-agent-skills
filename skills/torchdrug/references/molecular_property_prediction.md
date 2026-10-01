@@ -6,6 +6,10 @@ and
 [pretrained molecular representations](https://torchdrug.ai/docs/tutorials/pretrain.html)
 tutorials for TorchDrug 0.2.1.
 
+Run the [ClinTox cache preparation](datasets.md#clintox-download-repair) first;
+the packaged download URL is stale. Full benchmark/pretraining runs below are
+illustrative; the review uses small CPU checks, not converged pretrained models.
+
 ## Supervised property prediction
 
 ### 1. Load and split data
@@ -19,12 +23,15 @@ from torchdrug import datasets
 dataset = datasets.ClinTox("~/molecule-datasets/")
 lengths = [int(0.8 * len(dataset)), int(0.1 * len(dataset))]
 lengths.append(len(dataset) - sum(lengths))
-train_set, valid_set, test_set = torch.utils.data.random_split(dataset, lengths)
+train_set, valid_set, test_set = torch.utils.data.random_split(
+    dataset, lengths, generator=torch.Generator().manual_seed(1)
+)
 ```
 
 This is a random split, not a scaffold split. If a benchmark requires a scaffold
-split, implement or import that protocol explicitly and record it in the
-experiment configuration.
+split, use `data.scaffold_split(dataset, lengths)` and record the actual
+partition sizes/scaffold overlap. The 0.2.1 `ordered_scaffold_split` implementation
+hardcodes 80/10/10 despite accepting `lengths`; do not use it for custom ratios.
 
 ### 2. Define the representation model
 
@@ -62,12 +69,16 @@ Documented `PropertyPrediction` criteria are:
 - `"bce"`
 - `"ce"`
 
-Documented metrics are:
+The API docstring lists these basic metrics:
 
 - `"mae"`
 - `"rmse"`
 - `"auprc"`
 - `"auroc"`
+
+Released source also supports `"acc"`, `"mcc"`, `"r2"`, `"spearmanr"`, and
+`"pearsonr"`. Use `"acc"`/`"mcc"` with CE multiclass outputs; the AUROC/AUPRC
+branches expect binary targets, not an implicit multiclass averaging scheme.
 
 Other useful constructor options include `num_mlp_layer`, `normalization`,
 `num_class`, `mlp_batch_norm`, `mlp_dropout`, and
@@ -102,13 +113,14 @@ smaller batch for a smoke test.
 Use TorchDrug collation:
 
 ```python
-from torch.nn import functional as F
 from torchdrug import data
 
-batch = data.graph_collate(valid_set[:8])
-logits = task.predict(batch)
-probabilities = F.sigmoid(logits)
-targets = task.target(batch)
+batch = data.graph_collate([valid_set[i] for i in range(min(8, len(valid_set)))])
+task.eval()
+with torch.no_grad():
+    logits = task.predict(batch)
+    probabilities = torch.sigmoid(logits)
+    targets = task.target(batch)
 ```
 
 For binary classification, `predict()` returns logits and the tutorial applies
@@ -211,17 +223,26 @@ task = tasks.PropertyPrediction(
     metric=("auprc", "auroc"),
 )
 
-checkpoint = torch.load("gin-attribute-masking.pth")["model"]
-task.load_state_dict(checkpoint, strict=False)
+# Load only a checkpoint whose origin you trust (PyTorch 2.0 uses pickle).
+checkpoint = torch.load("gin-attribute-masking.pth", map_location="cpu")["model"]
+transfer = task.load_state_dict(checkpoint, strict=False)
+print(transfer.missing_keys, transfer.unexpected_keys)
 ```
 
 Then construct a new optimizer and supervised `Engine`. `strict=False` is
 intentional because the pretraining and supervised task heads differ. Review
 missing and unexpected keys if changing the architecture.
+This direct transfer applies to **AttributeMasking**, where encoder keys start
+with `model.`. An InfoGraph checkpoint nests them under `model.model.`; blindly
+using `strict=False` can load zero encoder weights. Extract that encoder's keys
+and load the recreated GIN with `strict=True` before wrapping it in a new task.
 
 ## Experiment checks
 
 - Confirm `dataset.tasks` names and label shapes.
+- Check labeled counts in each training target and both class counts for each
+  binary evaluation target. Empty/single-class metrics and zero/undefined
+  regression standard deviations are not meaningful performance estimates.
 - Confirm classification vs regression before choosing criterion and metrics.
 - Record the exact split protocol; do not mislabel random splits as scaffold
   splits.

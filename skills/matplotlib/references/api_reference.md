@@ -1,6 +1,6 @@
 # Matplotlib API Reference
 
-This document provides a quick reference for the most commonly used matplotlib classes and methods.
+Targets Matplotlib 3.11.2. Examples are fragments requiring imports and correctly shaped named data. See the [official API](https://matplotlib.org/stable/api/index.html) and [3.11 changes](https://matplotlib.org/stable/api/prev_api_changes/api_changes_3.11.0.html).
 
 ## Core Classes
 
@@ -22,13 +22,13 @@ fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 - `fig.tight_layout()` - Adjust spacing to prevent overlaps
 - `fig.suptitle(title)` - Set figure title
 - `fig.legend()` - Create figure-level legend
-- `fig.colorbar(mappable)` - Add colorbar to figure
+- `fig.colorbar(mappable, ax=ax)` - Add colorbar to figure
 - `plt.close(fig)` - Close figure to free memory
 
 **Key Attributes:**
 - `fig.axes` - List of all axes in the figure
 - `fig.dpi` - Resolution in dots per inch
-- `fig.figsize` - Figure dimensions in inches (width, height)
+- `fig.get_size_inches()` - Figure dimensions in inches (width, height); use `fig.set_size_inches(width, height)` to change them
 
 ### Axes
 
@@ -45,7 +45,7 @@ ax = fig.add_subplot(111)  # Alternative method
 **Line plots:**
 - `ax.plot(x, y, **kwargs)` - Line plot
 - `ax.step(x, y, where='pre'/'mid'/'post')` - Step plot
-- `ax.errorbar(x, y, yerr, xerr)` - Error bars
+- `ax.errorbar(x, y, yerr=yerr, xerr=xerr)` - Nonnegative error sizes: scalar, `(N,)`, or `(2, N)` for lower/upper sizes
 
 **Scatter plots:**
 - `ax.scatter(x, y, s=size, c=color, marker='o', alpha=0.5)` - Scatter plot
@@ -119,7 +119,7 @@ High-level interface for quick plotting.
 - `plt.scatter()` - Scatter plot
 - `plt.bar()` - Bar chart
 - `plt.hist()` - Histogram
-- (All axes methods available)
+- Many plotting methods have pyplot wrappers; Axes setters are not all exposed with the same name (for example, `plt.xlabel` wraps `ax.set_xlabel`).
 
 **Display and save:**
 - `plt.show()` - Display figure
@@ -204,8 +204,8 @@ ax.plot(x, y,
 
 ```python
 ax.scatter(x, y,
-    s=50,                   # Size (scalar or array)
-    c='blue',               # Color (scalar, array, or sequence)
+    s=50,                   # Marker area in points squared
+    c=values,               # Numeric array, one value per point
     marker='o',             # Marker style
     cmap='viridis',         # Colormap (if c is numeric)
     alpha=0.5,              # Transparency
@@ -244,7 +244,7 @@ Common rcParams settings for global customization:
 ```python
 # Font settings
 plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial', 'Helvetica']
+plt.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'DejaVu Sans']
 plt.rcParams['font.size'] = 12
 
 # Figure settings
@@ -258,7 +258,7 @@ plt.rcParams['savefig.bbox'] = 'tight'
 plt.rcParams['axes.labelsize'] = 14
 plt.rcParams['axes.titlesize'] = 16
 plt.rcParams['axes.grid'] = True
-plt.rcParams['axes.grid.alpha'] = 0.3
+plt.rcParams['grid.alpha'] = 0.3
 
 # Line settings
 plt.rcParams['lines.linewidth'] = 2
@@ -337,9 +337,9 @@ def update(frame):
     return line,
 
 anim = FuncAnimation(fig, update, init_func=init,
-                     frames=100, interval=50, blit=True)
+                     frames=100, interval=50, blit=fig.canvas.supports_blit)
 
-# Save animation
+# Keep anim alive. Pillow handles GIF; MP4 needs an external FFmpeg executable.
 anim.save('animation.gif', writer='pillow', fps=20)
 anim.save('animation.mp4', writer='ffmpeg', fps=20)
 ```
@@ -352,7 +352,7 @@ img = plt.imread('image.png')
 ax.imshow(img)
 
 # Display matrix as image
-ax.imshow(matrix, cmap='viridis', aspect='auto',
+im = ax.imshow(matrix, cmap='viridis', aspect='auto',
           interpolation='nearest', origin='lower')
 
 # Colorbar
@@ -401,6 +401,7 @@ ax.tick_params(labelbottom=False, labelleft=False)
 
 # Scientific notation
 ax.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
+# Requires ScalarFormatter (normally a linear numeric axis), not a log/date formatter.
 
 # Date formatting
 import matplotlib.dates as mdates

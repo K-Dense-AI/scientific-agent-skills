@@ -1,6 +1,7 @@
 # Polars Best Practices and Performance Guide
 
-Comprehensive guide to writing efficient Polars code and avoiding common pitfalls.
+Polars 1.44.2 patterns. Fragments use illustrative inputs; native regression coverage
+and official sources are recorded in [review.md](review.md).
 
 ## Performance Optimization
 
@@ -26,10 +27,11 @@ result = lf.filter(pl.col("age") > 25).select("name", "age").collect()
 
 ### 2. Filter and Select Early
 
-Push filters and column selection as early as possible in the pipeline:
+Let the optimizer push down predicates and projections where semantics permit.
+The following query selects groups whose **mean** exceeds 100:
 
 ```python
-# Bad: Process all data, then filter and select
+# Filter the group means, preserving every observation within a selected group
 result = (
     lf.group_by("category")
     .agg(pl.col("value").mean())
@@ -38,24 +40,27 @@ result = (
     .select("category", "value")
 )
 
-# Good: Filter and select early
+# Projection can move earlier while retaining all columns needed downstream.
 result = (
-    lf.select("category", "value")  # Only needed columns
-    .filter(pl.col("value") > 100)  # Filter early
+    lf.select("category", "value")
     .group_by("category")
     .agg(pl.col("value").mean())
+    .filter(pl.col("value") > 100)
     .join(other.select("category", "other_col"), on="category")
+    .select("category", "value")
 )
 ```
+Filtering `value > 100` before the mean changes which observations contribute.
+Likewise, moving filters across an outer join can change which rows survive.
 
 ### 3. Avoid Python Functions
 
 Stay within the expression API to maintain parallelization:
 
 ```python
-# Bad: Python function disables parallelization
+# Python element UDF adds overhead and can inhibit optimization
 df = df.with_columns(
-    result=pl.col("value").map_elements(lambda x: x * 2, return_dtype=pl.Float64)
+    result=pl.col("value").map_elements(lambda x: float(x) * 2, return_dtype=pl.Float64)
 )
 
 # Good: Use native expressions (parallelized)
@@ -76,7 +81,10 @@ df = df.with_columns(
 
 ### 4. Use Streaming for Very Large Data
 
-Enable streaming for datasets larger than RAM:
+Use streaming to reduce intermediate memory; it is not a memory cap.
+`collect(engine="streaming")` still returns one in-memory DataFrame. High-cardinality
+groups, joins, or unsupported operations may need large state or fall back to the
+in-memory engine. Inspect the plan and measure actual peak RSS on representative data:
 
 ```python
 # Streaming mode processes data in chunks
@@ -109,7 +117,7 @@ df = pl.read_csv(
 
 **Type optimization guidelines:**
 - Use smallest integer type that fits your data
-- Use `Categorical` for strings with low cardinality (<50% unique)
+- Benchmark `Categorical` for repeated strings; use `Enum` for a fixed, ordered domain
 - Use `Date` instead of `Datetime` when time isn't needed
 - Use `Boolean` instead of integers for binary flags
 
@@ -118,20 +126,19 @@ df = pl.read_csv(
 Structure code to maximize parallelization:
 
 ```python
-# Bad: Sequential pipe operations disable parallelization
-df = (
-    df.pipe(operation1)
-    .pipe(operation2)
-    .pipe(operation3)
-)
-
-# Good: Combined operations enable parallelization
+# Independent expressions share an input context.
 df = df.with_columns(
-    result1=operation1_expr(),
-    result2=operation2_expr(),
-    result3=operation3_expr()
+    doubled=pl.col("value") * 2,
+    squared=pl.col("value") ** 2,
 )
+# A dependent expression needs the new schema from the preceding context.
+df = df.with_columns(plus_one=pl.col("doubled") + 1)
 ```
+
+A `.pipe()` call simply invokes a Python helper. Helpers that return native
+LazyFrame plans preserve optimization and parallel execution. A helper that
+collects or loops over rows can lose those benefits. Eager chaining with and
+without intermediate variable names has the same execution semantics.
 
 ### 7. Rechunk After Concatenation
 
@@ -234,13 +241,13 @@ df.select("col1", "col2", "col3")
 df.select(pl.col("^sales_.*$"))
 
 # Starts with
-df.select(pl.col("^sales"))
+df.select(pl.col("^sales.*$"))
 
 # Ends with
-df.select(pl.col("_total$"))
+df.select(pl.col("^.*_total$"))
 
 # Contains
-df.select(pl.col(".*revenue.*"))
+df.select(pl.col("^.*revenue.*$"))
 ```
 
 **By type:**
@@ -282,7 +289,7 @@ df.group_by("category").agg(
     pl.col("id").n_unique().alias("unique_count"),
     pl.col("value").min().alias("minimum"),
     pl.col("value").max().alias("maximum"),
-    pl.col("value").quantile(0.5).alias("median"),
+    pl.col("value").median().alias("median"),
     pl.col("value").quantile(0.95).alias("p95")
 )
 ```
@@ -325,7 +332,7 @@ df.with_columns(
 ### Pitfall 1: Row Iteration
 
 ```python
-# Bad: Never iterate rows
+# Row iteration is costly for numerical transformations
 for row in df.iter_rows():
     # Process row
     result = row[0] * 2
@@ -337,8 +344,8 @@ df = df.with_columns(result=pl.col("value") * 2)
 ### Pitfall 2: Modifying in Place
 
 ```python
-# Bad: Polars is immutable, this doesn't work as expected
-df["new_col"] = df["old_col"] * 2  # May work but not recommended
+# String-key assignment of a Series is unsupported.
+# df["new_col"] = df["old_col"] * 2
 
 # Good: Functional style
 df = df.with_columns(new_col=pl.col("old_col") * 2)
@@ -383,16 +390,16 @@ df = pl.read_csv(
 )
 ```
 
-### Pitfall 6: Creating Many Small DataFrames
+### Pitfall 6: Repeated Materialization
 
 ```python
-# Bad: Many operations creating intermediate DataFrames
+# Eager operations execute at each step
 df1 = df.filter(pl.col("age") > 25)
 df2 = df1.select("name", "age")
 df3 = df2.sort("age")
 result = df3.head(10)
 
-# Good: Chain operations
+# Equivalent eager execution, expressed as a chain
 result = (
     df.filter(pl.col("age") > 25)
     .select("name", "age")
@@ -419,7 +426,7 @@ result = (
 # Check DataFrame size
 print(f"Estimated size: {df.estimated_size('mb'):.2f} MB")
 
-# Profile memory during operations
+# Inspect the plan (this is not a peak-memory measurement)
 lf = pl.scan_csv("large.csv")
 print(lf.explain())  # See query plan
 ```
@@ -525,8 +532,8 @@ print(f"Eager: {eager_time:.2f}s, Lazy: {lazy_time:.2f}s")
 
 **Arrow IPC:**
 - Best for: Inter-process communication, temporary storage
-- Pros: Fastest, zero-copy, preserves all types
-- Cons: Less compression than Parquet
+- Pros: Efficient Arrow interchange; compatible types can share buffers
+- Cons: Type conversion, compression, or rechunking can require copies
 
 ### File Reading Best Practices
 
@@ -544,7 +551,7 @@ lf = pl.scan_csv(
 )
 
 # 4. Use predicate pushdown
-result = lf.filter(pl.col("date") >= "2023-01-01").collect()
+result = lf.filter(pl.col("date") >= pl.date(2023, 1, 1)).collect()
 ```
 
 ### File Writing Best Practices
@@ -601,7 +608,7 @@ def clean_data(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.with_columns(
         pl.col("name").str.to_uppercase(),
         pl.col("date").str.strptime(pl.Date, "%Y-%m-%d"),
-        pl.col("amount").fill_null(0)
+        pl.col("amount").cast(pl.Float64)
     )
 
 def add_features(lf: pl.LazyFrame) -> pl.LazyFrame:
@@ -609,7 +616,8 @@ def add_features(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.with_columns(
         month=pl.col("date").dt.month(),
         year=pl.col("date").dt.year(),
-        amount_log=pl.col("amount").log()
+        amount_log=pl.when(pl.col("amount") > 0)
+            .then(pl.col("amount").log()).otherwise(None)
     )
 
 # Compose pipeline
@@ -621,6 +629,9 @@ result = (
     .collect()
 )
 ```
+
+The example retains missing amounts and excludes nonpositive values from the log.
+Record why that is appropriate for the measurement; zero is not a generic imputation.
 
 ## Documentation
 

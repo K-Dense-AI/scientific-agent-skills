@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-"""Bioequivalence assessment: average BE, reference-scaled BE, and sample size.
+"""Conventional average bioequivalence and numerical sample-size planning.
 
-Three separate criteria live under the word "bioequivalence" and they are not
-interchangeable. Average BE puts a 90% confidence interval for the geometric
-mean ratio inside 80.00-125.00%. EMA's ABEL widens those limits as a function
-of the reference within-subject variability. FDA's RSABE replaces the interval
-criterion altogether with a scaled linearised bound. Applying the wrong one, or
-scaling without a replicate design, is a refuse-to-file class of error.
+The CLI supports complete RT/TR 2x2 crossover and independent parallel data.
+It rejects replicate/reference-scaled analysis, which requires a design-specific
+model. Retained scalar scaling functions are arithmetic aids only.
 
     python3 bioequivalence.py -i be.csv --design 2x2 --metric auc
-    python3 bioequivalence.py -i be.csv --design replicate --metric cmax --scaling both
     python3 bioequivalence.py --power --cv 0.30 --gmr 0.95 --target-power 0.80
 
-Input columns: ``subject``, ``treatment`` (T or R), ``value``, plus
-``sequence`` and ``period`` for crossover designs. Replicate designs simply
-have more than one record per subject per treatment.
+Input: subject,treatment(T/R),value, plus sequence and period for crossover.
 """
 
 from __future__ import annotations
@@ -85,12 +79,10 @@ def crossover_2x2(records: list[dict], design: str = "2x2") -> AverageBE:
     treatment ANOVA gives on balanced or unbalanced data, without building the
     design matrix.
 
-    For replicate designs each subject's repeated administrations are averaged
-    before differencing, which is the same intra-subject contrast the FDA
-    reference-scaled procedure is built on. The within-subject CV reported for a
-    replicate design is therefore a T-and-R mixture; the reference-specific
-    ``CVwR`` used for scaling comes from ``reference_variability`` instead.
+    Replicate designs are rejected; repeated treatments need a different model.
     """
+    if design != "2x2":
+        raise InputError("replicate designs need a design-specific period/sequence model; use FDA Appendix G or validated replicateBE tooling")
     by_subject: dict[str, dict[str, list[float]]] = {}
     sequences: dict[str, str] = {}
     for row in records:
@@ -98,6 +90,18 @@ def crossover_2x2(records: list[dict], design: str = "2x2") -> AverageBE:
         if row.get("sequence"):
             sequences[row["subject"]] = row["sequence"]
 
+    for subject, treatments in by_subject.items():
+        if set(treatments) != {"T", "R"} or any(len(v) != 1 for v in treatments.values()):
+            raise InputError(f"subject {subject}: 2x2 analysis requires exactly one T and one R; handle incomplete records explicitly")
+        if sequences.get(subject) not in {"RT", "TR"}:
+            raise InputError("2x2 analysis requires RT/TR sequence and periods 1/2")
+        subject_rows = [r for r in records if r["subject"] == subject]
+        if {str(r.get("period")) for r in subject_rows} != {"1", "2"}:
+            raise InputError(f"subject {subject}: expected periods 1 and 2")
+        if any(r.get("sequence") != sequences[subject] or r["treatment"] != sequences[subject][int(r["period"])-1] for r in subject_rows):
+            raise InputError(f"subject {subject}: treatment, period and sequence disagree")
+    if set(sequences.values()) != {"RT", "TR"}:
+        raise InputError("both RT and TR sequences are required to separate period and treatment")
     differences: dict[str, list[float]] = {}
     for subject, treatments in by_subject.items():
         if "T" not in treatments or "R" not in treatments:
@@ -110,29 +114,15 @@ def crossover_2x2(records: list[dict], design: str = "2x2") -> AverageBE:
     if total < 3:
         raise InputError("fewer than 3 subjects completed both treatments")
 
-    if len(differences) < 2:
-        # No sequence information: fall back to a paired analysis and say so.
-        values = np.asarray(next(iter(differences.values())))
-        n = len(values)
-        estimate = float(values.mean())
-        se = float(values.std(ddof=1) / math.sqrt(n))
-        df = n - 1
-        s2w = float(values.var(ddof=1)) / 2.0
-        method = "paired (no sequence column: period effects are NOT removed)"
-    else:
-        means = {seq: float(np.mean(v)) for seq, v in differences.items()}
-        estimate = float(np.mean(list(means.values())))
-        pooled_num = sum(float(np.var(v, ddof=1)) * (len(v) - 1) for v in differences.values() if len(v) > 1)
-        pooled_den = sum(len(v) - 1 for v in differences.values())
-        s2d = pooled_num / pooled_den if pooled_den else float("nan")
-        se = math.sqrt(s2d / 4.0 * sum(1.0 / len(v) for v in differences.values()))
-        df = pooled_den
-        s2w = s2d / 2.0
-        method = (
-            "replicate crossover (subject means differenced; period effect removed)"
-            if design == "replicate"
-            else "2x2 crossover (period effect removed)"
-        )
+    means = {seq: float(np.mean(v)) for seq, v in differences.items()}
+    estimate = float(np.mean(list(means.values())))
+    pooled_num = sum(float(np.var(v, ddof=1)) * (len(v) - 1) for v in differences.values() if len(v) > 1)
+    pooled_den = sum(len(v) - 1 for v in differences.values())
+    s2d = pooled_num / pooled_den
+    se = math.sqrt(s2d / 4.0 * sum(1.0 / len(v) for v in differences.values()))
+    df = pooled_den
+    s2w = s2d / 2.0
+    method = "2x2 crossover (period effect removed)"
 
     crit = float(t_dist.ppf(0.95, df))
     return AverageBE(
@@ -148,6 +138,8 @@ def crossover_2x2(records: list[dict], design: str = "2x2") -> AverageBE:
 
 
 def parallel_design(records: list[dict]) -> AverageBE:
+    if len({r["subject"] for r in records}) != len(records):
+        raise InputError("parallel analysis requires one independent record per subject")
     test = np.asarray([r["logvalue"] for r in records if r["treatment"] == "T"])
     ref = np.asarray([r["logvalue"] for r in records if r["treatment"] == "R"])
     if len(test) < 2 or len(ref) < 2:
@@ -189,7 +181,11 @@ class ReferenceVariability:
 
 
 def reference_variability(records: list[dict]) -> ReferenceVariability:
-    """Within-subject variance of the reference, from replicated R administrations."""
+    """Descriptive unadjusted replicate variance; NOT design-adjusted BE variance.
+
+    Period/sequence effects contaminate this quantity. Do not supply it to a
+    regulatory scaled analysis; the CLI rejects that unsupported workflow.
+    """
     numerator = 0.0
     df = 0
     subjects = 0
@@ -218,17 +214,17 @@ def abel_limits(rv: ReferenceVariability) -> tuple[float, float, bool]:
 
 
 def rsabe_bound(estimate: float, se: float, df_point: int, rv: ReferenceVariability) -> dict[str, float]:
-    """FDA reference-scaled criterion via the Hyslop linearised 95% upper bound.
+    """Scalar FDA 2026 Appendix G bound; inputs must come from its design model.
 
-    The criterion is ``(mu_T - mu_R)^2 - theta^2 * s2wR <= 0``. Its upper
-    confidence bound is not the sum of the two separate bounds; Hyslop's method
-    combines them as ``E + H + sqrt((Eh-E)^2 + (Hh-H)^2)``, which is what the
-    FDA progesterone guidance implements.
+    This does not establish the HVD applicability threshold, point-estimate
+    constraint or validity of externally supplied variance/degrees of freedom.
     """
-    e_point = estimate**2
+    if not all(math.isfinite(v) for v in (estimate, se, df_point, rv.s2wr, rv.df)) or se < 0 or df_point <= 0 or rv.s2wr < 0 or rv.df <= 0:
+        raise InputError("scaled bound requires finite contrast, non-negative SE/variance and positive degrees of freedom")
+    e_point = estimate**2 - se**2
     e_bound = (abs(estimate) + float(t_dist.ppf(0.95, df_point)) * se) ** 2
     h_point = -(THETA_FDA**2) * rv.s2wr
-    h_bound = -(THETA_FDA**2) * rv.s2wr * rv.df / float(chi2.ppf(0.05, rv.df))
+    h_bound = -(THETA_FDA**2) * rv.s2wr * rv.df / float(chi2.ppf(0.95, rv.df))
     upper = e_point + h_point + math.sqrt((e_bound - e_point) ** 2 + (h_bound - h_point) ** 2)
     return {
         "criterion_point_estimate": e_point + h_point,
@@ -241,14 +237,17 @@ def rsabe_bound(estimate: float, se: float, df_point: int, rv: ReferenceVariabil
 
 
 def tost_power(n_total: int, cv: float, gmr: float, design: str = "2x2", limits: tuple[float, float] = (0.80, 1.25)) -> float:
-    """Exact TOST power by integrating over the sampling distribution of s.
+    """Approximate TOST power by a finite quantile grid over estimated variance.
 
-    Treating the standard error as known — the normal approximation that
-    appears in most quick calculations — overstates power at the sample sizes
-    bioequivalence studies actually use. This integrates the conditional power
-    over the chi distribution of the estimated standard deviation, which agrees
-    with Owen's Q to numerical precision.
+    Equal allocation and normal log-endpoints are assumed. This is not an
+    exact Owen-Q routine; verify borderline planning decisions independently.
     """
+    if design not in {"2x2", "parallel"}:
+        raise InputError("replicate power needs a specified sequence design and variance model; use PowerTOST")
+    if not math.isfinite(cv) or cv <= 0 or not math.isfinite(gmr) or gmr <= 0:
+        raise InputError("CV and GMR must be positive and finite")
+    if n_total < 4 or n_total % 2:
+        raise InputError("power calculation requires an even total N >= 4 for equal allocation")
     sigma = math.sqrt(s2_from_cv(cv))
     delta = math.log(gmr)
     theta_low, theta_high = math.log(limits[0]), math.log(limits[1])
@@ -259,9 +258,6 @@ def tost_power(n_total: int, cv: float, gmr: float, design: str = "2x2", limits:
     elif design == "2x2":
         df = n_total - 2
         factor = math.sqrt(2.0 / n_total)
-    else:  # 3- or 4-period replicate, treated as a crossover with more df
-        df = 2 * n_total - 3
-        factor = math.sqrt(1.0 / n_total)
     if df < 1:
         return 0.0
 
@@ -278,7 +274,9 @@ def tost_power(n_total: int, cv: float, gmr: float, design: str = "2x2", limits:
 
 
 def sample_size(cv: float, gmr: float, target: float, design: str = "2x2", limits: tuple[float, float] = (0.80, 1.25)) -> tuple[int, float]:
-    step = 2 if design != "parallel" else 2
+    if not 0 < target < 1:
+        raise InputError("target power must be in (0,1)")
+    step = 2
     for n in range(4, 5002, step):
         power = tost_power(n, cv, gmr, design, limits)
         if power >= target:
@@ -333,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--scaling",
         choices=("none", "abel", "rsabe", "both"),
         default="none",
-        help="reference-scaled criteria to apply (replicate designs only)",
+        help="unsupported: requires external design-specific analysis",
     )
     parser.add_argument("--limits", default="0.80,1.25", help="acceptance limits for average BE (default: 0.80,1.25)")
     parser.add_argument("--nti", action="store_true", help="narrow therapeutic index: apply 90.00-111.11%% limits")
@@ -348,12 +346,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
     report = Report()
 
-    limits = (0.90, 1.1111) if args.nti else tuple(float(x) for x in args.limits.split(","))
-    if len(limits) != 2 or limits[0] >= limits[1]:
+    limits = (0.90, 1.1111) if args.nti else tuple(parse_float(x, "acceptance limit") for x in args.limits.split(","))
+    if len(limits) != 2 or not all(math.isfinite(x) and x > 0 for x in limits) or limits[0] >= limits[1]:
         raise InputError(f"--limits must be low,high with low < high; got {args.limits!r}")
 
+    if args.design == "replicate" or args.scaling != "none":
+        raise InputError("replicate/reference-scaling requires a design-specific validated analysis (FDA 2026 Appendix G, replicateBE); this CLI supports 2x2 and parallel ABE only")
     if args.power:
         if args.cv is None:
             raise InputError("--power needs --cv")
@@ -369,13 +371,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         report.scalar("assumed_gmr", args.gmr)
         report.scalar("acceptance_limits", f"{limits[0]:.4f}-{limits[1]:.4f}")
         report.note(
-            "Power is computed exactly by integrating over the sampling distribution of the estimated "
+            "Power is approximated by numerical integration over the sampling distribution of the estimated "
             "standard deviation; the normal approximation overstates it at these sample sizes."
         )
         report.note(
-            "Sample size is driven far more by the assumed GMR than by CV. Assuming GMR = 1.00 rather "
-            "than 0.95 typically halves the calculated N and is the most common way a BE study ends up "
-            "underpowered."
+            "Planning depends jointly on GMR, CV, allocation and dropout. Assess plausible GMR/CV scenarios and inflate for dropout; the returned N is evaluable subjects."
         )
         return report.emit(args.format)
 
@@ -400,7 +400,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     report.scalar("degrees_of_freedom", result.df)
     if result.cv_within is not None:
         report.scalar(
-            "cv_within_pct" if args.design != "replicate" else "cv_within_pct_T_and_R_mixture",
+            "cv_within_pct",
             100.0 * result.cv_within,
         )
 
@@ -411,66 +411,6 @@ def run(argv: Sequence[str] | None = None) -> int:
         )
     if args.nti:
         report.note("narrow therapeutic index limits applied (90.00-111.11%)")
-
-    if args.scaling != "none":
-        if args.design != "replicate":
-            raise InputError(
-                "reference-scaling requires --design replicate. High observed variability in a 2x2 study "
-                "does not license widening: without replicated reference administrations there is no "
-                "estimate of within-subject reference variability to scale to."
-            )
-        rv = reference_variability(records)
-        report.scalar("cvwr_pct", 100.0 * rv.cvwr)
-        report.scalar("swr", rv.swr)
-        report.scalar("cvwr_degrees_of_freedom", rv.df)
-        report.scalar("subjects_with_replicated_reference", rv.n_subjects)
-
-        rows = []
-        if args.scaling in {"abel", "both"}:
-            low, high, widened = abel_limits(rv)
-            abel_pass = low <= result.ci_low and result.ci_high <= high and limits[0] <= result.gmr <= limits[1]
-            rows.append(
-                {
-                    "criterion": "EMA ABEL",
-                    "applicable": "yes" if rv.cvwr > CV_SCALING_THRESHOLD else "no (CVwR <= 30%)",
-                    "limits_pct": f"{100 * low:.2f}-{100 * high:.2f}",
-                    "widened": widened,
-                    "point_estimate_constraint": "80.00-125.00%",
-                    "met": abel_pass,
-                }
-            )
-            if widened and rv.cvwr > CV_ABEL_CAP:
-                report.note(
-                    f"CVwR is {100 * rv.cvwr:.1f}%, above the 50% cap; ABEL limits are frozen at "
-                    "69.84-143.19% rather than widening further."
-                )
-            if not abel_pass:
-                report.finding(f"{label}: EMA ABEL criterion not met")
-        if args.scaling in {"rsabe", "both"}:
-            estimate = math.log(result.gmr)
-            scaled = rsabe_bound(estimate, result.se, result.df, rv)
-            point_ok = limits[0] <= result.gmr <= limits[1]
-            applicable = rv.cvwr >= CV_SCALING_THRESHOLD
-            met = bool(scaled["passes_scaled_criterion"]) and point_ok
-            rows.append(
-                {
-                    "criterion": "FDA RSABE",
-                    "applicable": "yes" if applicable else "no (CVwR < 30%: use unscaled ABE)",
-                    "limits_pct": "linearised scaled bound",
-                    "widened": applicable,
-                    "point_estimate_constraint": "80.00-125.00%",
-                    "met": met if applicable else passes,
-                }
-            )
-            report.scalar("rsabe_criterion_point", scaled["criterion_point_estimate"])
-            report.scalar("rsabe_criterion_95_upper_bound", scaled["criterion_95_upper_bound"])
-            if applicable and not met:
-                report.finding(f"{label}: FDA RSABE criterion not met")
-        report.table("reference-scaled criteria", rows)
-        report.note(
-            "ABEL and RSABE are different criteria and can disagree on the same dataset. Which one "
-            "applies is decided by the regulator the application goes to, and must be pre-specified."
-        )
 
     report.note("all statistics computed on the natural-log scale; ratios are geometric means")
     return report.emit(args.format)

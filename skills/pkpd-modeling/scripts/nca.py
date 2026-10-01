@@ -79,6 +79,8 @@ def _parse_conc(raw: str, lloq: float | None, rule: str) -> tuple[float | None, 
     value = parse_float(text, "conc")
     if value is None:
         return None, True
+    if value < 0:
+        raise InputError("concentrations must be non-negative")
     if lloq is not None and value < lloq:
         if rule == "missing":
             return None, True
@@ -136,6 +138,12 @@ def load_profiles(args: argparse.Namespace) -> list[Profile]:
         if args.tinf is None and "tinf" in subject_rows[0]:
             tinf = parse_float(subject_rows[0].get("tinf"), "tinf", allow_missing=True)
 
+        if np.any(time_array < 0) or np.any(np.diff(time_array) <= 0):
+            raise InputError(f"subject {subject}: times must be non-negative and distinct")
+        if tau is not None and (not math.isfinite(tau) or tau <= 0):
+            raise InputError("tau must be finite and positive")
+        if args.route == "iv-infusion" and (tinf is None or not math.isfinite(tinf) or tinf <= 0):
+            raise InputError("iv-infusion needs a positive --tinf or tinf column")
         profiles.append(Profile(subject, time_array, conc_array, blq_array, float(dose), tau, tinf))
     return profiles
 
@@ -189,6 +197,8 @@ def interpolate(time: np.ndarray, conc: np.ndarray, target: float, method: str) 
 
 
 def partial_auc(time: np.ndarray, conc: np.ndarray, start: float, end: float, method: str) -> float:
+    if start < time[0] or end > time[-1] or end <= start:
+        raise InputError("partial AUC needs both boundaries within sampled times and end > start")
     inner = [t for t in time if start < t < end]
     knots = [start, *inner, end]
     values = [interpolate(time, conc, t, method) for t in knots]
@@ -221,6 +231,8 @@ class LambdaZ:
 
 def _loglinear_fit(t: np.ndarray, c: np.ndarray) -> tuple[float, float, float]:
     """Slope, intercept, r2 of ln(C) on time."""
+    if len(t) < 2 or np.ptp(t) <= 0:
+        raise InputError("lambda_z needs distinct sample times")
     y = np.log(c)
     tbar, ybar = t.mean(), y.mean()
     sxx = float(np.sum((t - tbar) ** 2))
@@ -249,18 +261,21 @@ def estimate_lambda_z(
     the longer window when scores are within that tolerance. Neither plain
     nor adjusted r-squared is monotonic as observations are added.
 
-    Points at or before Tmax are never eligible. Including Tmax makes the fit
-    describe the tail of absorption rather than elimination, which biases
-    lambda_z upward and the half-life, Vz, and AUCinf downward.
+    Points at or before Tmax are never eligible in this helper. Distribution
+    and absorption can still contaminate the tail; bias direction is not fixed.
     """
+    if min_points < 3:
+        raise InputError("lambda_z requires at least 3 points")
     eligible = (~is_blq) & (conc > 0) & (time > tmax)
     idx = np.flatnonzero(eligible)
     if manual is not None:
         lo, hi = manual
-        idx = np.flatnonzero((~is_blq) & (conc > 0) & (time >= lo) & (time <= hi))
-        if len(idx) < 2:
+        idx = np.flatnonzero(eligible & (time >= lo) & (time <= hi))
+        if len(idx) < 3:
             return LambdaZ(reason=f"manual window {lo}-{hi} contains {len(idx)} quantifiable points")
         slope, intercept, r2 = _loglinear_fit(time[idx], conc[idx])
+        if slope >= 0:
+            return LambdaZ(reason="manual terminal slope is not negative", n_points=len(idx))
         n = len(idx)
         r2_adj = 1.0 - (1.0 - r2) * (n - 1) / (n - 2) if n > 2 else float("nan")
         return LambdaZ(
@@ -271,7 +286,7 @@ def estimate_lambda_z(
             n_points=n,
             t_first=float(time[idx][0]),
             t_last=float(time[idx][-1]),
-            clast_pred=float(math.exp(intercept + slope * time[idx][-1])),
+            clast_pred=float(math.exp(intercept + slope * time[np.flatnonzero((~is_blq) & (conc > 0))[-1]])),
             reason="manual window",
             excluded_cmax=bool(np.all(time[idx] > tmax)),
         )
@@ -284,7 +299,7 @@ def estimate_lambda_z(
         window = idx[start:]
         n = len(window)
         slope, intercept, r2 = _loglinear_fit(time[window], conc[window])
-        if n <= 2 or not math.isfinite(r2):
+        if n <= 2 or not math.isfinite(r2) or slope >= 0:
             continue
         r2_adj = 1.0 - (1.0 - r2) * (n - 1) / (n - 2)
         candidate = LambdaZ(
@@ -324,6 +339,8 @@ def analyse(profile: Profile, args: argparse.Namespace) -> tuple[dict, LambdaZ, 
     last = int(np.flatnonzero(quantifiable)[-1])
     clast, tlast = float(conc[last]), float(time[last])
 
+    if time[0] > 0:
+        findings.append(f"subject {profile.subject}: first sample is at {time[0]:g}; AUC starts there, not at dose time 0; CL and volume estimates omit early exposure")
     auc_cum, aumc_cum = cumulative_auc(time, conc, args.auc_method)
     auc_last, aumc_last = float(auc_cum[last]), float(aumc_cum[last])
 
@@ -343,7 +360,7 @@ def analyse(profile: Profile, args: argparse.Namespace) -> tuple[dict, LambdaZ, 
     if profile.tau:
         row["auc_tau"] = partial_auc(time, conc, 0.0, profile.tau, args.auc_method)
 
-    if lz.lam:
+    if lz.lam and profile.tau is None:
         lam = lz.lam
         row["lambda_z"] = lam
         row["t_half"] = lz.half_life
@@ -368,7 +385,7 @@ def analyse(profile: Profile, args: argparse.Namespace) -> tuple[dict, LambdaZ, 
         if args.route != "extravascular":
             row["vss"] = clearance * mrt
 
-        span = (tlast - (lz.t_first or tlast)) / (lz.half_life or math.inf)
+        span = (lz.t_last - lz.t_first) / lz.half_life
         row["span_ratio"] = span
 
         prefix = f"subject {profile.subject}"
@@ -389,10 +406,13 @@ def analyse(profile: Profile, args: argparse.Namespace) -> tuple[dict, LambdaZ, 
             )
         if lz.n_points < 3:
             findings.append(f"{prefix}: lambda_z estimated from {lz.n_points} points")
-    else:
+    elif not lz.lam:
         findings.append(f"subject {profile.subject}: lambda_z not estimable - {lz.reason}")
 
     if profile.tau:
+        if np.any(time > profile.tau):
+            raise InputError("--tau input must contain only one interval [0, tau]")
+        findings.append(f"subject {profile.subject}: --tau assumes demonstrated steady state; AUCinf and single-dose CL/Vz/Vss are withheld")
         tau = profile.tau
         auc_tau = float(row["auc_tau"])
         cmin = float(np.min(conc[(time >= 0) & (time <= tau) & quantifiable])) if np.any(quantifiable) else float("nan")
@@ -403,13 +423,14 @@ def analyse(profile: Profile, args: argparse.Namespace) -> tuple[dict, LambdaZ, 
         row["swing"] = (cmax - cmin) / cmin if cmin else float("nan")
         row["cl_ss_f" if args.route == "extravascular" else "cl_ss"] = profile.dose / auc_tau
         if lz.lam:
-            row["accumulation_index"] = 1.0 / (1.0 - math.exp(-lz.lam * tau))
+            row["terminal_slope_accumulation_index"] = 1.0 / (-math.expm1(-lz.lam * tau))
+            findings.append("terminal-slope accumulation index is a monoexponential heuristic, not the observed AUC/peak accumulation ratio")
 
     for start, end in args.partial_auc:
         if end > tlast:
             findings.append(
                 f"subject {profile.subject}: partial AUC {start:g}-{end:g} extends past the last "
-                f"quantifiable sample at {tlast:g}; the tail is interpolated from Clast"
+                f"quantifiable sample at {tlast:g}; integration uses the declared BLQ substitutions beyond Clast"
             )
         row[f"auc_{start:g}_{end:g}"] = partial_auc(time, conc, start, end, args.auc_method)
 
@@ -518,9 +539,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.route == "iv-infusion" and args.tinf is None:
-        print("error: --route iv-infusion needs --tinf (or a tinf column)", file=sys.stderr)
-        return EXIT_INPUT
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
+    if args.lloq is not None and args.lloq <= 0:
+        raise InputError("--lloq must be positive")
 
     profiles = load_profiles(args)
     report = Report()

@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/llama-cpp
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi supports the llama.cpp **router** server, which discovers multiple GGUF models and loads or unloads them on demand. Use a current llama.cpp build with router support.
 
 ## Start the Router
@@ -54,7 +56,7 @@ Hugging Face search uses `HF_TOKEN` when set, then `$HF_TOKEN_PATH`, `$HF_HOME/t
 
 Pi never silently unloads models and never deletes model files; it asks whether to unload others first. The router may be shared with other clients, so `/llama` always displays the router's current state.
 
-Only loaded models appear in `/model`. Load with `/llama`, then select the model with `/model`.
+Loaded and sleeping models appear in `/model`; sleeping models wake when selected. With router autoload enabled, unloaded presets also appear and load on selection. With `--no-models-autoload`, load through `/llama` first. Every chat model also appears as a classifier with the same ID and `llama-cpp-classify` API; classifier calls consume context and should be validated for the selected model/task.
 
 ## Troubleshooting
 

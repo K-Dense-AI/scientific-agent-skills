@@ -18,6 +18,9 @@ import json
 import spikeinterface.full as si
 import numpy as np
 
+from _common import validate_recording, apply_phase_correction, reference_by_shank
+from compute_metrics import curate_units, METRIC_NAMES
+
 
 def load_recording(data_path: str, stream_name: str = 'imec0.ap') -> si.BaseRecording:
     """Load a SpikeGLX or Open Ephys recording."""
@@ -32,10 +35,11 @@ def load_recording(data_path: str, stream_name: str = 'imec0.ap') -> si.BaseReco
         recording = si.read_spikeglx(data_path, stream_name=stream_name)
     elif any(data_path.rglob('*.oebin')):
         # Open Ephys format
-        recording = si.read_openephys(data_path)
+        recording = si.read_openephys(data_path, stream_name=stream_name)
     else:
         raise ValueError(f"Unknown format in {data_path}")
 
+    validate_recording(recording)
     print(f"Loaded recording:")
     print(f"  Channels: {recording.get_num_channels()}")
     print(f"  Duration: {recording.get_total_duration():.2f} s")
@@ -55,12 +59,13 @@ def preprocess(
     Following SpikeInterface recommendations:
     1. High-pass filter at 400 Hz (not 300)
     2. Detect and remove bad channels
-    3. Phase shift (NP 1.0 only)
+    3. Phase shift using acquisition ADC timing metadata
     4. Common median reference
     """
     print("Preprocessing...")
 
     # Step 1: High-pass filter
+    validate_recording(recording)
     rec = si.highpass_filter(recording, freq_min=freq_min)
     print(f"  Applied high-pass filter at {freq_min} Hz")
 
@@ -72,13 +77,13 @@ def preprocess(
     else:
         print("  No bad channels detected")
 
-    # Step 3: Phase shift (for Neuropixels 1.0)
+    # Step 3: Phase shift from acquisition timing metadata
     if apply_phase_shift:
-        rec = si.phase_shift(rec)
+        rec = apply_phase_correction(rec)
         print("  Applied phase shift correction")
 
     # Step 4: Common median reference
-    rec = si.common_reference(rec, operator='median', reference='global')
+    rec = reference_by_shank(rec)
     print("  Applied common median reference")
 
     return rec, bad_channel_ids
@@ -99,22 +104,11 @@ def check_drift(recording: si.BaseRecording, output_folder: str) -> dict:
     noise_levels = si.get_noise_levels(recording, return_in_uV=False)
 
     # Detect peaks
-    peaks = detect_peaks(
-        recording,
-        method='locally_exclusive',
-        noise_levels=noise_levels,
-        detect_threshold=5,
-        radius_um=50.,
-        **job_kwargs
-    )
+    peaks = detect_peaks(recording, method='locally_exclusive', method_kwargs={'noise_levels': noise_levels, 'detect_threshold': 5, 'radius_um': 50.0}, job_kwargs=job_kwargs)
     print(f"  Detected {len(peaks)} peaks")
 
     # Localize peaks
-    peak_locations = localize_peaks(
-        recording, peaks,
-        method='center_of_mass',
-        **job_kwargs
-    )
+    peak_locations = localize_peaks(recording, peaks, method='center_of_mass', job_kwargs=job_kwargs)
 
     # Save drift plot
     import matplotlib.pyplot as plt
@@ -152,6 +146,10 @@ def correct_motion(
 ) -> si.BaseRecording:
     """Apply motion correction if needed."""
     print(f"Applying motion correction (preset: {preset})...")
+
+    probe = recording.get_probe()
+    if probe.shank_ids is None or len(np.unique(probe.shank_ids)) != 1:
+        raise ValueError("Motion estimation in this pipeline requires one verified shank; select channels per shank first.")
 
     # correct_motion returns just the corrected recording by default. Pass
     # output_motion_info=True only if you also want the motion info dict (a tuple is
@@ -196,7 +194,7 @@ def run_spike_sorting(
     )
 
     print(f"  Found {len(sorting.unit_ids)} units")
-    print(f"  Total spikes: {sorting.get_total_num_spikes()}")
+    print(f"  Total spikes: {sorting.count_total_num_spikes()}")
 
     return sorting
 
@@ -228,88 +226,17 @@ def postprocess(
 
     print("  Computing spike features...")
     analyzer.compute('spike_amplitudes', **job_kwargs)
+    analyzer.compute('amplitude_scalings', **job_kwargs)
     analyzer.compute('correlograms', window_ms=100, bin_ms=1)
     analyzer.compute('unit_locations', method='monopolar_triangulation')
     analyzer.compute('template_similarity')
 
     print("  Computing quality metrics...")
-    analyzer.compute('quality_metrics')
+    analyzer.compute('quality_metrics', metric_names=METRIC_NAMES)
 
     qm = analyzer.get_extension('quality_metrics').get_data()
 
     return analyzer, qm
-
-
-def curate_units(qm, method: str = 'allen') -> dict:
-    """
-    Classify units based on quality metrics.
-
-    Methods:
-        'allen': Allen Institute defaults (more permissive)
-        'ibl': IBL standards
-        'strict': Strict single-unit criteria
-    """
-    methods = ('allen', 'ibl', 'strict')
-    if method not in methods:
-        # Without this, an unrecognised method leaves every non-noise unit out of
-        # `labels` entirely, so export_results() silently reports zero good units.
-        raise ValueError(
-            f"unknown curation method {method!r}; choose one of {', '.join(methods)}"
-        )
-
-    print(f"Curating units (method: {method})...")
-
-    labels = {}
-
-    for unit_id in qm.index:
-        row = qm.loc[unit_id]
-
-        # Noise detection (universal)
-        if row['snr'] < 1.5:
-            labels[unit_id] = 'noise'
-            continue
-
-        if method == 'allen':
-            # Allen Institute defaults
-            if (row['presence_ratio'] > 0.9 and
-                row['isi_violations_ratio'] < 0.5 and
-                row['amplitude_cutoff'] < 0.1):
-                labels[unit_id] = 'good'
-            elif row['isi_violations_ratio'] > 0.5:
-                labels[unit_id] = 'mua'
-            else:
-                labels[unit_id] = 'unsorted'
-
-        elif method == 'ibl':
-            # IBL standards
-            if (row['presence_ratio'] > 0.9 and
-                row['isi_violations_ratio'] < 0.1 and
-                row['amplitude_cutoff'] < 0.1 and
-                row['firing_rate'] > 0.1):
-                labels[unit_id] = 'good'
-            elif row['isi_violations_ratio'] > 0.1:
-                labels[unit_id] = 'mua'
-            else:
-                labels[unit_id] = 'unsorted'
-
-        elif method == 'strict':
-            # Strict single-unit
-            if (row['snr'] > 5 and
-                row['presence_ratio'] > 0.95 and
-                row['isi_violations_ratio'] < 0.01 and
-                row['amplitude_cutoff'] < 0.01):
-                labels[unit_id] = 'good'
-            elif row['isi_violations_ratio'] > 0.05:
-                labels[unit_id] = 'mua'
-            else:
-                labels[unit_id] = 'unsorted'
-
-    # Summary
-    from collections import Counter
-    counts = Counter(labels.values())
-    print(f"  Classification: {dict(counts)}")
-
-    return labels
 
 
 def export_results(
@@ -325,12 +252,14 @@ def export_results(
     # Get good units
     good_ids = [u for u, l in labels.items() if l == 'good']
     sorting_good = sorting.select_units(good_ids)
+    sorting_good.save(folder=Path(output_folder) / 'sorting_curated')
+    analyzer.sorting.set_property('curation_label', [labels[uid] for uid in analyzer.sorting.unit_ids])
 
     # Export to Phy
     phy_folder = f'{output_folder}/phy_export'
     si.export_to_phy(analyzer, phy_folder,
                      compute_pc_features=True,
-                     compute_amplitudes=True)
+                     compute_amplitudes=True, additional_properties=['curation_label'])
     print(f"  Phy export: {phy_folder}")
 
     # Generate report
@@ -350,7 +279,7 @@ def export_results(
     summary = {
         'total_units': len(sorting.unit_ids),
         'good_units': len(good_ids),
-        'total_spikes': int(sorting.get_total_num_spikes()),
+        'total_spikes': int(sorting.count_total_num_spikes()),
         'duration_s': float(recording.get_total_duration()),
         'n_channels': int(recording.get_num_channels()),
     }
@@ -366,7 +295,8 @@ def run_pipeline(
     sorter: str = 'kilosort4',
     stream_name: str = 'imec0.ap',
     apply_motion_correction: bool = True,
-    curation_method: str = 'allen'
+    curation_method: str = 'allen',
+    apply_phase_shift: bool = True
 ):
     """Run complete Neuropixels analysis pipeline."""
 
@@ -377,7 +307,7 @@ def run_pipeline(
     recording = load_recording(data_path, stream_name)
 
     # 2. Preprocess
-    rec_preprocessed, bad_channels = preprocess(recording)
+    rec_preprocessed, bad_channels = preprocess(recording, apply_phase_shift=apply_phase_shift)
 
     # Save preprocessed
     preproc_folder = output_path / 'preprocessed'
@@ -433,6 +363,7 @@ if __name__ == '__main__':
     parser.add_argument('--stream', default='imec0.ap', help='Stream name')
     parser.add_argument('--no-motion-correction', action='store_true',
                         help='Skip external motion correction; sorter defaults still apply')
+    parser.add_argument('--no-phase-shift', action='store_true', help='Skip ADC phase correction after verifying acquisition timing')
     parser.add_argument('--curation', default='allen',
                         choices=['allen', 'ibl', 'strict'],
                         help='Curation method')
@@ -445,5 +376,6 @@ if __name__ == '__main__':
         sorter=args.sorter,
         stream_name=args.stream,
         apply_motion_correction=not args.no_motion_correction,
-        curation_method=args.curation
+        curation_method=args.curation,
+        apply_phase_shift=not args.no_phase_shift,
     )

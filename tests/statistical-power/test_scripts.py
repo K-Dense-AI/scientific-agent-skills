@@ -19,6 +19,8 @@ import math
 import sys
 import tempfile
 import unittest
+import warnings
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -161,15 +163,11 @@ class PowerTests(unittest.TestCase):
             power_module.power("correlation", effect_size=0.30, nobs=n), 0.80
         )
 
-    def test_regression_power_is_zero_when_the_model_has_no_residual_df(self) -> None:
-        # n - k_total - 1 < 1 means nothing left to test against; report 0
-        # rather than raising or returning a nonsense value.
-        self.assertEqual(
+    def test_regression_without_residual_df_is_an_invalid_design(self) -> None:
+        with self.assertRaisesRegex(ValueError, "sample size"):
             power_module.power(
                 "linear_regression", effect_size=0.15, nobs=5, df_num=3, k_total=5
-            ),
-            0.0,
-        )
+            )
 
     def test_two_proportions_power_round_trips(self) -> None:
         n = power_module.sample_size(
@@ -298,8 +296,8 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(first.power, second.power)
 
     def test_simulated_power_tracks_the_analytic_answer(self) -> None:
-        # The whole point of the simulator is to agree with theory where theory
-        # applies, so it can be trusted where theory does not.
+        # Calibration for this normal, equal-variance t-test only. It does not
+        # validate a different model or a real study's generating assumptions.
         generator = simulate_power.example_two_group_difference(effect=0.5)
         simulated = simulate_power.simulate_power(generator, n=64, n_sims=4000, seed=1)
         analytic = power_module.power("t_ind", effect_size=0.5, nobs1=64)
@@ -326,7 +324,8 @@ class SimulationTests(unittest.TestCase):
         )
         self.assertIsInstance(found, int)
         self.assertGreaterEqual(estimate.power, 0.80)
-        # Bisection returns the smallest adequate n, so one fewer must fall short.
+        # This seed happens to give an increasing neighborhood; noisy searches
+        # do not guarantee the global minimum for arbitrary designs.
         below = simulate_power.simulate_power(
             generator, n=found - 1, n_sims=400, seed=5
         )
@@ -337,6 +336,7 @@ class SimulationTests(unittest.TestCase):
             simulate_power.example_two_group_difference(effect=0.6),
             simulate_power.example_logistic_regression(beta=1.0),
             simulate_power.example_cluster_randomized(effect=0.5),
+            simulate_power.example_linear_mixed_repeated(effect=0.4),
         )
         for index, generator in enumerate(examples):
             with self.subTest(example=index):
@@ -344,6 +344,150 @@ class SimulationTests(unittest.TestCase):
                     generator, n=40, n_sims=200, seed=7
                 )
                 self.assertTrue(0.0 <= estimate.power <= 1.0)
+
+
+class DirectionAndDomainTests(unittest.TestCase):
+    def test_one_sided_correlation_has_one_tail_and_preserves_direction(self):
+        from scipy.stats import norm
+        for alternative, direction in (("larger", 1), ("smaller", -1)):
+            for r in (-0.3, 0, 0.3):
+                with self.subTest(alternative=alternative, r=r):
+                    expected = norm.cdf(direction * math.atanh(r) * math.sqrt(97)
+                                        - norm.ppf(0.95))
+                    actual = power_module.power("correlation", effect_size=r, nobs=100,
+                                                 alternative=alternative)
+                    self.assertAlmostEqual(actual, expected, places=12)
+
+    def test_signed_sample_sizes_and_mdes_round_trip(self):
+        for test, kwargs in (("t_ind", {}), ("t_one", {}), ("correlation", {}),
+                             ("two_proportions", {}), ("one_proportion", {})):
+            with self.subTest(test=test):
+                n = power_module.sample_size(test, effect_size=-0.3,
+                    alternative="smaller", round_up=False, **kwargs)
+                self.assertAlmostEqual(power_module.power(test, effect_size=-0.3,
+                    nobs=n, alternative="smaller", **kwargs), 0.8, places=6)
+                self.assertAlmostEqual(power_module.mde(test, nobs=n,
+                    alternative="smaller", **kwargs), -0.3, places=6)
+
+    def test_proportions_mde_does_not_need_known_alternative_proportions(self):
+        for test in ("one_proportion", "two_proportions"):
+            h = power_module.mde(test, nobs=100)
+            # statsmodels root finding defaults to about 1e-5 absolute accuracy.
+            self.assertAlmostEqual(power_module.power(test, nobs=100, effect_size=h),
+                                   0.8, delta=1e-5)
+        with self.assertRaisesRegex(ValueError, "omit proportions"):
+            power_module.mde("one_proportion", nobs=100, prop1=0.6, prop0=0.5)
+
+    def test_null_effect_power_equals_alpha_for_every_supported_test(self):
+        for test, kw in (("t_ind", {}), ("t_one", {}), ("t_paired", {}),
+                         ("correlation", {}), ("anova", {"k_groups": 4}),
+                         ("chi2", {"dof": 3}), ("two_proportions", {}),
+                         ("one_proportion", {}),
+                         ("linear_regression", {"df_num": 2, "k_total": 4})):
+            with self.subTest(test=test):
+                self.assertAlmostEqual(power_module.power(test, effect_size=0, nobs=100,
+                                                         **kw), 0.05, places=8)
+
+    def test_regression_matches_current_f2_api_with_nuisance_predictors(self):
+        from statsmodels.stats.power import FTestPowerF2
+        for total, tested in ((3, 3), (5, 2)):
+            expected = FTestPowerF2().power(effect_size=0.15, df_num=tested,
+                df_denom=100-total-1, alpha=0.05, ncc=total-tested+1)
+            actual = power_module.power("linear_regression", effect_size=0.15,
+                                        nobs=100, df_num=tested, k_total=total)
+            self.assertAlmostEqual(actual, expected, places=10)
+
+    def test_balanced_anova_rounds_to_complete_groups(self):
+        n = power_module.sample_size("anova", effect_size=0.2, k_groups=3)
+        self.assertEqual(n % 3, 0)
+        self.assertGreaterEqual(power_module.power("anova", effect_size=0.2,
+                                                   k_groups=3, nobs=n), 0.8)
+
+    def test_invalid_designs_fail_before_solver_returns_a_number(self):
+        cases = [
+            ("t_ind", {"effect_size": 0}),
+            ("t_ind", {"effect_size": 0.3, "ratio": 0}),
+            ("t_ind", {"effect_size": 0.3, "ration": 2}),
+            ("correlation", {"effect_size": 1}),
+            ("correlation", {"effect_size": -0.3, "alternative": "larger"}),
+            ("t_one", {"effect_size": 0.3, "alternative": "smaller"}),
+            ("t_one", {"effect_size": math.nan}),
+            ("t_one", {"effect_size": 0.3, "alpha": 1}),
+            ("t_one", {"effect_size": 0.3, "power": 0.01}),
+            ("t_one", {"effect_size": 0.3, "power": 1}),
+            ("anova", {"effect_size": -0.2, "k_groups": 3}),
+            ("anova", {"effect_size": 0.2, "k_groups": 1}),
+            ("anova", {"effect_size": 0.2, "k_groups": 3, "alternative": "larger"}),
+            ("chi2", {"effect_size": 0.3, "dof": 1.2}),
+            ("linear_regression", {"effect_size": 0.15, "df_num": 3, "k_total": 2}),
+            ("one_proportion", {"prop1": 1.1, "prop0": 0.5}),
+            ("two_proportions", {"effect_size": 0.3, "prop1": 0.6, "prop2": 0.5}),
+        ]
+        for test, kw in cases:
+            with self.subTest(test=test, kw=kw), self.assertRaises(ValueError):
+                power_module.sample_size(test, **kw)
+        for n in (3, math.nan, math.inf):
+            with self.subTest(n=n), self.assertRaises(ValueError):
+                power_module.mde("correlation", nobs=n)
+        with self.assertRaisesRegex(ValueError, "only one"):
+            power_module.power("t_ind", effect_size=0.3, nobs1=10, nobs=20)
+
+
+class SimulationFailureTests(unittest.TestCase):
+    def test_failed_replicates_remain_in_denominator_and_are_identified(self):
+        calls = iter((True, "failed", False, True))
+        def callback(n, rng):
+            value = next(calls)
+            if value == "failed":
+                raise simulate_power.SimulationFitError("separation")
+            return value
+        result = simulate_power.simulate_power(callback, n=10, n_sims=4)
+        self.assertEqual(result.power, 0.5)
+        self.assertEqual(result.n_failures, 1)
+        self.assertEqual(result.failure_reasons, {"separation": 1})
+
+    def test_unexpected_programming_errors_propagate(self):
+        def broken(n, rng):
+            raise KeyError("misspelled coefficient")
+        with self.assertRaises(KeyError):
+            simulate_power.simulate_power(broken, n=10, n_sims=1)
+
+    def test_warnings_are_counted_separately_from_rejections(self):
+        def warned(n, rng):
+            warnings.warn("boundary covariance", RuntimeWarning)
+            return True
+        result = simulate_power.simulate_power(warned, n=10, n_sims=3)
+        self.assertEqual(result.power, 1)
+        self.assertEqual(result.n_warned, 3)
+        self.assertEqual(result.warning_counts, {"RuntimeWarning": 3})
+        self.assertEqual(result.n_failures, 0)
+
+    def test_nonconvergence_and_invalid_pvalues_do_not_count_as_significant(self):
+        for result in (SimpleNamespace(converged=False, pvalues={"x": 0.001}),
+                       SimpleNamespace(converged=True, pvalues={"x": math.nan}),
+                       SimpleNamespace(mle_retvals={"converged": False}, pvalues={"x": 0.001})):
+            with self.subTest(result=result), self.assertRaises(simulate_power.SimulationFitError):
+                simulate_power._fit_decision(lambda: result, "x", 0.05)
+
+    def test_native_logit_separation_is_reported_as_failure(self):
+        import numpy as np
+        import statsmodels.api as sm
+        x = np.arange(20.)
+        def separated(n, rng):
+            return simulate_power._fit_decision(
+                lambda: sm.Logit((x >= 10).astype(int), sm.add_constant(x)).fit(disp=0), 1, .05)
+        result = simulate_power.simulate_power(separated, n=20, n_sims=1)
+        self.assertEqual(result.n_failures, 1)
+        self.assertEqual(result.power, 0)
+
+    def test_invalid_generator_parameters_are_not_silently_counted_as_failures(self):
+        for factory, kw in ((simulate_power.example_two_group_difference, {"sd": 0}),
+                           (simulate_power.example_logistic_regression, {"base_rate": 1}),
+                           (simulate_power.example_cluster_randomized, {"icc": 1}),
+                           (simulate_power.example_cluster_randomized, {"cluster_size": 1.2}),
+                           (simulate_power.example_linear_mixed_repeated, {"n_timepoints": 1})):
+            with self.subTest(factory=factory, kw=kw), self.assertRaises(ValueError):
+                factory(**kw)
 
 
 if __name__ == "__main__":

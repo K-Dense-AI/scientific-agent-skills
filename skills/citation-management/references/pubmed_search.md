@@ -5,7 +5,7 @@ Comprehensive guide to searching PubMed for biomedical and life sciences literat
 ## Overview
 
 PubMed is the premier database for biomedical literature:
-- **Coverage**: 35+ million citations
+- **Coverage**: Biomedical citations, including MEDLINE records and online books
 - **Scope**: Biomedical and life sciences
 - **Sources**: MEDLINE, life science journals, online books
 - **Authority**: Maintained by National Library of Medicine (NLM) / NCBI
@@ -51,7 +51,7 @@ MeSH is a controlled vocabulary thesaurus for indexing biomedical literature:
 - **Hierarchical structure**: Organized in tree structures
 - **Consistent indexing**: Same concept always tagged the same way
 - **Comprehensive**: Covers diseases, drugs, anatomy, techniques, etc.
-- **Professional curation**: NLM indexers assign MeSH terms
+- **Indexing**: NLM assigns MeSH using automated indexing and curation; recent and non-MEDLINE records can lack MeSH
 
 ### Finding MeSH Terms
 
@@ -65,9 +65,9 @@ MeSH term: "Myocardial Infarction"
 
 **In PubMed**:
 1. Search with keyword
-2. Check "MeSH Terms" in left sidebar
-3. Select relevant MeSH terms
-4. Add to search
+2. Open a relevant article record and inspect its MeSH terms when present
+3. Confirm descriptors in the MeSH Browser
+4. Combine descriptors with title/abstract synonyms
 
 ### Using MeSH in Searches
 
@@ -200,8 +200,8 @@ humans[MeSH Terms]               # Only human studies
 animals[MeSH Terms]              # Only animal studies
 "United States"[Place of Publication]
 nih[Grant Number]                # NIH-funded research
-"Female"[Sex]                    # Female subjects
-"Aged, 80 and over"[Age]        # Elderly subjects
+"Female"[MeSH Terms]                    # Female subjects
+"Aged, 80 and over"[MeSH Terms]        # Elderly subjects
 ```
 
 ## Boolean Operators
@@ -363,7 +363,10 @@ NCBI provides programmatic access via E-utilities (Entrez Programming Utilities)
 
 ### ESearch - Search PubMed
 
-Retrieve PMIDs for a query.
+Retrieve PMIDs for a query. The 10,000 ceiling is a total query window, not
+a per-page limit that cursor/history parameters bypass. Split larger searches
+into disjoint date ranges and deduplicate, or use NCBI EDirect. See
+[NCBI's PubMed update](https://ncbiinsights.ncbi.nlm.nih.gov/2021/10/05/updated-pubmed-api/).
 
 **Endpoint**: `/esearch.fcgi`
 
@@ -371,8 +374,8 @@ Retrieve PMIDs for a query.
 - `db`: Database (pubmed)
 - `term`: Search query
 - `retmax`: Maximum results (default 20, max 10000)
-- `retstart`: Starting position (for pagination)
-- `sort`: Sort order (relevance, pub_date, author)
+- `retstart`: Zero-based offset within the first 10,000 matches; `retstart + retmax` cannot exceed 10,000
+- `sort`: PubMed values include `relevance`, `pub_date`, `Author`, and `JournalName`
 - `api_key`: Your API key (optional but recommended)
 
 **Example URL**:
@@ -385,13 +388,13 @@ https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?
   api_key=YOUR_API_KEY
 ```
 
-**Response**:
+**Illustrative response (two-record excerpt)**:
 ```json
 {
   "esearchresult": {
     "count": "250000",
     "retmax": "100",
-    "idlist": ["12345678", "12345679", ...]
+    "idlist": ["12345678", "12345679"]
   }
 }
 ```
@@ -405,9 +408,9 @@ Get full metadata for PMIDs.
 **Parameters**:
 - `db`: Database (pubmed)
 - `id`: Comma-separated PMIDs
-- `retmode`: Format (xml, json, text)
-- `rettype`: Type (abstract, medline, full)
-- `api_key`: Your API key
+- `retmode=xml`: Full PubMed XML (omit `rettype`); JSON is not a PubMed EFetch format
+- `retmode=text&rettype=abstract` or `retmode=text&rettype=medline`: Text views
+- `api_key`: Optional NCBI API key; `tool` and `email` identify the caller
 
 **Example URL**:
 ```
@@ -442,7 +445,9 @@ https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?
   api_key=YOUR_API_KEY
 ```
 
-**Returns**: Key metadata without full abstract and details.
+**Returns**: JSON `result.uids` plus records keyed by PMID; this is not ESearch's
+`esearchresult` shape. This endpoint is an illustrative manual alternative; the
+bundled search script uses ESearch and EFetch only.
 
 ### ELink - Find Related Articles
 
@@ -454,14 +459,21 @@ https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?
   dbfrom=pubmed&
   db=pubmed&
   id=12345678&
-  linkname=pubmed_pubmed_citedin
+  linkname=pubmed_pubmed_citedin&
+  cmd=neighbor&
+  retmode=xml
 ```
 
 **Link types**:
 - `pubmed_pubmed`: Related articles
 - `pubmed_pubmed_citedin`: Papers citing this article
-- `pubmed_pmc`: PMC full-text versions
+- `pubmed_pmc`: PMC full-text versions (set target `db=pmc`)
 - `pubmed_protein`: Related protein records
+
+ELink XML contains `LinkSet/LinkSetDb/Link/Id` when matching links exist; an
+empty link set is valid. The cited-in relationship is not a complete citation
+index. EInfo (`einfo.fcgi?db=pubmed&retmode=json`) reports database fields and
+link names, not article records. These are illustrative manual API calls.
 
 ### Rate Limiting
 
@@ -601,6 +613,10 @@ cancer immunotherapy
 
 ## Script Integration
 
+The bundled client fetches explicit PMIDs in batches of 200, checks each batch
+for completeness, and refuses to export when any batch fails or includes
+unsupported PubmedBookArticle records. It does not export the full PubMed XML.
+
 ### search_pubmed.py Usage
 
 **Basic search**:
@@ -685,7 +701,7 @@ python scripts/extract_metadata.py \
 1. **Start with MeSH terms**:
    - Use MeSH Browser to find correct terms
    - More precise than keyword search
-   - Captures all papers on topic regardless of terminology
+   - Combine with text words: not every PubMed record has MeSH indexing
 
 2. **Include text word variants**:
    ```

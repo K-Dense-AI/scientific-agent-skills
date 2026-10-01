@@ -1,6 +1,6 @@
 # gget Module Reference
 
-Comprehensive parameter reference for all gget modules.
+Selected CLI parameters and Python differences for gget 0.30.8. Source-checked against the [released implementation](https://github.com/scverse/gget/tree/v0.30.8/gget); use `gget <module> --help` and `inspect.signature(gget.<module>)` for the full surface. [Database contracts](database_info.md) document return fields and completeness limits.
 
 ## Reference & Gene Information Modules
 
@@ -18,7 +18,7 @@ Retrieve Ensembl reference genome FTPs and metadata.
 | `-l/--list_species` | flag | List available vertebrate species | False |
 | `-liv/--list_iv_species` | flag | List available invertebrate species | False |
 | `-ftp` | flag | Return only FTP links | False |
-| `-d/--download` | flag | Download files (requires curl) | False |
+| `-d/--download` | flag | CLI-only download (requires curl; Python returns links) | False |
 | `-q/--quiet` | flag | Suppress progress information | False |
 
 **Returns:** JSON containing FTP links, Ensembl release numbers, release dates, file sizes
@@ -41,7 +41,7 @@ Search includes Ensembl synonyms in current gget versions.
 | `-o/--out` | str | Output file path (CSV/JSON) | None |
 | `wrap_text` | bool | Python-only wrapped text display for wide results | False |
 
-**Returns:** ensembl_id, gene_name, ensembl_description, ext_ref_description, biotype, URL
+**Returns:** ensembl_id, gene_name, ensembl_description, ext_ref_description, biotype, synonym, url
 
 ---
 
@@ -65,7 +65,7 @@ Get comprehensive gene/transcript metadata from Ensembl, UniProt, and NCBI.
 
 **Note:** Processing >1000 IDs simultaneously may cause server errors.
 
-**Returns:** UniProt ID, NCBI gene ID, gene name, synonyms, protein names, descriptions, biotype, canonical transcript
+**Returns:** DataFrame indexed by query Ensembl ID, with `uniprot_id`, `ncbi_gene_id`, `primary_gene_name`, `ensembl_gene_name`, annotations and transcript metadata. Preserve the index on export.
 
 ---
 
@@ -78,12 +78,12 @@ Retrieve nucleotide or amino acid sequences in FASTA format.
 | `ens_ids` | str/list | Ensembl identifiers | Required |
 | `-o/--out` | str | Output file path | stdout |
 | `-t/--translate` | flag | Fetch amino acid sequences | False |
-| `-iso/--isoforms` | flag | Return all transcript variants | False |
+| `-iso/--isoforms` | flag | Return all transcript variants (gene IDs only) | False |
 | `-q/--quiet` | flag | Suppress progress information | False |
 
 **Data sources:** Ensembl (nucleotide), UniProt (amino acid)
 
-**Returns:** FASTA format sequences
+**Returns:** Python list of FASTA lines (header, sequence, ...), or None on failure; CLI prints FASTA
 
 ---
 
@@ -137,7 +137,7 @@ Align multiple sequences using Muscle5.
 | `-s5/--super5` | flag | Use Super5 algorithm (faster, large datasets) | False |
 | `-q/--quiet` | flag | Suppress progress | False |
 
-**Returns:** ClustalW format alignment or aligned FASTA (.afa)
+**Returns:** Python returns None; prints ClustalW alignment or writes aligned FASTA using `out="alignment.afa"`
 
 ---
 
@@ -152,7 +152,7 @@ Fast local protein alignment and translated nucleotide-to-protein alignment.
 | `-s/--sensitivity` | str | fast, mid-sensitive, sensitive, more-sensitive, very-sensitive, ultra-sensitive | very-sensitive |
 | `-t/--threads` | int | CPU threads | 1 |
 | `--diamond_binary` | str | Path to DIAMOND installation | Auto-detect |
-| `-db/--diamond_db` | str | Save database for reuse | None |
+| `-db/--diamond_db` | str | Database output path (reference still required) | None |
 | `-x/--translated` | flag | Enable nucleotide query to amino acid reference alignment | False |
 | `-o/--out` | str | Output file path | None |
 | `-csv` | flag | CSV format (CLI) | False |
@@ -171,18 +171,33 @@ Query RCSB Protein Data Bank.
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `pdb_id` | str | PDB identifier (e.g., '7S7U') | Required |
-| `-r/--resource` | str | pdb, entry, pubmed, assembly, entity types | 'pdb' |
+| `-r/--resource` | str | pdb, mmcif, entry, pubmed, assembly, entity types | 'pdb' |
 | `-i/--identifier` | str | Assembly, entity, or chain ID | None |
 | `-o/--out` | str | Output file path | stdout |
 
-**Returns:** PDB format (structures) or JSON (metadata)
+**Returns:** PDB/mmCIF text (structures) or dictionary (metadata); `resource="pdb"` falls back to mmCIF if PDB is unavailable
+
+---
+
+### gget g2p
+
+| Python parameter | Contract |
+| --- | --- |
+| `gene`, `uniprot_id` | At least one required; exact pair avoids approximate gene-only human lookup |
+| `resource` | features (default), map, alignment |
+| `isoform` | Required alternative isoform for alignment; canonical uniprot_id also explicit |
+| `residues` | Integer/list/range/set positions, filtered locally; unavailable for map |
+| `save`, `out` | CSV output; out takes precedence. No Python json parameter |
+
+Returns DataFrame or None on request failure; invalid arguments may raise.
+See [catalog examples](module_catalog.md) and [official manual](https://scverse.org/gget/en/g2p.html).
 
 ---
 
 ### gget alphafold
-Predict 3D protein structures using AlphaFold2.
+Legacy AlphaFold2 wrapper; deprecated and no longer actively maintained since 0.30.7.
 
-**Setup:** Requires OpenMM and `gget setup alphafold` (~4GB download)
+**Legacy setup (not executed):** Requires OpenMM and `gget setup alphafold`; model assets are multi-gigabyte downloads. No current compatibility claim.
 
 **Parameters:**
 | Parameter | Type | Description | Default |
@@ -192,6 +207,7 @@ Predict 3D protein structures using AlphaFold2.
 | `-o/--out` | str | Output folder path | timestamped |
 | `-mfm/--multimer_for_monomer` | flag | Apply multimer model to monomers | False |
 | `-r/--relax` | flag | AMBER relaxation for top model | False |
+| `-jhd/--jackhmmer_savedir` | str | Temporary jackhmmer directory | ~/tmp/jackhmmer |
 | `-q/--quiet` | flag | Suppress progress | False |
 
 **Python-only:**
@@ -245,8 +261,8 @@ Query ARCHS4 for gene correlation or tissue expression.
 | `-q/--quiet` | flag | Suppress progress | False |
 
 **Returns:**
-- **correlation**: Gene symbols, Pearson correlation coefficients (top 100)
-- **tissue**: Tissue IDs, min/Q1/median/Q3/max expression
+- **correlation**: `gene_symbol`, `pearson_correlation` (default 100 human genes; `gene_count` controls count)
+- **tissue**: `id`, `min`, `q1`, `median`, `q3`, `max`
 
 ---
 
@@ -258,21 +274,21 @@ Query CZ CELLxGENE Discover Census for single-cell data.
 **Parameters:**
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `--gene` (-g) | list | Gene names or Ensembl IDs (case-sensitive!) | Required |
+| `--gene` (-g) | list | Gene names or Ensembl IDs (case-sensitive; not applied in metadata-only mode) | None (all genes) |
 | `--tissue` | list | Tissue type(s) | None |
 | `--cell_type` | list | Cell type(s) | None |
-| `--species` (-s) | str | 'homo_sapiens' or 'mus_musculus' | 'homo_sapiens' |
+| `--species` (-s) | str | homo_sapiens, mus_musculus, macaca_mulatta, callithrix_jacchus, pan_troglodytes | 'homo_sapiens' |
 | `--census_version` (-cv) | str | "stable", "latest", or dated version | "stable" |
 | `-o/--out` | str | Output file path (required for CLI) | Required |
 | `--ensembl` (-e) | flag | Use Ensembl IDs | False |
 | `--meta_only` (-mo) | flag | Return metadata only | False |
 | `-q/--quiet` | flag | Suppress progress | False |
 
-**Additional filters:** disease, development_stage, sex, assay, dataset_id, donor_id, ethnicity, suspension_type
+**Additional filters:** disease, development_stage, sex, assay, dataset_id, donor_id, self_reported_ethnicity, suspension_type
 
 **Important:** Gene symbols are case-sensitive ('PAX7' for human, 'Pax7' for mouse)
 
-**Returns:** AnnData object with count matrices and metadata
+**Returns:** AnnData with raw counts; `meta_only=True` instead returns a DataFrame of cells and ignores gene filters. Pin a dated Census version and constrain observation filters.
 
 ---
 
@@ -282,7 +298,7 @@ Perform enrichment analysis using Enrichr/modEnrichr.
 **Parameters:**
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `genes` | list | Gene symbols or Ensembl IDs | Required |
+| `genes` | list | Gene symbols, or Ensembl IDs with `ensembl=True` | Required |
 | `-db/--database` | str | Reference database or shortcut | Required |
 | `-s/--species` | str | human, mouse, fly, yeast, worm, fish | 'human' |
 | `-bkg_l/--background_list` | list | Background genes | None |
@@ -298,8 +314,11 @@ Perform enrichment analysis using Enrichr/modEnrichr.
 - 'ontology' → GO_Biological_Process_2021
 - 'diseases_drugs' → GWAS_Catalog_2019
 - 'celltypes' → PanglaoDB_Augmented_2021
+- 'kinase_interactions' → KEA_2015
 
-**Returns:** Pathway/function associations with adjusted p-values, overlapping gene counts
+Shortcuts apply to human/mouse only. Other species need their full library names; custom backgrounds are human/mouse only. Ensembl background IDs also require `ensembl_bkg=True`.
+
+**Returns:** DataFrame with `path_name`, `p_val`, `adj_p_val`, `overlapping_genes` (gene lists), `database`, and scores; no automatic significance threshold.
 
 ---
 
@@ -333,15 +352,17 @@ Retrieve disease/drug associations from OpenTargets.
 | `-r/--resource` | str | diseases, drugs, tractability, pharmacogenetics, expression, depmap, interactions | 'diseases' |
 | `-l/--limit` | int | Maximum results | None |
 | `-o/--out` | str | Output file path | None |
-| `--filters` | repeated key=value / dict | Exact-match filters using returned column names | None |
-| `-or/--or` | flag | Combine CLI filters with OR instead of AND | False |
+| `--filter` | repeated key=value / dict | Exact-match filters using returned column names | None |
+| Filter combination | AND | Python dict / repeated CLI --filter | AND |
 | `-csv` | flag | CSV format (CLI) | False |
 | `-q/--quiet` | flag | Suppress progress | False |
 
 **Current notes:**
-- gget 0.30.5 rewrote this module for the newer OpenTargets API; output column/key names may differ from older releases.
-- The older `--filter_mode` argument was removed upstream. Use CLI `--or` or Python filter logic documented by the current API.
-- Prefer inspecting returned column names before writing filters, then filter with exact column names such as `protein_a_id` or `gene_b_id`.
+- gget 0.30.8 returns dot-separated columns, including `disease.name`, `score`, `drug.name`, and `drug.maximumClinicalStage`.
+- Expression is `baselineExpression`: `median/min/q1/q3/max/unit` and `tissueBiosample.*`/`celltypeBiosample.*`.
+- Filters apply locally after limit. Expression fetches one page (max 3000); diseases/drugs/interactions use server default pages. `limit=None` does not make a complete export.
+- The older `--filter_mode` argument was removed upstream. The released CLI also has no `--or`; implement an explicit pandas OR mask after retrieval if needed.
+- Prefer inspecting returned column names before writing filters, then filter with exact column names such as `intA` or `targetB.id`.
 
 **Returns:** Disease/drug associations, tractability, pharmacogenetics, expression, DepMap, interactions
 
@@ -349,6 +370,8 @@ Retrieve disease/drug associations from OpenTargets.
 
 ### gget cbio
 Plot cancer genomics heatmaps from cBioPortal.
+
+**Setup:** `gget setup cbio` installs optional dependencies.
 
 **Subcommands:** search, plot
 
@@ -362,8 +385,8 @@ Plot cancer genomics heatmaps from cBioPortal.
 |-----------|------|-------------|---------|
 | `-s/--study_ids` | list | cBioPortal study IDs | Required |
 | `-g/--genes` | list | Gene names or Ensembl IDs | Required |
-| `-st/--stratification` | str | tissue, cancer_type, cancer_type_detailed, study_id, sample | None |
-| `-vt/--variation_type` | str | mutation_occurrences, cna_nonbinary, sv_occurrences, cna_occurrences, Consequence | None |
+| `-st/--stratification` | str | tissue, cancer_type, cancer_type_detailed, study_id, sample | tissue |
+| `-vt/--variation_type` | str | mutation_occurrences, cna_nonbinary, sv_occurrences, cna_occurrences, Consequence | mutation_occurrences |
 | `-f/--filter` | str | Filter by column value (e.g., 'study_id:msk_impact_2017') | None |
 | `-dd/--data_dir` | str | Cache directory | ./gget_cbio_cache |
 | `-fd/--figure_dir` | str | Output directory | ./gget_cbio_figures |
@@ -397,7 +420,7 @@ Search COSMIC database for cancer mutations.
 | `-gm/--gget_mutate` | flag | Create version for gget mutate | False |
 | `-cp/--cosmic_project` | str | cancer, cancer_example, census, cell_line, resistance, genome_screen, targeted_screen | cancer |
 | `-cv/--cosmic_version` | str | COSMIC version | Latest |
-| `-gv/--grch_version` | int | Human reference genome (37 or 38) | None |
+| `-gv/--grch_version` | int | Human reference genome (37 or 38) | 37 |
 | `--email` | str | COSMIC account email for non-interactive download | Prompt/env preferred |
 | `--password` | str | COSMIC account password for non-interactive download | Prompt/env preferred |
 
@@ -426,7 +449,7 @@ Download viral nucleotide sequences and metadata from INSDC sources via NCBI Vir
 | `--vaccine_strain` | bool | Include/exclude vaccine strain sequences | None |
 | `-g/--genbank_metadata` | flag | Fetch detailed GenBank metadata | False |
 | `--download_all_accessions` | flag | Apply filters across all viral accessions | False |
-| `--baseline` / `--merge-results` | path/flag | Resume or merge with previous metadata | None/False |
+| `--baseline` / `--merge-results` | path/flag | Resume or merge with previous metadata; Python baseline_metadata/merge_results | None/True |
 | `-q/--quiet` | flag | Suppress progress | False |
 
 **Warning:** `--download_all_accessions` without restrictive filters can request the entire Viruses taxonomy and require many hours and substantial disk.
@@ -476,14 +499,14 @@ Generate mutated nucleotide sequences.
 | `-o/--out` | str | Output FASTA file path | None (return list/stdout) |
 | `-q/--quiet` | flag | Suppress progress | False |
 
-**Returns:** Mutated sequences in FASTA format
+**Returns:** List of mutated sequence strings in Python; `out` writes FASTA
 
 **Note:** More complex variant-screening functionality moved upstream to the `kvar` project.
 
 ---
 
 ### gget gpt
-Generate text using OpenAI's API.
+Legacy OpenAI wrapper; deprecated and no longer actively maintained since 0.30.7.
 
 **Setup:** Requires `gget setup gpt` and OpenAI API key
 
@@ -495,13 +518,13 @@ Generate text using OpenAI's API.
 | `model` | str | OpenAI model name | gpt-3.5-turbo |
 | `temperature` | float | Sampling temperature (0-2) | 1.0 |
 | `top_p` | float | Nucleus sampling | 1.0 |
-| `max_tokens` | int | Maximum tokens to generate | None |
-| `frequency_penalty` | float | Frequency penalty (0-2) | 0 |
-| `presence_penalty` | float | Presence penalty (0-2) | 0 |
+| `max_tokens` | int | Maximum tokens to generate | 200 |
+| `frequency_penalty` | float | Frequency penalty (-2 to 2) | 0 |
+| `presence_penalty` | float | Presence penalty (-2 to 2) | 0 |
 | `stop` | str | Stop sequence | None |
 | `logit_bias` | dict | Token bias map | None |
 
-**Important:** Do not hard-code API keys or pass real keys in examples. The upstream CLI accepts a key argument; Python code that reads `OPENAI_API_KEY` is safer for notebooks and scripts.
+**Important:** This wrapper calls legacy `openai.ChatCompletion.create` and is incompatible with the modern OpenAI Python interface. Do not hard-code API keys or pass real keys in examples. The upstream CLI accepts a key argument; Python code that reads `OPENAI_API_KEY` is safer for notebooks and scripts.
 
 **Returns:** Generated text string
 
@@ -519,6 +542,7 @@ Install/download dependencies for modules.
 
 **Modules requiring setup:**
 - `alphafold` - Downloads ~4GB model parameters
+- `cbio` - Installs optional cBioPortal dependencies (bravado)
 - `cellxgene` - Installs cellxgene-census
 - `elm` - Downloads local ELM database
 - `gpt` - Configures OpenAI integration

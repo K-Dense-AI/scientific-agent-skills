@@ -19,7 +19,8 @@ Record variant/repeat mask source, release, thresholds, and coordinate transform
 
 - Polymerase and buffer formulation:
 - Monovalent / total divalent / total dNTP concentrations (mM):
-- Primer concentration (nM, model convention):
+- Initial reaction primer concentration (nM):
+- Primer3 effective annealing-oligo concentration (nM) and rationale:
 - Design constraints, engine versions, and report paths:
 - Assumptions requiring confirmation:
 

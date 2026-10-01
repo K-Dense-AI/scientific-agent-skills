@@ -1,21 +1,21 @@
 # Setup, Versions, and Authentication
 
-## Verified Version Baseline
+## Reviewed Version Baseline
 
-Checked against PyPI and official release notes on **2026-07-23**:
+Checked against PyPI and official release notes on **2026-10-01**:
 
-| Distribution | Verified version | Purpose | Python requirement |
+| Distribution | Reviewed version | Purpose | Python requirement |
 |---|---:|---|---|
-| `qiskit` | 2.5.0 | Core circuits, operators, transpiler, local statevector primitives | Python 3.10+ |
-| `qiskit-ibm-runtime` | 0.48.0 | IBM Quantum Platform service and Runtime primitives | Python 3.10+ |
+| `qiskit` | 2.5.2 | Core circuits, operators, transpiler, local statevector primitives | Python 3.10+ |
+| `qiskit-ibm-runtime` | 0.50.0 | IBM Quantum Platform service and Runtime primitives | Python 3.10+ |
 | `qiskit-aer` | 0.17.2 | High-performance and noisy simulation | See its PyPI metadata |
 | `qiskit-algorithms` | 0.4.0 | VQE, QAOA, Grover, phase estimation, optimizers | Python 3.9+ |
 | `qiskit-nature` | 0.8.0 | Quantum chemistry and second-quantized problems | Python 3.10+ |
 | `qiskit-nature-pyscf` | 0.4.0 | PySCF integration for Qiskit Nature | Python 3.8+ |
-| `qiskit-machine-learning` | 0.9.0 | Quantum kernels, QNNs, Torch integration | Python 3.10+ |
+| `qiskit-machine-learning` | 0.9.1 | Quantum kernels, QNNs, Torch integration | Python 3.10+ |
 | `qiskit-optimization` | 0.7.0 | Quadratic programs and quantum optimizers | Python 3.9+ |
 
-The Qiskit GitHub repository published a `2.5.1` patch release on 2026-07-23, but PyPI still served `2.5.0` when this skill was verified. Use the PyPI-available pin for reproducibility and check [sources.md](sources.md) before updating it.
+Local core, Runtime/Aer, Algorithms, Optimization, and visualization checks used these releases. Nature, Machine Learning, and addons were checked against official documentation and release metadata; their workflows below are illustrative and were not executed in this refresh.
 
 ## Create an Environment
 
@@ -37,13 +37,13 @@ Install the smallest useful set:
 
 ```bash
 # Core SDK
-uv pip install "qiskit==2.5.0"
+uv pip install "qiskit==2.5.2"
 
 # Core plus Matplotlib/LaTeX visualization dependencies
-uv pip install "qiskit[visualization]==2.5.0"
+uv pip install "qiskit[visualization]==2.5.2"
 
 # IBM QPUs and Runtime primitives
-uv pip install "qiskit-ibm-runtime==0.48.0"
+uv pip install "qiskit-ibm-runtime==0.50.0"
 
 # High-performance and noisy simulation
 uv pip install "qiskit-aer==0.17.2"
@@ -52,8 +52,8 @@ uv pip install "qiskit-aer==0.17.2"
 For a project, declare the same exact pins with `uv add`:
 
 ```bash
-uv add "qiskit[visualization]==2.5.0"
-uv add "qiskit-ibm-runtime==0.48.0"
+uv add "qiskit[visualization]==2.5.2"
+uv add "qiskit-ibm-runtime==0.50.0"
 uv add "qiskit-aer==0.17.2"
 ```
 
@@ -65,8 +65,10 @@ Install these only for the corresponding workflow:
 
 ```bash
 uv pip install "qiskit-algorithms==0.4.0"
-uv pip install "qiskit-nature==0.8.0" "qiskit-nature-pyscf==0.4.0"
-uv pip install "qiskit-machine-learning==0.9.0"
+uv pip install "qiskit-nature[pyscf]==0.8.0"
+# Optional reverse integration: PySCF calls a Qiskit Nature solver
+uv pip install "qiskit-nature-pyscf==0.4.0"
+uv pip install "qiskit-machine-learning==0.9.1"
 uv pip install "qiskit-optimization==0.7.0"
 ```
 
@@ -152,7 +154,9 @@ from qiskit_ibm_runtime import QiskitRuntimeService
 service = QiskitRuntimeService(name="default-platform")
 ```
 
-If only one default account exists, `QiskitRuntimeService()` is sufficient.
+If only one default account exists, `QiskitRuntimeService()` is sufficient. Pin the intended instance CRN for reproducible hardware work: selecting across instances can change the active billing allocation. `instance="auto"` explicitly opts into automatic selection; `plans_preference=["open"]` can restrict automatic discovery to Open Plan. The public alias `IBMQuantumComputeService` is also available since Runtime 0.49.
+
+`channel="local"` creates a local service without cloud credentials. Never infer cloud access from a successful local service test.
 
 ### CI or Ephemeral Machine: Do Not Persist
 
@@ -165,7 +169,7 @@ from qiskit_ibm_runtime import QiskitRuntimeService
 service = QiskitRuntimeService(
     channel="ibm_quantum_platform",
     token=os.environ["IBM_QUANTUM_API_KEY"],
-    instance=os.environ.get("IBM_QUANTUM_INSTANCE"),
+    instance=os.environ["IBM_QUANTUM_INSTANCE"],
 )
 ```
 
@@ -225,7 +229,7 @@ The reliable repair is a new environment:
 deactivate 2>/dev/null || true
 uv venv --python 3.13 .venv-qiskit
 source .venv-qiskit/bin/activate
-uv pip install "qiskit[visualization]==2.5.0"
+uv pip install "qiskit[visualization]==2.5.2"
 ```
 
 Avoid trying to repair a mixed pre-1.0 environment by repeatedly uninstalling individual packages; stale namespace files can remain.

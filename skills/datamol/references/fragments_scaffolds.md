@@ -1,174 +1,83 @@
-# Datamol Fragments and Scaffolds Reference
+# Datamol fragments and scaffolds (0.13.0)
 
-## Scaffolds Module (`datamol.scaffold`)
+Sources: [fragment API](https://docs.datamol.io/stable/api/datamol.fragment.html),
+[scaffold API](https://docs.datamol.io/stable/api/datamol.scaffold.html), and released source.
 
-Scaffolds represent the core structure of molecules, useful for identifying structural families and analyzing structure-activity relationships (SAR).
-
-### Murcko Scaffolds
-
-#### `dm.to_scaffold_murcko(mol)`
-Extract Bemis-Murcko scaffold (molecular framework).
-- **Method**: Removes side chains, retaining ring systems and linkers
-- **Returns**: Molecule object representing the scaffold
-- **Use case**: Identify core structures across compound series
-- **Example**:
-  ```python
-  mol = dm.to_mol("c1ccc(cc1)CCN")  # Phenethylamine
-  scaffold = dm.to_scaffold_murcko(mol)
-  scaffold_smiles = dm.to_smiles(scaffold)
-  # Returns: 'c1ccccc1CC' (benzene ring + ethyl linker)
-  ```
-
-**Workflow for scaffold analysis**:
-```python
-# Extract scaffolds from compound library
-scaffolds = [dm.to_scaffold_murcko(mol) for mol in mols]
-scaffold_smiles = [dm.to_smiles(s) for s in scaffolds]
-
-# Count scaffold frequency
-from collections import Counter
-scaffold_counts = Counter(scaffold_smiles)
-most_common = scaffold_counts.most_common(10)
-```
-
-### Fuzzy Scaffolds
-
-#### `dm.scaffold.fuzzy_scaffolding(mol, ...)`
-Generate fuzzy scaffolds with enforceable groups that must appear in the core.
-- **Purpose**: More flexible scaffold definition allowing specified functional groups
-- **Use case**: Custom scaffold definitions beyond Murcko rules
-
-### Applications
-
-**Scaffold-based splitting** (for ML model validation):
-```python
-# Group compounds by scaffold
-scaffold_to_mols = {}
-for mol, scaffold in zip(mols, scaffolds):
-    smi = dm.to_smiles(scaffold)
-    if smi not in scaffold_to_mols:
-        scaffold_to_mols[smi] = []
-    scaffold_to_mols[smi].append(mol)
-
-# Ensure train/test sets have different scaffolds
-```
-
-**SAR analysis**:
-```python
-# Group by scaffold and analyze activity
-for scaffold_smi, molecules in scaffold_to_mols.items():
-    activities = [get_activity(mol) for mol in molecules]
-    print(f"Scaffold: {scaffold_smi}, Mean activity: {np.mean(activities)}")
-```
-
----
-
-## Fragments Module (`datamol.fragment`)
-
-Molecular fragmentation breaks molecules into smaller pieces based on chemical rules, useful for fragment-based drug design and substructure analysis.
-
-### BRICS Fragmentation
-
-#### `dm.fragment.brics(mol, ...)`
-Fragment molecule using BRICS (Breaking Retrosynthetically Interesting Chemical Substructures).
-- **Method**: Dissects based on 16 chemically meaningful bond types
-- **Consideration**: Considers chemical environment and surrounding substructures
-- **Returns**: Set of fragment SMILES strings
-- **Use case**: Retrosynthetic analysis, fragment-based design
-- **Example**:
-  ```python
-  mol = dm.to_mol("c1ccccc1CCN")
-  fragments = dm.fragment.brics(mol)
-  # Returns fragments like: '[1*]CCN', '[1*]c1ccccc1', etc.
-  # [1*] represents attachment points
-  ```
-
-### RECAP Fragmentation
-
-#### `dm.fragment.recap(mol, ...)`
-Fragment molecule using RECAP (Retrosynthetic Combinatorial Analysis Procedure).
-- **Method**: Dissects based on 11 predefined bond types
-- **Rules**:
-  - Leaves alkyl groups smaller than 5 carbons intact
-  - Preserves cyclic bonds
-- **Returns**: Set of fragment SMILES strings
-- **Use case**: Combinatorial library design
-- **Example**:
-  ```python
-  mol = dm.to_mol("CCCCCc1ccccc1")
-  fragments = dm.fragment.recap(mol)
-  ```
-
-### MMPA Fragmentation
-
-#### `dm.fragment.mmpa_frag(mol, ...)`
-Fragment for Matched Molecular Pair Analysis.
-- **Purpose**: Generate fragments suitable for identifying molecular pairs
-- **Use case**: Analyzing how small structural changes affect properties
-- **Example**:
-  ```python
-  fragments = dm.fragment.mmpa_frag(mol)
-  # Used to find pairs of molecules differing by single transformation
-  ```
-
-### Comparison of Methods
-
-| Method | Bond Types | Preserves Cycles | Best For |
-|--------|-----------|------------------|----------|
-| BRICS  | 16        | Yes              | Retrosynthetic analysis, fragment recombination |
-| RECAP  | 11        | Yes              | Combinatorial library design |
-| MMPA   | Variable  | Depends          | Structure-activity relationship analysis |
-
-### Fragmentation Workflow
+## Murcko frameworks and split boundaries
 
 ```python
 import datamol as dm
-
-# 1. Fragment a molecule
-mol = dm.to_mol("CC(=O)Oc1ccccc1C(=O)O")  # Aspirin
-brics_frags = dm.fragment.brics(mol)
-recap_frags = dm.fragment.recap(mol)
-
-# 2. Analyze fragment frequency across library
-all_fragments = []
-for mol in molecule_library:
-    frags = dm.fragment.brics(mol)
-    all_fragments.extend(frags)
-
-# 3. Identify common fragments
 from collections import Counter
-fragment_counts = Counter(all_fragments)
-common_fragments = fragment_counts.most_common(20)
-
-# 4. Convert fragments back to molecules (remove attachment points)
-def clean_fragment(frag_smiles):
-    # Remove [1*], [2*], etc. attachment point markers
-    clean = frag_smiles.replace('[1*]', '[H]')
-    return dm.to_mol(clean)
+mol = dm.to_mol("c1ccc(cc1)CCN")  # phenethylamine
+scaffold = dm.to_scaffold_murcko(mol)
+assert dm.to_smiles(scaffold) == "c1ccccc1"  # terminal side chain is removed
+mols = [dm.to_mol(s) for s in ["c1ccccc1CCN", "c1ccccc1O", "c1ccncc1"]]
+scaffold_smiles = [dm.to_smiles(dm.to_scaffold_murcko(m)) for m in mols]
+scaffold_counts = Counter(scaffold_smiles)
 ```
 
-### Advanced: Fragment-Based Virtual Screening
+Murcko frameworks retain rings and linkers between rings. A chain attached to one ring
+is a side chain, not a retained linker. Acyclic molecules have an empty scaffold; choose
+and report their grouping policy explicitly. `make_generic=True` additionally abstracts
+atom/bond chemistry. Standardize consistently before grouping and keep full molecule IDs.
+Scaffold-disjoint splits do not by themselves prevent duplicates, analog leakage, target
+leakage, or temporal leakage; check overlap and group sizes.
+
+`dm.scaffold.fuzzy_scaffolding(mols, enforce_subs=None, n_atom_cuttoff=8, ...)`
+accepts a **list** of molecules. It returns `(scaffold_smiles_set, scaffold_infos,
+scaffold_to_group)`: the last two are pandas DataFrames in 0.13.0. `enforce_subs` contains substructure patterns;
+`additional_templates` supplies Mol templates. MCS and R-group decomposition settings
+matter; this is a template-generation tool, not a unique scaffold ontology. It removes
+conformers from molecules during decomposition; pass `[dm.copy_mol(m) for m in mols]`
+when the source coordinates must survive.
+
+## BRICS, RECAP and MMPA contracts
+
+`dm.fragment.brics(mol, singlepass=True, remove_parent=False, sanitize=True, fix=True)`
+and `dm.fragment.recap(mol, remove_parent=False, sanitize=True, fix=True)` return
+**lists of Mol**, not sets of SMILES. Parent inclusion and dummy-atom fixing change the
+meaning of fragment counts. Request `remove_parent=True` to exclude the original molecule;
+use `fix=False` when attachment labels must survive. Do not strip attachment points by
+string replacement: that loses environment labels and can produce wrong chemistry.
 
 ```python
-# Build fragment library from known actives
-active_fragments = set()
-for active_mol in active_compounds:
-    frags = dm.fragment.brics(active_mol)
-    active_fragments.update(frags)
-
-# Screen compounds for presence of active fragments
-def score_by_fragments(mol, fragment_set):
-    mol_frags = dm.fragment.brics(mol)
-    overlap = mol_frags.intersection(fragment_set)
-    return len(overlap) / len(mol_frags)
-
-# Score screening library
-scores = [score_by_fragments(mol, active_fragments) for mol in screening_lib]
+mol = dm.to_mol("CC(=O)Oc1ccccc1C(=O)O")
+brics_molecules = dm.fragment.brics(mol, remove_parent=True, fix=False)
+recap_molecules = dm.fragment.recap(mol, remove_parent=True, fix=False)
+brics_smiles = {dm.to_smiles(fragment) for fragment in brics_molecules}
+assert all(isinstance(fragment, dm.Mol) for fragment in brics_molecules)
 ```
 
-### Key Concepts
+BRICS uses compatibility rules between labelled environments; labels such as `[3*]` and
+`[16*]` are not interchangeable generic atoms. RECAP follows its own retrosynthetic bond
+rules. Neither is proof of a feasible synthesis or a reaction yield. Avoid claiming a fixed
+universal count of bond types: RDKit implementations encode environment/rule combinations.
+`dm.fragment.mmpa_frag(mol, max_cut=1, max_bond_cut=20)` returns a set of
+`(core_smiles, sidechain_smiles)` pairs in the release, despite its Mol type annotation.
+Its output alone is not a matched-pair dataset; matching requires comparing appropriate
+common cores across molecules and validating attachment correspondence.
 
-- **Attachment Points**: Marked with [1*], [2*], etc. in fragment SMILES
-- **Retrosynthetic**: Fragmentation mimics synthetic disconnections
-- **Chemically Meaningful**: Breaks occur at typical synthetic bonds
-- **Recombination**: Fragments can theoretically be recombined into valid molecules
+## Reproducible fragment counting and heuristic overlap
+
+```python
+def fragment_keys(molecule):
+    return {dm.to_smiles(f) for f in dm.fragment.brics(
+        molecule, remove_parent=True, fix=False,
+    )}
+
+# Each fragment contributes at most once per compound (prevalence, not site count).
+fragment_counts = Counter()
+for molecule in mols:
+    fragment_counts.update(fragment_keys(molecule))
+reference_fragments = fragment_keys(mol)
+
+def fragment_score(molecule, reference):
+    keys = fragment_keys(molecule)
+    return len(keys & reference) / len(keys) if keys else 0.0
+
+scores = [fragment_score(molecule, reference_fragments) for molecule in mols]
+```
+
+This overlap score measures the chosen fragmentation representation. It is not a validated
+activity prediction. Specify fragmentation options, duplicate policy, attachment treatment,
+and whether a parent molecule is included whenever comparing libraries.

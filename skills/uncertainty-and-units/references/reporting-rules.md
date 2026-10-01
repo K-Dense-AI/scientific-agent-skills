@@ -62,7 +62,7 @@ The two standard forms:
 > confidence of 95%.
 
 The second is verbose because it has to be. `scripts/format_result.py --coverage-factor`
-generates the sentence.
+formats the supplied values; its stated probability is caller-supplied and not verified.
 
 ## SD, SEM, and CI in figures
 
@@ -83,7 +83,7 @@ difference, and two 95% CIs that overlap slightly do not establish the absence o
 ## Relative and absolute
 
 State which. A relative standard uncertainty is dimensionless and is written
-`u_r(y) = 0.0035` or `0.35%`; multiplying it by the value gives the absolute one. Mixing
+`u_r(y) = 0.0035` or `0.35%`; multiplying it by the absolute value of the estimate gives the absolute one. Mixing
 them in a single budget without conversion is a common arithmetic error — a "1%"
 component and a "0.2 mg" component cannot be combined until they are in the same form.
 
@@ -94,16 +94,18 @@ coefficients rather than from remembered rules is worth the extra step.
 
 ## Results near zero or below a detection limit
 
-- Do not report a value with an uncertainty larger than itself as though it were a
-  measurement. Report the estimate and its uncertainty, and state that it is consistent
-  with zero.
+- An uncertainty larger than the estimate does not invalidate the measurement. Retain
+  the estimate and uncertainty; assess compatibility with zero using a justified interval
+  and the intended measurement model, not the size of an unspecified error bar.
 - Do not substitute zero, LOD, or LOD/2 for a non-detect without saying so; each choice
   biases downstream statistics differently.
 - A negative estimate of a non-negative quantity is a legitimate measurement outcome and
   should be reported as measured, not truncated. Truncating biases any subsequent
   average.
-- LOD and LOQ are defined by a stated procedure (typically 3σ and 10σ of the blank).
-  Quote the procedure with the number.
+- LOD and LOQ need a stated procedure and performance criteria. Multiples such as
+  3σ and 10σ of a blank are conventions in some methods, not universal definitions.
+- Zero supplied uncertainty is not evidence of exactness; it may mean uncertainty was
+  omitted or a first-order derivative vanished.
 
 ## Significant figures in intermediate work
 
@@ -118,8 +120,8 @@ four digits.
 ## Conformity statements
 
 Deciding whether a result passes a specification is a separate step from measuring it,
-because a result within tolerance but with an uncertainty straddling the limit has not
-demonstrated conformity. ISO/IEC 17025 requires a documented decision rule; ILAC-G8
+because the decision depends on the specified acceptance rule and risk. An interval
+straddling a limit does not by itself settle conformity. ISO/IEC 17025 requires a documented decision rule; ILAC-G8
 describes guard-banded acceptance, where the acceptance limit is pulled inside the
 specification limit by a multiple of u_c chosen for the false-accept risk you will
 tolerate. Report the rule alongside the verdict.
@@ -131,3 +133,7 @@ tolerate. Report the rule alongside the verdict.
 - NIST Technical Note 1297, *Guidelines for Evaluating and Expressing the Uncertainty of
   NIST Measurement Results* — the source of the two standard sentence forms above.
 - ISO/IEC 17025:2017 clause 7.8.6 and ILAC-G8:09/2019 — decision rules and guard bands.
+
+Current [ILAC guidance index](https://ilac.org/publications-and-resources/ilac-guidance-series/)
+still lists ILAC G8:09/2019 (checked 2026-10-01); use its rule appropriate to the agreed
+conformity task. This skill does not certify laboratory accreditation or compliance.

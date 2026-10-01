@@ -34,7 +34,8 @@
       "/sys/fs/cgroup/jobs/memory.max": "2147483648\n",
       "/sys/fs/cgroup/memory.current": "1073741824\n",
       "/sys/fs/cgroup/memory.high": "max\n",
-      "/sys/fs/cgroup/memory.max": "max\n"
+      "/sys/fs/cgroup/memory.max": "max\n",
+      "/sys/fs/cgroup/jobs/example/step/cgroup.controllers": "cpu cpuset memory pids\n"
     }
   },
   "macos": {
@@ -83,5 +84,21 @@
     "host_physical": 64,
     "memory_available": 34359738368,
     "memory_total": 68719476736
-  }
+  },
+  "amd_smi_current": [
+    {
+      "gpu": 0,
+      "asic": {
+        "market_name": "AMD Instinct MI300X",
+        "asic_serial": "private-synthetic-serial"
+      },
+      "vram": {
+        "type": "HBM",
+        "size": {
+          "value": 196608,
+          "unit": "MB"
+        }
+      }
+    }
+  ]
 }

@@ -64,6 +64,7 @@ The current guide lists:
 | Tool | Purpose |
 |---|---|
 | `list_files` | List immediate children of a Latch Data directory |
+| `get_file` | Return a Console link or presigned download URL for a file |
 | `list_workspaces` | List accessible workspaces and the default |
 | `list_workflows` | Discover workspace and public workflows |
 | `get_workflow_schema` | Retrieve launch metadata and parameter schema |
@@ -92,6 +93,8 @@ tools before calling them.
 4. **Resolve data**
    - Use `list_files` only for the minimum directories needed.
    - It lists metadata, not file contents.
+   - Use `get_file` for a selected file's access link. Prefer its Console link
+     for sharing; treat a presigned download URL as a temporary credential.
    - Do not browse unrelated or sensitive directories.
 
 5. **Prepare a launch summary**
@@ -149,7 +152,7 @@ Use:
 - `latch_cli.services.launch.launch_v2` for Python automation
 - `latch ls` or `LPath` for data inspection
 - Latch Console for execution monitoring; `latch get-executions` remains in
-  2.76.8 but is deprecated and scheduled for removal
+  2.77.1 but is deprecated and scheduled for removal
 
 Do not simulate a missing MCP tool by inventing undocumented HTTP endpoints.
 

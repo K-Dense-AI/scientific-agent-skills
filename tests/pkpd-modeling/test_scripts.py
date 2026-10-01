@@ -525,7 +525,7 @@ class TestAllometryAndFIH(unittest.TestCase):
     def test_mrsd_uses_the_most_sensitive_species(self) -> None:
         result = run_script("allometry_and_fih", "--fih", "--noael", "rat=50,dog=10", "--safety-factor", "10", "--format", "json")
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["scalars"]["most_sensitive_species"], "dog")
+        self.assertEqual(payload["scalars"]["lowest_hed_species"], "dog")
         self.assertAlmostEqual(payload["scalars"]["mrsd_mg_kg"], 10.0 * 20 / 37 / 10, places=6)
 
     def test_maturation_is_monotone_and_bounded(self) -> None:
@@ -553,7 +553,7 @@ class TestAllometryAndFIH(unittest.TestCase):
 
     def test_rule_of_exponents_bands(self) -> None:
         self.assertIn("simple allometry", allometry_and_fih.rule_of_exponents(0.65))
-        self.assertIn("maximum-life-span", allometry_and_fih.rule_of_exponents(0.85))
+        self.assertIn("lifespan", allometry_and_fih.rule_of_exponents(0.85))
         self.assertIn("brain-weight", allometry_and_fih.rule_of_exponents(1.10))
 
     def test_unknown_species_rejected(self) -> None:
@@ -598,7 +598,7 @@ class TestDDIStatic(unittest.TestCase):
         self.assertIn("strong inhibitor", ddi_static.classify(6.0))
         self.assertIn("moderate inhibitor", ddi_static.classify(3.0))
         self.assertIn("weak inhibitor", ddi_static.classify(1.5))
-        self.assertIn("no clinically relevant", ddi_static.classify(1.0))
+        self.assertIn("0.8-1.25", ddi_static.classify(1.0))
         self.assertIn("strong inducer", ddi_static.classify(0.1))
 
 
@@ -865,3 +865,189 @@ class TestCLIContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRefreshRegressions(unittest.TestCase):
+    """Independent arithmetic and fail-closed checks for clinically relevant errors."""
+
+    def payload(self, script, *args):
+        result = run_script(script, *args, "--format", "json")
+        self.assertIn(result.returncode, (0, 1), result.stderr)
+        return json.loads(result.stdout)
+
+    def test_m12_tdi_uses_five_times_unbound_cmax(self):
+        payload = self.payload("ddi_static", "--basic", "--tdi", "--imax", "2", "--fu", "0.1", "--ki-inact", "1", "--kinact", "0.02", "--kdeg", "0.001")
+        row = payload["tables"][0]["rows"][0]
+        self.assertAlmostEqual(row["value"], 11.0)  # I=1, kobs=.01/min
+
+    def test_inlet_converts_minutes_to_hours(self):
+        value = ddi_static.inlet_concentration(imax=2, fu=.1, dose=100, fa=.8, fg=.5, ka=.1, blood_ratio=1)
+        self.assertAlmostEqual(value, .1 * (2 + .8*.5*6*100/97))
+
+    def test_mate_cutoff_differs_from_oat_oct(self):
+        results = []
+        for transporter in ("mate", "renal", "systemic-efflux"):
+            p = self.payload("ddi_static", "--basic", "--transporter", transporter, "--transporter-ki", "1", "--imax", ".3", "--fu", ".1")
+            results.append(p["tables"][0]["rows"][0]["triggers_study"])
+        self.assertEqual(results, [True, False, True])
+
+    def test_fu_floor_requires_measured_reliability(self):
+        args = ("--basic", "--ki", "1", "--imax", "1", "--fu", ".001")
+        floor = self.payload("ddi_static", *args)
+        measured = self.payload("ddi_static", *args, "--fu-validated")
+        self.assertEqual(floor["scalars"]["imax_unbound"], .01)
+        self.assertEqual(measured["scalars"]["imax_unbound"], .001)
+
+    def test_combined_gut_hepatic_ceiling(self):
+        fit = ddi_static.mechanistic_static(ih=1e10, ig=1e10, fm=.8, fg=.5, ki=1)
+        self.assertAlmostEqual(fit["maximum_possible_auc_ratio"], 10)
+        self.assertAlmostEqual(fit["hepatic_only_auc_ceiling"], 5)
+        self.assertAlmostEqual(fit["auc_ratio"], 10, places=6)
+
+    def test_msm_invalid_fractions_rejected(self):
+        for fm, fg in ((1.1,.5), (.5,0), (.5,1.1)):
+            with self.assertRaises(_common.InputError):
+                ddi_static.mechanistic_static(ih=1, ig=1, fm=fm, fg=fg)
+
+    def test_msm_uses_inlet_and_enterocyte_concentrations(self):
+        p = self.payload("ddi_static", "--msm", "--ki", ".5", "--imax", "2", "--fu", ".1", "--dose", "100", "--fm", ".8", "--fg", ".5")
+        # Default Fa=Fg_perpetrator=RB=1, ka=.1/min, Qh=97, Qen=18 L/h.
+        values = p["scalars"]
+        self.assertAlmostEqual(values["msm_hepatic_inlet_unbound"], .1*(2+600/97))
+        self.assertAlmostEqual(values["msm_enterocyte_concentration"], 600/18)
+
+    def test_manual_lambda_predicts_at_actual_last_quantifiable_time(self):
+        t = np.arange(0., 7.)
+        c = 10*np.exp(-.2*t)
+        fit = nca.estimate_lambda_z(t, c, np.zeros(len(t), dtype=bool), 0., manual=(1.,4.))
+        self.assertAlmostEqual(fit.clast_pred, c[-1], places=12)
+        self.assertEqual(fit.t_last, 4.)
+
+    def test_manual_rising_terminal_slope_not_reported_as_half_life(self):
+        t = np.arange(5.)
+        c = np.array([100,1,2,3,4.])
+        fit = nca.estimate_lambda_z(t, c, np.zeros(5,dtype=bool), 0., manual=(1,4))
+        self.assertIsNone(fit.lam)
+
+    def test_partial_auc_cannot_extrapolate_unobserved_early_or_late_area(self):
+        t=np.array([1.,2.,3.]); c=np.array([3.,2.,1.])
+        for start,end in ((0,2),(1,4)):
+            with self.assertRaises(_common.InputError):
+                nca.partial_auc(t,c,start,end,"linear")
+
+    def test_nca_steady_state_withholds_single_dose_parameters(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=write_csv(Path(td),"ss.csv","time,conc", [(t, 10*math.exp(-.2*t)) for t in range(13)])
+            p=self.payload("nca","-i",str(path),"--dose","100","--route","iv-bolus","--tau","12")
+            row=p["tables"][0]["rows"][0]
+            self.assertIn("auc_tau",row)
+            self.assertIn("cl_ss",row)
+            for key in ("auc_inf_obs","auc_inf_pred","cl","vz","vss"):
+                self.assertNotIn(key,row)
+
+    def test_nca_rejects_negative_concentration_and_duplicate_time(self):
+        for rows in ([(0,10),(1,-2),(2,1)], [(0,10),(1,5),(1,4)]):
+            with tempfile.TemporaryDirectory() as td:
+                path=write_csv(Path(td),"bad.csv","time,conc",rows)
+                result=run_script("nca","-i",str(path),"--dose","100")
+                self.assertEqual(result.returncode,2,result.stderr)
+                self.assertNotIn("Traceback",result.stderr)
+
+    def test_multicompartment_auc_accumulation_uses_interval_auc(self):
+        d=_models.disposition(5,20,(3,),(100,))
+        tau=12.; t=np.linspace(0,tau,100001)
+        first_auc=float(np.trapezoid(_models.conc_bolus(t,100,d),t))
+        expected=(100/5)/first_auc
+        self.assertAlmostEqual(_models.steady_state_metrics(d,100,tau)["accumulation_ratio_auc"],expected,places=8)
+
+    def test_unsupported_oral_closed_form_summary_is_rejected(self):
+        result=run_script("simulate_regimen","--cl","5","--v","40","--dose","100","--interval","12","--route","oral","--ka","1","--steady-state")
+        self.assertEqual(result.returncode,2)
+
+    def test_transit_cannot_silently_ignore_post_transit_ka(self):
+        with self.assertRaises(ValueError):
+            _models.conc_transit(np.array([0.,1.,2.]),100,2,3,_models.disposition(5,20),ka=1.)
+
+    def test_exact_tdm_steady_state_for_extremely_long_half_life(self):
+        import tdm_bayes
+        fit=tdm_bayes.exposure_metrics(cl=.001,v=100,dose=10,interval=12,infusion=1)
+        self.assertAlmostEqual(fit["auc_24h"],20000.,places=7)
+
+    def test_strict_json_uses_null_for_missing_diagnostics(self):
+        p=_common._json_finite({"x":float("nan"),"y":np.array([1.,float("inf")])})
+        self.assertEqual(p,{"x":None,"y":[1.,None]})
+        json.dumps(p,allow_nan=False)
+
+    def test_nonfinite_csv_and_cli_inputs_are_rejected(self):
+        with self.assertRaises(_common.InputError):
+            _common.parse_float("inf","concentration")
+        result=run_script("simulate_regimen","--cl","nan","--v","40","--dose","100","--interval","12")
+        self.assertEqual(result.returncode,2)
+
+    def test_fda_scalar_bound_includes_bias_correction_and_upper_chi_quantile(self):
+        from scipy.stats import chi2,t
+        est,se,df=.05,.07,24
+        rv=bioequivalence.ReferenceVariability(s2wr=.16,df=22,n_subjects=24)
+        x=est*est-se*se; y=-(math.log(1.25)/.25)**2*.16
+        bx=(abs(est)+t.ppf(.95,df)*se)**2; by=y*22/chi2.ppf(.95,22)
+        expected=x+y+math.hypot(bx-x,by-y)
+        result=bioequivalence.rsabe_bound(est,se,df,rv)
+        self.assertAlmostEqual(result["criterion_point_estimate"],x+y)
+        self.assertAlmostEqual(result["criterion_95_upper_bound"],expected)
+
+    def test_replicate_analysis_and_power_fail_closed(self):
+        result=run_script("bioequivalence","--design","replicate","--power","--cv",".3")
+        self.assertEqual(result.returncode,2)
+        with self.assertRaises(_common.InputError):
+            bioequivalence.tost_power(24,.3,.95,"replicate")
+
+    def test_sequence_period_mismatch_is_rejected(self):
+        records=[{"subject":str(i),"sequence":seq,"period":str(j+1),"treatment":trt,"logvalue":1.} for i,seq in enumerate(("RT","TR")) for j,trt in enumerate(seq)]
+        records[0]["sequence"]="TR"
+        with self.assertRaises(_common.InputError):
+            bioequivalence.crossover_2x2(records)
+
+    def test_parallel_repeated_subjects_are_rejected(self):
+        records=[{"subject":"1","treatment":trt,"logvalue":1.} for trt in ("T","T","R","R")]
+        with self.assertRaises(_common.InputError):
+            bioequivalence.parallel_design(records)
+
+    def test_logistic_separation_is_rejected(self):
+        with self.assertRaises(_common.InputError):
+            exposure_response.fit_logistic(np.arange(6.),np.array([0.,0.,0.,1.,1.,1.]))
+
+    def test_constant_exposure_has_no_estimable_qtc_slope(self):
+        with self.assertRaises(_common.InputError):
+            exposure_response.fit_cqtc(np.ones(5),np.arange(5.),cmax=1.)
+
+    def test_reset_and_constant_ss_infusion_are_valid_events(self):
+        import check_popk_dataset as checker
+        rows=[dict(ID="1",TIME="0",DV=".",AMT="0",EVID="1",MDV="1",RATE="5",SS="1",II="0"),
+              dict(ID="1",TIME="5",DV="1",AMT="0",EVID="0",MDV="0",RATE="0",SS="0",II="0"),
+              dict(ID="1",TIME="0",DV=".",AMT="100",EVID="4",MDV="1",RATE="-1",SS="0",II="0"),
+              dict(ID="1",TIME="2",DV="2",AMT="0",EVID="0",MDV="0",RATE="0",SS="0",II="0")]
+        args=checker.build_parser().parse_args(["-i","unused.csv"])
+        findings,_=checker.check_dataset(rows,args)
+        checks={v["check"] for v in findings.items if v["severity"]=="error"}
+        self.assertFalse({"SS without II","dose without AMT","TIME not monotonic","invalid RATE"}&checks,checks)
+
+    def test_dataset_nonfinite_rate_and_discontinuous_ids_are_flagged(self):
+        import check_popk_dataset as checker
+        rows=[dict(ID=str(i),TIME="0",DV="1",AMT="0",EVID="0",MDV="0",RATE="inf") for i in (1,2,1)]
+        args=checker.build_parser().parse_args(["-i","unused.csv"])
+        findings,_=checker.check_dataset(rows,args)
+        checks={v["check"] for v in findings.items}
+        self.assertTrue({"invalid RATE","noncontiguous ID"}<=checks)
+
+    def test_emax_rank_deficiency_with_two_distinct_exposures(self):
+        x=np.array([0.,0.,0.,0.,1.,1.,1.,1.])
+        fit=exposure_response.fit_emax(x,1.+2*x,sigmoid=True)
+        self.assertFalse(fit["identifiable_local_covariance"])
+        self.assertTrue(math.isnan(fit["se_emax"]))
+
+    def test_qss_high_target_root_preserves_drug_mass(self):
+        total_drug=np.array([0.,1e-6,1.]); total_target=1e12; kss=1.
+        free=_models._qss_free(total_drug,total_target,kss)
+        complex_=total_target*free/(kss+free)
+        np.testing.assert_allclose(free+complex_,total_drug,rtol=1e-12,atol=0)
+        self.assertGreater(free[-1],0.)

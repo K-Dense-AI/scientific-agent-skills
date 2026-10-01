@@ -37,6 +37,10 @@ MAX_DEPTH = 20
 MAX_TOTAL_NODES = 20_000
 
 IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._:-]{1,95}$")
+DATETIME_RE = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
+)
 BLOCKER_RE = re.compile(r"^[A-Z][A-Z0-9_]{2,95}$")
 DIRECT_IDENTIFIER_KEYS = {
     "address",
@@ -621,7 +625,7 @@ def _reject_nonlocal_path(raw_path: str | Path) -> Path:
     lowered = text.strip().lower()
     if not lowered or "\x00" in text or "://" in lowered:
         raise ValidationError("NONLOCAL_OR_EMPTY_PATH")
-    if lowered.startswith("\\\\"):
+    if lowered.startswith(("\\\\", "//")):
         raise ValidationError("NETWORK_SHARE_PATH_REJECTED")
     return Path(text).expanduser()
 
@@ -736,9 +740,15 @@ def read_json(raw_path: str | Path) -> dict[str, Any]:
 
     path = safe_input_file(raw_path)
     try:
-        text = path.read_text(encoding="utf-8")
+        with path.open("rb") as handle:
+            raw = handle.read(MAX_INPUT_BYTES + 1)
+        if len(raw) > MAX_INPUT_BYTES:
+            raise ValidationError("INPUT_FILE_TOO_LARGE", path.name)
+        text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValidationError("JSON_NOT_UTF8", path.name) from exc
+    except OSError as exc:
+        raise ValidationError("INPUT_READ_FAILED", path.name) from exc
     if "\x00" in text:
         raise ValidationError("JSON_CONTAINS_NUL", path.name)
     try:
@@ -751,6 +761,12 @@ def read_json(raw_path: str | Path) -> dict[str, Any]:
         raise ValidationError(
             "JSON_PARSE_ERROR", f"{path.name}:{exc.lineno}:{exc.colno}"
         ) from exc
+    except RecursionError as exc:
+        raise ValidationError("JSON_MAX_DEPTH_EXCEEDED") from exc
+    except ValidationError:
+        raise
+    except ValueError as exc:
+        raise ValidationError("JSON_NUMBER_INVALID") from exc
     if not isinstance(value, dict):
         raise ValidationError("JSON_ROOT_NOT_OBJECT", path.name)
     _check_bounds(value, counter=[0])
@@ -800,8 +816,10 @@ def _valid_iso_date(value: str) -> bool:
 
 
 def parse_iso_datetime(value: str) -> datetime | None:
-    """Parse a timezone-aware ISO datetime, accepting a trailing Z."""
+    """Parse an extended calendar datetime with seconds and an explicit offset."""
 
+    if not isinstance(value, str) or DATETIME_RE.fullmatch(value) is None:
+        return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
@@ -828,8 +846,9 @@ def _validate_schema(
         properties = schema["properties"]
         for key in sorted(set(properties) - set(value)):
             issues.append(Issue("SCHEMA_REQUIRED_FIELD", f"{path}.{key}"))
-        for key in sorted(set(value) - set(properties)):
-            issues.append(Issue("SCHEMA_UNKNOWN_FIELD", f"{path}.{key}"))
+        for _ in set(value) - set(properties):
+            # Unknown keys may themselves contain identifying or clinical text.
+            issues.append(Issue("SCHEMA_UNKNOWN_FIELD", f"{path}.[unknown_field]"))
         for key in properties.keys() & value.keys():
             _validate_schema(
                 value[key], properties[key], f"{path}.{key}", issues
@@ -856,6 +875,8 @@ def _validate_schema(
             return
         if not schema["minimum"] <= len(value) <= schema["maximum"]:
             issues.append(Issue("SCHEMA_STRING_BOUNDS", path))
+        if schema["minimum"] and not value.strip():
+            issues.append(Issue("SCHEMA_STRING_BLANK", path))
         if schema["const"] is not None and value != schema["const"]:
             issues.append(Issue("SCHEMA_CONST", path))
         if schema["enum"] is not None and value not in schema["enum"]:
@@ -966,7 +987,10 @@ def validate_document(
         intended = document.get("intended_use")
         if isinstance(intended, dict):
             uses = intended.get("prohibited_uses")
-            if isinstance(uses, list) and set(uses) != PROHIBITED_USES:
+            if isinstance(uses, list) and (
+                any(not isinstance(item, str) for item in uses)
+                or set(uses) != PROHIBITED_USES
+            ):
                 issues.append(
                     Issue(
                         "PROHIBITED_USE_SET_CHANGED",
@@ -1068,15 +1092,22 @@ def atomic_write_json(destination: Path, payload: dict[str, Any]) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
         os.chmod(temporary_name, 0o600)
-        os.replace(temporary_name, destination)
+        # Publish a completed file without replacing a path created by another
+        # writer after the initial existence check. Fail on filesystems without
+        # hard-link support rather than fall back to a clobbering rename.
+        os.link(temporary_name, destination)
+        Path(temporary_name).unlink()
         return destination
+    except FileExistsError as exc:
+        raise ValidationError("OUTPUT_ALREADY_EXISTS", destination.name) from exc
     except OSError as exc:
+        raise ValidationError("OUTPUT_WRITE_FAILED", destination.name) from exc
+    finally:
         if temporary_name:
             try:
                 Path(temporary_name).unlink(missing_ok=True)
             except OSError:
                 pass
-        raise ValidationError("OUTPUT_WRITE_FAILED", destination.name) from exc
 
 
 def copy_template_document(

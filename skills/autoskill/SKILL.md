@@ -1,20 +1,22 @@
 ---
 name: autoskill
-description: Observe the user's screen via screenpipe, detect repeated research workflows, match them against existing scientific-agent-skills, and draft new skills (or composition recipes that chain existing ones) for the patterns not yet covered. Use when the user asks to analyze their recent work and propose skills based on what they actually do. Requires the screenpipe daemon (https://github.com/screenpipe/screenpipe) running locally on port 3030 — the skill has no other data source and will refuse to run if screenpipe is unreachable. All detection runs locally; only redacted cluster summaries reach the LLM.
+description: Analyzes user-requested Screenpipe history windows to detect repeated research workflows, match existing scientific skills, and stage new skill drafts or composition recipes for review. Requires a reachable Screenpipe HTTP API, normally on localhost:3030. Detection and embedding inference run locally; the selected LLM receives redacted app/title cluster summaries and matched skill descriptions. Use only when the user explicitly asks to analyze their recent work and propose skills.
 allowed-tools: Read Write Edit Bash
 license: MIT license
+compatibility: Requires Python 3.10+ with httpx, PyYAML, and sentence-transformers; Screenpipe and a local LM Studio server or an opt-in cloud LLM. Initial model installation needs network access.
 metadata:
-  version: "1.5"
+  version: "1.6"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
-    requires:
-      bins:
-      - screenpipe
     primaryEnv: SCREENPIPE_TOKEN
     envVars:
     - name: SCREENPIPE_TOKEN
-      required: true
-      description: Auth token for the local screenpipe daemon.
+      required: false
+      description: Bearer token when the selected Screenpipe daemon has authentication enabled.
+    - name: LM_API_TOKEN
+      required: false
+      description: Bearer token if the selected LM Studio server requires authentication.
     - name: ANTHROPIC_API_KEY
       required: false
       description: For Claude API calls during skill drafting.
@@ -27,7 +29,7 @@ metadata:
 
 > **Requires a running [screenpipe](https://github.com/screenpipe/screenpipe) daemon.** This skill has no alternate data source — it reads exclusively from the local screenpipe HTTP API (default `http://localhost:3030`). If the daemon isn't running, `run()` raises `ScreenpipeUnreachable` with install instructions.
 
-> **Network access & environment variables.** This skill makes authenticated HTTP requests to (a) the user's local screenpipe daemon on loopback, and (b) the user-configured LLM backend — one of `http://localhost:1234/v1` (LM Studio, default), `https://api.anthropic.com` (opt-in Claude), or a user-supplied BYOK Foundry gateway. The skill reads three environment variables — `SCREENPIPE_TOKEN`, `ANTHROPIC_API_KEY`, `FOUNDRY_API_KEY` — and uses each only to authenticate to the single endpoint its name implies. Opt-in cloud backends receive redacted cluster summaries and matched skill descriptions. Embedding-model installation may also download public model files; local inference does not imply zero network access.
+> **Network access & environment variables.** This skill makes authenticated HTTP requests to (a) the user's local screenpipe daemon on loopback, and (b) the user-configured LLM backend — one of `http://localhost:1234/v1` (LM Studio, default), `https://api.anthropic.com` (opt-in Claude), or a user-supplied BYOK Foundry gateway. The adapters read `SCREENPIPE_TOKEN`, `LM_API_TOKEN`, `ANTHROPIC_API_KEY`, and `FOUNDRY_API_KEY` for the corresponding configured service. HTTPX also honors its standard proxy and CA environment settings; sentence-transformers uses Hugging Face cache/download settings. Opt-in cloud backends receive redacted cluster summaries and matched skill descriptions. Embedding-model installation may also download public model files; local inference does not imply zero network access.
 
 ## Overview
 
@@ -45,9 +47,9 @@ Do **not** invoke it for one-off questions about screenpipe itself, for real-tim
 
 ## Privacy Posture
 
-- **Screenpipe handles app/window filtering at capture time.** Install a starter deny-list by copying `references/screenpipe-config.yaml` into the user's screenpipe config. Sensitive apps (password managers, messaging, banking) are never OCR'd in the first place.
-- **Raw OCR is not sent to the synthesis backend by this pipeline.** `scripts/fetch_window.py` pulls data over localhost HTTP. `scripts/cluster.py` reduces the timeline to app/duration/title summaries. `scripts/redact.py` strips emails, API keys, bearer tokens, and phone numbers as defense-in-depth before any cluster summary reaches the LLM.
-- **LLM backend defaults to `local`.** The recommended setup is [LM Studio](https://lmstudio.ai/) running `Gemma-4-31B-it` — strong reasoning at a size that fits on most workstation GPUs, and no data ever leaves your machine. Cloud backends (`claude`, `foundry`) are opt-in and documented in `config.yaml` for users who explicitly want them. Detection and embeddings always run locally regardless of backend choice.
+- **Configure capture filtering in Screenpipe before collecting history.** `references/screenpipe-config.yaml` is a checklist of literal, case-insensitive app/title substrings, not a Screenpipe-importable YAML file. Apply them in Screenpipe settings or as repeated `--ignored-windows` arguments; `*` is not a glob. Check exclusions with synthetic windows. Filtering cannot remove sensitive material already captured or guarantee complete exclusion.
+- **Raw OCR is not sent to the synthesis backend by this pipeline.** `scripts/fetch_window.py` pulls data over localhost HTTP. `scripts/cluster.py` reduces the timeline to app/duration/title summaries. `scripts/redact.py` scrubs recognizable emails, API keys, bearer tokens, and selected phone formats as defense-in-depth before any cluster summary reaches the LLM.
+- **LLM backend defaults to `local`.** Use an already installed chat model served by [LM Studio](https://lmstudio.ai/); its exact server model ID belongs in `local.model`. Summaries stay on the machine only while this endpoint is loopback. A remote HTTPS endpoint also sends summaries off-host. Cloud backends (`claude`, `foundry`) remain opt-in. Detection and embedding inference run locally regardless of backend choice.
 - **Dry-run mode** (`--dry-run`) skips skill matching and LLM synthesis and writes a clustered `plan.md`. Review the retained app names and window titles before selecting a cloud backend; the regex scrubber does not guarantee anonymization or removal of unpublished research details.
 - **TLS for localhost** (optional, for corporate policy): see `references/https-proxy.md` for the Caddy pattern.
 
@@ -60,24 +62,26 @@ Either install the official release or build from source. Either way the daemon 
 **From source** (recommended if you want the CLI daemon without the desktop GUI):
 
 ```bash
-git clone --depth 1 https://github.com/mediar-ai/screenpipe.git
+git clone --depth 1 https://github.com/screenpipe/screenpipe.git
 cd screenpipe
 cargo build -p screenpipe-engine --release
 # System deps (macOS): cmake + full Xcode.app (not just Command Line Tools).
 #   brew install cmake
 #   # if xcodebuild plug-ins error: sudo xcodebuild -runFirstLaunch
 ./target/release/screenpipe doctor   # confirm permissions + ffmpeg
-./target/release/screenpipe record --disable-audio --use-pii-removal
+./target/release/screenpipe record --disable-audio --use-pii-removal \
+  --ignored-windows "1Password" --ignored-windows "Bitwarden" \
+  --ignored-windows "Private Browsing" --ignored-windows "Incognito"
 ```
 
-First run will prompt for macOS Screen Recording permission. Grant it and relaunch.
+This source-build example is illustrative and was not compiled in the API review. Check the installed `screenpipe record --help`; permissions and system dependencies vary by platform/release. On macOS, grant the requested Screen Recording/Accessibility permissions and relaunch. Review the full deny-list before real capture.
 
 ### 2. Screenpipe API token
 
-The local API now requires bearer auth. Retrieve your token and export it:
+Current Screenpipe enables API auth by default; protected routes such as `/search` require a bearer token even on loopback. `/health` is exempt, so a successful health check does not validate search authorization. For an authenticated instance, retrieve its local API token:
 
 ```bash
-export SCREENPIPE_TOKEN=$(screenpipe auth token)
+export SCREENPIPE_TOKEN="$(screenpipe auth token)"
 ```
 
 (Or set `screenpipe.token` directly in `config.yaml` — env var is preferred since it keeps secrets out of version control.)
@@ -87,30 +91,35 @@ Generated draft names must be valid skill names, so model output cannot write ou
 
 ### 3. Python environment
 
-Via `pipenv` from the repo root:
+Create a separate environment; do not add scientific dependencies to the repository environment:
 
 ```bash
-pipenv install httpx pyyaml sentence-transformers
+uv venv .venv-autoskill --python 3.12
+uv pip install --python .venv-autoskill/bin/python httpx==0.28.1 pyyaml==6.0.3 sentence-transformers==6.1.0
+source .venv-autoskill/bin/activate
 ```
 
-The embedding model (`sentence-transformers/all-MiniLM-L6-v2`, ~80 MB) downloads on first run.
+The public `sentence-transformers/all-MiniLM-L6-v2` model downloads on first use. For an existing cache, set `embeddings.local_files_only: true` to prevent download attempts. Its 384-dimensional embeddings truncate inputs beyond 256 word pieces; long summaries may lose detail. Similarity is a retrieval heuristic, not proof of workflow equivalence.
 
 ### 4. Local LLM (default path) — LM Studio
 
 - Install [LM Studio](https://lmstudio.ai/).
-- Download `Gemma-4-31B-it` (or another strong reasoning model; adjust `local.model` in `config.yaml`).
-- Load it via the CLI for headless use (no GUI required):
+- Choose a chat model already installed on your machine (`lms ls`). Match the context length to its supported limits and available memory; no particular GPU fit is assumed.
+- Load it with a stable identifier and start the API server explicitly:
 
 ```bash
-lms load gemma-4-31b-it --context-length 131072 --gpu max -y
-lms status   # confirm server running on :1234
+lms load <installed-model-key> --identifier autoskill-local
+lms server start --port 1234
+lms server status
 ```
+
+This setup is illustrative; no model was downloaded or inferred during this review. `lms load` does not itself start the HTTP server. If LM Studio's **Require Authentication** option is enabled (0.4.0+), set `LM_API_TOKEN` to a token created in its server settings. `doctor` checks the configured ID against `/v1/models`; the list can include JIT-loadable models and does not prove inference succeeds.
 
 ### 5. Cloud LLM backends (optional, opt-in)
 
 Only if you explicitly opt out of local:
 - `claude`: set `ANTHROPIC_API_KEY`, flip `backend: claude` in `config.yaml`.
-- `foundry`: set `FOUNDRY_API_KEY`, flip `backend: foundry`, set `foundry.endpoint` to your corporate gateway URL.
+- `foundry`: set `FOUNDRY_API_KEY`, flip `backend: foundry`, and set `foundry.endpoint` to `https://<resource>.services.ai.azure.com/anthropic` (or a gateway with that same Messages contract). Set `foundry.model` to the deployment name. This adapter supports API-key auth, not Entra token acquisition; Entra-only deployments need a different client.
 
 ## Architecture
 
@@ -138,28 +147,28 @@ scripts/promote.py         → user-approved proposal → skills/<name>/
 The skill ships a unified CLI at `scripts/autoskill.py` with three subcommands:
 
 ```bash
-python scripts/autoskill.py doctor   --config config.yaml --skills-dir ../
-python scripts/autoskill.py run      --start ... --end ... --config config.yaml
-python scripts/autoskill.py promote  --proposed ~/.autoskill/proposed/<ts> --skills-dir ../ --name <skill>
+python skills/autoskill/scripts/autoskill.py doctor --config skills/autoskill/config.yaml --skills-dir skills
+python skills/autoskill/scripts/autoskill.py run --start <ISO-start> --end <ISO-end> --config skills/autoskill/config.yaml
+python skills/autoskill/scripts/autoskill.py promote --proposed <proposal-dir> --skills-dir skills --name <skill>
 ```
 
 ### 0. Preflight with `doctor`
 
-Before a full run, verify every dependency in one shot:
+Before a full run, check connectivity and backend configuration:
 
 ```bash
-python scripts/autoskill.py doctor \
+python skills/autoskill/scripts/autoskill.py doctor \
   --config skills/autoskill/config.yaml \
   --skills-dir skills
 ```
 
-The report covers `config` (backend choice valid), `skills_dir` (exists), `screenpipe` (reachable + authed), and `llm` (LM Studio serving or API key present). Non-zero exit on any failure, with the offending line marked `error`.
+The report covers `config` (backend choice valid), `skills_dir` (exists), `screenpipe` (public health endpoint reachable), and `llm` (LM Studio lists the configured model, or a cloud API key is present). It does not fetch history, verify Screenpipe search auth, test cloud credentials, run inference, or load embedding weights. Non-zero exit on any failure, with the offending line marked `error`.
 
 ### 1. Run the pipeline
 
 ```bash
-export SCREENPIPE_TOKEN=$(screenpipe auth token)
-python scripts/autoskill.py run \
+export SCREENPIPE_TOKEN="$(screenpipe auth token)"
+python skills/autoskill/scripts/autoskill.py run \
   --start "2026-04-17T00:00:00Z" \
   --end   "2026-04-17T23:59:59Z" \
   --config skills/autoskill/config.yaml \
@@ -169,9 +178,9 @@ python scripts/autoskill.py run \
 Proposals land in `~/.autoskill/proposed/<timestamp>/` by default, keeping experimental output out of the skills repo. Pass `--out PATH` to override.
 
 Internally:
-1. **Fetch** — `fetch_window` paginates screenpipe's `/search` endpoint, normalizes events to `{ts, app, window_title, text, content_type}`.
-2. **Redact** — `redact` scrubs emails, API keys, bearer tokens, phones from OCR text and window titles as defense-in-depth over screenpipe's own PII removal.
-3. **Cluster** — `segment_sessions` splits on idle gaps (default 10 min) and drops short sessions; `cluster_sessions` groups sessions by app-signature and keeps clusters of size `min_cluster_size` (default 2).
+1. **Fetch** — `fetch_window` uses `/search` with a fixed time window and limit/offset pagination, explicitly disables cloud results, frame images, and API `filter_pii` (which can call a remote enclave). It normalizes OCR/UI/accessibility/input/audio rows to `{ts, app, window_title, text, content_type}`. Memory/parsed records are skipped with a warning because they are not activity events. Malformed or incomplete pagination fails instead of producing a silently partial report.
+2. **Redact** — `redact` scrubs recognizable secret patterns from event text, app names, and window titles as defense-in-depth over screenpipe's own PII removal.
+3. **Cluster** — `segment_sessions` splits on idle gaps (default 10 min) and drops short sessions; `cluster_sessions` groups sessions by the ordered list of distinct apps and keeps clusters of size `min_cluster_size` (default 2).
 4. **Match** — `load_skill_descriptions` reads frontmatter from every `SKILL.md` in `skills/`; `top_k_matches` ranks each cluster against all skills using local `sentence-transformers` embeddings (cosine similarity).
 5. **Synthesize** — `synthesize` prompts the configured LLM backend to classify each cluster as `reuse`, `compose`, or `novel` and emit a SKILL.md body where appropriate.
 6. **Report** — writes `<out_dir>/<ts>/report.md`, plus `new-skills/<name>/SKILL.md` or `composition-recipes/<name>/SKILL.md` for each proposal.
@@ -183,11 +192,13 @@ Add `--dry-run` to stop after clustering; this skips the LLM (and the sentence-t
 Open `~/.autoskill/proposed/<ts>/report.md`, edit drafts in place, delete anything you don't want. Then:
 
 ```bash
-python scripts/autoskill.py promote \
+python skills/autoskill/scripts/autoskill.py promote \
   --proposed ~/.autoskill/proposed/2026-04-17T14-30-00 \
   --skills-dir skills \
   --name zotero-pubmed-helper
 ```
+
+Validate each draft with `uv run skills-ref validate <draft-directory>` and follow the repository's tests/scan rules before promotion. The LLM draft is not automatically spec-validated.
 
 `promote` moves the directory into `skills/<name>/`, refusing to overwrite an existing skill. Exits non-zero with a friendly error if the proposal isn't found or the target already exists.
 
@@ -199,7 +210,7 @@ See `config.yaml` for the full shape. Default values (local-first):
 backend: local
 local:
   endpoint: http://localhost:1234/v1   # LM Studio's Developer server
-  model: Gemma-4-31B-it
+  model: autoskill-local
 
 screenpipe:
   url: http://localhost:3030           # or https://screenpipe.local via Caddy
@@ -225,11 +236,14 @@ claude:
 
 ## Testing
 
-The skill is covered by a small pytest suite at `tests/autoskill/` in the repository root. Each script is unit-tested in isolation with dependency injection (mock HTTP transport, stub backend, stub embedder):
+The skill is covered by a pytest suite at `tests/autoskill/` in the repository root. Each script is unit-tested in isolation with dependency injection (mock HTTP transport, stub backend, stub embedder):
 
 ```bash
-python -m pytest tests/autoskill -v
+uv run --with pytest python -m pytest tests/autoskill -q
+python tests/run_all.py --isolated autoskill
 ```
+
+The 2026-09-30 review used synthetic events, mock HTTP transports, and a local fixture server. No real Screenpipe history, authenticated cloud inference, live LM Studio inference, or embedding-model download was used. See [API contract and source review](references/api-contracts.md) for endpoint details and validation limits.
 
 ## Composition with other skills in this repo
 

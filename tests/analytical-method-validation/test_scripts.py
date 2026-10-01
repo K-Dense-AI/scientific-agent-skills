@@ -690,7 +690,7 @@ class TestCheckAccuracyPrecision(unittest.TestCase):
         guideline explicitly permits.
         """
         res = run_script("check_accuracy_precision", "-i", str(FIXTURES / "ap_no_group.csv"),
-                         "--design-check", "assay")
+                         "--design-check", "assay", "--test-concentration", "100")
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("option (b)", res.stderr)
 
@@ -713,7 +713,8 @@ class TestCheckDetectionLimits(unittest.TestCase):
                          "--blanks", str(FIXTURES / "blanks.csv"), "--format", "json")
         payload = json.loads(res.stdout)[0]
         approaches = [e["approach"] for e in payload["estimates"]]
-        self.assertGreaterEqual(len(approaches), 3)
+        self.assertEqual(len(approaches), 2)
+        self.assertFalse(any("intercept" in a for a in approaches))
         self.assertTrue(any("blanks" in a for a in approaches))
         self.assertTrue(any("residual SD" in a for a in approaches))
 
@@ -736,6 +737,7 @@ class TestCheckDetectionLimits(unittest.TestCase):
                          str(FIXTURES / "lowrange_calibration.csv"),
                          "--confirm-ql", "0.05",
                          "--confirm-data", str(FIXTURES / "ql_confirmation.csv"),
+                         "--confirm-accuracy-limit", "10", "--confirm-rsd-limit", "10",
                          "--format", "json")
         payload = json.loads(res.stdout)[0]
         metrics = {r["metric"]: r["value"] for r in payload["confirmation"]}
@@ -772,7 +774,8 @@ class TestCheckDetectionLimits(unittest.TestCase):
                          "--blanks", str(FIXTURES / "blanks.csv"),
                          "--confirm-ql", "0.005", "--reporting-threshold", "0.010")
         self.assertNotIn("straddle", res.stderr)
-        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(res.returncode, 1, res.stderr)
+        self.assertIn("no confirmation data", res.stderr)
 
     def test_signal_to_noise_requires_level(self):
         res = run_script("check_detection_limits", "--calibration",

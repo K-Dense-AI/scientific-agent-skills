@@ -28,7 +28,7 @@ The responsible radiologist and organization control report content, communicati
 
 ## Pathology
 
-CAP publishes and updates organ- and specimen-specific Cancer Protocols. The CAP template page showed protocol updates on 17 June 2026 and a Breast DCIS correction on 24 June 2026 when checked. Protocol versions and required/core or conditional elements can change.
+CAP publishes and updates organ- and specimen-specific Cancer Protocols. The current CAP page lists 16 September 2026 updates across 14 protocols, including retirement of the Vaginal Biopsy protocol. Verify the selected protocol’s current scope and implementation requirements rather than reusing the earlier June snapshot. Protocol versions and required/core or conditional elements can change.
 
 Use `assets/pathology_report_template.json` only after a qualified pathologist selects:
 
@@ -37,7 +37,7 @@ Use `assets/pathology_report_template.json` only after a qualified pathologist s
 - applicable biomarker protocol and staging edition;
 - local laboratory/reporting requirements.
 
-For CAP synoptic reporting within its scope, core and conditionally required data elements are represented as data-element/response pairs; applicability depends on the exact current protocol.
+For CAP synoptic reporting within its scope, core and conditionally required data elements are represented as data-element/response pairs; applicability depends on the exact current protocol. CAP states that Biomarker Reporting Protocols provide reporting guidance and are not required for accreditation; do not extend a cancer-protocol accreditation requirement to every biomarker template.
 
 Do not:
 

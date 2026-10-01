@@ -1,5 +1,9 @@
 # Modal Resource Configuration
 
+Reviewed against SDK 1.6.0 and the official [resource guide](https://modal.com/docs/guide/resources)
+and [timeout guide](https://modal.com/docs/guide/timeouts). Examples are configuration
+fragments; no remote allocation or billing was measured.
+
 ## CPU
 
 ### Requesting CPU
@@ -20,7 +24,7 @@ def compute():
 - Set explicit limits to prevent noisy-neighbor effects:
 
 ```python
-@app.function(cpu=4.0)  # Request 4 cores
+@app.function(cpu=(1.0, 4.0))  # Request 1 core, soft limit 4 cores
 def bounded_compute():
     ...
 ```
@@ -35,7 +39,7 @@ def large_data():
     ...
 ```
 
-- Value in **MiB** (megabytes)
+- Value in **MiB** (mebibytes)
 - Default: 128 MiB
 
 ### Memory Limits
@@ -43,12 +47,14 @@ def large_data():
 Set hard memory limits to OOM-kill containers that exceed them:
 
 ```python
-@app.function(memory=8192)  # 8 GiB request and limit
+@app.function(memory=(8192, 16384))  # 8 GiB request, 16 GiB hard limit
 def bounded_memory():
     ...
 ```
 
 This prevents paying for runaway memory leaks.
+A scalar `memory=8192` is a request, not an explicit hard limit. Requests/limits
+are validated against platform capacity; do not assume a requested allocation is available.
 
 ## Ephemeral Disk
 
@@ -79,7 +85,9 @@ def long_running():
 
 - Default: 300 seconds (5 minutes)
 - Maximum: 86,400 seconds (24 hours)
-- Function is killed when timeout expires
+- Execution timeout is per attempt; configured retries get a fresh timeout
+- Queue time is excluded; `startup_timeout` controls startup independently
+- Expiry is approximate and eventually raises `modal.exception.FunctionTimeoutError`
 
 ## Billing
 

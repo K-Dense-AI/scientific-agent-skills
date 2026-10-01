@@ -3,15 +3,15 @@
 
 Two different jobs share this script because they share a failure mode: taking
 a number derived for one purpose and using it for another. An HED is not a
-starting dose. A NOAEL-derived MRSD is not appropriate for an agonist
-immunomodulator. Allometry with a fixed 0.75 exponent describes clearance in
-adults and is wrong in neonates unless maturation is modelled separately.
+starting dose. A NOAEL-derived MRSD is insufficient alone for high-risk
+immunomodulators. Fixed allometry and generic maturation need drug-specific
+justification and uncertainty assessment before extrapolation.
 
     python3 allometry_and_fih.py --scale --cl 5 --weight-from 70 --weight-to 15
     python3 allometry_and_fih.py --scale --cl 5 --weight-from 70 --weight-to 6 --pma-weeks 44
     python3 allometry_and_fih.py --exponent -i species.csv
     python3 allometry_and_fih.py --fih --noael rat=50,dog=10 --safety-factor 10 --human-weight 60
-    python3 allometry_and_fih.py --mabel --ec50 2.5 --target-occupancy 0.2 --cl 0.2 --weight 70
+    python3 allometry_and_fih.py --mabel --ec50 2.5 --target-occupancy 0.2 --cl 0.2
 
 ``--exponent`` input is a table of ``species,weight,cl`` for cross-species
 regression.
@@ -24,6 +24,7 @@ import math
 from typing import Sequence
 
 import numpy as np
+from scipy.stats import t as t_dist
 
 from _common import (
     InputError,
@@ -88,8 +89,8 @@ def hed_mg_per_kg(animal_dose_mg_kg: float, species: str) -> float:
 
 def fit_exponent(weights: np.ndarray, values: np.ndarray) -> dict[str, float]:
     """Log-log regression of a parameter on body weight across species."""
-    if len(weights) < 3:
-        raise InputError("cross-species regression needs at least 3 species")
+    if len(weights) < 3 or np.ptp(weights) <= 0:
+        raise InputError("cross-species regression needs at least 3 species and varied weights")
     x = np.log(weights)
     y = np.log(values)
     n = len(x)
@@ -102,8 +103,8 @@ def fit_exponent(weights: np.ndarray, values: np.ndarray) -> dict[str, float]:
         "exponent": float(slope),
         "coefficient": float(math.exp(intercept)),
         "se_exponent": se_slope,
-        "ci95_low": float(slope - 1.96 * se_slope),
-        "ci95_high": float(slope + 1.96 * se_slope),
+        "ci95_low": float(slope - float(t_dist.ppf(0.975, n - 2)) * se_slope),
+        "ci95_high": float(slope + float(t_dist.ppf(0.975, n - 2)) * se_slope),
         "r2": 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan"),
         "n_species": n,
     }
@@ -116,8 +117,8 @@ def rule_of_exponents(exponent: float) -> str:
     if exponent <= 0.70:
         return "0.55-0.70: simple allometry"
     if exponent <= 1.00:
-        return "0.71-1.00: apply the maximum-life-span-potential correction"
-    return "above 1.00: apply the brain-weight correction; predictions are poor in this range"
+        return "0.71-1.00: historical rule suggests lifespan scaling; do not apply without drug-specific justification"
+    return "above 1.00: historical rule suggests brain-weight scaling; do not apply without drug-specific justification"
 
 
 # --------------------------------------------------------------------- CLI
@@ -133,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--scale", action="store_true", help="scale parameters between two body weights")
     mode.add_argument("--exponent", action="store_true", help="estimate the allometric exponent from species data")
     mode.add_argument("--fih", action="store_true", help="NOAEL-based human equivalent dose and MRSD")
-    mode.add_argument("--mabel", action="store_true", help="minimum anticipated biological effect level")
+    mode.add_argument("--mabel", action="store_true", help="illustrative equilibrium occupancy/dose-rate calculation; not a complete MABEL")
 
     parser.add_argument("-i", "--input", help="species table for --exponent (species,weight,cl)")
     parser.add_argument("--cl", type=float, help="clearance at the reference weight")
@@ -160,10 +161,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
     chosen = [m for m in ("scale", "exponent", "fih", "mabel") if getattr(args, m)]
     if len(chosen) != 1:
         raise InputError("choose exactly one of --scale, --exponent, --fih, --mabel")
     report = Report()
+    for name in ("weight_from", "weight_to", "human_weight", "weight", "safety_factor", "mabel_safety_factor", "tm50", "maturation_hill", "cl", "volume", "ec50", "pma_weeks"):
+        value = getattr(args, name)
+        if value is not None and value <= 0:
+            raise InputError(f"--{name.replace('_', '-')} must be positive")
 
     if args.scale:
         if args.weight_to is None:
@@ -197,21 +204,18 @@ def run(argv: Sequence[str] | None = None) -> int:
                 }
             )
         report.table(f"scaled from {args.weight_from} kg to {args.weight_to} kg", rows)
-        report.note("volume is not matured: maturation describes eliminating capacity, not distribution space")
+        report.note("This helper applies maturation to clearance only; developmental volume changes need a separate justified model.")
         if args.pma_weeks:
             report.scalar("post_menstrual_age_weeks", args.pma_weeks)
             report.scalar("maturation_fraction_of_adult_cl", maturation)
             report.note(
                 f"maturation uses TM50 = {args.tm50} weeks PMA and Hill = {args.maturation_hill} "
-                "(Anderson & Holford). These are generic clearance values; substitute drug-specific "
-                "ontogeny where it is known, because the difference in a neonate is several-fold."
+                "(illustrative). Justify drug/pathway-specific ontogeny and uncertainty before extrapolation."
             )
         else:
             if args.weight_to < 20:
                 report.finding(
-                    "scaling to a body weight below 20 kg with size alone. Below roughly 2 years of age, "
-                    "clearance is limited by enzyme and renal maturation, not by size; supply --pma-weeks "
-                    "or the prediction will overestimate clearance, in a neonate by several fold."
+                    "scaling below 20 kg using size alone; assess age, drug-specific maturation and organ function. A generic PMA multiplier does not validate the prediction."
                 )
         report.note("allometry is a covariate model for size, not evidence of a mechanism")
 
@@ -250,8 +254,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if not (fit["ci95_low"] <= 0.75 <= fit["ci95_high"]):
             report.note("the 95% interval excludes 0.75; a fixed-exponent model would be misspecified here")
         report.note(
-            "Cross-species allometry predicts human clearance within 2-fold about half the time. Treat "
-            "it as one input to the starting dose, never as the sole basis."
+            "Cross-species allometry depends on species relevance, binding, pathways and input uncertainty. It is one exploratory input, not a validated starting-dose prediction."
         )
 
     elif args.fih:
@@ -281,7 +284,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         report.table("human equivalent dose by species", entries)
         most_sensitive = min(entries, key=lambda e: e["hed_mg_kg"])
         mrsd = most_sensitive["hed_mg_kg"] / args.safety_factor
-        report.scalar("most_sensitive_species", most_sensitive["species"])
+        report.scalar("lowest_hed_species", most_sensitive["species"])
         report.scalar("lowest_hed_mg_kg", most_sensitive["hed_mg_kg"])
         report.scalar("safety_factor", args.safety_factor)
         report.scalar("mrsd_mg_kg", mrsd)
@@ -292,8 +295,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "surface-area-related, mg/kg or exposure matching is generally more appropriate."
         )
         report.note(
-            "The most sensitive species is used unless there is a justified reason to prefer another - "
-            "for example a species known not to be pharmacologically responsive."
+            "The calculator selects the lowest numerical HED. Establish pharmacological/toxicological species relevance before choosing a starting-dose basis."
         )
         if args.safety_factor < 10:
             report.finding(
@@ -303,8 +305,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             )
         report.finding(
             "MRSD from a NOAEL is not appropriate on its own for agonist immunomodulators or other "
-            "agents with a plausible risk of severe on-target toxicity - compute MABEL as well and take "
-            "the lower value"
+            "agents with a plausible risk of severe on-target toxicity. Integrate NOAEL, pharmacologically active dose, MABEL, exposure and uncertainty; --mabel is only a simplified calculation"
         )
 
     else:  # --mabel
@@ -313,25 +314,21 @@ def run(argv: Sequence[str] | None = None) -> int:
         if not 0 < args.target_occupancy < 1:
             raise InputError("--target-occupancy must be between 0 and 1")
         if args.cl is None:
-            raise InputError("--mabel needs --cl to convert a target concentration into a dose")
+            raise InputError("--mabel needs --cl to calculate a model-implied dose rate")
         target_conc = args.ec50 * args.target_occupancy / (1.0 - args.target_occupancy)
         # Steady-state-equivalent dose to reach the target average concentration.
         dose_rate = target_conc * args.cl
         report.scalar("ec50", args.ec50)
-        report.scalar("target_receptor_occupancy", args.target_occupancy)
+        report.scalar("target_fractional_effect_or_occupancy", args.target_occupancy)
         report.scalar("target_concentration", target_conc)
         report.scalar("clearance", args.cl)
         report.scalar("dose_rate_for_target_concentration", dose_rate)
         report.scalar("dose_rate_with_safety_factor", dose_rate / args.mabel_safety_factor)
         report.note(
-            "MABEL derives the starting dose from the lowest exposure expected to produce any biological "
-            "effect, using in vitro potency in human cells plus target expression - not from the NOAEL. "
-            "It became the expected approach for agonist immunomodulators after TGN1412."
+            "This simplified calculation inverts a fractional Emax/equilibrium occupancy curve. A full MABEL assessment integrates human biology, exposure, target engagement and uncertainty."
         )
         report.note(
-            "The occupancy-to-concentration step assumes simple 1:1 binding at equilibrium and no "
-            "target-mediated disposition. For a drug with appreciable TMDD, occupancy at a given free "
-            "concentration is not a fixed function and this calculation understates the dose needed."
+            "The EC50 formula describes a fractional Emax response. For receptor occupancy, supply a justified Kd instead: functional EC50 need not equal Kd. Concentration times CL is amount/time (e.g. mg/L times L/h gives mg/h), not an initial dose. TMDD and time-varying target require a mechanistic model."
         )
         report.finding(
             "MABEL requires human-cell in vitro potency, target expression in the relevant tissue, and "

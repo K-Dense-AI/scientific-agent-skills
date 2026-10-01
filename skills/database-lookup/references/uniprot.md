@@ -164,7 +164,9 @@ Returns:
 ```
 GET /idmapping/status/{jobId}
 ```
-When complete, redirects to:
+Poll the status response until no longer running. Then request
+`GET /idmapping/details/{jobId}` and follow its `redirectURL` for the correct
+result resource. A typical result path is:
 ```
 GET /idmapping/results/{jobId}?format=json&size=500
 ```
@@ -174,7 +176,7 @@ GET /idmapping/results/{jobId}?format=json&size=500
 Map Ensembl gene IDs to UniProt accessions:
 ```
 POST /idmapping/run
-from=Ensembl&to=UniProtKB_AC-ID&ids=ENSG00000141510,ENSG00000012048
+from=Ensembl&to=UniProtKB&ids=ENSG00000141510,ENSG00000012048
 ```
 
 Map UniProt to PDB:
@@ -255,7 +257,7 @@ UniProt search queries support field:value syntax with boolean operators:
 - `(protein_name:kinase)` -- protein name contains keyword
 - `(ec:2.7.11.1)` -- enzyme classification
 - `(go:0006915)` -- Gene Ontology term ID
-- `(xref:pdb-P04637)` -- cross-reference
+- `(xref:pdb-4HHB)` -- cross-reference
 - `(length:[100 TO 300])` -- sequence length range
 - `(cc_disease:cancer)` -- disease involvement
 - `(ft_domain:SH2)` -- domain annotation
@@ -285,3 +287,6 @@ Combine with `AND`, `OR`, `NOT`:
 ```
 
 HTTP 400 for bad queries, 404 for not found, 429 for rate limiting, 500 for server errors.
+
+Mapping namespaces are directional: check `https://rest.uniprot.org/configure/idmapping/fields`
+for allowed `from`/`to` values. Preserve unmapped IDs and one-to-many mappings.

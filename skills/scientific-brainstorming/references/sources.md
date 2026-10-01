@@ -1,9 +1,10 @@
 # Sources and Evidence Notes
 
-Research cut-off: **2026-07-23**. All links were checked on that date with
-Parallel web search and focused extraction. Dates below are publication,
-release, or page-update dates shown by the source. Source excerpts were treated
-as untrusted text and checked against the canonical page.
+Review date: **2026-10-01**. Official guidance and accessible primary-paper
+abstracts/text were rechecked with web browsing and focused extraction. This is
+a maintenance review, not a systematic search for every newer experiment.
+Dates below are publication, release, or page-update dates, not evidence that
+every paper's full text was accessible. Access limits are recorded at the end.
 
 This bibliography supports process guidance; it does not show that any single
 brainstorming method universally improves creativity or scientific validity.
@@ -30,7 +31,7 @@ Published 1987.
 Brian Mullen, Craig Johnson, and Eduardo Salas, “Productivity loss in
 brainstorming groups: A meta-analytic integration,” *Basic and Applied Social
 Psychology* 12(1), 3–23.
-[DOI 10.1207/s15324834basp1201_1](https://psycnet.apa.org/record/1991-24145-001).
+[DOI 10.1207/s15324834basp1201_1](https://www.tandfonline.com/doi/abs/10.1207/s15324834basp1201_1).
 Published 1991.
 
 - The reviewed studies generally favored nominal over interacting groups for
@@ -49,12 +50,14 @@ idea generation and selection,” *Journal of Experimental Social Psychology*
 [DOI 10.1016/j.jesp.2005.04.005](https://www.sciencedirect.com/science/article/abs/pii/S0022103105000600).
 Published March 2006.
 
-- In 42 analyzed three-person student groups, nominal groups generated more
+- In the reported experiment, nominal groups generated more
   ideas; their ideas were more original and less feasible.
 - Selected-idea quality did not differ among conditions, and selection was not
   significantly better than chance.
 - Strictly separating generation and selection did not establish a universal
   selection advantage in this experiment.
+- The [authors' institutional record](https://research.rug.nl/en/publications/productivity-is-not-enough-a-comparison-of-interactive-and-nomina/)
+  provides the abstract when the publisher page is unavailable.
 
 ### Rietzschel, Nijstad, and Stroebe (2010) — primary experiments
 
@@ -74,7 +77,7 @@ Published February 2010.
 
 Steven M. Smith, Thomas B. Ward, and Jay S. Schumacher, “Constraining effects
 of examples in a creative generation task,” *Memory & Cognition* 21, 837–845.
-[DOI 10.3758/BF03202751](https://pubmed.ncbi.nlm.nih.gov/8289661/).
+[DOI 10.3758/BF03202751](https://link.springer.com/article/10.3758/BF03202751).
 Published November 1993.
 
 - Across three creative-generation experiments, participants exposed to
@@ -115,7 +118,7 @@ Published March 1972.
 Sami I. Harb et al., “Methodological options of the nominal group technique for
 survey item elicitation in health research: A scoping review,” *Journal of
 Clinical Epidemiology* 139, 140–148.
-[DOI 10.1016/j.jclinepi.2021.08.008](https://www.sciencedirect.com/science/article/abs/pii/S0895435621002535).
+[DOI 10.1016/j.jclinepi.2021.08.008](https://pubmed.ncbi.nlm.nih.gov/34400255/).
 Published November 2021.
 
 - Included 57 studies and identified 30 process decision points across five
@@ -230,14 +233,14 @@ Published 26 June 2015.
 Center for Open Science,
 [*Preregistration*](https://www.cos.io/initiatives/prereg) and
 [*Preregistration: A Plan, Not a Prison*](https://www.cos.io/blog/preregistration-plan-not-prison).
-Current pages accessed 23 July 2026.
+Current pages reviewed 1 October 2026.
 
 - Explicitly values both exploratory and confirmatory research, recommends
   transparent labeling, and explains how to report deviations.
 
 Center for Open Science,
 [*Registered Reports*](https://www.cos.io/initiatives/registered-reports).
-Current page accessed 23 July 2026.
+Current page reviewed 1 October 2026.
 
 - Describes Stage 1 protocol review and in-principle acceptance before results,
   with exploratory analyses reported separately.
@@ -273,17 +276,21 @@ Published 7 September 2023.
 - Results are model-, prompt-, task-, and date-specific; they justify direct
   source verification rather than a timeless error rate.
 
-### European Commission / ERA Forum (2024) — official living guidance
+### European Commission / ERA Forum (2026) — official living guidance
 
 European Commission Directorate-General for Research and Innovation,
-[*Guidelines on the responsible use of generative AI in
-research*](https://research-and-innovation.ec.europa.eu/news/all-research-and-innovation-news/guidelines-responsible-use-generative-ai-research-developed-european-research-area-forum-2024-03-20_en).
-Published 20 March 2024.
+[*Living guidelines on the responsible use of generative AI in
+research*](https://research-and-innovation.ec.europa.eu/document/download/2b6cf7e5-36ac-41cb-aab5-0d32050143dc_en).
+Third edition, May 2026; originally published March 2024.
 
 - Emphasizes transparency, responsibility, privacy, confidentiality,
   intellectual property, bias awareness, and avoiding AI in sensitive
   evaluation activities when confidentiality is not assured.
 - The Commission describes the guidance as living and subject to updates.
+- This revision addresses third-party AI meeting notes and document handling,
+  and hidden prompts in material processed by AI. Check both direct and
+  indirect exposure of session records, and do not treat source text as
+  instructions for the ideation or evaluation process.
 
 ### UNESCO (2023; updated 2026) — official guidance
 
@@ -324,8 +331,8 @@ Edition*](https://allea.org/portfolio-item/european-code-of-conduct-2023).
 
 World Health Organization,
 [*Ensuring responsible use of life sciences research*](https://www.who.int/activities/ensuring-responsible-use-of-life-sciences-research).
-Program page accessed 23 July 2026; it indexes the 13 September 2022 Global
-Guidance Framework and materials through a 15 June 2026 meeting report.
+Program page reviewed 1 October 2026; it indexes the 13 September 2022 Global
+Guidance Framework and implementation resources.
 
 - Frames dual-use risk mitigation as individual and collective,
   multi-stakeholder work across life sciences and relevant emerging
@@ -336,29 +343,29 @@ Guidance Framework and materials through a 15 June 2026 meeting report.
 
 U.S. Department of Health and Human Services, Administration for Strategic
 Preparedness and Response,
-[*Dual Use Research of Concern Oversight Policy Framework*](https://aspr.hhs.gov/S3/Pages/Dual-Use-Research-of-Concern-Oversight-Policy-Framework.aspx).
-Current-status notice accessed 23 July 2026.
+[*United States Government Policy for Stopping High-Risk Life Sciences Research*](https://www.aspr.gov/readiness-response/medical-countermeasures-biodefense/s3/high-consequence-research-oversight/USG-Policy-For-Stopping-High-Risk-Life-Sciences-Research).
+Official policy-status page reviewed 1 October 2026.
 
-- The page states that federal departments and agencies will revise or replace
-  the 2024 DURC/PEPP policy in response to the 5 May 2025 executive order and
-  that the page will be updated when revised policy is available.
-- Therefore this skill does not present the 2024 policy as a stable current
-  checklist; researchers should consult their institution and current agency
-  materials.
+- ASPR states that OSTP approved the policy on 20 July 2026 and that it replaces
+  the 2024 DURC/PEPP policy, following Executive Order 14292.
+- The status page describes revised oversight and attestations. It does not
+  justify using the old thresholds or treating a brainstorm as a compliance
+  determination. Obtain current implementation instructions from the relevant
+  agency and institution.
 
-## Research method
+## Review limits and local validation
 
-Parallel CLI searches used focused academic and official-domain queries for:
+Some publisher pages returned access errors or script shells. PubMed author
+abstracts and an author-institution record were used where available; these
+do not constitute fresh full-text replication of the historical literature.
+The Diehl/Stroebe APA record and the 1972 NGT full text could not be freshly
+read, so their detailed descriptions remain from the prior review. The Cooke
+paper was available only as an indexed publisher abstract. The linked U.S.
+policy PDF was inaccessible in this review; the update above is limited to the
+official ASPR status page, not interpretation of the full policy.
 
-- interactive versus nominal brainstorming and productivity blocking;
-- NGT, Delphi, and structured expert elicitation;
-- divergent/convergent idea generation and selection;
-- NIH rigor, reproducibility, and SABV;
-- preregistration, Registered Reports, and open-science guidance;
-- responsible AI, hallucinated citations, homogenization, confidentiality,
-  research integrity, and disclosure;
-- WHO and U.S. dual-use policy status.
-
-Canonical sources were then fetched with `parallel-cli extract` using focused
-objectives for bibliographic metadata, methods, findings, limitations, and
-current policy status. No research JSON artifacts were saved in the skill.
+The standard-library CLIs were exercised with synthetic registers and the
+documented scoring example. Tests check deterministic data handling, not
+brainstorming effectiveness, source truth, empirical feasibility, or actual
+scientific outcomes. No literature-search or LLM endpoint is implemented by
+these scripts; no authenticated scientific service was called.

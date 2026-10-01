@@ -186,6 +186,7 @@ def analyze_structure(structure: Any, args: argparse.Namespace) -> dict[str, Any
             structure, args.max_distance_sites
         ),
         "minimum_distance_omitted_above_sites": args.max_distance_sites,
+        "minimum_distance_includes_self_images": False,
         "scientific_validity_established": False,
     }
     if args.symmetry:

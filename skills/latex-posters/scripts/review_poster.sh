@@ -1,214 +1,144 @@
 #!/bin/bash
+# Read-only Poppler preflight. Exit 0: automated checks passed; 1: failure;
+# 2: incomplete because a required inspector is missing. Visual review is always required.
+export LC_ALL=C
 
-# Poster PDF Quality Check Script
-# Usage: ./review_poster.sh poster.pdf
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Check if file argument provided
-if [ $# -eq 0 ]; then
-    echo -e "${RED}Error: No file specified${NC}"
-    echo "Usage: $0 <poster.pdf>"
-    exit 1
-fi
-
-POSTER_FILE="$1"
-
-# Check if file exists
+usage() { printf 'Usage: %s <poster.pdf>\n' "$0"; }
+if [ "${1:-}" = '--help' ] || [ "${1:-}" = '-h' ]; then usage; exit 0; fi
+if [ "$#" -ne 1 ]; then usage; exit 1; fi
+POSTER_FILE=$1
+# A leading dash must not become an inspector option.
+case "$POSTER_FILE" in /*) ;; *) POSTER_FILE="./$POSTER_FILE" ;; esac
 if [ ! -f "$POSTER_FILE" ]; then
-    echo -e "${RED}Error: File '$POSTER_FILE' not found${NC}"
+    printf '[FAIL] File not found: %s\n' "$POSTER_FILE"
     exit 1
 fi
+failed=0
+incomplete=0
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+missing() { printf '[WARN] %s not installed; check incomplete. Install Poppler.\n' "$1"; incomplete=1; }
 
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${BLUE}   Poster PDF Quality Check${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
-echo -e "${GREEN}File:${NC} $POSTER_FILE"
-echo ""
-
-# Function to check if command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# 1. Page Size Check
-echo -e "${YELLOW}[1] Page Dimensions:${NC}"
+printf 'Poster PDF Quality Check\nFile: %s\n\n' "$POSTER_FILE"
+printf '[1] Page Dimensions:\n'
+PDF_INFO=''
 if command_exists pdfinfo; then
-    PAGE_SIZE=$(pdfinfo "$POSTER_FILE" 2>/dev/null | grep "Page size")
-    if [ -n "$PAGE_SIZE" ]; then
-        echo "    $PAGE_SIZE"
-        
-        # Extract dimensions and check common sizes
-        WIDTH=$(echo "$PAGE_SIZE" | awk '{print $3}')
-        HEIGHT=$(echo "$PAGE_SIZE" | awk '{print $5}')
-        
-        # Check against common poster sizes (approximate)
-        if [ "$WIDTH" = "2384" ] && [ "$HEIGHT" = "3370" ]; then
-            echo -e "    ${GREEN}✓ Detected: A0 Portrait${NC}"
-        elif [ "$WIDTH" = "3370" ] && [ "$HEIGHT" = "2384" ]; then
-            echo -e "    ${GREEN}✓ Detected: A0 Landscape${NC}"
-        elif [ "$WIDTH" = "1684" ] && [ "$HEIGHT" = "2384" ]; then
-            echo -e "    ${GREEN}✓ Detected: A1 Portrait${NC}"
-        elif [ "$WIDTH" = "2592" ] && [ "$HEIGHT" = "3456" ]; then
-            echo -e "    ${GREEN}✓ Detected: 36×48 inches Portrait${NC}"
-        else
-            echo -e "    ${YELLOW}⚠ Non-standard size detected${NC}"
+    if PDF_INFO=$(pdfinfo "$POSTER_FILE" 2>&1); then
+        printf '%s\n' "$PDF_INFO" | awk '/^Page size:/ {print; found=1} END {if (!found) exit 1}' || failed=1
+        printf '%s\n' "$PDF_INFO" | awk '
+            function near(a,b) {return (a-b < 2 && b-a < 2)}
+            /^Page size:/ {
+                w=$3; h=$5
+                if (near(w,2383.94) && near(h,3370.39)) label="A0 Portrait"
+                else if (near(w,3370.39) && near(h,2383.94)) label="A0 Landscape"
+                else if (near(w,1683.78) && near(h,2383.94)) label="A1 Portrait"
+                else if (near(w,2383.94) && near(h,1683.78)) label="A1 Landscape"
+                else if (near(w,2592) && near(h,3456)) label="36 x 48 inches Portrait"
+                else if (near(w,3456) && near(h,2592)) label="36 x 48 inches Landscape"
+                else label="Custom dimensions"
+                print "[INFO] " label "; compare exact dimensions with venue requirements."
+            }'
+    else
+        printf '[FAIL] pdfinfo could not read the PDF.\n%s\n' "$PDF_INFO"
+        PDF_INFO=''
+        failed=1
+    fi
+else
+    missing pdfinfo
+fi
+
+printf '\n[2] Page Count:\n'
+if [ -n "$PDF_INFO" ]; then
+    PAGE_COUNT=$(printf '%s\n' "$PDF_INFO" | awk '/^Pages:/ {print $2}')
+    if [ "$PAGE_COUNT" = 1 ]; then
+        printf '[OK] Single page.\n'
+    else
+        printf '[FAIL] Expected one page; found: %s\n' "${PAGE_COUNT:-unknown}"
+        failed=1
+    fi
+else
+    printf '[WARN] Page count unavailable.\n'
+fi
+
+printf '\n[3] File Size:\n'
+FILE_SIZE_BYTES=$(wc -c < "$POSTER_FILE")
+printf '%s bytes. File size alone does not establish image quality.\n' "$FILE_SIZE_BYTES"
+if [ "$FILE_SIZE_BYTES" -gt 52428800 ]; then
+    printf '[WARN] Over 50 MiB; check the submission limit before creating a separate compressed copy.\n'
+fi
+
+printf '\n[4] Font Embedding:\n'
+if command_exists pdffonts; then
+    if FONT_OUTPUT=$(pdffonts "$POSTER_FILE" 2>&1); then
+        printf '%s\n' "$FONT_OUTPUT"
+        # Font type names contain spaces. The five rightmost fields are stable:
+        # emb, sub, uni, object number, generation. Inspect ALL rows.
+        if ! printf '%s\n' "$FONT_OUTPUT" | awk '
+            NR==1 {if ($0 !~ /emb.*sub.*uni.*object ID/) invalid=1; next}
+            NR>2 && NF {
+                count++
+                if (NF<8 || ($(NF-4)!="yes" && $(NF-4)!="no")) invalid=1
+                else if ($(NF-4)=="no") bad++
+            }
+            END {
+                if (invalid || NR<2) {print "[FAIL] Unrecognized pdffonts output."; exit 1}
+                if (bad) {print "[FAIL] " bad " font(s) are NOT embedded."; exit 1}
+                if (count) print "[OK] All " count " listed fonts are embedded."
+                else print "[INFO] No PDF fonts listed; check for outlined or rasterized text."
+            }'; then
+            printf 'Rebuild the LaTeX or imported figure source with embeddable fonts.\n'
+            failed=1
         fi
     else
-        echo -e "    ${RED}✗ Could not extract page size${NC}"
+        printf '[FAIL] pdffonts failed.\n%s\n' "$FONT_OUTPUT"
+        failed=1
     fi
 else
-    echo -e "    ${YELLOW}⚠ pdfinfo not installed (install: brew install poppler or apt-get install poppler-utils)${NC}"
+    missing pdffonts
 fi
-echo ""
 
-# 2. Page Count
-echo -e "${YELLOW}[2] Page Count:${NC}"
-if command_exists pdfinfo; then
-    PAGE_COUNT=$(pdfinfo "$POSTER_FILE" 2>/dev/null | grep "Pages" | awk '{print $2}')
-    if [ "$PAGE_COUNT" = "1" ]; then
-        echo -e "    ${GREEN}✓ Single page (correct for poster)${NC}"
-    else
-        echo -e "    ${RED}✗ Multiple pages detected: $PAGE_COUNT${NC}"
-        echo -e "    ${YELLOW}  Posters should be single page${NC}"
-    fi
-else
-    echo -e "    ${YELLOW}⚠ pdfinfo not installed${NC}"
-fi
-echo ""
-
-# 3. File Size
-echo -e "${YELLOW}[3] File Size:${NC}"
-if command_exists ls; then
-    FILE_SIZE=$(ls -lh "$POSTER_FILE" | awk '{print $5}')
-    FILE_SIZE_BYTES=$(ls -l "$POSTER_FILE" | awk '{print $5}')
-    echo "    Size: $FILE_SIZE"
-    
-    # Check if file is too large for email
-    if [ "$FILE_SIZE_BYTES" -gt 52428800 ]; then  # 50MB
-        echo -e "    ${YELLOW}⚠ Large file (>50MB) - may need compression for email${NC}"
-        echo -e "    ${BLUE}  Compress with: gs -sDEVICE=pdfwrite -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -sOutputFile=compressed.pdf $POSTER_FILE${NC}"
-    elif [ "$FILE_SIZE_BYTES" -lt 1048576 ]; then  # 1MB
-        echo -e "    ${YELLOW}⚠ Small file - check image quality${NC}"
-    else
-        echo -e "    ${GREEN}✓ Reasonable file size${NC}"
-    fi
-fi
-echo ""
-
-# 4. Font Embedding Check
-echo -e "${YELLOW}[4] Font Embedding:${NC}"
-if command_exists pdffonts; then
-    echo "    Checking first 20 fonts..."
-    FONT_OUTPUT=$(pdffonts "$POSTER_FILE" 2>/dev/null | head -21)
-    echo "$FONT_OUTPUT" | tail -20 | while IFS= read -r line; do
-        echo "    $line"
-    done
-    
-    # Check for non-embedded fonts
-    NON_EMBEDDED=$(echo "$FONT_OUTPUT" | tail -n +3 | awk '{if ($4 == "no") print $0}')
-    if [ -n "$NON_EMBEDDED" ]; then
-        echo -e "    ${RED}✗ Some fonts are NOT embedded (printing may fail)${NC}"
-        echo -e "    ${BLUE}  Fix: Recompile with 'pdflatex -dEmbedAllFonts=true poster.tex'${NC}"
-    else
-        echo -e "    ${GREEN}✓ All fonts appear to be embedded${NC}"
-    fi
-else
-    echo -e "    ${YELLOW}⚠ pdffonts not installed (install: brew install poppler or apt-get install poppler-utils)${NC}"
-fi
-echo ""
-
-# 5. Image Quality Check
-echo -e "${YELLOW}[5] Image Quality:${NC}"
+printf '\n[5] Image Quality:\n'
 if command_exists pdfimages; then
-    IMAGE_COUNT=$(pdfimages -list "$POSTER_FILE" 2>/dev/null | tail -n +3 | wc -l | tr -d ' ')
-    if [ "$IMAGE_COUNT" -gt 0 ]; then
-        echo "    Found $IMAGE_COUNT image(s)"
-        echo "    Image details:"
-        pdfimages -list "$POSTER_FILE" 2>/dev/null | head -20
-        
-        # Note: DPI calculation would require page size knowledge
-        echo -e "    ${BLUE}  Verify images are at least 300 DPI for printing${NC}"
-        echo -e "    ${BLUE}  Formula: DPI = pixels / (inches in poster)${NC}"
+    if IMAGE_OUTPUT=$(pdfimages -list "$POSTER_FILE" 2>&1); then
+        printf '%s\n' "$IMAGE_OUTPUT"
+        if ! printf '%s\n' "$IMAGE_OUTPUT" | awk '
+            NR==1 {if ($0 !~ /x-ppi.*y-ppi/) invalid=1; next}
+            NR>2 && NF {
+                if (NF<16 || $13 !~ /^[0-9.]+$/ || $14 !~ /^[0-9.]+$/) invalid=1
+                if ($3=="image") {count++; if ($13+0<300 || $14+0<300) low++}
+            }
+            END {
+                if (invalid || NR<2) {print "[FAIL] Unrecognized pdfimages output."; exit 1}
+                if (!count) print "[INFO] No raster images listed; vector artwork has no raster PPI."
+                else if (low) print "[WARN] " low " raster image(s) below 300 PPI at placed size; confirm print needs."
+                else print "[OK] Listed raster images are at least 300 PPI at placed size."
+            }'; then
+            failed=1
+        fi
     else
-        echo -e "    ${YELLOW}⚠ No images found${NC}"
+        printf '[FAIL] pdfimages failed.\n%s\n' "$IMAGE_OUTPUT"
+        failed=1
     fi
 else
-    echo -e "    ${YELLOW}⚠ pdfimages not installed (install: brew install poppler or apt-get install poppler-utils)${NC}"
+    missing pdfimages
 fi
-echo ""
 
-# 6. Manual Checks Required
-echo -e "${YELLOW}[6] Manual Visual Inspection Required:${NC}"
-echo ""
-echo -e "${BLUE}Layout and Spacing:${NC}"
-echo "    [ ] Content fills entire page (no large white margins)"
-echo "    [ ] Consistent spacing between columns"
-echo "    [ ] Consistent spacing between blocks/sections"
-echo "    [ ] All elements aligned properly"
-echo "    [ ] No overlapping text or figures"
-echo ""
-
-echo -e "${BLUE}Typography:${NC}"
-echo "    [ ] Title visible and large (72pt+)"
-echo "    [ ] Section headers readable (48-72pt)"
-echo "    [ ] Body text readable (24-36pt minimum)"
-echo "    [ ] No text cutoff or running off edges"
-echo "    [ ] Consistent font usage"
-echo ""
-
-echo -e "${BLUE}Visual Elements:${NC}"
-echo "    [ ] All figures display correctly"
-echo "    [ ] No pixelated or blurry images"
-echo "    [ ] Figure captions present and readable"
-echo "    [ ] Colors render as expected"
-echo "    [ ] Logos display clearly"
-echo "    [ ] QR codes visible and scannable"
-echo ""
-
-echo -e "${BLUE}Content:${NC}"
-echo "    [ ] All sections present (Intro, Methods, Results, Conclusions)"
-echo "    [ ] References included"
-echo "    [ ] Contact information visible"
-echo "    [ ] No placeholder text (Lorem ipsum, TODO, etc.)"
-echo ""
-
-# 7. Recommended Tests
-echo -e "${YELLOW}[7] Recommended Next Steps:${NC}"
-echo ""
-echo -e "${BLUE}Test Print:${NC}"
-echo "    • Print at 25% scale (A0→A4, 36×48→Letter)"
-echo "    • Check readability from 2-3 feet"
-echo "    • Verify colors printed accurately"
-echo ""
-
-echo -e "${BLUE}Digital Checks:${NC}"
-echo "    • View at 100% zoom in PDF viewer"
-echo "    • Test on different screens/devices"
-echo "    • Verify QR codes work with scanner app"
-echo ""
-
-echo -e "${BLUE}Proofreading:${NC}"
-echo "    • Spell-check all text"
-echo "    • Verify author names and affiliations"
-echo "    • Confirm all statistics and numbers"
-echo "    • Ask colleague to review"
-echo ""
-
-# 8. Summary
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${BLUE}   Quality Check Complete${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
-echo -e "Review the checks above and complete manual verification."
-echo -e "For full checklist, see: ${BLUE}assets/poster_quality_checklist.md${NC}"
-echo ""
-
+printf '\n[6] Manual Visual Inspection Required:\n'
+printf '%s\n' \
+    '  [ ] No clipping or overlap at any edge, column, title, or footer.' \
+    '  [ ] Readable typography and figure labels at the intended viewing distance.' \
+    '  [ ] Correct data, units, uncertainty, citations, authors, and affiliations.' \
+    '  [ ] No draft placeholders; all figure captions and legends are accurate.' \
+    '  [ ] Suitable contrast; categories use labels or shapes as well as color.' \
+    '  [ ] QR codes scan and lead to the intended public resource.'
+printf '\n[7] Recommended Next Steps:\n'
+printf '%s\n' \
+    '  - Inspect a rendered PDF and its LaTeX log; automated checks do not detect all overflow.' \
+    '  - A0 to A4 is approximately 25% linear scale; 36 x 48 inches needs 9 x 12 inches at 25%.' \
+    '  - View a reduced proof at the same scale factor times the full-size viewing distance.' \
+    '  - Confirm exact dimensions, color profile, bleed, and any PDF/X requirement with the printer.' \
+    '  - Use assets/poster_quality_checklist.md for the remaining checks.'
+printf '\nQuality Check Complete\n'
+if [ "$failed" -ne 0 ]; then printf '[FAIL] Automated checks found errors.\n'; exit 1; fi
+if [ "$incomplete" -ne 0 ]; then printf '[WARN] Automated preflight incomplete.\n'; exit 2; fi
+printf '[OK] Automated checks passed; manual visual and scientific review still required.\n'
 exit 0
-

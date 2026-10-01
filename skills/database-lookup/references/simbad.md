@@ -1,6 +1,6 @@
 # SIMBAD Astronomical Database (CDS Strasbourg)
 
-SIMBAD contains data on over 17 million astronomical objects beyond the Solar System, including identifications, coordinates, photometry, proper motions, parallaxes, radial velocities, spectral types, and bibliographic references.
+SIMBAD contains data on astronomical objects beyond the Solar System, including identifications, coordinates, photometry, proper motions, parallaxes, radial velocities, spectral types, and bibliographic references.
 
 ## Base URLs
 
@@ -61,7 +61,7 @@ Note: radius in CIRCLE is in degrees (5 arcmin = 0.083 deg).
 
 **Example — objects by type (e.g., all pulsars):**
 ```
-https://simbad.cds.unistra.fr/simbad/sim-tap/sync?request=doQuery&lang=adql&format=json&query=SELECT TOP 100 main_id, ra, dec, otype FROM basic WHERE otype = 'Pulsar'
+https://simbad.cds.unistra.fr/simbad/sim-tap/sync?request=doQuery&lang=adql&format=json&query=SELECT TOP 100 main_id, ra, dec, otype FROM basic WHERE otype = 'Psr'
 ```
 
 ### 2. Identifier Query (simple lookup)
@@ -109,12 +109,12 @@ query id <object name>
 - `query id <name>` — lookup by name (e.g., `query id M31`)
 - `query coo <ra> <dec> radius=<value><unit>` — cone search (units: `d`=deg, `m`=arcmin, `s`=arcsec)
 - `query id wildcard <pattern>` — wildcard search (e.g., `query id wildcard NGC 10*`)
-- `query sample <criteria>` — criteria search (e.g., `query sample otype='Star' & Vmag < 5.0`)
+- `query sample <criteria>` — criteria search (e.g., `query sample otype='*' & Vmag < 5.0`)
 
 **Multi-object queries** — include multiple `query id` lines in a single script:
 ```
 output console=off script=off
-format object "%IDLIST(1) | %COO(A D;ICRS) | %OTYPE"
+format object "%IDLIST(1) | %COO(s;A D;ICRS) | %OTYPE"
 query id M31
 query id M42
 query id M101
@@ -136,15 +136,15 @@ Format codes define which fields appear in script output. Use inside `format obj
 
 | Code | Description | Example Output |
 |------|-------------|----------------|
-| `%COO(A D;ICRS)` | RA Dec ICRS (sexagesimal) | `00 42 44.330 +41 16 07.50` |
-| `%COO(d d;ICRS)` | RA Dec decimal degrees | `10.6847083 +41.2687500` |
-| `%COO(A D;GAL)` | Galactic coordinates | `121.1743 -21.5733` |
+| `%COO(s;A D;ICRS)` | RA Dec ICRS (sexagesimal) | `00 42 44.330 +41 16 07.50` |
+| `%COO(d;A D;ICRS)` | RA Dec decimal degrees | `10.6847083 +41.2687500` |
+| `%COO(d;A D;GAL)` | Galactic coordinates | `121.1743 -21.5733` |
 
 ### Object Properties
 
 | Code | Description | Example Output |
 |------|-------------|----------------|
-| `%OTYPE` | Object type (condensed) | `Galaxy` |
+| `%OTYPE` | Object type (short code) | `G` |
 | `%SP` | Spectral type | `A1V` |
 | `%MT` | Morphological type | `SA(s)b` |
 
@@ -154,8 +154,8 @@ Format codes define which fields appear in script output. Use inside `format obj
 |------|-------------|
 | `%FLUXLIST(V)` | V-band magnitude |
 | `%FLUXLIST(B)` | B-band magnitude |
-| `%FLUXLIST(U;B;V;R;I)` | Multiple bands |
-| `%FLUXLIST(J;H;K)` | Near-infrared bands |
+| `%FLUXLIST(U,B,V,R,I)` | Multiple bands |
+| `%FLUXLIST(J,H,K)` | Near-infrared bands |
 
 ### Kinematics
 
@@ -168,9 +168,9 @@ Format codes define which fields appear in script output. Use inside `format obj
 ### Predefined Format Levels
 
 ```
-Basic:    "%IDLIST(1) | %COO(A D;ICRS) | %OTYPE"
-Detailed: "%IDLIST(1) | %COO(A D;ICRS) | %OTYPE | %SP | %FLUXLIST(V)"
-Full:     "%IDLIST(1) | %COO(A D;ICRS;J2000) | %OTYPE | %SP | %FLUXLIST(U;B;V;R;I;J;H;K) | %PM | %PLX | %RV | %MT"
+Basic:    "%IDLIST(1) | %COO(s;A D;ICRS) | %OTYPE"
+Detailed: "%IDLIST(1) | %COO(s;A D;ICRS) | %OTYPE | %SP | %FLUXLIST(V)"
+Full:     "%IDLIST(1) | %COO(s;A D;ICRS;J2000) | %OTYPE | %SP | %FLUXLIST(U,B,V,R,I,J,H,K) | %PM | %PLX | %RV | %MT"
 ```
 
 ## Key TAP Tables
@@ -234,7 +234,7 @@ Full:     "%IDLIST(1) | %COO(A D;ICRS;J2000) | %OTYPE | %SP | %FLUXLIST(U;B;V;R;
 | `bibcode` | VARCHAR | ADS bibcode |
 | `title` | VARCHAR | Paper title |
 | `journal` | VARCHAR | Journal name |
-| `year` | INTEGER | Publication year |
+| `"year"` | INTEGER | Publication year |
 
 ### `otypedef` — Object Type Definitions
 
@@ -247,24 +247,24 @@ Full:     "%IDLIST(1) | %COO(A D;ICRS;J2000) | %OTYPE | %SP | %FLUXLIST(U;B;V;R;
 
 | Code | Description |
 |------|-------------|
-| `Star` | Star |
+| `*` | Star |
 | `HII` | HII region |
 | `PN` | Planetary nebula |
 | `SNR` | Supernova remnant |
-| `Galaxy` | Galaxy |
+| `G` | Galaxy |
 | `AGN` | Active galactic nucleus |
 | `QSO` | Quasar |
-| `GClstr` | Galaxy cluster |
-| `GlobCl` | Globular cluster |
-| `OpCl` | Open cluster |
-| `Pulsar` | Pulsar |
+| `ClG` | Galaxy cluster |
+| `GlC` | Globular cluster |
+| `OpC` | Open cluster |
+| `Psr` | Pulsar |
 | `WD*` | White dwarf |
-| `Planet` | Extra-solar planet |
+| `Pl` | Extra-solar planet |
 | `**` | Double/multiple star |
 | `V*` | Variable star |
 | `X` | X-ray source |
 
-Query `SELECT * FROM otypedef ORDER BY otype` for the full list.
+Query `SELECT * FROM otypedef ORDER BY otype` for the full list. `otype` is the stored short code; `label` contains display labels such as `Galaxy`. Equality to `*` selects only that exact type, not every stellar subtype; use the type hierarchy deliberately when including descendants.
 
 ## ADQL Query Patterns
 
@@ -332,19 +332,19 @@ SELECT b.main_id, i1.id AS hipparcos_id, i2.id AS gaia_id
 FROM basic AS b
 JOIN ident AS i1 ON b.oid = i1.oidref AND i1.id LIKE 'HIP %'
 JOIN ident AS i2 ON b.oid = i2.oidref AND i2.id LIKE 'Gaia DR3%'
-WHERE b.otype = 'Star' AND b.plx_value > 50
+WHERE b.otype = '*' AND b.plx_value > 50
 ```
 
 ### Bibliography for Objects in a Region
 
 ```sql
-SELECT b.main_id, r.bibcode, r.title, r.year
+SELECT b.main_id, r.bibcode, r.title, r."year"
 FROM basic AS b
 JOIN has_ref AS hr ON b.oid = hr.oidref
 JOIN ref AS r ON hr.oidbibref = r.oidbib
 WHERE CONTAINS(POINT('ICRS', b.ra, b.dec), CIRCLE('ICRS', 83.633, -5.375, 0.5)) = 1
-  AND r.year >= 2020
-ORDER BY r.year DESC
+  AND r."year" >= 2020
+ORDER BY r."year" DESC
 ```
 
 ### Aggregation
@@ -358,12 +358,12 @@ GROUP BY otype
 HAVING COUNT(*) > 5
 ORDER BY count DESC
 
--- Average parallax by spectral class
-SELECT SUBSTRING(sp_type, 1, 1) AS sp_class, AVG(plx_value) AS mean_plx, COUNT(*) AS n
+-- Average parallax grouped by the exact spectral-type string
+SELECT sp_type, AVG(plx_value) AS mean_plx, COUNT(*) AS n
 FROM basic
 WHERE sp_type IS NOT NULL AND plx_value IS NOT NULL
-GROUP BY sp_class
-ORDER BY sp_class
+GROUP BY sp_type
+ORDER BY sp_type
 ```
 
 ## Response Formats
@@ -399,7 +399,7 @@ No formal rate limits documented. Best practices:
 ## Input Sanitization
 
 When building ADQL or script queries from user-supplied object names, sanitize inputs to prevent injection:
-- Block newlines, carriage returns, tabs, quotes, semicolons, backslashes, and angle brackets in object names
+- Reject control characters in object names. Use form/URL encoding for transport, and keep script commands and field names fixed
 - Escape single quotes in ADQL string literals by doubling them (`'` → `''`)
 - Limit input length (128 chars is reasonable)
 - Collapse and trim whitespace

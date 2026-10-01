@@ -1,571 +1,154 @@
-# Stable Baselines3 Callback System
+# Stable Baselines3 callbacks
 
-This document provides comprehensive information about the callback system in Stable Baselines3 for monitoring and controlling training.
+Targets SB3 2.9.0. Sources: [callback guide and API](https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/callbacks.html)
+and [released implementation](https://github.com/DLR-RM/stable-baselines3/blob/v2.9.0/stable_baselines3/common/callbacks.py).
+Examples are fragments requiring the model and environments named below; the
+complete tested pipeline is [train_rl_agent.py](../scripts/train_rl_agent.py).
 
-## Overview
+## Timing and callback state
 
-Callbacks are functions called at specific points during training to:
-- Monitor training metrics
-- Save checkpoints
-- Implement early stopping
-- Log custom metrics
-- Adjust hyperparameters dynamically
-- Trigger evaluations
+`BaseCallback._on_step()` runs once per vector step. `n_calls` counts calls;
+`num_timesteps` counts transitions across all environments. `eval_freq` and
+`CheckpointCallback.save_freq` use calls. For a requested transition interval use
+`max(interval // n_envs, 1)`; the actual interval is a multiple of `n_envs`.
+`EveryNTimesteps(n_steps, callback)` and `LogEveryNTimesteps(n_steps)` instead
+compare total transitions, with the same vector-step granularity.
 
-## Built-in Callbacks
+`_init_callback` runs when initialized for a learn call. `_on_training_start`,
+`_on_rollout_start`, `_on_rollout_end`, and `_on_training_end` delimit collection
+and training. Off-policy algorithms also invoke rollout hooks. `_on_step`
+returning False stops learning; return True otherwise. Rollout-end occurs before
+the subsequent gradient update, so it does not expose that update's losses.
 
-### EvalCallback
+Available attributes: `model`, `training_env`, `logger`, `n_calls`,
+`num_timesteps`, `locals`, `globals`, and `parent`. The `locals` dictionary is
+specific to the algorithm and collection phase. An event callback attaches itself
+as its child's `parent`; `CallbackList` propagates its own parent, rather than
+becoming the child's parent. Do not assume `locals['total_timesteps']` or
+`locals['entropy_losses']` exists at every step.
 
-Evaluates the agent periodically and saves the best model.
+## Evaluation and checkpointing
 
-```python
-from stable_baselines3.common.callbacks import EvalCallback
-
-eval_callback = EvalCallback(
-    eval_env,                                    # Separate evaluation environment
-    best_model_save_path="./logs/best_model/",  # Where to save best model
-    log_path="./logs/eval/",                    # Where to save evaluation logs
-    eval_freq=10000,                            # Evaluate every N steps
-    n_eval_episodes=5,                          # Number of episodes per evaluation
-    deterministic=True,                         # Use deterministic actions
-    render=False,                               # Render during evaluation
-    verbose=1,
-    warn=True,
-)
-
-model.learn(total_timesteps=100000, callback=eval_callback)
-```
-
-**Key Features:**
-- Automatically saves best model based on mean reward
-- Logs evaluation metrics to TensorBoard
-- Can stop training if reward threshold reached
-
-**Important:** Callback frequencies (`eval_freq`, `save_freq`) are measured in **environment steps per sub-environment**, not total timesteps across all parallel envs. Divide by `n_envs` to align with total training timesteps:
+Use a separate environment with the same observation transforms. `make_vec_env`
+adds Monitor. When using VecNormalize, wrap both train and evaluation environments
+in matching order and set evaluation `training=False`, `norm_reward=False`.
+EvalCallback synchronizes training statistics before each evaluation. Evaluation
+during training is validation for model selection; reserve fresh final test seeds.
 
 ```python
-# With 4 parallel environments, divide eval_freq by n_envs
-eval_freq = 10000 // 4  # Evaluate every 10000 total environment steps
-```
+from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
 
-### CheckpointCallback
-
-Saves model checkpoints at regular intervals.
-
-```python
-from stable_baselines3.common.callbacks import CheckpointCallback
-
-checkpoint_callback = CheckpointCallback(
-    save_freq=10000,                     # Save every N steps
-    save_path="./logs/checkpoints/",     # Directory for checkpoints
-    name_prefix="rl_model",              # Prefix for checkpoint files
-    save_replay_buffer=True,             # Save replay buffer (off-policy only)
-    save_vecnormalize=True,              # Save VecNormalize stats
-    verbose=2,
-)
-
-model.learn(total_timesteps=100000, callback=checkpoint_callback)
-```
-
-**Output Files:**
-- `rl_model_10000_steps.zip` - Model at 10k steps
-- `rl_model_20000_steps.zip` - Model at 20k steps
-- etc.
-
-**Important:** `save_freq` is in **environment steps per sub-environment**; divide by `n_envs` for total-timestep alignment (same as `EvalCallback` above).
-
-### LogEveryNTimesteps
-
-Dumps training logs every N timesteps (added SB3 2.6.0). Useful when the algorithm's built-in `log_interval` is too coarse.
-
-```python
-from stable_baselines3.common.callbacks import LogEveryNTimesteps
-
-log_callback = LogEveryNTimesteps(n_steps=1000)
-
-# Pass log_interval=None to avoid interference with the algorithm's default logging
-model = PPO("MlpPolicy", env, log_interval=None, verbose=1)
-model.learn(total_timesteps=100000, callback=log_callback)
-```
-
-### StopTrainingOnRewardThreshold
-
-Stops training when mean reward exceeds a threshold.
-
-```python
-from stable_baselines3.common.callbacks import StopTrainingOnRewardThreshold
-
-stop_callback = StopTrainingOnRewardThreshold(
-    reward_threshold=200,  # Stop when mean reward >= 200
-    verbose=1,
-)
-
-# Must be used with EvalCallback
-eval_callback = EvalCallback(
+# env and eval_env already constructed; n_envs is the training count.
+evaluation = EvalCallback(
     eval_env,
-    callback_on_new_best=stop_callback,  # Trigger when new best found
-    eval_freq=10000,
+    eval_freq=max(10000 // n_envs, 1),
     n_eval_episodes=5,
+    deterministic=True,
+    best_model_save_path="logs/best/",
+    log_path="logs/eval/",
 )
-
-model.learn(total_timesteps=1000000, callback=eval_callback)
+checkpoint = CheckpointCallback(
+    save_freq=max(10000 // n_envs, 1),
+    save_path="logs/checkpoints/",
+    name_prefix="rl_model",
+    save_replay_buffer=True,   # Applies only when a replay buffer exists.
+    save_vecnormalize=True,
+)
+model.learn(100000, callback=[evaluation, checkpoint])
 ```
 
-### StopTrainingOnNoModelImprovement
+`EvalCallback` saves `best_model.zip` and `evaluations.npz`; it does not save
+VecNormalize state with that best model. Attach a `callback_on_new_best` that saves
+`model.get_vec_normalize_env()` at the same step, as the bundled training script
+does. Loading final-run statistics alongside an earlier best checkpoint changes
+the policy input transform. Periodic CheckpointCallback files include the actual
+transition count, e.g. `rl_model_10000_steps.zip`,
+`rl_model_vecnormalize_10000_steps.pkl`, and optionally
+`rl_model_replay_buffer_10000_steps.pkl`.
 
-Stops training if model doesn't improve for N evaluations.
+## Stopping and logging
 
 ```python
-from stable_baselines3.common.callbacks import StopTrainingOnNoModelImprovement
-
-stop_callback = StopTrainingOnNoModelImprovement(
-    max_no_improvement_evals=10,  # Stop after 10 evals with no improvement
-    min_evals=20,                 # Minimum evaluations before stopping
-    verbose=1,
+from stable_baselines3.common.callbacks import (
+    EvalCallback, StopTrainingOnRewardThreshold,
+    StopTrainingOnNoModelImprovement, StopTrainingOnMaxEpisodes,
+    LogEveryNTimesteps, ProgressBarCallback, CallbackList,
 )
 
-# Use with EvalCallback
-eval_callback = EvalCallback(
-    eval_env,
-    callback_after_eval=stop_callback,
-    eval_freq=10000,
+stop_reward = StopTrainingOnRewardThreshold(reward_threshold=200)
+stop_plateau = StopTrainingOnNoModelImprovement(
+    max_no_improvement_evals=10, min_evals=20,
 )
-
-model.learn(total_timesteps=1000000, callback=eval_callback)
-```
-
-### StopTrainingOnMaxEpisodes
-
-Stops training after a maximum number of episodes.
-
-```python
-from stable_baselines3.common.callbacks import StopTrainingOnMaxEpisodes
-
-stop_callback = StopTrainingOnMaxEpisodes(
-    max_episodes=1000,  # Stop after 1000 episodes
-    verbose=1,
+evaluation = EvalCallback(
+    eval_env, eval_freq=max(10000 // n_envs, 1),
+    callback_on_new_best=stop_reward,
+    callback_after_eval=stop_plateau,
 )
-
-model.learn(total_timesteps=1000000, callback=stop_callback)
+callbacks = CallbackList([evaluation, LogEveryNTimesteps(n_steps=1000)])
+# log_interval belongs to learn(), not the algorithm constructor.
+model.learn(100000, callback=callbacks, log_interval=None)
 ```
 
-### ProgressBarCallback
+The reward callback continues while best reward is below the threshold. Plateau
+stopping attaches after every evaluation, not just new best events.
+`StopTrainingOnMaxEpisodes(max_episodes=1000)` uses a total target of
+`1000 * n_envs`, not exactly 1000 episodes globally (and counts can overshoot at a
+vector step). `ProgressBarCallback()` or `learn(progress_bar=True)` requires both
+`tqdm` and `rich`, included in SB3 extras.
 
-Displays a progress bar during training (requires tqdm).
+## Custom metrics across all environments
+
+Collect actual Monitor summaries, avoiding fabricated zero rewards or only
+looking at environment zero. A bounded deque avoids growth over long runs.
 
 ```python
-from stable_baselines3.common.callbacks import ProgressBarCallback
-
-progress_callback = ProgressBarCallback()
-
-model.learn(total_timesteps=100000, callback=progress_callback)
-```
-
-**Output:**
-```
-100%|██████████| 100000/100000 [05:23<00:00, 309.31it/s]
-```
-
-## Creating Custom Callbacks
-
-### BaseCallback Structure
-
-```python
+from collections import deque
+import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
-class CustomCallback(BaseCallback):
-    """
-    Custom callback template.
-    """
+class EpisodeMetrics(BaseCallback):
+    def __init__(self):
+        super().__init__()
+        self.returns = deque(maxlen=100)
 
-    def __init__(self, verbose=0):
-        super().__init__(verbose)
-        # Custom initialization
-
-    def _init_callback(self) -> None:
-        """
-        Called once when training starts.
-        Useful for initialization that requires access to model/env.
-        """
-        pass
-
-    def _on_training_start(self) -> None:
-        """
-        Called before the first rollout starts.
-        """
-        pass
-
-    def _on_rollout_start(self) -> None:
-        """
-        Called before collecting new samples (on-policy algorithms).
-        """
-        pass
-
-    def _on_step(self) -> bool:
-        """
-        Called after every step in the environment.
-
-        Returns:
-            bool: If False, training will be stopped.
-        """
-        return True  # Continue training
-
-    def _on_rollout_end(self) -> None:
-        """
-        Called after rollout ends (on-policy algorithms).
-        """
-        pass
-
-    def _on_training_end(self) -> None:
-        """
-        Called at the end of training.
-        """
-        pass
-```
-
-### Useful Attributes
-
-Inside callbacks, you have access to:
-
-- **`self.model`**: The RL algorithm instance
-- **`self.training_env`**: The training environment
-- **`self.n_calls`**: Number of times `_on_step()` was called
-- **`self.num_timesteps`**: Total number of environment steps
-- **`self.locals`**: Local variables from the algorithm (varies by algorithm)
-- **`self.globals`**: Global variables from the algorithm
-- **`self.logger`**: Logger for TensorBoard/CSV logging
-- **`self.parent`**: Parent callback (if used in CallbackList)
-
-## Custom Callback Examples
-
-### Example 1: Log Custom Metrics
-
-```python
-class LogCustomMetricsCallback(BaseCallback):
-    """
-    Log custom metrics to TensorBoard.
-    """
-
-    def __init__(self, verbose=0):
-        super().__init__(verbose)
-        self.episode_rewards = []
-
-    def _on_step(self) -> bool:
-        # Check if episode ended
-        if self.locals["dones"][0]:
-            # Log episode reward
-            episode_reward = self.locals["infos"][0].get("episode", {}).get("r", 0)
-            self.episode_rewards.append(episode_reward)
-
-            # Log to TensorBoard
-            self.logger.record("custom/episode_reward", episode_reward)
-            self.logger.record("custom/mean_reward_last_100",
-                             np.mean(self.episode_rewards[-100:]))
-
+    def _on_step(self):
+        for done, info in zip(self.locals['dones'], self.locals['infos']):
+            if done and 'episode' in info:
+                self.returns.append(info['episode']['r'])
+                if 'is_success' in info:
+                    self.logger.record_mean('custom/success', float(info['is_success']))
+        if self.returns:
+            self.logger.record('custom/mean_return_100', float(np.mean(self.returns)))
         return True
 ```
 
-### Example 2: Adjust Learning Rate
+`logger.record` stores the latest value; `record_mean` aggregates values until
+logger dump. Output routes depend on logger configuration (for TensorBoard set
+`tensorboard_log=...` when constructing the model). `info['is_success']` is the
+standard success key used by EvalCallback; define success and its denominator
+explicitly for the task. Do not equate entropy to task success.
+
+## Schedules and curricula
+
+Pass learning-rate schedules through the algorithm API so training updates do
+not overwrite callback changes. The same principle applies to off-policy models
+with separate actor and critic optimizers.
 
 ```python
-class LinearScheduleCallback(BaseCallback):
-    """
-    Linearly decrease learning rate during training.
-    """
+from stable_baselines3.common.utils import LinearSchedule
+from stable_baselines3 import PPO
 
-    def __init__(self, initial_lr=3e-4, final_lr=3e-5, verbose=0):
-        super().__init__(verbose)
-        self.initial_lr = initial_lr
-        self.final_lr = final_lr
-
-    def _on_step(self) -> bool:
-        # Calculate progress (0 to 1)
-        progress = self.num_timesteps / self.locals["total_timesteps"]
-
-        # Linear interpolation
-        new_lr = self.initial_lr + (self.final_lr - self.initial_lr) * progress
-
-        # Update learning rate
-        for param_group in self.model.policy.optimizer.param_groups:
-            param_group["lr"] = new_lr
-
-        # Log learning rate
-        self.logger.record("train/learning_rate", new_lr)
-
-        return True
+model = PPO('MlpPolicy', env, learning_rate=LinearSchedule(3e-4, 3e-5, 1.0))
 ```
 
-### Example 3: Early Stopping on Moving Average
-
-```python
-class EarlyStoppingCallback(BaseCallback):
-    """
-    Stop training if moving average of rewards doesn't improve.
-    """
-
-    def __init__(self, check_freq=10000, min_reward=200, window=100, verbose=0):
-        super().__init__(verbose)
-        self.check_freq = check_freq
-        self.min_reward = min_reward
-        self.window = window
-        self.rewards = []
-
-    def _on_step(self) -> bool:
-        # Collect episode rewards
-        if self.locals["dones"][0]:
-            reward = self.locals["infos"][0].get("episode", {}).get("r", 0)
-            self.rewards.append(reward)
-
-        # Check every check_freq steps
-        if self.n_calls % self.check_freq == 0 and len(self.rewards) >= self.window:
-            mean_reward = np.mean(self.rewards[-self.window:])
-            if self.verbose > 0:
-                print(f"Mean reward: {mean_reward:.2f}")
-
-            if mean_reward >= self.min_reward:
-                if self.verbose > 0:
-                    print(f"Stopping: reward threshold reached!")
-                return False  # Stop training
-
-        return True  # Continue training
-```
-
-### Example 4: Save Best Model by Custom Metric
-
-```python
-class SaveBestModelCallback(BaseCallback):
-    """
-    Save model when custom metric is best.
-    """
-
-    def __init__(self, check_freq=1000, save_path="./best_model/", verbose=0):
-        super().__init__(verbose)
-        self.check_freq = check_freq
-        self.save_path = save_path
-        self.best_score = -np.inf
-
-    def _init_callback(self) -> None:
-        if self.save_path is not None:
-            os.makedirs(self.save_path, exist_ok=True)
-
-    def _on_step(self) -> bool:
-        if self.n_calls % self.check_freq == 0:
-            # Calculate custom metric (example: policy entropy)
-            custom_metric = self.locals.get("entropy_losses", [0])[-1]
-
-            if custom_metric > self.best_score:
-                self.best_score = custom_metric
-                if self.verbose > 0:
-                    print(f"New best! Saving model to {self.save_path}")
-                self.model.save(os.path.join(self.save_path, "best_model"))
-
-        return True
-```
-
-### Example 5: Log Environment-Specific Information
-
-```python
-class EnvironmentInfoCallback(BaseCallback):
-    """
-    Log custom info from environment.
-    """
-
-    def _on_step(self) -> bool:
-        # Access info dict from environment
-        info = self.locals["infos"][0]
-
-        # Log custom metrics from environment
-        if "distance_to_goal" in info:
-            self.logger.record("env/distance_to_goal", info["distance_to_goal"])
-
-        if "success" in info:
-            self.logger.record("env/success_rate", info["success"])
-
-        return True
-```
-
-## Chaining Multiple Callbacks
-
-Use `CallbackList` to combine multiple callbacks:
-
-```python
-from stable_baselines3.common.callbacks import CallbackList
-
-callback_list = CallbackList([
-    eval_callback,
-    checkpoint_callback,
-    progress_callback,
-    custom_callback,
-])
-
-model.learn(total_timesteps=100000, callback=callback_list)
-```
-
-Or pass a list directly:
-
-```python
-model.learn(
-    total_timesteps=100000,
-    callback=[eval_callback, checkpoint_callback, custom_callback]
-)
-```
-
-## Event-Based Callbacks
-
-Callbacks can trigger other callbacks on specific events:
-
-```python
-from stable_baselines3.common.callbacks import EventCallback
-
-# Stop training when reward threshold reached
-stop_callback = StopTrainingOnRewardThreshold(reward_threshold=200)
-
-# Evaluate periodically and trigger stop_callback when new best found
-eval_callback = EvalCallback(
-    eval_env,
-    callback_on_new_best=stop_callback,  # Triggered when new best model
-    eval_freq=10000,
-)
-```
-
-## Logging to TensorBoard
-
-Use `self.logger.record()` to log metrics:
-
-```python
-class TensorBoardCallback(BaseCallback):
-    def _on_step(self) -> bool:
-        # Log scalar
-        self.logger.record("custom/my_metric", value)
-
-        # Log multiple metrics
-        self.logger.record("custom/metric1", value1)
-        self.logger.record("custom/metric2", value2)
-
-        # Logger automatically writes to TensorBoard
-        return True
-```
-
-**View in TensorBoard:**
-```bash
-tensorboard --logdir ./logs/
-```
-
-## Advanced Patterns
-
-### Curriculum Learning
-
-```python
-class CurriculumCallback(BaseCallback):
-    """
-    Increase task difficulty over time.
-    """
-
-    def __init__(self, difficulty_schedule, verbose=0):
-        super().__init__(verbose)
-        self.difficulty_schedule = difficulty_schedule
-
-    def _on_step(self) -> bool:
-        # Update environment difficulty based on progress
-        progress = self.num_timesteps / self.locals["total_timesteps"]
-
-        for threshold, difficulty in self.difficulty_schedule:
-            if progress >= threshold:
-                self.training_env.env_method("set_difficulty", difficulty)
-
-        return True
-```
-
-### Population-Based Training
-
-```python
-class PopulationBasedCallback(BaseCallback):
-    """
-    Adjust hyperparameters based on performance.
-    """
-
-    def __init__(self, check_freq=10000, verbose=0):
-        super().__init__(verbose)
-        self.check_freq = check_freq
-        self.performance_history = []
-
-    def _on_step(self) -> bool:
-        if self.n_calls % self.check_freq == 0:
-            # Evaluate performance
-            perf = self._evaluate_performance()
-            self.performance_history.append(perf)
-
-            # Adjust hyperparameters if performance plateaus
-            if len(self.performance_history) >= 3:
-                recent = self.performance_history[-3:]
-                if max(recent) - min(recent) < 0.01:  # Plateau detected
-                    self._adjust_hyperparameters()
-
-        return True
-
-    def _adjust_hyperparameters(self):
-        # Example: increase learning rate
-        for param_group in self.model.policy.optimizer.param_groups:
-            param_group["lr"] *= 1.2
-```
-
-## Debugging Tips
-
-### Print Available Attributes
-
-```python
-class DebugCallback(BaseCallback):
-    def _on_step(self) -> bool:
-        if self.n_calls == 1:
-            print("Available in self.locals:")
-            for key in self.locals.keys():
-                print(f"  {key}: {type(self.locals[key])}")
-        return True
-```
-
-### Common Issues
-
-1. **Callback not being called:**
-   - Ensure callback is passed to `model.learn()`
-   - Check that `_on_step()` returns `True`
-
-2. **AttributeError in callback:**
-   - Not all attributes available in all callbacks
-   - Use `self.locals.get("key", default)` for safety
-
-3. **Memory leaks:**
-   - Don't store large arrays in callback state
-   - Clear buffers periodically
-
-4. **Performance impact:**
-   - Minimize computation in `_on_step()` (called every step)
-   - Use `check_freq` to limit expensive operations
-
-## Best Practices
-
-1. **Use appropriate callback timing:**
-   - `_on_step()`: For metrics that change every step
-   - `_on_rollout_end()`: For metrics computed over rollouts
-   - `_init_callback()`: For one-time initialization
-
-2. **Log efficiently:**
-   - Don't log every step (hurts performance)
-   - Aggregate metrics and log periodically
-
-3. **Handle vectorized environments:**
-   - Remember that `dones`, `infos`, etc. are arrays
-   - Check `dones[i]` for each environment
-
-4. **Test callbacks independently:**
-   - Create simple test cases
-   - Verify callback behavior before long training runs
-
-5. **Document custom callbacks:**
-   - Clear docstrings
-   - Example usage in comments
-
-## Additional Resources
-
-- Official SB3 Callbacks Guide: https://stable-baselines3.readthedocs.io/en/master/guide/callbacks.html
-- Callback API Reference: https://stable-baselines3.readthedocs.io/en/master/guide/callbacks.html#module-stable_baselines3.common.callbacks
-- TensorBoard Documentation: https://www.tensorflow.org/tensorboard
+For curriculum changes expose a setter on the underlying Gymnasium environment,
+then call `training_env.env_method('set_difficulty', new_difficulty)` at a chosen
+event. Have the environment apply the pending difficulty at its next reset, not
+mid-episode. A custom callback should keep an explicit schedule index; do not loop
+through every prior threshold and reapply all stages every step. Keep evaluation
+difficulty fixed and separately described.
+
+Debug a callback by inspecting types/keys in `self.locals` on its first call;
+avoid printing large observations or saving on every step. If a custom metric or
+population-training method is not implemented, treat that fragment as a design
+sketch, not executable training logic.

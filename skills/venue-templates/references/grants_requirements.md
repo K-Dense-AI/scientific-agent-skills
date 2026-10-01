@@ -2,7 +2,7 @@
 
 Funding requirements are controlled by the current solicitation or notice of funding opportunity (NOFO), the effective agency guide, and the submission portal. A general agency summary never overrides the call.
 
-**Reviewed:** 2026-07-20
+**Reviewed:** 2026-10-01
 
 ## Required Order of Authority
 
@@ -25,7 +25,7 @@ Record the source URLs, versions, and date checked in the proposal workspace.
 - Current PAPPG Chapter II: follow the version marked current on the landing page
 - SciENcv: https://www.ncbi.nlm.nih.gov/sciencv/
 
-As reviewed on 2026-07-20, **NSF 24-1** remains the current PAPPG for proposals submitted or due on or after 2024-05-20, with later supplemental policy notices listed on the PAPPG landing page. Recheck this status for every deadline.
+As reviewed on 2026-10-01, **NSF 24-1** remains the current PAPPG for proposals submitted or due on or after 2024-05-20, with [Supplement 1 (26-200)](https://www.nsf.gov/policies/document/pappg24-1-supplement-1) and [Supplement 2 (26-202)](https://www.nsf.gov/policies/document/pappg24-1-supplement-2). Recheck this status for every deadline.
 
 ### Verified common research-proposal rules
 
@@ -36,7 +36,7 @@ Unless the solicitation modifies them:
 | Project Summary | No more than 1 page; include Overview, Intellectual Merit, and Broader Impacts |
 | Project Description | Up to 15 pages for a standard research proposal |
 | References Cited | Separate section; follow PAPPG content rules |
-| Data Management and Sharing Plan | No more than 2 pages |
+| Data Management and Sharing Plan | Create using the Research.gov DMSP tool; Supplement 2 supersedes the old two-page PDF-upload rule from 2026-04-27 |
 | Biographical Sketch | Generated in SciENcv for each senior/key person; no old three-page cap |
 | Current and Pending (Other) Support | Generated and certified in SciENcv |
 | Synergistic Activities | Separate document, up to 1 page and up to 5 examples per senior/key person |
@@ -84,6 +84,10 @@ This is writing guidance, not a required section order. Follow the solicitation.
 
 ### Data Management and Sharing Plan
 
+Use the Research.gov tool and current program prompts. Data supporting NSF-funded
+publications must be shared at publication unless an exception is justified in the
+plan. Do not upload the bundled prose as an assumed two-page substitute.
+
 Address applicable plans for:
 
 - data and other research products;
@@ -111,7 +115,7 @@ Use the form set and instructions applicable to the due date. The NOFO always ta
 
 ### Verified common page limits
 
-As reviewed on 2026-07-20:
+As reviewed on 2026-10-01:
 
 | Attachment | General limit unless the NOFO says otherwise |
 |---|---|
@@ -121,7 +125,7 @@ As reviewed on 2026-07-20:
 | Introduction to resubmission/revision | 1 page |
 | Project Summary/Abstract | 30 lines |
 | Project Narrative | 3 sentences for most activity codes |
-| Legacy Biographical Sketch | 5 pages |
+| Legacy Biographical Sketch | Historical only; do not select this for a current application merely because it remains in the page-limit table |
 | Biographical Sketch Common Form and Supplement | No hard page limit; length is controlled through SciENcv data entry |
 
 Not every activity code uses every attachment. Check the NOFO and activity-code instructions.
@@ -138,6 +142,11 @@ Verify the current guide for:
 - headers, footers, and page numbers; and
 - whether a format page or common form is mandatory.
 
+The current NIH attachment guide requires text of at least 11 points, at most
+15 characters per linear inch, at most six lines per vertical inch, and margins of
+at least half an inch. Smaller legible text is permitted in graphics. Helvetica
+is among the recommended fonts; Arial is not uniquely required. Do not add
+headers or footers/page numbers unless the attachment instructions request them.
 Do not compress text or figures to evade a page limit.
 
 ### Specific Aims
@@ -166,12 +175,7 @@ Address rigor, feasibility, analysis, expected outcomes, potential problems, alt
 
 ### Biosketch and common forms
 
-Do not rely on the old assumption that every NIH biosketch is a manually edited five-page PDF. Determine whether the application uses:
-
-- a legacy biosketch format page; or
-- the Biographical Sketch Common Form and NIH supplement through SciENcv.
-
-Use the current forms directory and due-date-specific instructions.
+Use the [Biographical Sketch Common Form and NIH supplement](https://www.grants.nih.gov/grants-process/write-application/forms-directory/biographical-sketch-common-form) through SciENcv for current applications. NIH implemented Common Forms for due dates on or after 2026-01-25; [NOT-OD-26-079](https://grants.nih.gov/grants/guide/notice-files/NOT-OD-26-079.html) sets system enforcement from 2026-05-08. The research-security-training certification starts on 2026-05-25, a separate date. Consult current form instructions and certifications. A legacy five-page row in the general limits table is not authorization to use the old form.
 
 ## DOE
 
@@ -179,6 +183,8 @@ Use the current forms directory and due-date-specific instructions.
 
 - Office of Science funding opportunities: https://science.osti.gov/grants
 - DOE funding opportunities: https://www.energy.gov/funding-financing
+- Office of Science current calls: https://science.osti.gov/grants/FOAs/Open
+- Office of Science submission guidance: https://science.osti.gov/grants/Policy-and-Guidance
 - SAM.gov: https://sam.gov/content/opportunities
 
 DOE requirements vary substantially by Funding Opportunity Announcement. Extract exact rules for:
@@ -192,7 +198,9 @@ DOE requirements vary substantially by Funding Opportunity Announcement. Extract
 - milestones, deliverables, and technology readiness; and
 - submission system.
 
-No DOE template is bundled in this skill.
+Submission systems are office- and stage-specific; Office of Science guidance
+uses PAMS/Grants.gov, while other offices can use their own exchanges. Follow
+the active call. No DOE template is bundled in this skill.
 
 ## DARPA
 
@@ -203,7 +211,7 @@ No DOE template is bundled in this skill.
 
 Every BAA defines its own volumes, page limits, abstract/full-proposal stages, security markings, cost package, and submission channel. Do not apply a generic “20–25 page DARPA proposal” limit.
 
-Use the Heilmeier questions as a thinking aid when relevant:
+Use the [official Heilmeier Catechism](https://www.darpa.mil/about/heilmeier-catechism) as a thinking aid when relevant:
 
 - What are you trying to do?
 - How is it done today, and what are the limits?

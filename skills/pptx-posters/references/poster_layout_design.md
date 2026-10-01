@@ -151,6 +151,18 @@ result.
 distinguishes Standard quality for publishing/printing from Minimum size. Use the
 current PowerPoint interface and Standard/high print quality when PDF is required.
 
+The export plan reports both canvas dimensions and final-artboard dimensions in
+PDF points (72 points per inch), but creates no PDF. A reduced canvas does not make
+the exported page automatically full-size. Measure the actual PDF page; arrange
+printer scaling or an approved full-size PDF conversion as required, then verify
+the transformed file again. Never confuse full-size print placement with PDF page
+size.
+
+On macOS, [Microsoft's accessible PDF export route](https://support.microsoft.com/en-us/accessibility/office-accessibility/create-accessible-pdfs)
+uses an online conversion service. Record the route and settings; choose a local
+route when document transmission is not authorized and inspect its actual tags and
+links. Standard/high quality is a print setting, not a privacy or tagging guarantee.
+
 After export, independently verify:
 
 - PDF page/artboard dimensions and orientation;

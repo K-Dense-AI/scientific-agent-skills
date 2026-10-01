@@ -3,9 +3,11 @@ name: rdkit
 description: Cheminformatics toolkit for fine-grained molecular control. SMILES/SDF parsing, descriptors (MW, LogP, TPSA), fingerprints, substructure search, 2D/3D generation, similarity, reactions. For standard workflows with simpler interface, use datamol (wrapper around RDKit). Use rdkit for advanced control, custom sanitization, specialized algorithms.
 license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
-compatibility: Examples target RDKit 2026.03.x. Use conda-forge for the broadest binary support or PyPI package `rdkit` for supported platform wheels; `rdkit-pypi` is the legacy PyPI name.
+compatibility: Tested with RDKit 2026.03.6 on Python 3.13; bundled scripts require the rdkit package. No credentials or network are needed after installation. Use conda-forge for the broadest binary support or PyPI package `rdkit` for supported platform wheels; `rdkit-pypi` is the legacy PyPI name.
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
+  tested-rdkit: "2026.03.6"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,14 +17,14 @@ metadata:
 
 RDKit is a comprehensive cheminformatics library providing Python APIs for molecular analysis and manipulation. This skill provides guidance for reading/writing molecular structures, calculating descriptors, fingerprinting, substructure searching, chemical reactions, 2D/3D coordinate generation, and molecular visualization. Use this skill for drug discovery, computational chemistry, and cheminformatics research tasks.
 
-**Current baseline (checked 2026-06-07):** RDKit **2026.03.3** is the latest GitHub/PyPI release (`rdkit` 2026.3.3 on PyPI). Official installation docs continue to recommend conda-forge for most users, while cross-platform PyPI wheels are published under the `rdkit` package name. `rdkit-pypi` is the old PyPI package name and should only appear when maintaining legacy environments.
+**Tested stable baseline (reviewed 2026-10-01):** RDKit **2026.03.6**, distributed as `rdkit==2026.3.6` on PyPI; this is the current stable GitHub/PyPI release. Official installation docs continue to recommend conda-forge for most users, while cross-platform PyPI wheels are published under the `rdkit` package name. `rdkit-pypi` is the old PyPI package name and should only appear when maintaining legacy environments.
 
 ## Installation and Setup
 
 Use `uv` when installing into an existing Python environment:
 
 ```bash
-uv pip install rdkit
+uv pip install "rdkit==2026.3.6"
 ```
 
 For reproducible chemistry environments, especially when mixing compiled scientific packages, conda-forge remains the upstream recommendation:
@@ -60,11 +62,33 @@ Worked workflows and the performance, thread-safety, and version-sensitivity not
 Prefer portable exchange formats (SMILES, SDF) for shared data; for local caches RDKit's
 binary molecule representation avoids generic pickle.
 
+## Preserve chemical meaning
+
+Canonical isomeric SMILES records one molecular graph under a particular RDKit
+version. It does not merge tautomers, choose a pH-dependent protonation state,
+remove salts, or resolve unspecified stereo. Preserve the original structure and
+source ID before any explicit standardization policy. Similarity 1.0 is not an
+identity test: fingerprints collide and the bundled search ignores chirality
+unless `--chirality` is selected. See the tested identity/standardization example
+in [references/workflows_and_best_practices.md](references/workflows_and_best_practices.md).
+
+The helpers retain one-based source IDs through invalid-record filtering, reject
+empty molecules, and perform no implicit salt stripping or neutralization.
+SMILES files have no header; RDKit parses a SMILES/CXSMILES structure followed
+by an optional name. Text outputs retain enhanced stereo groups as CXSMILES;
+other CX annotations (such as drawing coordinates) are not an archive format.
+The search accepts one valid query molecule, not a query batch. MACCS always has
+167 positions (166 keys plus unused bit 0); `--bits` applies to other methods.
+The substructure helper's historical `pains` option is only five illustrative
+motifs, not the published PAINS catalogue. Invalid requested patterns abort.
+Descriptor cutoffs, QED, and alerts are research heuristics, not evidence of
+safety, potency, bioavailability, or synthetic feasibility.
+
 ## Common Pitfalls
 
 1. **Forgetting to check for None:** Always validate molecules after parsing
 2. **Sanitization failures:** Use `DetectChemistryProblems()` to debug
-3. **Missing hydrogens:** Use `AddHs()` when calculating properties that depend on hydrogen
+3. **Hydrogen representation:** Most 2D descriptors account for implicit H. Use `AddHs()` before embedding; it does not choose protonation at a specified pH.
 4. **2D vs 3D:** Generate appropriate coordinates before visualization or 3D analysis. Check the conformer ID returned by `EmbedMolecule` before accessing coordinates: `-1` means embedding failed. For difficult molecules, enable `EmbedParameters.trackFailures` and inspect `GetFailureCounts()`; do not send a failed embedding into force-field optimization.
 5. **SMARTS matching rules:** Remember that unspecified properties match anything
 6. **Thread safety with MolSuppliers:** Don't share supplier objects across threads
@@ -76,7 +100,7 @@ binary molecule representation avoids generic pickle.
 This skill includes detailed API reference documentation:
 
 - `api_reference.md` - Comprehensive listing of RDKit modules, functions, and classes organized by functionality
-- `descriptors_reference.md` - Complete list of available molecular descriptors with descriptions
+- `descriptors_reference.md` - Selected list of available molecular descriptors with descriptions
 - `smarts_patterns.md` - Common SMARTS patterns for functional groups and structural features
 
 Load these references when needing specific API details, parameter information, or pattern examples.
@@ -92,6 +116,11 @@ Example scripts for common RDKit workflows:
 - `substructure_filter.py` - Filter molecules by substructure patterns
 
 These scripts can be executed directly or used as templates for custom workflows.
+
+## Review evidence
+
+Release, official API/source links, runtime coverage, and explicitly illustrative
+examples are recorded in [references/review.md](references/review.md).
 
 ## Citing Scientific Agent Skills
 

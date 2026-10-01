@@ -14,7 +14,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Optional
 
 
-DOCUMENTED_BASELINE = "0.410.0"
+DOCUMENTED_BASELINE = "0.415.0"
 
 SYMBOL_GROUPS: dict[str, list[tuple[str, str]]] = {
     "files": [

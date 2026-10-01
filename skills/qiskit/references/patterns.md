@@ -1,5 +1,6 @@
 # End-to-End Qiskit Patterns
 
+Cloud authentication, QPU, session, and batch snippets are illustrative and were not executed in this refresh. Local evidence is listed in [sources.md](sources.md).
 Use a four-stage workflow:
 
 ```text
@@ -106,7 +107,7 @@ print("layout:", isa_circuit.layout)
 ### Execute
 
 ```python
-from qiskit_ibm_runtime import SamplerV2 as Sampler
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 sampler = Sampler(mode=backend)
 job = sampler.run([isa_circuit], shots=4096)
@@ -215,7 +216,8 @@ Run iterative Estimator calls. Session mode requires an eligible paid plan:
 
 ```python
 from scipy.optimize import minimize
-from qiskit_ibm_runtime import EstimatorV2 as Estimator, Session
+from qiskit_ibm_runtime import Session
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 history = []
 
@@ -271,7 +273,8 @@ isa_circuits = pass_manager.run(circuits)
 Submit independent jobs:
 
 ```python
-from qiskit_ibm_runtime import Batch, SamplerV2 as Sampler
+from qiskit_ibm_runtime import Batch
+from qiskit_ibm_runtime.executor_sampler import Sampler
 
 with Batch(backend=backend, max_time="10m") as batch:
     sampler = Sampler(mode=batch)
@@ -316,7 +319,7 @@ Avoid claiming a noise model predicts QPU output merely because the two results 
 Run an unmitigated baseline:
 
 ```python
-from qiskit_ibm_runtime import EstimatorV2 as Estimator
+from qiskit_ibm_runtime.executor_estimator import Estimator
 
 baseline_estimator = Estimator(
     mode=backend,

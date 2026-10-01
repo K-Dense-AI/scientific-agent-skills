@@ -1,13 +1,14 @@
 ---
 name: openpiv
-description: Particle Image Velocimetry (PIV) analysis with OpenPIV. Use when extracting velocity fields from PIV image pairs, analyzing fluid dynamics or flow visualization experiments, cross-correlating interrogation windows, validating and replacing spurious PIV vectors, or computing vorticity, strain rate, and turbulence statistics from measured velocity fields.
+description: Performs Particle Image Velocimetry (PIV) analysis with OpenPIV. Use when extracting velocity fields from PIV image pairs, analyzing fluid dynamics or flow visualization experiments, cross-correlating interrogation windows, validating and replacing spurious PIV vectors, or computing vorticity, strain rate, and turbulence statistics from measured velocity fields.
 license: BSD-3-Clause
 compatibility: Requires Python 3.10+ with openpiv installed (uv pip install openpiv). numpy, scipy, scikit-image, and matplotlib arrive as dependencies. No network access needed after install.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: OpenPIV Team
-  tested-against: "openpiv 0.25.4"
+  tested-against: "openpiv 0.26.1"
+  last-reviewed: "2026-10-01"
 ---
 
 # OpenPIV
@@ -18,8 +19,9 @@ OpenPIV (Open Particle Image Velocimetry) analyzes fluid flow from PIV image pai
 preprocessing, cross-correlation, vector validation, outlier replacement, smoothing, and scaling to
 physical units.
 
-Everything below is verified against **openpiv 0.25.4**. The API moves between releases — check
-`inspect.signature()` before trusting a snippet against a different version.
+Targets **openpiv 0.26.1**. Synthetic checks ran on Python 3.13, NumPy 2.5.3, SciPy 1.18.1,
+scikit-image 0.26.0, and Matplotlib 3.11.2. Rust was not installed; use `backend="scipy"` for the
+tested path. See [review evidence](references/advanced_algorithms.md#review-sources-and-verification).
 
 ## When to use
 
@@ -37,7 +39,7 @@ uv pip install openpiv
 
 # Pin it when the analysis needs to be reproducible -- this is the version every
 # snippet below was checked against.
-uv pip install "openpiv==0.25.4"
+uv pip install "openpiv==0.26.1"
 ```
 
 Run PIV analysis on an image pair:
@@ -49,15 +51,17 @@ from openpiv import tools, pyprocess, validation, filters, scaling
 frame_a = tools.imread("image_a.bmp")
 frame_b = tools.imread("image_b.bmp")
 
-# Cross-correlate. Returns (u, v, s2n) whenever sig2noise_method is not None.
+# Always returns (u, v, s2n); s2n is all NaN if sig2noise_method=None.
 u, v, s2n = pyprocess.extended_search_area_piv(
-    frame_a.astype(np.int32),
-    frame_b.astype(np.int32),
+    frame_a.astype(np.float32),
+    frame_b.astype(np.float32),
     window_size=32,
     overlap=12,
     dt=0.02,
     search_area_size=38,
-    correlation_method="linear",   # required for search_area_size > window_size
+    correlation_method="linear",   # circular also supports extended search
+    normalized_correlation=True,
+    backend="scipy",
     sig2noise_method="peak2peak",
 )
 
@@ -65,20 +69,22 @@ x, y = pyprocess.get_coordinates(
     image_size=frame_a.shape,
     search_area_size=38,
     overlap=12,
+    center_on_field=False,         # matches sliding-window positions
 )
 
 # flags is a boolean array: True marks a spurious vector.
-flags = validation.sig2noise_val(s2n, threshold=1.05)
+flags = validation.sig2noise_val(s2n, threshold=1.05) | ~np.isfinite(s2n)
+flags |= ~np.isfinite(u) | ~np.isfinite(v)
 u, v = filters.replace_outliers(u, v, flags, method="localmean", max_iter=3, kernel_size=2)
 
-# Scale to physical units, then flip to image coordinates for plotting.
+# Scale, then convert to right-handed image-boundary coordinates.
 x, y, u, v = scaling.uniform(x, y, u, v, scaling_factor=96.52)
-x, y, u, v = tools.transform_coordinates(x, y, u, v)
+y, v = frame_a.shape[0] / 96.52 - y, -v
 
 tools.save("vectors.txt", x, y, u, v, flags)
 ```
 
-Or use the bundled CLI, which wraps exactly that pipeline:
+Or use the bundled CLI, which also checks inputs and preserves masks and processing parameters:
 
 ```bash
 python skills/openpiv/scripts/runner.py \
@@ -111,9 +117,10 @@ overlap raises vector density and cost, but adjacent vectors become correlated r
 independent.
 
 **`search_area_size`** — the window searched in the second frame. Must be ≥ `window_size`; a few
-pixels larger accommodates larger displacements. Pair an extended search area with
-`correlation_method="linear"` — the default `"circular"` relies on FFT wrap-around and aliases large
-displacements into small ones. See `references/advanced_algorithms.md`.
+pixels larger accommodates larger displacements. Both `"circular"` and `"linear"` support extended
+search. The CLI chooses zero-padded `"linear"` with `normalized_correlation=True` for it; this
+does not recover arbitrary displacement or eliminate spurious peaks. Grid stride is
+`search_area_size - overlap`, so overlap must be smaller than the search area.
 
 Rules of thumb: keep the largest displacement under about a quarter of `window_size`, and aim for
 5–10 particles per window.
@@ -133,13 +140,13 @@ flags = validation.sig2noise_val(s2n, threshold=1.05)
 
 ### Dynamic Masking
 
-Masking lives in `openpiv.preprocess`, **not** in an `openpiv.masking` module. It returns an
-`(image, mask)` tuple and expects a float image.
+Masking lives in `openpiv.preprocess` and returns `(image, mask)`. Use floating-point copies
+to avoid unsigned subtraction artifacts. Inspect masks on both frames before analysis.
 
 ```python
 from openpiv import preprocess
 
-# method="edges" for dark, sharp-edged objects; "intensity" for high-contrast objects.
+# Intensity masking uses Otsu; the threshold argument is for edges.
 frame_a_masked, mask_a = preprocess.dynamic_masking(
     frame_a.astype(np.float64), method="intensity", filter_size=7, threshold=0.005
 )
@@ -148,9 +155,11 @@ frame_b_masked, mask_b = preprocess.dynamic_masking(
 )
 ```
 
-Feed the **returned image** into the correlation step — it already has the masked region zeroed. Do
-not multiply the original frame by `mask`: masking is already applied, and for `method="edges"` the
-mask comes back as `uint8` 0/255 rather than boolean, so multiplying rescales the image by 255.
+Preserve the union `mask_a | mask_b` as excluded physical regions. The CLI samples it at
+interrogation centers, saves it, and keeps those velocities NaN after replacement. Windows
+straddling an object can still be biased: inspect/dilate masks for the experiment. In 0.26.1
+`method="edges"` indexes with uint8 instead of bool, potentially corrupting the image or failing.
+The CLI refuses it; use intensity masking or a verified boolean mask in a custom workflow.
 
 ### Multi-Pass Processing
 
@@ -161,14 +170,13 @@ Multi-pass (window deformation) lives in `openpiv.windef`, driven by a `PIVSetti
 import numpy as np
 from openpiv import scaling, windef
 
-settings = windef.PIVSettings()
-settings.windowsizes = (64, 32, 16)   # one entry per pass, decreasing (this is also the default)
-settings.overlap = (32, 16, 8)        # same length as windowsizes
-settings.num_iterations = 3           # number of passes to actually run
-settings.sig2noise_threshold = 1.05
+settings = windef.PIVSettings(
+    windowsizes=(64, 32, 16), overlap=(32, 16, 8), num_iterations=3,
+    backend="scipy", sig2noise_method="peak2peak", sig2noise_threshold=1.05,
+)
 
 x, y, u, v, flags = windef.simple_multipass(
-    frame_a.astype(np.int32), frame_b.astype(np.int32), settings
+    frame_a.astype(np.float32), frame_b.astype(np.float32), settings
 )
 
 # Output is in PIXELS PER FRAME -- convert yourself. scaling.uniform only divides
@@ -178,13 +186,14 @@ x, y, u, v = scaling.uniform(x, y, u, v, scaling_factor=96.52)
 u, v = u / dt, v / dt
 ```
 
-`simple_multipass` already validates, replaces outliers, fills remaining NaNs with zeros, and calls
-`transform_coordinates` — do not repeat those steps.
+`simple_multipass` validates, replaces outliers, fills remaining NaNs with zeros, and transforms
+coordinates. Keep its flags: repaired/zero-filled output is not an independent measurement.
+Always pass settings: its no-settings path has two window sizes but three iterations in 0.26.1.
 
-**Units trap:** `PIVSettings` has `dt` and `scaling_factor` fields, but `windef` never uses either —
-`first_pass` calls `extended_search_area_piv` without `dt`, so the whole multi-pass chain works in
-pixels per frame. Setting `settings.dt = 0.02` changes nothing about the returned values. Convert
-after the fact, as above.
+**Units trap:** `simple_multipass` and its alias `multigrid_windef` ignore `settings.dt` and
+`settings.scaling_factor`; convert their arrays as above. Batch `windef.piv(settings)` applies
+both before saving — do not scale its files again. The simple wrapper does not honor all batch
+preprocessing/output switches.
 
 For control over individual passes, `windef.first_pass` and `windef.multipass_img_deform` are the
 lower-level building blocks.
@@ -193,7 +202,8 @@ lower-level building blocks.
 
 ### Validation Methods
 
-Every validator returns a boolean array where **True marks a spurious vector**.
+Every validator returns a boolean array where **True marks a spurious vector**. Also reject
+nonfinite `u`, `v`, and `s2n`: `sig2noise_val` alone does not flag NaN.
 
 ```python
 # Signal-to-noise
@@ -217,7 +227,8 @@ flags = (
 `extended_search_area_piv` divides by `dt`, so with `dt=0.02` a 3 px/frame displacement arrives as
 150 px/s. The thresholds above suit that case; the `(-30, 30)` figure that PIV literature and
 `PIVSettings.min_max_u_disp` use is a px/frame limit, and applying it to px/s output rejects the
-entire field. Either validate before scaling, or scale the thresholds by `1/dt` too.
+entire field. Correlate with `dt=1` to validate displacements before conversion, or adjust
+thresholds to the actual velocity units (including both time and calibration factors).
 
 ### Outlier Replacement
 
@@ -227,9 +238,9 @@ u, v = filters.replace_outliers(
 )
 ```
 
-`method` accepts `"localmean"`, `"disk"`, or `"distance"` — and only those three. An unrecognized
-name is not rejected; it falls through to an all-zero kernel and silently returns a useless field.
-Note that replacement *fills* the flagged
+`method` accepts `"localmean"`, `"disk"`, or `"distance"`; an invalid name raises `ValueError`
+when filling missing cells. Use `kernel_size>=2` for `"distance"`: size 1 truncates all neighbor
+weights to zero in 0.26.1 and leaves holes. Replacement *fills* the flagged
 positions with interpolated values — if you then overwrite them with NaN, the replacement was
 wasted. Choose one or the other:
 
@@ -242,13 +253,14 @@ v = np.where(flags, np.nan, v)
 ### Smoothing
 
 Smoothing is `openpiv.smoothn.smoothn`; there is no `openpiv.smooth` module. It returns a tuple
-whose first element is the smoothed field, and it does not accept NaN input.
+whose first element is the smoothed field. NaN/Inf are missing observations; supply a copy because
+it can modify input. Zero-filling holes first incorrectly treats them as measured zeros.
 
 ```python
 from openpiv.smoothn import smoothn
 
-u_smooth, *_ = smoothn(np.nan_to_num(u), s=0.5)  # s: larger == smoother
-v_smooth, *_ = smoothn(np.nan_to_num(v), s=0.5)
+u_smooth, *_ = smoothn(np.asarray(u, dtype=float).copy(), s=0.5)  # larger == smoother
+v_smooth, *_ = smoothn(np.asarray(v, dtype=float).copy(), s=0.5)
 u_smooth = np.asarray(u_smooth)
 ```
 
@@ -272,12 +284,18 @@ tools.display_vector_field(
     scaling_factor=96.52,   # same factor used in scaling.uniform, to map back onto the image
     scale=50,
     width=0.0035,
-    on_img=True,
-    image_name="frame_a.bmp",
+    on_img=False,
 )
+image = tools.imread("frame_a.bmp")
+height, width = image.shape
+ax.imshow(image, cmap="gray", origin="upper", zorder=-1,
+          extent=(0, width / 96.52, 0, height / 96.52))
 fig.savefig("vector_field.png", dpi=150, bbox_inches="tight")
 plt.close(fig)
 ```
+
+Set image extents explicitly: the helper's `on_img=True` infers them from the last vector and
+can stretch overlays when windows leave unused margins. The CLI plots with the actual image bounds.
 
 ### Custom Visualization
 
@@ -315,7 +333,7 @@ from analyze import PIVAnalyzer
 piv = PIVAnalyzer("results/params.npz")
 vorticity = piv.compute_vorticity()          # dv/dx - du/dy
 exx, eyy, exy = piv.compute_strain()
-stats = piv.compute_statistics()             # u_mean, v_mean, rms_u, rms_v, tke
+stats = piv.compute_statistics()             # excludes flagged and masked vectors
 piv.plot_vector_field(save_path="quiver.png")
 ```
 
@@ -337,11 +355,10 @@ Prefer differences of the saved `x` and `y` coordinates, especially after multip
 processing. Leaving `dx=1.0` yields vorticity per grid cell, not per unit length.
 See [OpenPIV coordinate generation](https://openpiv.readthedocs.io/en/stable/src/tutorial1.html).
 
-**Sign convention:** `runner.py` ends with `transform_coordinates`, which relabels the grid into a
-right-handed y-up frame but leaves the rows in image order, so the saved `y` *decreases* as the row
-index grows. The standalone forms above assume the opposite, so on a `params.npz` field they return
-`-du/dy` and flip the sign of the vorticity and the shear strain — negate the `axis=0` derivatives, or
-use `PIVAnalyzer`, which reads the orientation off the saved coordinates.
+**Sign convention:** the CLI writes `y = image_height / scaling_factor - y` and negates `v`,
+keeping rows in image order. Saved `y` decreases down the array. The standalone forms need
+signed `dy` (negative here), or use `PIVAnalyzer`, which reads orientation. Positive `dy` changes
+the y-derivative contribution and can even cancel real rotation.
 
 ### Strain Rate
 
@@ -374,8 +391,10 @@ def compute_statistics(u, v):
 ```
 
 **Caveat:** subtracting the *spatial* mean of one frame measures spatial variance, which equals
-turbulent intensity only for a homogeneous field. Genuine Reynolds decomposition needs an ensemble of
-image pairs: average over the time axis, then subtract that mean field from each realization.
+turbulent intensity only under justified homogeneity/ergodicity assumptions. Reynolds decomposition
+needs an ensemble: subtract its mean field from each realization. The legacy `tke` key is only
+two-component spatial variance energy, not full turbulent kinetic energy. The analyzer excludes
+flagged vectors by default; `compute_statistics(include_interpolated=True)` includes repaired ones.
 
 ## CLI Usage
 
@@ -407,13 +426,14 @@ python skills/openpiv/scripts/runner.py \
 | `--image` | required | Image file; specify exactly twice for the pair |
 | `--output_dir` | `results` | Output directory (created if absent) |
 | `--window_size` | 32 | Interrogation window size (px) |
-| `--overlap` | 12 | Window overlap (px) |
+| `--overlap` | 12 | Search-grid overlap (px), nonnegative and less than search area |
 | `--search_area` | 38 | Search area size (px), must be ≥ `--window_size` |
 | `--dt` | 0.02 | Time between frames (s) |
 | `--scaling` | 96.52 | Scaling factor, pixels per physical unit (e.g. px/mm) |
 | `--threshold` | 1.05 | `peak2peak` signal-to-noise threshold |
 | `--mask` | `none` | `none` or `dynamic` (`openpiv.preprocess.dynamic_masking`) |
-| `--mask_method` | `intensity` | `edges` or `intensity`, used only with `--mask dynamic` |
+| `--mask_method` | `intensity` | Only intensity is usable in 0.26.1; edges is refused |
+| `--backend` | `scipy` | `scipy`, `auto`, or `rust`; Rust requires its extension |
 | `--drop_invalid` | off | NaN out flagged vectors instead of keeping interpolated values |
 | `--verbose` | off | Print progress messages |
 
@@ -426,7 +446,8 @@ python skills/openpiv/scripts/run_example.py --output_dir /tmp/openpiv-demo
 ## Output Files
 
 - **vectors.txt** — tab-delimited, `%.4e` formatted, with a `# x y u v flags mask` comment header
-- **params.npz** — NumPy archive with `x`, `y`, `u`, `v`, `flags` arrays
+- **params.npz** — `x`, `y`, `u`, `v`, `flags`, `mask`, `s2n`, timing/calibration/window parameters,
+  requested backend, and OpenPIV version. Coordinates use physical units; velocity uses units/s.
 - **vector_field.png** — vector field drawn over the first frame
 
 ```text
@@ -435,7 +456,8 @@ python skills/openpiv/scripts/run_example.py --output_dir /tmp/openpiv-demo
 4.8695e-01	3.5226e+00	-3.1587e-01	-2.9800e+00	0.0000e+00	0.0000e+00
 ```
 
-`flags` is written as a float, `0` for a valid vector and `1` for a flagged one.
+`flags` is float, `0` for valid and `1` for flagged. `mask=1` marks an excluded object region,
+independently of flags. Preserve both with the measured field.
 
 ## Best Practices
 

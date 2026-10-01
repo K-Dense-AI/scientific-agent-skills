@@ -1,6 +1,6 @@
 # Multimodal processing with `bio_process`
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable source/runtime
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable source/runtime
 and the official Bio API/examples.
 
 ## What `bio_process()` does—and does not do
@@ -147,8 +147,14 @@ python skills/neurokit2/scripts/validate_multimodal.py \
 ```
 
 The validator reports units, rates, timestamp order/jitter, missingness, starts, common
-overlap, and whether streams can be passed directly to `bio_process()`. It does not
-resample or modify data.
+overlap, and whether streams meet its numerical requirements for `bio_process()`.
+It checks all observed timestamps against each stream's declared regular grid and
+against corresponding reference-stream timestamps, allowing at most half a sample.
+Equal starts/rates/counts can conceal accumulating drift or interior timing jumps.
+Without a time column, the assumed uniform grid is marked as declared, not observed.
+`valid` describes the manifest checks; direct compatibility is a separate field.
+Neither field validates synchronization hardware, sensor latency, or physiology. It
+does not resample or modify data.
 
 ## `keep`
 
@@ -235,7 +241,7 @@ Multimodal convergence does not prove a latent state, diagnosis, or causal mecha
 Use `bio_*` for research/education only—not patient, worker, driver, athlete, or device
 monitoring and not medical-device validation.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official Bio API](https://neuropsychology.github.io/NeuroKit/functions/bio.html)
 - [Official custom Bio example](https://neuropsychology.github.io/NeuroKit/examples/bio_custom/bio_custom.html)

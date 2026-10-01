@@ -4,7 +4,7 @@
 - [Picking libraries by question](#picking-libraries-by-question)
 - [The main gene-set databases](#the-main-gene-set-databases)
 - [MSigDB collections](#msigdb-collections)
-- [g:Profiler (alternative ORA, custom background, 500+ organisms)](#gprofiler)
+- [g:Profiler (alternative ORA, custom background, many organisms)](#gprofiler)
 - [Gene-ID types and conversion](#gene-id-types-and-conversion)
 - [Organism handling](#organism-handling)
 - [Pathway/interaction APIs (Reactome, KEGG, STRING)](#pathwayinteraction-apis)
@@ -52,14 +52,19 @@ question needs them — each extra library multiplies the testing burden.
 | **C6** | Oncogenic signatures |
 | **C7** | ImmuneSigDB |
 | **C8** | Cell-type signatures |
+| **C9** | Computational perturbation signatures from DepMap CRISPR/CCLE analyses |
 
-Fetch via gseapy: `gp.Msigdb().get_gmt(category="h.all", dbver="2024.1.Hs")`
-(use `dbver="…Mm"` for mouse symbols). See `gseapy.md`.
+Current release (reviewed 2026-10-01): **2026.1.Hs / 2026.1.Mm**. Fetch human
+Hallmark with `gp.Msigdb.get_gmt(category="h.all", dbver="2026.1.Hs")`.
+Mouse uses its own category codes (Hallmark `mh.all`, `m2`, `m5`, etc.); changing
+only Hs to Mm is insufficient. List categories for the exact release. Symbols and
+Entrez GMTs are available; save the file/hash and comply with MSigDB license terms.
+See [gseapy.md](gseapy.md) and the [official collections](https://www.gsea-msigdb.org/gsea/msigdb).
 
 ## g:Profiler
 
 The official client (`gprofiler-official`) is the best path when you need a
-**custom background**, **many organisms** (~500), or g:Profiler's `g:SCS`
+**custom background**, **many organisms** (discover supported organism codes), or g:Profiler's `g:SCS`
 multiple-testing correction. It performs ORA over GO, KEGG, Reactome,
 WikiPathways, miRTarBase, CORUM, HP, and more in one call.
 
@@ -75,43 +80,65 @@ res = gp.profile(
     significance_threshold_method="g_SCS",    # default; or "fdr" / "bonferroni"
     domain_scope="custom",                    # use a custom statistical background
     background=expressed_genes,               # the tested/expressed universe
+    all_results=True,                        # retain nonsignificant returned terms
+    no_evidences=False,                       # required for intersections/evidences
+    ordered=False,                           # ranked-prefix ORA is not GSEA
     no_iea=False,                             # True = drop electronic GO annotations
 )
 # columns: source, native, name, p_value, term_size, query_size,
 #          intersection_size, effective_domain_size, intersections
 ```
 
-`gp.convert(organism="hsapiens", query=ids, target_namespace="ENTREZGENE")` maps
-IDs; `gp.orth(...)` maps orthologs across organisms.
+`gp.convert(organism="hsapiens", query=ids, target_namespace="ENTREZGENE_ACC")` maps
+numeric Entrez IDs. In the live service, target `ENTREZGENE` returned a symbol
+(`TP53`), whereas `ENTREZGENE_ACC` returned `7157`; validate the output namespace.
+`gp.orth(query=["Trp53"], organism="mmusculus", target="hsapiens")` returns
+source `converted`, target `ortholog_ensg`, and target `name`; do not confuse them.
+
+`p_value` is **already adjusted** with the requested method. Do not BH-adjust it
+a second time or relabel g:SCS as FDR. `all_results=True` retains nonsignificant
+returned terms; it does not promise all database terms including zero overlap.
+Save `gp.meta` immediately with results (subsequent calls overwrite it), including
+version, effective domains, mapping failures/ambiguities and correction settings.
+Client 1.0.0 forces `domain_scope="custom"` whenever background is supplied; it
+cannot preserve `custom_annotated` via that method. Use the documented raw API
+only if that alternative domain is actually required, and verify echoed metadata.
 
 ## Gene-ID types and conversion
 
-Enrichr and MSigDB libraries are keyed by **gene symbols**. Convert other ID
-types before ORA/GSEA, or matches silently drop.
+Choose one declared namespace and species. Many Enrichr libraries use symbols;
+MSigDB also offers numeric Entrez GMTs. Map only when needed and retain the
+source-to-target table, failed IDs and ambiguous mappings. No casing operation
+constitutes identifier mapping; `capitalize()` can corrupt identifiers.
 
 | You have | Convert with |
 |----------|--------------|
 | Ensembl gene IDs (`ENSG…`) | `gp.Biomart`, g:Profiler `g:Convert`, or `mygene` |
 | Entrez IDs | `mygene`, g:Profiler |
-| Mouse symbols → human | g:Profiler `g:Orth`, `mygene` (then run human libraries) |
+| Mouse symbols → human | g:Profiler `g:Orth` or another explicit orthology resource; querying MyGene with `species="human"` is not orthology conversion |
 
 `mygene` example:
 ```python
 import mygene
 mg = mygene.MyGeneInfo()
-hits = mg.querymany(ensembl_ids, scopes="ensembl.gene",
-                    fields="symbol", species="human", as_dataframe=True)
-symbols = hits["symbol"].dropna().tolist()
+mapping = mg.querymany(ensembl_ids, scopes="ensembl.gene",
+                       fields="symbol", species="human", returnall=True)
+# mapping["out"] contains query-aligned hits (or notfound); inspect dup/missing.
+# Resolve one-to-many cases before extracting symbols; never silently keep first.
 ```
-Strip Ensembl version suffixes first (`ENSG00000141510.16` → `ENSG00000141510`).
+For versioned Ensembl IDs only, record and strip the numeric version suffix first (`ENSG00000141510.16` → `ENSG00000141510`).
 The `gget` skill (`gget info`) is another quick ID-mapping path.
 
 ## Organism handling
 
-- Human symbols are UPPERCASE (`TP53`); mouse symbols are Title-case (`Trp53`).
+- Human symbols are often uppercase (`TP53`), and mouse symbols often start
+  with a capital (`Trp53`); these conventions are not a conversion rule.
 - Set `organism=` for `gp.enrichr` (Enrichr) and use the matching MSigDB `dbver`
   (`…Hs` vs `…Mm`) or g:Profiler `organism=` code.
-- Don't run human libraries on mouse symbols — convert or map orthologs first.
+- Human and mouse both route to the main Enrichr instance; `organism="mouse"`
+  does not make every selected library mouse-specific. Prefer native mouse GMTs,
+  or map explicit orthologs and disclose one-to-many/lost genes. Apply the same
+  mapping to the assay universe, and resolve ranking collisions before GSEA.
 
 ## Pathway/interaction APIs
 
@@ -132,9 +159,12 @@ enrichment/activity methods (ORA, GSEA, univariate linear models, etc.) against
 curated priors:
 - **PROGENy** — 14 signaling pathway responsive signatures.
 - **DoRothEA / CollecTRI** — TF→target regulons for TF-activity inference.
-- **MSigDB** priors via its OmniPath integration.
+- **Hallmark** and other priors via its OmniPath integration (check resource
+  availability and license). Current decoupler uses `dc.op.progeny`,
+  `dc.op.collectri`, `dc.op.hallmark` and `dc.mt.*` method namespaces; these are
+  documentation pointers here, not runtime-tested decoupler workflows.
 
 decoupler integrates natively with AnnData/Scanpy (per-cell activities) and with
 per-sample pseudobulk matrices. APIs evolve between major versions — check the
-current decoupler docs (https://decoupler-py.readthedocs.io/) for exact function
+current decoupler docs (https://decoupler.scverse.org/) for exact function
 names before writing code.

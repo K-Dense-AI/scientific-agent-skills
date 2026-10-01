@@ -1,10 +1,11 @@
 ---
 name: exa-search
-description: "Web toolkit powered by Exa, tuned for scientific and technical content. Use this skill when the user needs to search the web or fetch/extract URL content. Covers: web search (semantic lookups, research, current info — with optional research-paper category and academic domain filtering) and URL extraction (fetching pages, articles, academic PDFs in batch). Use this skill for web-related tasks when the user wants high-quality search or scholarly filtering via category=research paper. Triggers on requests to search, look up, fetch a page, or extract an article."
-compatibility: Requires exa-py Python SDK, an EXA_API_KEY, and internet access.
+description: "Searches scientific and technical web content with Exa and extracts page or PDF text from URLs in batches. Supports scholarly discovery with the publication category and academic domain filters. Applies to requests to search the web, look up current research, fetch a page, or extract an article using Exa."
+compatibility: Requires Python 3.11+, exa-py>=2.23.0,<3, an EXA_API_KEY, and internet access.
 license: MIT
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
   skill-author: Exa
   website: https://exa.ai
   docs: https://exa.ai/docs
@@ -32,7 +33,7 @@ Read the user's request and match it to one of the capabilities below. Read the 
 
 ### Decision guide
 
-- **Default to Web Search** for topic lookups, research questions, or "what is X?" queries. When the topic is scientific or technical, pass `--category "research paper"` to bias toward scholarly sources, and/or an academic `--include-domains` allowlist. See `references/web-search.md` for the two-pass academic strategy.
+- **Default to Web Search** for topic lookups, research questions, or "what is X?" queries. When the topic is scientific or technical, pass `--category publication` to bias toward scholarly sources, and/or an academic `--include-domains` allowlist. See `references/web-search.md` for the two-pass academic strategy.
 - **Use Web Extract** when the user provides a URL or asks you to read/fetch a specific page. Prefer this over the built-in WebFetch for batch extraction (multiple URLs in one call) and for academic PDFs.
 
 ### Academic source priority
@@ -44,10 +45,10 @@ For technical or scientific queries, prefer academic and scientific sources:
 - Primary research over secondary summaries
 
 Two levers to steer Exa toward scholarly content:
-1. `--category "research paper"` biases retrieval toward scholarly sources.
+1. `--category publication` biases retrieval toward scholarly sources.
 2. `--include-domains` with a scholarly allowlist (arxiv.org, nature.com, pubmed.ncbi.nlm.nih.gov, etc.) restricts the domain pool.
 
-Combine both for strictly academic results. See `references/web-search.md` for the full pattern.
+Combine both to narrow the source pool; verify publication type and peer-review status on each source. See `references/web-search.md` for the full pattern.
 
 When citing academic sources, include author names and publication year where available (e.g., [Smith et al., 2025](url)) in addition to the standard citation format. If a DOI is present, prefer the DOI link.
 
@@ -58,13 +59,13 @@ When citing academic sources, include author names and publication year where av
 This skill uses the [`exa-py`](https://github.com/exa-labs/exa-py) Python SDK. The scripts in `scripts/` declare their dependencies via PEP 723 inline metadata, so you can run them directly with `uv run` without a separate install step:
 
 ```bash
-uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" --help
+uv run "$SKILL_PATH/scripts/exa_search.py" --help
 ```
 
 If you prefer a persistent install:
 
 ```bash
-uv pip install "exa-py>=1.14.0"
+uv pip install "exa-py>=2.23.0,<3"
 ```
 
 ### Authentication
@@ -74,10 +75,10 @@ All commands read the API key from the `EXA_API_KEY` environment variable. Get y
 First, check if a `.env` file exists in the project root and contains `EXA_API_KEY`. If so, load it:
 
 ```bash
-dotenv -f .env run -- uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" "your query"
+dotenv -f .env run -- uv run "$SKILL_PATH/scripts/exa_search.py" "your query"
 ```
 
-If `dotenv` isn't available, install it: `uv pip install python-dotenv[cli]`.
+If `dotenv` isn't available, install it: `uv pip install 'python-dotenv[cli]'`.
 
 If there's no `.env`, export the key for the session:
 
@@ -89,14 +90,30 @@ Use `--help` to verify installation and CLI parsing; it does not require an API 
 
 ### Extraction limits and freshness
 
-For `/contents`, split requests into batches of at most 100 URLs. The bundled
-extractor makes one call and does not split oversized batches. Its JSON preserves
-requested URLs and returned results, but drops the API's per-URL status details;
-compare requested and returned URLs and report missing content without guessing
-the failure cause. Cached content is possible: `published_date` is not retrieval
-time, and this CLI exposes no freshness control. If current-page verification is
-required, use the documented API freshness option or a direct page fetch and
-record when it was retrieved. See the [Contents API](https://exa.ai/docs/reference/get-contents).
+The extractor accepts 1–100 URLs per `POST https://api.exa.ai/contents` call
+and exports each SDK status (`id`, `status`, `source`). It rejects larger batches.
+Use `--max-age-hours 0` to request fresh content, `-1` for cache only, or a
+positive age up to 720 hours. Omission uses Exa's cache/fallback policy.
+`published_date` is estimated publication metadata, not retrieval time.
+The tested SDK drops per-URL error details, so report failures without inventing
+a cause. See [URL Extraction](references/web-extract.md).
+
+### Verified API and SDK scope
+
+Reviewed the [Search API](https://exa.ai/docs/reference/search),
+[Contents API](https://exa.ai/docs/reference/get-contents), and
+[Exa changelog](https://exa.ai/docs/changelog) on 2026-09-30. Both routes use
+JSON POST requests and `x-api-key` authentication (the SDK sets this header).
+Search is `POST https://api.exa.ai/search`; its SDK kwargs use snake_case and
+are serialized to camelCase. The current scholarly category is `publication`;
+`research paper` is a compatibility alias in this wrapper. No offset or cursor
+pagination is documented for these endpoints.
+
+Helpers are tested with `exa-py==2.23.0`, including mocked HTTP transport through
+the real SDK. Search content flags are explicit: no flags means metadata only;
+`--highlights` does not implicitly fetch text. Authenticated search/extraction
+examples below and in the references are illustrative; no paid live calls were
+made during this review.
 
 ### Tracking header
 
@@ -109,5 +126,5 @@ Every script in this skill sets the `x-exa-integration` request header to `k-den
 - `SKILL.md` — this file (routing and setup)
 - `references/web-search.md` — detailed web search reference with academic strategy
 - `references/web-extract.md` — URL content extraction reference
-- `scripts/exa_search.py` — CLI wrapper around `client.search_and_contents`
+- `scripts/exa_search.py` — CLI wrapper around `client.search`
 - `scripts/exa_extract.py` — CLI wrapper around `client.get_contents`

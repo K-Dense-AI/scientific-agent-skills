@@ -1,113 +1,107 @@
-# Dated sources
+# Dated official sources and verification
 
-Research and access date: **2026-07-23**.
+Review date: **2026-10-01**. The July 2026 review remains historical evidence;
+package, source, dataset revisions, provider contracts and the local tools were
+rechecked for this refresh. Source inspection and mock transport tests are not
+authenticated provider or scientific validation.
 
-Only official project, package-index, repository, publisher, and provider
-sources were used for behavioral claims. Parallel web search/extract identified
-the canonical pages; GitHub and PyPI APIs were used to verify exact refs,
-metadata, file hashes, and source files.
+## Release and implementation
 
-## Package and source
-
-1. [PyPI: hypogenic](https://pypi.org/project/hypogenic/) — latest stable
-   `0.3.5`, released 2025-07-16; Python requirement, beta classifier,
-   dependencies, files, SHA-256 values, project links, trusted-publisher
-   provenance, source tag/commit. Accessed 2026-07-23.
-2. [ChicagoHAI/hypothesis-generation](https://github.com/ChicagoHAI/hypothesis-generation)
-   — official repository, README, license, default branch, package layout,
-   examples, task-config instructions, and current project links. Repository
-   default commit checked 2026-07-23.
-3. [Release v0.3.5 source tree](https://github.com/ChicagoHAI/hypothesis-generation/tree/8c3800ccae155e333fac5b530afa8abdaac38300)
-   — immutable source used for API/CLI review. Commit dated 2025-07-16; accessed
-   2026-07-23.
-4. [GitHub releases](https://github.com/ChicagoHAI/hypothesis-generation/releases)
-   — release/tag history through `v0.3.5`. Accessed 2026-07-23.
-5. [Master commit history](https://github.com/ChicagoHAI/hypothesis-generation/commits/master)
-   — four post-tag logging/debug commits ending at
-   `bd37a3129a2f98ee586f545a57b10b59496eedad` on 2025-07-17. Accessed
-   2026-07-23.
-6. [Pinned pyproject.toml](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/pyproject.toml)
-   — version, Python requirement, dependencies, optional `dev` dependencies,
-   console entry points, license, and project URLs. Accessed 2026-07-23.
-7. [Pinned generation CLI](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic_cmd/generation.py)
-   and [inference CLI](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic_cmd/inference.py)
-   — exact parser flags, defaults, execution flow, logging, output, and metric
-   behavior. Accessed 2026-07-23.
-8. [Pinned task loader](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/tasks.py)
-   and [prompt implementation](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/prompt.py)
-   — YAML fields, split-path resolution, sampling, and prompt-template access.
-   Accessed 2026-07-23.
-9. [Pinned model wrappers](https://github.com/ChicagoHAI/hypothesis-generation/tree/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/LLM_wrapper)
-   — OpenAI, Anthropic, Transformers, vLLM, local registration, cost table, and
-   model-loading behavior. Accessed 2026-07-23.
-10. [Pinned output serializer](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/algorithm/update/base.py)
-    and [SummaryInformation](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/algorithm/summary_information.py)
-    — hypothesis-bank JSON shape and stored statistics. Accessed 2026-07-23.
-11. [Pinned Redis cache](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/LLM_cache.py)
-    — local Redis prompt/response caching and pickle serialization. Accessed
-    2026-07-23.
+- [PyPI package](https://pypi.org/project/hypogenic/) and
+  [official metadata](https://pypi.org/pypi/hypogenic/json): latest release
+  remains 0.3.5, released 2025-07-16, Python >=3.10, beta classifier, MIT,
+  dependencies, artifact hashes and trusted-publisher provenance. The 96,169-byte
+  wheel was downloaded and its SHA-256 matched the metadata.
+- [Official repository](https://github.com/ChicagoHAI/hypothesis-generation),
+  [latest release](https://api.github.com/repos/ChicagoHAI/hypothesis-generation/releases/latest),
+  and [default branch](https://api.github.com/repos/ChicagoHAI/hypothesis-generation/commits/master):
+  v0.3.5 and master `bd37a3129a2f98ee586f545a57b10b59496eedad` remain unchanged.
+- [Pinned release source](https://github.com/ChicagoHAI/hypothesis-generation/tree/8c3800ccae155e333fac5b530afa8abdaac38300)
+  and [pyproject](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/pyproject.toml):
+  source/API review targets this exact version rather than an unpinned branch.
+- [Generation CLI](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic_cmd/generation.py),
+  [inference CLI](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic_cmd/inference.py),
+  and [logger](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/logger_config.py):
+  parser flags and positional arguments, early help exit, swapped logger and
+  hosted-wrapper constructor arguments, small-bank assertion and averaging bug.
+- [Task loader](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/tasks.py)
+  and [prompt implementation](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/prompt.py):
+  config fields, column JSON, sampling, return order, OOD aliasing, and template
+  substitution. The shipped template rendered locally with synthetic examples.
+- [Model wrappers](https://github.com/ChicagoHAI/hypothesis-generation/tree/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/LLM_wrapper):
+  SDK calls, cost table, local registration, model loading, retries, message
+  mutation, block assumptions and error behavior. Executed hosted paths used
+  mock HTTP responses and stubbed heavy import-only dependencies.
+- [Output serializer](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/algorithm/update/base.py)
+  and [SummaryInformation](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/algorithm/summary_information.py):
+  JSON hypothesis-bank structure and stored statistics.
+- [Redis cache](https://github.com/ChicagoHAI/hypothesis-generation/blob/8c3800ccae155e333fac5b530afa8abdaac38300/hypogenic/LLM_cache.py):
+  cache keys, prompt/response storage and pickle serialization. No Redis server
+  was started or contacted.
+- [PyTorch 2.4.1 release metadata](https://pypi.org/pypi/torch/2.4.1/json):
+  no CPython 3.13 wheels; the upstream package's `torch~=2.4.0` range still
+  prevents the default repository interpreter from installing its full stack.
+- [PyYAML release metadata](https://pypi.org/pypi/PyYAML/json) and
+  [parser documentation](https://pyyaml.org/wiki/PyYAMLDocumentation): reviewed
+  local parser pin advanced to 6.0.3. Valid YAML and rejection of duplicate keys,
+  aliases, anchors, tags, dates and malformed input were exercised locally.
 
 ## Datasets
 
-12. [ChicagoHAI/HypoBench-datasets](https://github.com/ChicagoHAI/HypoBench-datasets)
-    — current official GitHub data/config repository; no releases. Default
-    revision `7e4bbc341ee90b7efaa607f67a81543cd68cdf2e`, dated 2025-07-09;
-    accessed 2026-07-23.
-13. [Pinned HypoBench dataset tree](https://github.com/ChicagoHAI/HypoBench-datasets/tree/7e4bbc341ee90b7efaa607f67a81543cd68cdf2e)
-    — task families, configs, and split files used for the manifest example.
-    Accessed 2026-07-23.
-14. [ChicagoHAI/HypoGeniC-datasets on Hugging Face](https://huggingface.co/datasets/ChicagoHAI/HypoGeniC-datasets)
-    — official alternate dataset publication. Observed revision
-    `613860dcbcda9e522a6163ee9edf78c261ebe4bb`, last modified 2025-04-23;
-    accessed 2026-07-23.
+- [HypoBench GitHub repository](https://github.com/ChicagoHAI/HypoBench-datasets)
+  and [default commit](https://api.github.com/repos/ChicagoHAI/HypoBench-datasets/commits/main):
+  remain at `7e4bbc341ee90b7efaa607f67a81543cd68cdf2e`.
+- [Pinned dataset tree](https://github.com/ChicagoHAI/HypoBench-datasets/tree/7e4bbc341ee90b7efaa607f67a81543cd68cdf2e):
+  the deceptive-review config and train/validation/test JSON hashes were
+  rechecked; 800/300/500 rows and three cross-split duplicate groups reproduced.
+  The optional OOD file was acquired only to verify the task's path contract.
+- [Official Hugging Face publication](https://huggingface.co/datasets/ChicagoHAI/HypoGeniC-datasets)
+  and [Hub metadata](https://huggingface.co/api/datasets/ChicagoHAI/HypoGeniC-datasets):
+  revision remains `613860dcbcda9e522a6163ee9edf78c261ebe4bb`.
 
-## Papers and evaluation scope
+## Provider contracts and privacy
 
-15. [Hypothesis Generation with Large Language Models](https://aclanthology.org/2024.nlp4science-1.10/)
-    — Zhou et al., Proceedings of the 1st Workshop on NLP for Science,
-    November 2024, DOI `10.18653/v1/2024.nlp4science-1.10`. Data-driven
-    HypoGeniC algorithm, classification evaluations, and paper claims.
-    Accessed 2026-07-23.
-16. [Literature Meets Data: A Synergistic Approach to Hypothesis Generation](https://arxiv.org/abs/2410.17309)
-    — Liu et al.; submitted 2024-10-22, version 3 dated 2025-01-08.
-    HypoRefine, literature/data integration, union methods, five-dataset
-    evaluation, and human decision-support study. Accessed 2026-07-23.
-17. [HypoBench: Towards Systematic and Principled Benchmarking for Hypothesis Generation](https://arxiv.org/abs/2504.11524)
-    — Liu et al.; submitted 2025-04-15, version 2 dated 2026-02-10. Seven
-    real-world tasks, five synthetic task families, 194 datasets, evaluation
-    dimensions, and documented remaining limitations. Accessed 2026-07-23.
-18. [HypoBench OpenReview record](https://openreview.net/forum?id=cizEoSePyT)
-    — TMLR submission metadata and revisions; submitted 2025-08-31, modified
-    2026-02-25, recorded as rejected. Used only to distinguish publication
-    status from the arXiv version. Accessed 2026-07-23.
+- [OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create):
+  request and response fields, legacy `max_tokens`, choice/usage semantics and
+  incompatibility with o-series models. The pinned OpenAI 1.40.3 SDK was exercised
+  through HTTPX MockTransport; it sent the documented route and Bearer header.
+- [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
+  and [deprecations](https://developers.openai.com/api/docs/deprecations):
+  endpoint/model-specific storage and availability must be checked at execution
+  time. This review did not query an authenticated model catalog or account.
+- [Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create):
+  top-level system field, content-block response, version header, token parameter,
+  and current temperature restriction. Anthropic 0.32.0 sent the expected route,
+  `x-api-key` and API-version header in mock transport tests.
+- [Anthropic model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations):
+  retired model IDs and rejection of non-default temperature on newer models.
+- [Anthropic API retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention)
+  and [commercial retention](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data):
+  standard deletion policy, exceptions, ZDR eligibility, and covered-model
+  30-day requirements. No account-specific arrangement was verified.
+- [OpenAI 1.40.3 client source](https://github.com/openai/openai-python/blob/v1.40.3/src/openai/_client.py)
+  and [Anthropic 0.32.0 client source](https://github.com/anthropics/anthropic-sdk-python/blob/v0.32.0/src/anthropic/_client.py):
+  automatic credential lookup and base-URL environment overrides. These were
+  also inspected in the installed pinned SDKs; no credential values were read.
 
-## Provider authentication and privacy
+## Local wrappers and scientific scope
 
-19. [OpenAI developer quickstart](https://developers.openai.com/api/docs/quickstart)
-    — `OPENAI_API_KEY` and automatic SDK environment lookup. Accessed
-    2026-07-23.
-20. [OpenAI enterprise privacy](https://openai.com/enterprise-privacy/) —
-    business/API training defaults, up-to-30-day API retention, exceptions, and
-    eligible ZDR requests. Page search result dated 2026-01-08; accessed
-    2026-07-23.
-21. [Anthropic get started](https://docs.anthropic.com/en/docs/get-started) —
-    `ANTHROPIC_API_KEY` and automatic SDK environment lookup. Accessed
-    2026-07-23.
-22. [Anthropic API and data retention](https://docs.anthropic.com/en/docs/build-with-claude/zero-data-retention)
-    — standard policy links, eligible ZDR, feature exclusions, legal/misuse
-    exceptions, HIPAA readiness, and model-specific retention. Accessed
-    2026-07-23.
-23. [Anthropic commercial data retention](https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-personal-data)
-    — automatic API input/output deletion within 30 days. Updated 2026-07-01;
-    accessed 2026-07-23.
-24. [Anthropic covered-model retention](https://support.claude.com/en/articles/15425996-data-retention-practices-for-covered-models)
-    — 30-day retention requirement for designated covered models, including
-    effects on ZDR arrangements. Updated 2026-07-09; accessed 2026-07-23.
-
-## Local model behavior
-
-25. [Transformers installation and offline mode](https://huggingface.co/docs/transformers/installation)
-    — Hub downloads, caches, pre-download workflows, and local reload. Accessed
-    2026-07-23.
-26. [Transformers pipelines](https://huggingface.co/docs/transformers/en/main_classes/pipelines)
-    — model/path loading and `trust_remote_code` warning. Accessed 2026-07-23.
+- [Transformers 4.45.2 pipelines](https://huggingface.co/docs/transformers/v4.45.2/en/main_classes/pipelines)
+  and [installation/offline mode](https://huggingface.co/docs/transformers/v4.45.2/en/installation):
+  model/path loading and offline configuration compatible with the pinned
+  4.45.x line. No model weights or local inference were tested.
+- [vLLM 0.6.2 LLM API](https://docs.vllm.ai/en/v0.6.2/dev/offline_inference/llm.html):
+  offline model, sampling and generation interfaces; reviewed alongside the
+  package wrapper, not validated on GPU hardware.
+- [Hypothesis Generation with Large Language Models](https://aclanthology.org/2024.nlp4science-1.10/):
+  Zhou et al., NLP4Science 2024, DOI `10.18653/v1/2024.nlp4science-1.10`;
+  data-driven candidate generation and classification evaluations.
+- [Literature Meets Data](https://arxiv.org/abs/2410.17309): Liu et al.,
+  version 3 dated 2025-01-08; HypoRefine and literature/data integration.
+- [HypoBench](https://arxiv.org/abs/2504.11524): Liu et al., version 2
+  dated 2026-02-10; seven real-world tasks, five synthetic families and 194
+  datasets. Publication metadata does not establish scientific validity of an
+  individual generated hypothesis.
+- [HypoBench OpenReview record](https://openreview.net/forum?id=cizEoSePyT):
+  current retrieval reached a browser challenge. No current review/acceptance
+  status is asserted from that response.

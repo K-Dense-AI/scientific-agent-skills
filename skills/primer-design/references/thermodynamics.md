@@ -1,6 +1,6 @@
 # Thermodynamic calculations and interpretation
 
-Documentation checked: 2026-09-30 against primer3-py 2.3.1 documentation.
+Documentation checked: 2026-10-01 against primer3-py 2.3.1 documentation.
 Use the version recorded by the actual run to describe tested behavior.
 
 ## Record the physical assumptions
@@ -27,6 +27,19 @@ These parameter units are documented in the
 For proprietary mixes with undisclosed composition, label chosen values as
 assumptions and compare plausible conditions if necessary. Never back-fill exact
 chemistry from the name of a kit.
+
+`PRIMER_DNA_CONC` is an effective concentration of annealing oligos during PCR;
+the Primer3 manual distinguishes it from initial reaction primer concentration.
+Record both and explain the model choice. The supplied checker uses the entered
+`dna_conc` for core Tm and structures, so comparisons share that assumption.
+The native `calc_tm` API supports DMSO/formamide, but the bundled adapter does not
+expose them; its results assume zero additive correction.
+[Primer3 concentration convention](https://primer3.org/manual.html#PRIMER_DNA_CONC).
+
+Native Primer3 can return a finite -273.15°C Tm at zero effective salt. The checker
+rejects Tm at/below absolute zero as invalid, alongside NaN/infinite output; it does
+not convert these to valid low-temperature candidates. This guard is not a complete
+test that a buffer lies within the model's calibrated range.
 
 ## Calculate several distinct quantities
 
@@ -65,9 +78,10 @@ definition, observed value, and reason for any override.
 Predicted Tm is not an automatic annealing temperature. Follow the selected
 polymerase's current instructions and validate an appropriate condition range.
 Even manufacturer protocols differ; for example, NEB's
-[Taq guidance](https://www.neb.com/en/protocols/taq-5x-master-mix-pcr-guidelines?pdf=true)
+[Q5 annealing-temperature study](https://media.neb.com/m/5ee45964c1bea954/original/AppNote_Q5_UniversalAnnealing_Temp.pdf)
 and [Phusion Flash guidance](https://www.neb.com/en/protocols/guidelines-for-pcr-optimization-with-phusion-flash-high-fidelity-pcr-master-mix?pdf=true)
-use different temperature recommendations.
+use product-specific recommendations. A temperature tested on one enzyme,
+formulation, or target collection does not establish performance for another.
 
 ## Model and implementation boundaries
 

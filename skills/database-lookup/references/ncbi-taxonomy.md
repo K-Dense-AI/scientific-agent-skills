@@ -84,7 +84,7 @@ GET esummary.fcgi?db=taxonomy&id=TAXIDS&retmode=json
 ```
 GET esummary.fcgi?db=taxonomy&id=9606,10090,7227&retmode=json
 ```
-Response includes: `ScientificName`, `CommonName`, `Rank`, `Division`, `TaxId`, `Genus`, `Species`.
+Response includes: lowercase JSON keys `scientificname`, `commonname`, `rank`, `division`, `taxid`, `genus`, `species` (XML uses different capitalization).
 
 ### 4. ELink -- Cross-link taxonomy to other databases
 ```
@@ -97,15 +97,17 @@ Find all protein records for a given taxid, optionally filtered by keyword.
 # All species under a genus
 term=Drosophila[Next Level] AND species[Rank]
 
-# Search by taxid directly
-term=txid9606[Organism:exp]
+# Search Taxonomy by taxid directly
+term=9606[Taxonomy ID]
 
 # By rank
 term=Mammalia[Scientific Name] AND class[Rank]
 
-# Subtree search (all descendants)
-term=txid9606[Organism:exp]
+# Taxonomy subtree search
+term=9605[Subtree]
 ```
+
+`txid9606[Organism:exp]` is a sequence-database search expression, not a Taxonomy field. Discover Taxonomy search fields with `einfo.fcgi?db=taxonomy&retmode=json`; resolve scientific names to taxids before subtree searches.
 
 ## Useful Cross-references
 | Link | Description |

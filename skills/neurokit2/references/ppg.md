@@ -1,6 +1,6 @@
 # Photoplethysmography
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable runtime/source,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable runtime/source,
 the official PPG API, 0.2.13 release notes, and measurement guidance.
 
 ## Acquisition contract
@@ -92,10 +92,14 @@ Stable quality methods and scales differ:
 - `dissimilarity`: unbounded, where zero is highest similarity;
 - `ho2025`/interval-consistency path: binary interval quality;
 - `skewness`, `kurtosis`, `entropy`: unbounded windowed metrics;
-- `perfusion`: percentage-like 0–100 and requires raw PPG; and
+- `perfusion`: AC peak-to-peak / absolute raw DC mean × 100; requires raw PPG and
+  is not bounded at 100 in the implementation; and
 - `relative_power`: 0–1, requires raw PPG, and defaults to 60 s windows.
 
 No threshold is universal across these outputs. Name the method and direction/scale.
+For perfusion, a near-zero DC denominator can explode the ratio; exactly zero returns
+zero in the implementation. Neither outcome establishes poor/good sensor quality.
+The docstring's advertised 0–100 range is not enforced by stable source/runtime.
 Short signals can be invalid for a method's default window. `ppg_process()` passes
 peak indices—not the whole info dict—to quality estimation.
 
@@ -153,7 +157,7 @@ epochs = nk.epochs_create(
     baseline_correction=False,
 )
 event_features = nk.ppg_eventrelated(epochs)
-interval_features = nk.ppg_intervalrelated(signals)
+interval_features = nk.ppg_intervalrelated(signals, sampling_rate=100)
 ```
 
 Documented event fields include baseline/min/max/mean/SD rate, times, and polynomial
@@ -180,7 +184,7 @@ Use these tools for research and education. They are not validated here for arrh
 oxygen saturation, blood pressure, disease detection, remote patient monitoring,
 alarms, or wearable medical-device validation.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official PPG API](https://neuropsychology.github.io/NeuroKit/functions/ppg.html)
 - [Stable v0.2.13 PPG source](https://github.com/neuropsychology/NeuroKit/tree/v0.2.13/neurokit2/ppg)
@@ -189,3 +193,5 @@ alarms, or wearable medical-device validation.
 - [Allen (2007), PPG measurement review](https://doi.org/10.1088/0967-3334/28/3/R01)
 - [Quigley et al. (2024), ECG/PPG and HRV guidance](https://doi.org/10.1111/psyp.14604)
 - [Yuda et al. (2020), PRV site differences](https://pmc.ncbi.nlm.nih.gov/articles/PMC7035641/)
+
+- [Stable `ppg_quality.py` implementation](https://github.com/neuropsychology/NeuroKit/blob/v0.2.13/neurokit2/ppg/ppg_quality.py)

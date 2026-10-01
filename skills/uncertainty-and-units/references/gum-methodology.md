@@ -17,9 +17,10 @@ number is defensible.
 | Coverage factor | k | multiplier chosen for a stated coverage probability |
 | Coverage probability | p | probability that the interval contains the measurand |
 
-"Error" and "uncertainty" are not synonyms. An error is a single unknowable difference
-from the true value; an uncertainty is a dispersion. "Accuracy" and "precision" are
-qualitative words in the GUM's vocabulary and never carry a number.
+"Error" and "uncertainty" are not synonyms: error is measured value minus a reference
+value; uncertainty characterizes dispersion of values attributed to the measurand.
+Accuracy is qualitative. Precision can be quantified by a standard deviation, variance,
+or coefficient of variation under specified conditions (VIM 2.15).
 
 ## Type A and Type B are methods, not qualities
 
@@ -39,8 +40,8 @@ value is a mean. Using s(q) itself overstates it by sqrt(n); using `numpy.std` w
 `ddof=1` understates s(q) itself. Both mistakes are common and neither is visible in
 the output.
 
-Pooling repeatability across several runs raises the degrees of freedom and is worth
-doing when the same instrument and procedure produced them.
+Pool repeatability only when a common variance model is defensible; the same instrument
+does not rule out drift, dependence, or different between-run variation.
 
 **Type B** — evaluated by any other means: a calibration certificate, a manufacturer's
 specification, a handbook value, a previous measurement, or documented judgement.
@@ -50,14 +51,16 @@ depends on what the statement means:
 
 | What the source states | Assumed density | Divisor | u |
 | --- | --- | --- | --- |
-| Expanded uncertainty U with coverage factor k | normal | k | U / k |
-| 95% confidence interval, no k given | normal | 1.96 | half-width / 1.96 |
-| A standard uncertainty | normal | 1 | as stated |
+| Expanded uncertainty U with stated factor k | use the source model; not necessarily normal | k | U / k |
+| Symmetric 95% interval justified by a large-sample normal model | normal | 1.96 | half-width / 1.96 |
+| A standard uncertainty | any assigned density with this SD | 1 | as stated |
 | Limits ±a, any value equally likely | rectangular | sqrt(3) | a / sqrt(3) |
 | Limits ±a, centre far more likely | triangular | sqrt(6) | a / sqrt(6) |
 | Limits ±a, extremes more likely (sinusoidal drift, cyclic error) | arcsine | sqrt(2) | a / sqrt(2) |
 
-Rectangular is the default when a specification gives limits and says nothing about the
+A 95% label alone does not identify a divisor: recover the source method, degrees of
+freedom, asymmetry, and whether the interval is a confidence, coverage, or prediction
+interval. Rectangular is a common model when a specification gives limits and says nothing about the
 distribution inside them. Digital resolution of one least significant digit d gives
 half-width a = d/2, so u = d / (2 sqrt(3)).
 
@@ -85,23 +88,26 @@ Comparing contributions, not raw uncertainties, is what tells you where to spend
 
 Correlation is not exotic. It appears whenever two inputs were calibrated against the
 same standard, corrected with the same reference value, measured with the same
-instrument, or derived from a common fit. Ignoring a positive correlation understates
-u_c; ignoring a negative one overstates it. In a difference of two similar quantities
+instrument, or derived from a common fit. The sign of the covariance contribution is `c_i*c_j*r_ij`, not the sign of `r_ij`
+alone. Positive correlation increases uncertainty in a sum and can reduce it in a
+difference; negative correlation has the reverse effect. In a difference of two similar quantities
 measured the same way, the correlation is the whole point — it is what makes the
 difference more precise than either term.
 
 ## Degrees of freedom and the coverage factor
 
-k = 2 is a convention, not a law. It corresponds to p ≈ 95% only when the effective
-degrees of freedom are large. The Welch-Satterthwaite formula (JCGM 100:2008 G.2b)
+k = 2 gives about 95% coverage for an approximately normal output with sufficiently
+well-determined standard uncertainty. Large degrees of freedom alone do not make an
+output normal. The Welch-Satterthwaite formula (JCGM 100:2008 G.2b)
 gives them:
 
 ```text
 nu_eff = u_c(y)^4 / sum_i ( (c_i u(x_i))^4 / nu_i )
 ```
 
-Components evaluated as Type B from a specification are conventionally assigned
-infinite degrees of freedom and drop out of the denominator. A single Type A component
+Assigning infinite degrees of freedom to Type B components assumes their uncertainty
+evaluations are sufficiently reliable. This is not automatic: GUM G.4.2 allows finite
+values based on the uncertainty of the uncertainty. Infinite-dof terms drop out of the denominator. A single Type A component
 from a handful of readings can pull nu_eff low enough that k rises well above 2:
 
 | nu_eff | k for p = 95% |
@@ -115,7 +121,8 @@ from a handful of readings can pull nu_eff low enough that k rises well above 2:
 
 If the dominant component came from five readings, reporting k = 2 understates the
 interval by about a quarter. The formula assumes uncorrelated inputs; with correlation
-it is an approximation with no established validity.
+the independent-input formula must not be used without a justified extension or
+reformulation in terms of independent sources.
 
 ## When the GUM framework is not applicable
 
@@ -147,18 +154,19 @@ deviations. The procedure is:
 
 Two intervals are defined and they differ for an asymmetric output. The
 **probabilistically symmetric** interval cuts (1-p)/2 from each tail. The **shortest**
-interval is the narrowest one containing the fraction p; it is the honest choice when
-the output is skewed, and identical to the other when it is not.
+interval is the narrowest one containing the fraction p; it can be useful for skewed unimodal outputs. State which interval is used. Equal-tail
+and shortest intervals need not agree for symmetric multimodal distributions, and a
+shortest interval need not be unique. A single interval can obscure separated modes.
 
 M = 10^6 is the usual starting point for a 95% interval; JCGM 101 also defines an
 adaptive procedure that keeps drawing until the results are stable to within the
-numerical tolerance below. Fewer than 10^4 trials cannot resolve a 95% interval's
-endpoints reliably.
+numerical tolerance below. A fixed trial count does not guarantee endpoint accuracy; assess stabilization of the
+mean, SD, and endpoints against the requested numerical tolerance.
 
-## The validation test that decides which answer to report
+## Comparing intervals without overstating validation
 
-JCGM 101 clause 8 is the reason to run both methods rather than choosing one. Write u_c
-from the GUM framework to n_dig significant digits (1 or 2) as c × 10^L. The numerical
+JCGM 101 clause 8 is the reason to run both methods rather than choosing one. Write u(y)
+from the stabilized Monte Carlo result to n_dig significant digits (1 or 2) as c × 10^L. The numerical
 tolerance is half of that last digit:
 
 ```text
@@ -172,23 +180,27 @@ d_low  = | (y - U)      - y_low_MC  |
 d_high = | (y + U)      - y_high_MC |
 ```
 
-If both are at or below delta, the linearization is validated and the GUM framework
-result may be reported. If either exceeds delta, the framework is not validated for
-this model, and the Monte Carlo result is what should be reported.
+With Monte Carlo numerically stabilized to delta/5 (clause 8.2), endpoint agreement
+supports the GUM interval for this model, PDF assignment, probability, and interval
+type. Disagreement can reflect nonlinearity or a poor output-distribution approximation.
+It does not by itself establish which measurement model or input PDFs are appropriate.
 
-`scripts/propagate_uncertainty.py` runs both methods and applies this test. Two
-outcomes worth understanding:
+`scripts/propagate_uncertainty.py` runs a fixed number of trials and reports only an
+endpoint-agreement diagnostic; `gum_framework_validated` is null. It does not implement
+the adaptive stabilization procedure. Finite dof alter the GUM factor but not the MC
+input PDFs, so their difference may reflect different distributional assumptions.
+Neither numerical agreement nor propagation mechanics proves metrological traceability,
+empirical coverage, or correctness of the measurement model. Two useful examples:
 
 **Rectangular inputs, linear model.** A model dominated by rectangular contributions
-fails validation even though it is perfectly linear: the true output distribution is
+can fail interval agreement even though it is perfectly linear: the true output distribution is
 closer to trapezoidal than normal, and k = 1.96 over-covers. The GUM value and u_c are
 right; the interval is too wide.
 
 **Nonlinear model.** For y = x^2 with x = 1.0 ± 0.5, the framework gives y = 1.0,
-u_c = 1.0, and a 95% interval of [-0.96, 2.96] — an interval that is largely negative
+u_c = 1.0, and a 95% interval of [-0.96, 2.96] — an interval that is partly negative
 for a squared quantity. Monte Carlo gives a mean of 1.25, u_c = 1.06, and a shortest
-95% interval of [0, 3.32]. The framework result is not merely imprecise; it is outside
-the range the model can produce.
+95% interval of [0, 3.32]. The GUM interval includes values the model cannot produce.
 
 ## Order of operations
 
@@ -217,3 +229,10 @@ the range the model can produce.
 - Applying the framework to a strongly nonlinear model and never checking.
 - Propagating uncertainty through a fitted model without using the fit's covariance
   matrix, which discards the correlation between the fitted parameters.
+
+## Current primary guidance
+
+Reviewed 2026-10-01: [BIPM JCGM publications](https://www.bipm.org/en/committees/jc/jcgm/publications),
+[JCGM 100](https://www.bipm.org/documents/20126/2071204/JCGM_100_2008_E.pdf),
+[JCGM 101](https://www.bipm.org/documents/20126/2071204/JCGM_101_2008_E.pdf),
+and [VIM precision](https://jcgm.bipm.org/vim/en/2.15.html).

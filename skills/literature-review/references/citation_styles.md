@@ -1,6 +1,6 @@
 # Citation Styles Reference
 
-This document provides detailed guidelines for formatting citations in various academic styles commonly used in literature reviews.
+Reviewed 2026-09-30. This is a formatting aid; all sample author/title/page combinations below are illustrative, not verified references. Replace placeholders and use a current CSL style plus the target venue instructions for final output. The DOI-checking script verifies registration/metadata, not style compliance.
 
 ## APA Style (7th Edition)
 
@@ -8,7 +8,7 @@ This document provides detailed guidelines for formatting citations in various a
 
 **Format**: Author, A. A., Author, B. B., & Author, C. C. (Year). Title of article. *Title of Periodical*, *volume*(issue), page range. https://doi.org/xx.xxx/yyyy
 
-**Example**: Smith, J. D., Johnson, M. L., & Williams, K. R. (2023). Machine learning approaches in drug discovery. *Nature Reviews Drug Discovery*, *22*(4), 301-318. https://doi.org/10.1038/nrd.2023.001
+**Example**: Smith, J. D., Johnson, M. L., & Williams, K. R. (2023). Machine learning approaches in drug discovery. *Nature Reviews Drug Discovery*, *22*(4), 301-318. [DOI URL]
 
 ### Books
 
@@ -26,7 +26,7 @@ This document provides detailed guidelines for formatting citations in various a
 
 **Format**: Author, A. A., & Author, B. B. (Year). Title of preprint. *Repository Name*. https://doi.org/xxxx
 
-**Example**: Zhang, Y., Chen, L., & Wang, H. (2024). Novel therapeutic targets in Alzheimer's disease. *bioRxiv*. https://doi.org/10.1101/2024.01.001
+**Example**: Zhang, Y., Chen, L., & Wang, H. (2024). Novel therapeutic targets in Alzheimer's disease. *bioRxiv*. [preprint DOI URL]
 
 ### Conference Papers
 
@@ -50,26 +50,27 @@ This document provides detailed guidelines for formatting citations in various a
 
 ### Multiple Authors
 
-- 1-2 authors: List all
-- 3+ authors: List first author followed by "et al."
+- Nature reference lists: list all authors through five; above five use the first author followed by "et al.". Other Nature Portfolio journals may differ; check the actual journal instructions.
 
-**Example**: Zhang, Y. et al. Novel therapeutic targets in Alzheimer's disease. *bioRxiv* https://doi.org/10.1101/2024.01.001 (2024).
+**Example**: Zhang, Y. et al. Novel therapeutic targets in Alzheimer's disease. *bioRxiv* [preprint DOI URL] (2024).
 
 ---
 
-## Chicago Style (Author-Date)
+## Chicago Style (18th Edition, Author-Date)
 
 ### Journal Articles
 
 **Format**: Author, First Name Middle Initial. Year. "Article Title." *Journal Title* volume, no. issue (Month): page range. https://doi.org/xxxx.
 
-**Example**: Smith, John D., Mary L. Johnson, and Karen R. Williams. 2023. "Machine Learning Approaches in Drug Discovery." *Nature Reviews Drug Discovery* 22, no. 4 (April): 301-318. https://doi.org/10.1038/nrd.2023.001.
+**Example**: Smith, John D., Mary L. Johnson, and Karen R. Williams. 2023. "Machine Learning Approaches in Drug Discovery." *Nature Reviews Drug Discovery* 22, no. 4 (April): 301-318. [DOI URL].
+
+Reference lists include up to six authors; above six list the first three plus et al. Three or more authors use first author plus et al. in text. Current Chicago no longer requires a book publication place.
 
 ### Books
 
-**Format**: Author, First Name Middle Initial. Year. *Book Title: Subtitle*. Edition. Place: Publisher.
+**Format**: Author, First Name Middle Initial. Year. *Book Title: Subtitle*. Edition. Publisher.
 
-**Example**: Kumar, Vinay, Abul K. Abbas, and Jon C. Aster. 2021. *Robbins and Cotran Pathologic Basis of Disease*. 10th ed. Philadelphia: Elsevier.
+**Example**: Kumar, Vinay, Abul K. Abbas, and Jon C. Aster. 2021. *Robbins and Cotran Pathologic Basis of Disease*. 10th ed. Elsevier.
 
 ---
 
@@ -111,7 +112,7 @@ Use superscript numbers in order of appearance: "Recent studies^1,2^ have shown.
 
 ## Common Abbreviations for Journal Names
 
-- Nature: Nat.
+- Nature: Nature (single-word journal titles are not shortened)
 - Science: Science
 - Cell: Cell
 - Nature Reviews Drug Discovery: Nat. Rev. Drug Discov.
@@ -127,7 +128,7 @@ Use superscript numbers in order of appearance: "Recent studies^1,2^ have shown.
 
 1. **Always verify DOIs**: Use the verify_citations.py script to check all DOIs
 2. **Format as URLs**: https://doi.org/10.xxxx/yyyy (preferred over doi:10.xxxx/yyyy)
-3. **No period after DOI**: DOI should be the last element without trailing punctuation
+3. **Separate punctuation from identifiers**: APA omits a final period after a DOI URL; other styles may differ. Do not copy prose punctuation into the identifier
 4. **Resolve redirects**: Check that DOIs resolve to the correct article
 
 ---
@@ -144,8 +145,8 @@ Use superscript numbers in order of appearance: "Recent studies^1,2^ have shown.
 - Or: Recent studies (refs 1,2) have shown...
 
 ### Chicago Style
-- (Smith, Johnson, and Williams 2023)
-- Smith, Johnson, and Williams (2023) found...
+- (Smith et al. 2023) for three or more authors
+- Smith et al. (2023) found...
 
 ---
 
@@ -164,3 +165,13 @@ Maintain consistent formatting throughout:
 - Journal name abbreviations
 - DOI presentation
 - Author name format
+
+
+## Authoritative style resources
+
+- [APA reference examples](https://apastyle.apa.org/style-grammar-guidelines/references/examples) and [reference guide](https://apastyle.apa.org/instructional-aids/reference-guide.pdf).
+- [Nature formatting guide](https://www.nature.com/nature/for-authors/formatting-guide).
+- [Chicago author-date examples](https://www.chicagomanualofstyle.org/tools_citationguide/citation-guide-2.html).
+- [NLM Citing Medicine](https://www.ncbi.nlm.nih.gov/books/NBK7256/); numbered citation punctuation and author truncation can be journal-specific.
+- [IEEE reference guide](https://ieeeauthorcenter.ieee.org/wp-content/uploads/IEEE-Reference-Guide.pdf). Its full current text was not retrievable during this refresh; the IEEE examples above remain illustrative and require venue verification.
+- [Pandoc citation processing](https://pandoc.org/MANUAL.html#citations); a local CSL file and complete bibliography are required for the selected nondefault style.

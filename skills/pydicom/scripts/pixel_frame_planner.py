@@ -54,6 +54,9 @@ PIXEL_TAGS = [
     "WindowCenter",
     "WindowWidth",
     "VOILUTFunction",
+    "SharedFunctionalGroupsSequence",
+    "PerFrameFunctionalGroupsSequence",
+    "RealWorldValueMappingSequence",
     "ICCProfile",
     "BurnedInAnnotation",
     "RecognizableVisualFeatures",
@@ -167,12 +170,19 @@ def plan(args: argparse.Namespace) -> dict[str, Any]:
         "WindowCenter" in dataset and "WindowWidth" in dataset
     ):
         transforms.append("optional VOI LUT/window after modality transform")
-    if photometric.startswith("YBR"):
+    if photometric in {"YBR_FULL", "YBR_FULL_422"}:
         transforms.append("default pydicom YCbCr-to-RGB conversion unless raw=True")
+    elif photometric.startswith("YBR"):
+        transforms.append("codec-specific color conversion requires validation")
     if photometric == "PALETTE COLOR":
         transforms.append("palette color LUT required for RGB rendering")
     if photometric == "MONOCHROME1":
         transforms.append("presentation inversion may be required")
+    if any(keyword in dataset for keyword in (
+        "SharedFunctionalGroupsSequence", "PerFrameFunctionalGroupsSequence",
+        "RealWorldValueMappingSequence",
+    )):
+        transforms.append("frame-specific functional groups/real-world mapping require separate review")
 
     return {
         "burned_in_annotation": str(

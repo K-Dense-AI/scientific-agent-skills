@@ -1,14 +1,16 @@
 ---
 name: bids
 description: >
-  Use this skill when working with Brain Imaging Data Structure (BIDS) datasets:
+  Organizes, queries, validates, and converts Brain Imaging Data Structure (BIDS) datasets. Supports
   organizing neuroscience and biomedical data (MRI, EEG, MEG, iEEG, PET, microscopy,
   NIRS, motion capture, EMG, MR spectroscopy, behavioral), querying BIDS layouts,
   validating compliance, converting DICOM to BIDS, writing metadata sidecars, or
   creating BIDS derivatives.
 license: https://creativecommons.org/licenses/by/4.0/
+compatibility: Requires Python 3.10+ for PyBIDS and the validator wrapper; dcm2niix for DICOM conversion. Network access for installation and schema updates; no API credentials required.
 metadata:
-  version: "1.2"
+  version: "1.3"
+  last-reviewed: "2026-09-30"
   skill-author: Yaroslav Halchenko
 ---
 
@@ -16,7 +18,7 @@ metadata:
 
 ## Overview
 
-The Brain Imaging Data Structure (BIDS) is a community standard for organizing and describing neuroscience and biomedical research datasets. It defines a consistent file naming convention, directory hierarchy, and metadata schema so that datasets are immediately understandable by humans and software tools alike. BIDS is governed by the BIDS Specification (currently v1.11.x) and is maintained by the community via the BIDS-Standard GitHub organization.
+The Brain Imaging Data Structure (BIDS) is a community standard for organizing and describing neuroscience and biomedical research datasets. It defines a consistent file naming convention, directory hierarchy, and metadata schema so that datasets are immediately understandable by humans and software tools alike. BIDS is governed by the BIDS Specification (reviewed against v1.11.2, released 2026-09-29) and is maintained by the community via the BIDS-Standard GitHub organization.
 
 While BIDS originated for MRI, it has grown well beyond neuroimaging. The specification now covers 11 modalities spanning imaging, electrophysiology, and behavioral data:
 
@@ -24,9 +26,9 @@ While BIDS originated for MRI, it has grown well beyond neuroimaging. The specif
 - **Electrophysiology**: EEG, MEG, iEEG (intracranial EEG), EMG
 - **Other**: NIRS (near-infrared spectroscopy), motion capture, behavioral data (without imaging), MR spectroscopy
 
-Active BEPs are extending BIDS further — notably BEP032 (microelectrode electrophysiology) will add support for extracellular recordings including Neuropixels probes, bringing BIDS to a prevalent methodology in animal neuroscience research (see also the neuropixels-analysis skill).
+Active BEPs are extending BIDS further — notably BEP032 (microelectrode electrophysiology) proposes support for extracellular recordings including Neuropixels probes, bringing BIDS to a prevalent methodology in animal neuroscience research (see also the neuropixels-analysis skill).
 
-Adoption is required or strongly encouraged by major data repositories (OpenNeuro, DANDI), leading journals (NeuroImage, Human Brain Mapping, Scientific Data), and funding agencies (NIH, ERC).
+Repository submission requirements vary by modality and archive; check the target archive before preparing a deposit.
 
 The Python ecosystem for BIDS centers on **PyBIDS** (`pybids`) for querying and indexing BIDS datasets, and the **bids-validator** (Deno-based, available as PyPI package `bids-validator-deno` or via Deno directly) for compliance checking. Conversion from DICOM is typically done with **HeuDiConv**, **dcm2bids**, or **BIDScoin**.
 
@@ -53,7 +55,7 @@ uv pip install pybids
 # BIDS validator (Deno-based, installed via PyPI wrapper)
 uv pip install bids-validator-deno
 # Alternative: install directly via Deno
-# deno install -g -A npm:bids-validator
+# deno install -ERWN -g -n bids-validator jsr:@bids/validator
 
 # DICOM-to-BIDS converters (install as needed)
 uv pip install heudiconv       # HeuDiConv - heuristic-based DICOM conversion
@@ -101,17 +103,19 @@ This skill includes detailed reference documentation:
 - **metadata_fields.md**: Required and recommended JSON sidecar fields for every BIDS modality (anat, func, dwi, fmap, eeg, meg, pet, etc.)
 - **conversion_tools.md**: Detailed workflows for HeuDiConv, dcm2bids, and BIDScoin including heuristic/config examples and troubleshooting
 
-Update schema and BEPs with: `python scripts/update_schema.py`
+From the skill directory, update schema and BEPs with `python scripts/update_schema.py`.
+The bundled snapshot is BIDS 1.11.2 / schema 2.0.0; BEP proposals are not adopted requirements.
+If ReadTheDocs blocks an automated fetch, use the documented versioned GitHub export in the updater help.
 
 ## Common Issues and Solutions
 
 ### 1. Validator reports "Not a BIDS dataset"
 **Cause**: Missing `dataset_description.json` at the root.
-**Fix**: Create the file with at minimum `{"Name": "...", "BIDSVersion": "1.10.0"}`.
+**Fix**: Create the file with at minimum `{"Name": "...", "BIDSVersion": "1.11.2"}`.
 
 ### 2. Inconsistent subjects warning
 **Cause**: Not all subjects have the same set of files (some missing sessions, runs, etc.).
-**Fix**: This is a warning, not an error. Use `--ignoreSubjectConsistency` if intentional. Document missing data in `participants.tsv` or a `scans.tsv`.
+**Fix**: Review severity and the exact issue code in the validator JSON report and document missing data in `participants.tsv` or `scans.tsv`. The current schema validator does not provide the legacy `--ignoreSubjectConsistency` flag; use a narrowly scoped `--config` only for reviewed exceptions.
 
 ### 3. Missing SliceTiming
 **Cause**: `dcm2niix` couldn't extract slice timing from DICOM headers.
@@ -123,9 +127,10 @@ Update schema and BEPs with: `python scripts/update_schema.py`
 
 ### 5. PyBIDS is slow on large datasets
 **Cause**: Full filesystem indexing on every `BIDSLayout()` call.
-**Fix**: Use `database_path` to cache the index to an SQLite file:
+**Fix**: Use `database_path` to cache the index in a directory outside the dataset:
 ```python
-layout = BIDSLayout("/data", database_path="/data/.pybids_cache.db")
+layout = BIDSLayout("/data", database_path="/cache/pybids")
+# After dataset changes, rebuild with reset_database=True.
 ```
 
 ### 6. Derivatives not found by PyBIDS
@@ -134,10 +139,10 @@ layout = BIDSLayout("/data", database_path="/data/.pybids_cache.db")
 
 ### 7. Events file timing is off
 **Cause**: `onset` times are relative to the wrong reference (e.g., trigger time vs first volume).
-**Fix**: Onsets must be in seconds relative to the first volume of that run's acquisition. Account for dummy scans if they were discarded.
+**Fix**: Onsets are seconds relative to the first stored data point in the corresponding recording. If dummy volumes were discarded before storage, reset time zero to the first retained volume; negative onsets are allowed.
 
 ### 8. TSV files fail validation
-**Cause**: Encoding or delimiter issues (spaces instead of tabs, BOM characters, Windows line endings).
+**Cause**: Encoding or delimiter issues (spaces instead of tabs, BOM characters).
 **Fix**: Ensure tab-separated values with UTF-8 encoding and Unix line endings (`\n`). Use `n/a` (not `NA`, `NaN`, or empty) for missing values.
 
 ## Best Practices
@@ -146,7 +151,7 @@ layout = BIDSLayout("/data", database_path="/data/.pybids_cache.db")
 
 2. **Use metadata inheritance** - Place shared metadata (e.g., `TaskName`, scanner parameters) in top-level sidecar files rather than duplicating in every subject's directory.
 
-3. **Keep sourcedata** - Store the original DICOM (or other raw) data under `sourcedata/` so conversions are reproducible. Add `sourcedata/` to `.bidsignore`.
+3. **Keep sourcedata** - Preserve source DICOMs and conversion provenance in controlled storage; `sourcedata/` is excluded from raw BIDS validation, not deidentified. Review identifiers before any sharing.
 
 4. **Use consistent naming from the start** - Define your BIDS naming scheme before data collection. Use the ReproIn naming convention for scan protocols to enable automatic conversion.
 
@@ -162,45 +167,20 @@ layout = BIDSLayout("/data", database_path="/data/.pybids_cache.db")
 
 8. **Deface anatomical images** - Remove facial features from T1w/T2w images before sharing (e.g., using `pydeface`, `mri_deface`, or `afni_refacer`). Store defaced versions as the primary data or use `_defacemask` files.
 
-9. **Use BIDS URIs for provenance** - In derivatives, reference source files using BIDS URIs: `bids::sub-01/anat/sub-01_T1w.nii.gz`.
+9. **Use BIDS URIs for provenance** - In derivatives, use `bids:raw:sub-01/anat/sub-01_T1w.nii.gz` for raw sources and define `"DatasetLinks": {"raw": "../.."}` when the derivative root is `raw/derivatives/pipeline/`. `bids::` resolves within the current dataset, which in a derivative is the derivative dataset.
 
-10. **Prefer community tools** - Use established BIDS-Apps (fMRIPrep, MRIQC, QSIPrep) rather than custom pipelines when possible. They handle BIDS I/O correctly and produce BIDS-compliant derivatives.
+10. **Prefer community tools** - Use established BIDS-Apps (fMRIPrep, MRIQC, QSIPrep) rather than custom pipelines when possible. Check the chosen release's supported inputs and output conventions; software output still needs validation.
 
-11. **Study bids-examples** - The [bids-examples](https://github.com/bids-standard/bids-examples) repository is the canonical collection of prototypical BIDS datasets covering different modalities and use cases (MRI, fMRI, DWI, EEG, MEG, iEEG, PET, ASL, genetics, derivatives, and more). Use it as a reference when structuring your own dataset, as test data for BIDS tools, or to understand how a specific modality should be organized. Each example passes the BIDS validator.
+11. **Study bids-examples** - The [bids-examples](https://github.com/bids-standard/bids-examples) repository is the canonical collection of prototypical BIDS datasets covering different modalities and use cases (MRI, fMRI, DWI, EEG, MEG, iEEG, PET, ASL, genetics, derivatives, and more). Use it as a reference when structuring your own dataset, as test data for BIDS tools, or to understand how a specific modality should be organized. Pin an example revision and validator/schema versions; the upstream test suite also tracks expected failures while implementations evolve.
 
 ## BIDS Extension Proposals (BEPs)
 
 BEPs are community-driven proposals to extend BIDS to new modalities, derivatives, or metadata. The full list with status, leads, and links is in `references/beps.yml` (fetched from the [bids-website](https://github.com/bids-standard/bids-website/blob/main/data/beps/beps.yml)). BEP-specific schema previews are rendered at https://github.com/bids-standard/bids-schema/tree/main/BEPs.
 
-**Current BEPs** (as of schema update):
-
-| BEP | Title | Content | Status |
-|-----|-------|---------|--------|
-| 004 | Susceptibility Weighted Imaging | raw | Seeking new leader |
-| 011 | Structural preprocessing derivatives | derivative | Has PR (#518) |
-| 012 | Functional preprocessing derivatives | derivative | Has PR (#519), schema implemented |
-| 014 | Affine transforms and nonlinear field warps | derivative | X5 format development |
-| 016 | Diffusion weighted imaging derivatives | derivative | Has PR (#2211) |
-| 017 | Generic BIDS connectivity data schema | derivative | In development |
-| 021 | Common Electrophysiological Derivatives | derivative | In development |
-| 023 | PET Preprocessing derivatives | derivative | In development |
-| 024 | Computed Tomography scan | raw | Seeking contributors |
-| 026 | Microelectrode Recordings | raw | Seeking new leader |
-| 028 | Provenance | metadata | Has PR (#2099) |
-| 032 | Microelectrode electrophysiology | raw | Has PR (#2307), preview available — covers Neuropixels and other extracellular probes; relates to neuropixels-analysis skill |
-| 033 | Advanced Diffusion Weighted Imaging | raw | Seeking contributors |
-| 034 | Computational modeling | derivative | Has PR (#967) |
-| 035 | Mega-analyses with non-compliant derivatives | derivative | In development |
-| 036 | Phenotypic Data Guidelines | raw | Community review |
-| 037 | Non-Invasive Brain Stimulation | raw | In development |
-| 039 | Dimensionality reduction-based networks | raw | In development |
-| 040 | Functional Ultrasound | raw | In development |
-| 041 | Statistical Model Derivatives | derivative | Collecting feedback |
-| 043 | BIDS Term Mapping | metadata | Collecting feedback |
-| 044 | Stimuli | raw | Has PR (#2022), community review |
-| 045 | Peripheral Physiological Recordings | raw | Has PR (#2267) |
-| 046 | Diffusion Tractography | derivative | In development |
-| 047 | Audio/video recordings for behavioral experiments | raw | Has PR (#2231) |
+The bundled BEP listing was refreshed on 2026-09-30. Read each entry's proposal/PR and
+status before using draft entities; BEP032 remains a proposal, not part of stable 1.11.2.
+Use the repository directory listing to discover preview schema paths; do not assume a
+`BEPs/BEP032/schema.json` URL exists.
 
 **Related standards:**
 - **BIDS-Stats Models**: JSON specification for defining GLM-based neuroimaging analyses

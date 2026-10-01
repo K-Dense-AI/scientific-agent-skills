@@ -7,8 +7,9 @@ Illustrative template: copy, customize, and validate on your own recording and s
 
 Usage:
     1. Copy this file to your analysis directory
-    2. Update the PARAMETERS section
-    3. Run: python analysis_template.py
+    2. Copy the skill scripts/ alongside it as neuropixels_scripts/
+    3. Update the PARAMETERS section
+    4. Run: python analysis_template.py
 """
 
 # =============================================================================
@@ -19,7 +20,7 @@ Usage:
 DATA_PATH = '/path/to/your/spikeglx/data/'
 OUTPUT_DIR = 'analysis_output/'
 DATA_FORMAT = 'spikeglx'  # 'spikeglx', 'openephys', or 'nwb'
-STREAM_ID = 'imec0.ap'    # For multi-probe recordings
+STREAM_NAME = 'imec0.ap'    # Select the exact AP stream discovered in acquisition metadata
 
 # Preprocessing parameters
 FREQ_MIN = 300           # Highpass filter (Hz)
@@ -51,6 +52,15 @@ N_JOBS = -1              # -1 = all cores
 
 from pathlib import Path
 import json
+import sys
+
+# When used inside this skill, use ../scripts; when copied, use the bundled copy.
+script_dir = Path(__file__).resolve().parents[1] / "scripts"
+if not (script_dir / "compute_metrics.py").is_file():
+    script_dir = Path(__file__).resolve().parent / "neuropixels_scripts"
+sys.path.insert(0, str(script_dir))
+from compute_metrics import curate_units, METRIC_NAMES
+from _common import validate_recording, apply_phase_correction, reference_by_shank
 
 import spikeinterface.full as si
 from spikeinterface.exporters import export_to_phy
@@ -70,13 +80,16 @@ def main():
     print("=" * 60)
 
     if DATA_FORMAT == 'spikeglx':
-        recording = si.read_spikeglx(DATA_PATH, stream_name=STREAM_ID)
+        recording = si.read_spikeglx(DATA_PATH, stream_name=STREAM_NAME)
     elif DATA_FORMAT == 'openephys':
-        recording = si.read_openephys(DATA_PATH)
+        recording = si.read_openephys(DATA_PATH, stream_name=STREAM_NAME)
     elif DATA_FORMAT == 'nwb':
         recording = si.read_nwb(DATA_PATH)
     else:
         raise ValueError(f"Unknown format: {DATA_FORMAT}")
+
+    validate_recording(recording)
+    si.set_global_job_kwargs(n_jobs=N_JOBS, chunk_duration="1s")
 
     print(f"Recording: {recording.get_num_channels()} channels")
     print(f"Duration: {recording.get_total_duration():.1f} seconds")
@@ -98,7 +111,7 @@ def main():
     # Phase shift correction
     if APPLY_PHASE_SHIFT:
         print("Applying phase shift correction...")
-        rec = si.phase_shift(rec)
+        rec = apply_phase_correction(rec)
 
     # Bad channel detection
     if DETECT_BAD_CHANNELS:
@@ -111,11 +124,11 @@ def main():
     # Common median reference
     if APPLY_CMR:
         print("Applying common median reference...")
-        rec = si.common_reference(rec, operator='median', reference='global')
+        rec = reference_by_shank(rec)
 
     # Save preprocessed
     print("Saving preprocessed recording...")
-    rec.save(folder=output_path / 'preprocessed', n_jobs=N_JOBS)
+    rec = rec.save(folder=output_path / 'preprocessed', n_jobs=N_JOBS)
 
     # =========================================================================
     # 3. MOTION CORRECTION
@@ -179,6 +192,7 @@ def main():
     analyzer.compute('templates', operators=['average', 'std'])
     analyzer.compute('noise_levels')
     analyzer.compute('spike_amplitudes')
+    analyzer.compute('amplitude_scalings')
     analyzer.compute('correlograms', window_ms=50.0, bin_ms=1.0)
     analyzer.compute('unit_locations', method='monopolar_triangulation')
 
@@ -192,10 +206,7 @@ def main():
     print("Computing quality metrics...")
     metrics = si.compute_quality_metrics(
         analyzer,
-        metric_names=[
-            'snr', 'isi_violations_ratio', 'presence_ratio',
-            'amplitude_cutoff', 'firing_rate', 'amplitude_cv',
-        ],
+        metric_names=METRIC_NAMES,
         n_jobs=N_JOBS,
     )
 
@@ -215,33 +226,11 @@ def main():
     print("7. CURATION")
     print("=" * 60)
 
-    # Curation criteria
-    criteria = {
-        'allen': {'snr': 3.0, 'isi_violations_ratio': 0.1, 'presence_ratio': 0.9},
-        'ibl': {'snr': 4.0, 'isi_violations_ratio': 0.5, 'presence_ratio': 0.5},
-        'strict': {'snr': 5.0, 'isi_violations_ratio': 0.01, 'presence_ratio': 0.95},
-    }[CURATION_METHOD]
-
-    print(f"Applying {CURATION_METHOD} criteria: {criteria}")
-
-    labels = {}
-    for unit_id in metrics.index:
-        row = metrics.loc[unit_id]
-        is_good = (
-            row.get('snr', 0) >= criteria['snr'] and
-            row.get('isi_violations_ratio', 1) <= criteria['isi_violations_ratio'] and
-            row.get('presence_ratio', 0) >= criteria['presence_ratio']
-        )
-        if is_good:
-            labels[int(unit_id)] = 'good'
-        elif row.get('snr', 0) < 2:
-            labels[int(unit_id)] = 'noise'
-        else:
-            labels[int(unit_id)] = 'mua'
+    labels = curate_units(metrics, method=CURATION_METHOD)
 
     # Save labels
     with open(output_path / 'curation_labels.json', 'w') as f:
-        json.dump(labels, f, indent=2)
+        json.dump({str(uid): label for uid, label in labels.items()}, f, indent=2)
 
     # Count
     good_count = sum(1 for v in labels.values() if v == 'good')
@@ -261,11 +250,15 @@ def main():
     print("8. EXPORT")
     print("=" * 60)
 
-    print("Exporting to Phy...")
+    analyzer.sorting.set_property('curation_label', [labels[uid] for uid in analyzer.sorting.unit_ids])
+    good_ids = [uid for uid, label in labels.items() if label == 'good']
+    sorting.select_units(good_ids).save(folder=output_path / 'sorting_curated')
+    print("Exporting all units with screening labels to Phy...")
     export_to_phy(
         analyzer,
         output_folder=output_path / 'phy_export',
         copy_binary=True,
+        additional_properties=['curation_label'],
     )
 
     print(f"\nAnalysis complete!")

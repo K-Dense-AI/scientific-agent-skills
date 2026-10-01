@@ -6,8 +6,8 @@ This script verifies that the DiffDock environment is properly configured
 and all dependencies are available.
 
 Usage:
-    python setup_check.py
-    python setup_check.py --verbose
+    python /path/to/skill/scripts/setup_check.py
+    python /path/to/skill/scripts/setup_check.py --verbose
 """
 
 import argparse
@@ -22,12 +22,12 @@ def check_python_version():
     version = sys.version_info
 
     print("Checking Python version...")
-    if version.major == 3 and version.minor >= 9:
+    if version.major == 3 and version.minor == 9:
         print(f"  [OK] Python {version.major}.{version.minor}.{version.micro}")
         return True
     else:
         print(f"  [FAIL] Python {version.major}.{version.minor}.{version.micro} "
-              f"(requires Python 3.9 or higher; upstream environment.yml uses Python 3.9.18)")
+              f"(upstream environment.yml targets Python 3.9.18; other minors are not verified)")
         return False
 
 
@@ -98,10 +98,12 @@ def check_core_dependencies():
         ('numpy', 'numpy'),
         ('scipy', 'scipy'),
         ('pandas', 'pandas'),
-        ('rdkit', 'rdkit', 'rdBase.__version__'),
+        ('rdkit', 'rdkit', '__version__'),
         ('biopython', 'Bio', '__version__'),
         ('pytorch-lightning', 'pytorch_lightning'),
         ('PyYAML', 'yaml'),
+        ('ProDy', 'prody'),
+        ('e3nn', 'e3nn'),
     ]
 
     all_ok = True
@@ -118,14 +120,17 @@ def check_core_dependencies():
 
 def check_esm():
     """Check ESM (protein language model) installation."""
-    print("\nChecking ESM (for protein sequence folding)...")
+    print("\nChecking fair-esm (ESM2 embeddings for all inputs; ESMFold for sequences)...")
     try:
         import esm
+        if not hasattr(esm, 'FastaBatchedDataset') or not hasattr(getattr(esm, 'pretrained', None), 'load_model_and_alphabet'):
+            print("  [FAIL] Wrong/incomplete esm module; DiffDock requires fair-esm==2.0.0")
+            return False
         print(f"  [OK] ESM installed (version: {esm.__version__ if hasattr(esm, '__version__') else 'unknown'})")
         return True
     except ImportError:
-        print(f"  [WARN] ESM not installed (needed for protein sequence folding)")
-        print(f"    Install with: uv pip install fair-esm")
+        print(f"  [FAIL] fair-esm not installed (required for PDB embeddings and protein sequence folding)")
+        print(f"    Use the upstream environment.yml fair-esm[esmfold]==2.0.0 pin")
         return False
 
 
@@ -144,7 +149,7 @@ def check_diffdock_installation():
     missing_files = []
 
     for filename in key_files:
-        if os.path.exists(filename):
+        if Path(filename).is_file():
             found_files.append(filename)
         else:
             missing_files.append(filename)
@@ -162,13 +167,16 @@ def check_diffdock_installation():
     model_dir = Path('./workdir/v1.1/score_model')
     confidence_dir = Path('./workdir/v1.1/confidence_model')
 
-    if model_dir.exists() and confidence_dir.exists():
+    checkpoint_files = [model_dir / 'model_parameters.yml', model_dir / 'best_ema_inference_epoch_model.pt', confidence_dir / 'model_parameters.yml', confidence_dir / 'best_model_epoch75.pt']
+    if all(path.is_file() and path.stat().st_size > 0 for path in checkpoint_files):
         print(f"  [OK] Model checkpoints found")
     else:
         print(f"  [WARN] Model checkpoints not found in ./workdir/v1.1/")
-        print(f"    Models will be downloaded on first run")
+        print(f"    Models are downloaded on first run only if the score-model directory is absent; repair partial downloads")
 
-    return len(found_files) > 0
+    if missing_files:
+        print(f"  [FAIL] Missing checkout files: {', '.join(missing_files)}")
+    return not missing_files
 
 
 def print_installation_instructions():
@@ -181,7 +189,7 @@ def print_installation_instructions():
 If DiffDock is not installed, follow these steps:
 
 1. Clone the repository:
-   git clone https://github.com/gcorso/DiffDock.git
+   git clone --branch v1.1.3 --depth 1 https://github.com/gcorso/DiffDock.git
    cd DiffDock
 
 2. Create conda environment:
@@ -189,7 +197,7 @@ If DiffDock is not installed, follow these steps:
    conda activate diffdock
 
 3. Verify installation:
-   python setup_check.py
+   python /path/to/skill/scripts/setup_check.py
 
 For Docker installation:
    docker pull rbgcsail/diffdock
@@ -207,27 +215,12 @@ def print_performance_notes(has_cuda):
     print("="*80)
 
     if has_cuda:
-        print("""
-[OK] GPU detected - DiffDock will run efficiently
-
-Expected performance:
-  - First run: ~2-5 minutes (pre-computing SO(2)/SO(3) tables)
-  - Subsequent runs: ~10-60 seconds per complex (depending on settings)
-  - Batch processing: Highly efficient with GPU
-        """)
+        print("[OK] GPU detected; benchmark runtime and memory on your inputs.")
     else:
-        print("""
-[WARN] No GPU detected - DiffDock will run on CPU
-
-Expected performance:
-  - CPU inference is SIGNIFICANTLY slower than GPU
-  - Single complex: Several minutes to hours
-  - Batch processing: Not recommended on CPU
-
-Recommendation: Use GPU for practical applications
-  - Cloud options: Google Colab, AWS, or other cloud GPU services
-  - Local: Install CUDA-capable GPU
-        """)
+        print("[WARN] No GPU detected; PDB inference may be SIGNIFICANTLY slower on CPU.")
+        print("Sequence folding in v1.1.3 calls CUDA unconditionally; provide a PDB on CPU.")
+    print("First use can build lookup tables and download docking, ESM2 and ESMFold weights.")
+    print("Import checks do not establish checkpoint compatibility or successful docking.")
 
 
 def main():
@@ -270,7 +263,7 @@ def main():
         print(f"  {status:8s} - {check_name}")
 
     if all_passed:
-        print("\n[OK] All checks passed! DiffDock is ready to use.")
+        print("\n[OK] Dependency imports and checkout checks passed; verify pinned versions and run a small docking smoke test.")
         print_performance_notes(has_cuda)
         return 0
     else:

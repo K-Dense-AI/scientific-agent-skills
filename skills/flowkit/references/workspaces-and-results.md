@@ -41,6 +41,30 @@ For an intentionally partial group, use `analyze_samples(sample_id=...)` for
 the explicitly selected IDs and report included and missing IDs. The bundled
 CLI deliberately requires the complete named group.
 
+## Report paths and denominators
+
+FlowKit 1.3.2 reports individual quadrants with `gate_path` equal to the
+owning `QuadrantGate`'s path and puts that gate's name in `quadrant_parent`.
+For example, quadrant `High` in `Split` below `Cells` has report path
+`("root", "Cells")`, but strategy path `("root", "Cells", "Split")`.
+Its percentage denominator is the `Cells` count; `Split` is a collection of
+quadrants, not another population. A gate below `High` uses the full parent
+path `("root", "Cells", "Split", "High")`.
+
+The CLI adds a full `population_path`, including the population's own name
+and any quadrant owner, plus `sample_event_count` and `parent_event_count`.
+Use sample ID plus that path to join results. An empty parent gives an
+undefined percentage even when the child count is zero: the helper writes a
+blank `relative_percent` and `relative_percent_defined=False`. A zero-count
+gate under a nonempty parent retains its valid 0% value.
+
+The 1.3.2 membership API cannot disambiguate a repeated quadrant name across
+different owning QuadrantGates, even with a path; it raises `ValueError`.
+Use unique quadrant names when constructing strategies. For imported
+strategies, inspect the report and preserve its owner column; do not silently
+rename gates or use the wrong population's mask. The CLI's report export does
+not call this membership API and retains both populations correctly.
+
 ## FlowJo compatibility
 
 FlowKit supports a subset of FlowJo 10: documented transformations and
@@ -67,9 +91,14 @@ apply the intended matrix to the Sample and summarize the desired detector
 from `source="comp"`. This keeps compensation separate from display transforms.
 
 For a `Workspace`, `get_gate_events(sample_id, gate_name, gate_path=path,
-source="comp")` returns gated, compensated events. Its default `source=None`
-uses the workspace's compensation **and transforms**, so it is unsuitable for
-an untransformed intensity summary without an explicit source choice.
+source="comp")` applies the workspace matrix without display transforms.
+If `workspace.get_comp_matrix(sample_id)` is `None`, this silently returns
+raw events instead; confirm that this is the intended analysis provenance.
+Its default `source=None` uses the workspace's compensation **and transforms**,
+so choose the source explicitly for an untransformed intensity summary.
+The returned DataFrame has a string `sample_id` column and channel columns
+formed by joining PnN and PnS labels. Inspect those labels and select the
+intended detector before calculating a numeric summary.
 
 There is an API asymmetry: `Session.get_gate_events(...)` defaults to raw
 events unless `matrix` and/or `transform` are supplied. It does not
@@ -87,4 +116,6 @@ batch, controls, and calibration before interpreting intensity differences.
 - [Workspace API](https://flowkit.readthedocs.io/en/latest/workspace.html)
 - [Session API](https://flowkit.readthedocs.io/en/latest/session.html)
 - [GatingResults API](https://flowkit.readthedocs.io/en/latest/gating_results.html)
+- [Released report implementation](https://github.com/whitews/FlowKit/blob/1.3.2/src/flowkit/_models/gating_results.py)
+- [Released gating and percentage implementation](https://github.com/whitews/FlowKit/blob/1.3.2/src/flowkit/_models/gating_strategy.py)
 - [Upstream feature scope](https://github.com/whitews/FlowKit)

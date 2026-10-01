@@ -1,11 +1,12 @@
 ---
 name: scikit-survival
-description: Build, evaluate, and audit right-censored or competing-risk survival workflows with scikit-survival, including leakage-safe preprocessing, model selection, probability prediction, and censoring-aware metrics.
+description: Builds, evaluates, and audits right-censored or competing-risk survival workflows with scikit-survival, including leakage-safe preprocessing, model selection, probability prediction, and censoring-aware metrics.
 license: MIT
 compatibility: Requires Python 3.11+, uv, and the pinned scikit-survival 0.28.0 stack for executable examples. Bundled CLIs are local and network-free by default.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -26,9 +27,14 @@ support is nonparametric cumulative incidence; it does not provide Fine-Gray reg
 Do not present model output as clinical advice, causal evidence, or proof of clinical
 utility.
 
+Python snippets using study-defined variables such as `X_train`, `y_train`,
+`frame`, or `times` are illustrative integration templates. The native regression
+tests and local CLI smoke runs use small synthetic fixtures; they do not validate
+an unprovided study, clinical dataset, or every optional dataframe backend.
+
 ## Current release and installation
 
-Verified 2026-07-23:
+Verified 2026-10-01:
 
 - Latest stable: **scikit-survival 0.28.0**, released 2026-07-05.
 - Python: **3.11 or later**; PyPI wheels cover CPython 3.11-3.14 on Linux
@@ -38,22 +44,24 @@ Verified 2026-07-23:
 - 0.28 adds pandas/Polars estimator support through narwhals and removes
   `criterion` from `GradientBoostingSurvivalAnalysis`.
 
-Create an isolated environment and install the tested snapshot:
+The native refresh tests used Python 3.13 and the following snapshot (NumPy 2.5.1
+was cached; this is a tested snapshot, not a claim that every pin is newest).
+Create an isolated environment:
 
 ```bash
-uv venv --python 3.11
-source .venv/bin/activate
+uv venv .venv-survival --python 3.13
+source .venv-survival/bin/activate
 uv pip install \
   "scikit-survival==0.28.0" \
-  "scikit-learn==1.9.0" \
-  "numpy==2.4.6" \
-  "pandas==3.0.5" \
-  "scipy==1.17.1" \
+  "scikit-learn==1.9.1" \
+  "numpy==2.5.1" \
+  "pandas==3.0.6" \
+  "scipy==1.18.1" \
   "ecos==2.0.14" \
   "osqp==1.1.3" \
-  "joblib==1.5.3" \
+  "joblib==1.6.0" \
   "numexpr==2.14.2" \
-  "narwhals==2.24.0"
+  "narwhals==2.26.0"
 ```
 
 Binary wheels are preferred. A source build requires a C/C++ compiler; OSQP may
@@ -144,12 +152,14 @@ use a group-aware split; for temporal deployment, use a time-respecting split.
 - `CoxnetSurvivalAnalysis`: LASSO/elastic-net path for high-dimensional data.
   `l1_ratio` is in `(0, 1]`; use `fit_baseline_model=True` before requesting
   survival or cumulative-hazard functions.
-- `IPCRidge`: IPC-weighted ridge AFT model; prediction is on a time/log-time scale,
+- `IPCRidge`: IPC-weighted ridge AFT model; `predict()` returns original-time values (the fitted objective uses log time),
   not a Cox risk score.
 - `RandomSurvivalForest` / `ExtraSurvivalTrees`: nonlinear survival and cumulative
   hazard predictions; use permutation importance, not impurity importance.
 - `GradientBoostingSurvivalAnalysis`: tree boosting with `"coxph"`, `"squared"`,
-  or `"ipcwls"` loss. `criterion` was removed in 0.28.
+  or `"ipcwls"` loss. `criterion` was removed in 0.28. The `ipcwls` implementation
+  has log-time validation and missing gradient-weight defects; read the ensemble
+  reference before relying on it.
 - `ComponentwiseGradientBoostingSurvivalAnalysis`: sparse linear componentwise
   boosting.
 - `FastSurvivalSVM` / `FastKernelSurvivalSVM`: ranking or regression objectives.
@@ -188,6 +198,10 @@ ibs = integrated_brier_score(y_train, y_test, surv_prob, times)
   discrimination and calibration. It is not a standalone calibration curve.
 - Calibration requires horizon-specific predicted-versus-observed checks on
   independent data. scikit-survival 0.28 has no dedicated calibration-curve API.
+
+The evaluator applies a conservative common-support rule for the combined metrics;
+AUC also needs observed cases and controls at every horizon. Prediction export
+checks this contract and fails clearly on an unsupported holdout.
 
 See `references/evaluation-metrics.md` for assumptions, primary literature, safe
 time-grid construction, and scorer wrappers.
@@ -231,13 +245,18 @@ cause_1_cif = cif[1]
 ```
 
 `cif` has shape `(K + 1, n_times)`; row 0 is total risk and rows 1..K are
-cause-specific cumulative incidence. Cause-specific Cox models treat other causes
+cause-specific cumulative incidence. In 0.28.0 the raw total-risk confidence
+interval is reversed and ignores `conf_level`; the bundled helper repairs it using
+Kaplan–Meier. Conditional `time_min` that removes times is guarded because of an
+upstream shape defect. See the competing-risk reference before requesting intervals.
+Cause-specific Cox models treat other causes
 as censored to estimate cause-specific hazards, but one such model's
 `1 - survival` is not the cause-specific CIF. See `references/competing-risks.md`.
 
 ## Bundled local CLIs
 
-All helpers use deterministic synthetic data when no input is given. They make no
+All helpers use deterministic synthetic data when no input is given; the report-only
+example contains illustrative metric values, not results from a model fit. They make no
 network calls, reject URLs and symlinks, bound files/rows/features, avoid unsafe
 pickle loading, and lazily import scientific packages.
 
@@ -270,13 +289,17 @@ python skills/scikit-survival/scripts/model_report.py \
   --metrics-summary metrics-summary.json --output model-report.md
 ```
 
+The report helper summarizes the two supplied JSON files; it cannot establish that
+they describe the same fitted model and held-out cohort. Verify that provenance
+before combining summaries. It emits Markdown text, not plots or CIF results.
+
 Use only de-identified, authorized local data. The bundled tests contain synthetic
 records only and no patient data or PHI.
 
 ## Security triage
 
 `SECURITY.md` previously claimed this skill bundled package-shadowing files named
-`sklearn.py` and `sksurv.py`. The 2026-07-23 inventory confirmed those files did
+`sklearn.py` and `sksurv.py`. The earlier 2026-07-23 inventory confirmed those files did
 not exist; the claim was a phantom analyzer finding. This refresh adds only
 descriptively named helpers and no shadow modules, environment reads, or network
 calls.
@@ -302,7 +325,8 @@ examples copied from untrusted sources.
 
 ## Dated sources
 
-Official API and compatibility sources, checked 2026-07-23:
+Official API and compatibility sources, checked 2026-10-01. Released v0.28.0
+source and native execution take precedence over stale cached API pages:
 
 - [PyPI 0.28.0](https://pypi.org/project/scikit-survival/) — released 2026-07-05.
 - [GitHub v0.28.0 release](https://github.com/sebp/scikit-survival/releases/tag/v0.28.0)
@@ -310,6 +334,7 @@ Official API and compatibility sources, checked 2026-07-23:
 - [0.28 release notes](https://scikit-survival.readthedocs.io/en/stable/release_notes/v0.28.html).
 - [Installation guide](https://scikit-survival.readthedocs.io/en/stable/install.html).
 - [Stable user guide](https://scikit-survival.readthedocs.io/en/stable/user_guide/index.html).
+- [Released implementation](https://github.com/sebp/scikit-survival/tree/v0.28.0/sksurv).
 - [Stable API reference](https://scikit-survival.readthedocs.io/en/stable/api/index.html).
 
 ## Citing Scientific Agent Skills

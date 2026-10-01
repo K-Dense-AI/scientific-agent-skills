@@ -125,11 +125,16 @@ For each criterion, the script multiplies its weight by `1-delta` and
 `1+delta`, renormalizes all weights to one, and recomputes descriptive scores.
 It reports:
 
-- every scenario and its exact weights;
+- every scenario and its floating-point weights;
 - each work's score and coverage per scenario;
 - score ranges;
-- base ordinal order; and
+- base ordinal order and explicit tied pairs; and
 - pairwise order changes.
+
+Comparisons use unrounded scores with absolute tolerance `1e-9`; displayed
+scores and ranges are rounded to six decimals and can appear equal. This is a
+computational tolerance, not a threshold of meaningful scientific difference.
+Different criterion-status patterns generate a comparability warning.
 
 The base order is included solely to detect instability. It is not a ranking
 recommendation and must never be used for people or high-impact decisions.
@@ -142,7 +147,10 @@ The CSV header must be exactly:
 evaluation_id,work_id,rater_id,criterion_id,status,score
 ```
 
-Use pseudonymous rater identifiers. Run:
+Use pseudonymous rater identifiers. One `evaluation_id` identifies a frozen
+work revision and evaluation round; all raters in that round use the same ID.
+Different rounds need different IDs. One evaluation ID cannot name two works.
+Ratings from separate rounds are never paired or overwritten. Run:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/summarize_agreement.py \
@@ -158,6 +166,13 @@ For each criterion and overall, the report includes:
 - within-one-scale-step agreement rate;
 - mean absolute difference;
 - overlap, rated, missing, and not-applicable counts.
+
+Summaries pool all rater pairs within each work/round/criterion; a round with
+three rated raters contributes three pairs, and a round with two contributes
+one. Histograms avoid materializing the quadratic pair list. Missing and
+not-applicable statuses are excluded from score-pair denominators; omitted CSV
+rows have unknown status. Minimum-rater shortfalls are reported per rated
+round/criterion, even if the dataset has enough distinct raters overall.
 
 Rater identifiers are not emitted. These are descriptive agreement summaries,
 not chance-corrected reliability, generalizability, validity, or fairness
@@ -211,6 +226,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/generate_report_scaffold.py \
   --process /tmp/process-check.json \
   --output /tmp/developmental-report-scaffold.json
 ```
+
+Agreement and sensitivity companions must list the current work/evaluation in
+`evaluation_records`; regenerate reports from older skill versions before using
+them as companions. Identifier checks do not detect content edited in place:
+freeze inputs and regenerate all checks after changes. The process checklist
+is a separate attestation and is not cryptographically bound to a work.
 
 The scaffold includes:
 

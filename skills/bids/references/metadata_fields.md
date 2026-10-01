@@ -1,367 +1,180 @@
 # BIDS Metadata Fields Reference
 
-This reference lists the required and recommended JSON sidecar fields for each BIDS modality.
+Reviewed against [BIDS 1.11.2](https://bids-specification.readthedocs.io/en/stable/)
+on 2026-09-30. This is a practical selection, not a complete validator. The bundled
+`bids_schema.json` contains field definitions under `objects.metadata`, conditional
+requirements under `rules.sidecars`, and cross-file checks under `rules.checks`.
+A field can be required only for a particular suffix, acquisition, or dataset context.
+Read selectors before interpreting a rule; do not merge every modality's requirements.
+Required metadata may be inherited from matching higher-level sidecars.
 
-**Legend:**
-- **R** = Required
-- **REC** = Recommended
-- **OPT** = Optional
+## MRI: units, timing and orientation
 
-## Common MRI Fields (All MRI Modalities)
+Use seconds for MRI timing fields, degrees for `FlipAngle`, and tesla for
+`MagneticFieldStrength`. Convert DICOM millisecond values; do not copy units blindly.
+`Manufacturer`, `ManufacturersModelName`, scanner/software identifiers and institution
+fields are generally recommended. Check `rules.sidecars.mri` for exceptions, including
+ASL and concurrent PET requirements.
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `MagneticFieldStrength` | REC | number | Field strength in Tesla |
-| `Manufacturer` | REC | string | Scanner manufacturer |
-| `ManufacturersModelName` | REC | string | Scanner model |
-| `DeviceSerialNumber` | REC | string | Scanner serial number |
-| `StationName` | REC | string | Scanner station name |
-| `SoftwareVersions` | REC | string | Scanner software version |
-| `InstitutionName` | REC | string | Name of institution |
-| `InstitutionAddress` | REC | string | Address of institution |
-| `InstitutionalDepartmentName` | REC | string | Department name |
+- Anatomical MRI: `EchoTime` and `FlipAngle` are generally recommended;
+  `RepetitionTimeExcitation` and `RepetitionTimePreparation` are available where applicable.
+  Do not present one mandatory qMRI field set for all anatomical suffixes.
+- BOLD: `TaskName` is required. It need not equal or be derived from the `task-` label.
+  Specify **either** `RepetitionTime` **or** `VolumeTiming`, never both.
+  With `VolumeTiming`, provide `SliceTiming` or `FrameAcquisitionDuration`;
+  `DelayTime` is not used with `VolumeTiming`. Sparse sequences need the additional
+  timing information described in the [MRI timing table](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetic-resonance-imaging-data.html#timing-parameters).
+- `EchoTime` is required for multi-echo data, ASL, or where the stated fieldmap
+  conditions apply. With an `echo-` entity, record that echo's actual time, not its index.
+- `PhaseEncodingDirection` uses NIfTI voxel axes `i`, `j`, `k` with optional `-`.
+  Anatomical AP/PA/LR labels do not determine the axis or sign without the affine and
+  converter orientation. Verify scanner metadata and image orientation together.
+- `PhaseEncodingDirection` and `TotalReadoutTime` are recommended for DWI/BOLD and
+  become required under specified fieldmap/opposing-encoding conditions. For pepolar
+  `_epi` images, readout timing must be supplied or calculable through supported metadata.
+  `EffectiveEchoSpacing` alone is not numerically interchangeable with total readout time.
+- `SliceTiming` contains acquisition offsets in seconds, indexed by slice (reversed
+  relative to slice index when `SliceEncodingDirection` is negative). It is not a list
+  of slice indices. The list length must match the slice dimension. Never infer offsets
+  from TR and slice order without accounting for multiband acquisition and dead time.
 
-## Anatomical MRI (anat/)
+Illustrative odd-first order 1,3,5,2,4,6 with TR=2 s, equal spacing, no dead time and
+positive slice encoding direction:
 
-### T1w, T2w, FLAIR, T2star, PDw
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `RepetitionTime` | REC | number | TR in seconds |
-| `EchoTime` | REC | number | TE in seconds |
-| `InversionTime` | REC | number | TI in seconds (if applicable) |
-| `FlipAngle` | REC | number | Flip angle in degrees |
-| `SequenceName` | REC | string | Pulse sequence name |
-| `SequenceVariant` | REC | string | Variant of the sequence |
-| `ScanningSequence` | REC | string | General description |
-| `PulseSequenceType` | REC | string | Type of pulse sequence |
-| `NonlinearGradientCorrection` | REC | boolean | Whether applied |
-| `ParallelReductionFactorInPlane` | REC | number | iPAT/GRAPPA factor |
-| `ContrastBolusIngredient` | REC | string | Active contrast ingredient |
-
-### Quantitative MRI (T1map, T2map, etc.)
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `RepetitionTimeExcitation` | R | number | Excitation TR in seconds |
-| `RepetitionTimePrepration` | R | number | Preparation TR in seconds |
-| `FlipAngle` | R | number/array | Flip angle(s) in degrees |
-| `MTState` | R | boolean | Magnetization transfer on/off |
-| `SpoilingState` | REC | boolean | Whether RF spoiling applied |
-| `SpoilingType` | REC | string | `RF`, `GRADIENT`, or `COMBINED` |
-| `SpoilingRFPhaseIncrement` | REC | number | Phase increment in degrees |
-
-## Functional MRI (func/)
-
-### BOLD
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `RepetitionTime` | R | number | TR in seconds (volume acquisition time) |
-| `TaskName` | R | string | Name of the task (must match `task-<label>`) |
-| `SliceTiming` | REC | array | Time each slice was acquired, in seconds |
-| `EchoTime` | REC | number | TE in seconds |
-| `FlipAngle` | REC | number | Flip angle in degrees |
-| `PhaseEncodingDirection` | REC | string | `i`, `i-`, `j`, `j-`, `k`, `k-` |
-| `EffectiveEchoSpacing` | REC | number | Effective echo spacing in seconds |
-| `TotalReadoutTime` | REC | number | Total readout time in seconds |
-| `MultibandAccelerationFactor` | REC | number | Multiband/SMS factor |
-| `NumberOfVolumesDiscardedByScanner` | REC | integer | Dummy scans removed |
-| `NumberOfVolumesDiscardedByUser` | REC | integer | Volumes removed post-hoc |
-| `TaskDescription` | REC | string | Longer description of the task |
-| `CogAtlasID` | REC | string | Cognitive Atlas ID for the task |
-| `CogPOID` | REC | string | Cognitive Paradigm Ontology ID |
-| `Instructions` | REC | string | Instructions given to participants |
-
-### Multi-echo BOLD
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `EchoTime` | R | number | TE for this echo (each echo in separate file) |
-| `EchoTime1`, `EchoTime2` | - | - | NOT used; use `echo-<index>` entity |
-
-### BOLD Timing Details
-
-**SliceTiming** - Array of times (in seconds) at which each slice was acquired relative to the start of volume acquisition. Length must equal the number of slices.
-
-Example for ascending sequential (3 slices, TR=2s):
-```json
-{"SliceTiming": [0.0, 0.667, 1.333]}
-```
-
-Illustrative equal-spacing example: odd-first slice acquisition order 1, 3, 5, 2, 4, 6
-with 6 slices, TR=2s, no dead time, and positive `SliceEncodingDirection`.
-The array is indexed by slice, not ordered by acquisition time:
 ```json
 {"SliceTiming": [0.0, 1.0, 0.333, 1.333, 0.667, 1.667]}
 ```
 
-**PhaseEncodingDirection** values:
-- `i` / `i-` : along first image axis (typically left-right)
-- `j` / `j-` : along second image axis (typically anterior-posterior)
-- `k` / `k-` : along third image axis (typically inferior-superior)
-- The `-` suffix indicates the negative direction along that axis
+qMRI requirements are suffix-specific (`rules.sidecars.qmri`): VFA requires
+`FlipAngle`, `PulseSequenceType`, and `RepetitionTimeExcitation`; MP2RAGE additionally
+requires `InversionTime`, `RepetitionTimePreparation`, `NumberShots`, and field strength.
+`MTState` is required for MT collections, not universally for every quantitative map.
+The spelling is **`RepetitionTimePreparation`**.
 
-## Diffusion-Weighted Imaging (dwi/)
+## Diffusion gradients
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `PhaseEncodingDirection` | R | string | Phase encoding direction |
-| `TotalReadoutTime` | R | number | Total readout time in seconds |
-| `EchoTime` | REC | number | TE in seconds |
-| `RepetitionTime` | REC | number | TR in seconds |
-| `FlipAngle` | REC | number | Flip angle in degrees |
-| `EffectiveEchoSpacing` | REC | number | Effective echo spacing in seconds |
-| `MultibandAccelerationFactor` | REC | number | SMS/multiband factor |
-| `SliceTiming` | REC | array | Slice timing |
+Store `.bvec` as 3 rows × N columns and `.bval` as 1 row × N columns, with N equal to
+stored image volumes. Use space-separated numbers. b=0 volumes have zero vectors;
+diffusion-weighted vectors should be unit length. Preserve dcm2niix's FSL/BIDS image
+coordinate convention and verify gradients after any image reorientation (including
+the x-component handedness convention); scanner anatomical directions are insufficient.
+See the [DWI specification](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetic-resonance-imaging-data.html#diffusion-imaging-data).
 
-### DWI Gradient Files
+## Fieldmaps and association
 
-`.bvec` file (3 rows x N columns, N = number of volumes):
-```
-0 0.707 -0.707 0 0.577
-0 0.707 0.707 0 0.577
-0 0 0 1 0.577
-```
+| Acquisition | Required core fields | Additional checks |
+|---|---|---|
+| `_phasediff` | `EchoTime1`, `EchoTime2` | Shorter echo first; matching magnitude image |
+| `_phase1` / `_phase2` | `EchoTime` per image | Verify echo pairs and magnitude association |
+| `_fieldmap` | `Units` | `Hz`, `rad/s`, or `T`; retain actual physical units |
+| `_epi` pepolar | `PhaseEncodingDirection` | Readout time or supported inputs to calculate it; complementary encoding scans |
 
-`.bval` file (1 row x N columns):
-```
-0 1000 1000 1000 2000
-```
+`IntendedFor` is optional for fieldmaps, not universally required. Use meaningful
+associations for processing: `B0FieldIdentifier` defines a field estimate and
+`B0FieldSource` on a target selects it; `IntendedFor` remains supported. Check the
+pipeline's support before choosing the association method.
 
-- b=0 volumes have zero-vectors in `.bvec`
-- Gradient directions are in the image coordinate system
-- Values are space-separated (not tab-separated)
-- Number of columns must match number of volumes in the NIfTI
+Fieldmap JSON example for a target in the same raw dataset:
 
-## Fieldmaps (fmap/)
-
-### Case 1: Phase-difference map (`_phasediff`)
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `EchoTime1` | R | number | TE of the first echo (shorter) |
-| `EchoTime2` | R | number | TE of the second echo (longer) |
-| `IntendedFor` | R | string/array | BIDS URI(s) of files to correct |
-| `B0FieldIdentifier` | REC | string | Identifier for this B0 field |
-
-### Case 2: Two phase maps (`_phase1`, `_phase2`)
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `EchoTime` | R | number | TE for this phase image |
-| `IntendedFor` | R | string/array | Files to correct |
-
-### Case 3: Direct fieldmap (`_fieldmap`)
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `Units` | R | string | Must be `Hz` or `rad/s` |
-| `IntendedFor` | R | string/array | Files to correct |
-
-### Case 4: "Pepolar" fieldmaps (`_epi`)
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `PhaseEncodingDirection` | R | string | PE direction for this image |
-| `TotalReadoutTime` | R | number | Total readout time |
-| `IntendedFor` | R | string/array | Files to correct |
-| `B0FieldIdentifier` | REC | string | Identifier for this B0 field |
-| `B0FieldSource` | REC | string | Which B0 field to use |
-
-### IntendedFor Syntax
-
-**BIDS URI format** (recommended, v1.7+):
 ```json
 {
-    "IntendedFor": [
-        "bids::sub-01/func/sub-01_task-rest_bold.nii.gz",
-        "bids::sub-01/dwi/sub-01_dwi.nii.gz"
-    ]
+  "B0FieldIdentifier": "pepolar_fmap0",
+  "IntendedFor": ["bids::sub-01/func/sub-01_task-rest_bold.nii.gz"]
 }
 ```
 
-**Relative path format** (legacy):
-```json
-{
-    "IntendedFor": [
-        "func/sub-01_task-rest_bold.nii.gz",
-        "dwi/sub-01_dwi.nii.gz"
-    ]
-}
-```
+Target BOLD JSON addition:
 
-**B0FieldIdentifier/B0FieldSource** (preferred in v1.9+):
 ```json
-// In the fieldmap sidecar
-{"B0FieldIdentifier": "pepolar_fmap0"}
-
-// In the BOLD sidecar
 {"B0FieldSource": "pepolar_fmap0"}
 ```
 
-## Perfusion Imaging (perf/)
+`bids::` is relative to the nearest dataset root, including a derivative's own root.
+For cross-dataset sources, use a named BIDS URI and `DatasetLinks`. Legacy subject-relative
+`IntendedFor` paths are deprecated. See [BIDS URI resolution](https://bids-specification.readthedocs.io/en/stable/common-principles.html#resolution-of-bids-uris).
 
-### ASL
+## ASL
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `ArterialSpinLabelingType` | R | string | `CASL`, `PCASL`, or `PASL` |
-| `PostLabelingDelay` | R | number/array | PLD in seconds |
-| `BackgroundSuppression` | R | boolean | Whether applied |
-| `MagneticFieldStrength` | R | number | In Tesla |
-| `M0Type` | R | string | `Separate`, `Included`, `Estimate`, `Absent` |
-| `RepetitionTimePreparation` | R | number | Time between ASL pulses |
-| `LabelingDuration` | R | number | Duration of labeling pulse |
-| `BackgroundSuppressionNumberPulses` | REC | integer | Number of suppression pulses |
-| `BackgroundSuppressionPulseTime` | REC | array | Timing of suppression pulses |
-| `VascularCrushing` | REC | boolean | Whether applied |
-| `LabelingOrientation` | REC | string | Orientation of labeling plane |
-| `LabelingDistance` | REC | number | Distance from isocenter (mm) |
-| `BolusCutOffFlag` | R (PASL) | boolean | Whether QUIPSS applied |
-| `BolusCutOffTimingSequence` | R (PASL) | string | QUIPSS sequence type |
-| `BolusCutOffDelayTime` | R (PASL) | number | QUIPSS delay time |
+For `_asl`, core requirements include `ArterialSpinLabelingType` (`CASL`, `PCASL`,
+`PASL`), `PostLabelingDelay`, `BackgroundSuppression`, `M0Type`,
+`RepetitionTimePreparation`, `TotalAcquiredPairs`, `MagneticFieldStrength`,
+`MRAcquisitionType`, and `EchoTime`. Also provide `_aslcontext.tsv` with one volume
+label per stored volume, and verify the M0 acquisition/estimate relation.
 
-### aslcontext.tsv
+- CASL/PCASL requires `LabelingDuration`; it is not a universal PASL field.
+- PASL requires `BolusCutOffFlag`; when true, also supply `BolusCutOffDelayTime`
+  and **`BolusCutOffTechnique`**.
+- `M0Type: "Estimate"` requires `M0Estimate`; a separate `_m0scan` has an `IntendedFor` requirement.
+- 2D ASL requires `SliceTiming`. Suppression pulse count/times are recommended when
+  background suppression is true.
 
-Required file listing the order of volumes (label/control/m0scan):
-```
-volume_type
-control
-label
-control
-label
-m0scan
-```
+Use the full [ASL specification](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetic-resonance-imaging-data.html#arterial-spin-labeling-perfusion-data)
+for acquisition-specific conditions and per-volume arrays.
 
-## EEG (eeg/)
+## Electrophysiology
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `TaskName` | R | string | Name of the task |
-| `SamplingFrequency` | R | number | In Hz |
-| `EEGReference` | R | string | Reference electrode(s) |
-| `PowerLineFrequency` | R | number | 50 or 60 Hz (or `n/a`) |
-| `SoftwareFilters` | R | object | Online filters applied |
-| `EEGPlacementScheme` | REC | string | e.g., `10-20`, `10-10` |
-| `CapManufacturer` | REC | string | Cap manufacturer |
-| `CapManufacturersModelName` | REC | string | Cap model |
-| `EEGChannelCount` | REC | integer | Number of EEG channels |
-| `EOGChannelCount` | REC | integer | Number of EOG channels |
-| `ECGChannelCount` | REC | integer | Number of ECG channels |
-| `EMGChannelCount` | REC | integer | Number of EMG channels |
-| `MiscChannelCount` | REC | integer | Number of misc channels |
-| `TriggerChannelCount` | REC | integer | Number of trigger channels |
-| `RecordingDuration` | REC | number | In seconds |
-| `RecordingType` | REC | string | `continuous`, `epoched`, `discontinuous` |
+| Datatype | Core required JSON fields for task recordings |
+|---|---|
+| EEG | `TaskName`, `SamplingFrequency`, `EEGReference`, `PowerLineFrequency`, `SoftwareFilters` |
+| iEEG | `TaskName`, `SamplingFrequency`, `iEEGReference`, `PowerLineFrequency`, `SoftwareFilters` |
+| MEG | `TaskName`, `SamplingFrequency`, `PowerLineFrequency`, `DewarPosition`, `SoftwareFilters`, `DigitizedLandmarks`, `DigitizedHeadPoints` |
+| EMG | `TaskName`, `EMGPlacementScheme`, `EMGReference`, `SamplingFrequency`, `PowerLineFrequency`, `RecordingType`, `SoftwareFilters` |
 
-### channels.tsv (EEG)
+`PowerLineFrequency` accepts a numeric frequency or `"n/a"`; `SoftwareFilters` accepts
+a filter-description object or `"n/a"` under its field definition. EMG needs
+`EMGPlacementSchemeDescription` when the scheme is `"Other"` and `EpochLength` for
+epoched recordings. iEEG requires electrode/coordinate metadata; do not conflate
+channels (recorded signals) with electrodes (physical contacts).
 
-| Column | Status | Description |
-|--------|--------|-------------|
-| `name` | R | Channel name |
-| `type` | R | `EEG`, `EOG`, `ECG`, `EMG`, `MISC`, `TRIG`, etc. |
-| `units` | R | `V`, `mV`, `uV` |
-| `sampling_frequency` | OPT | Per-channel if different |
-| `low_cutoff` | REC | High-pass filter frequency (Hz) |
-| `high_cutoff` | REC | Low-pass filter frequency (Hz) |
-| `notch` | REC | Notch filter frequency (Hz) |
-| `reference` | REC | Reference electrode name |
-| `status` | REC | `good` or `bad` |
-| `status_description` | OPT | Reason for bad status |
+For EEG channels, `name`, `type`, and `units` are required columns. Coordinate units
+and coordinate-system identifiers belong in matching `coordsystem.json`. Consult the
+modality's rules for which companion files are required, recommended or conditional.
+BrainVision datasets need the complete `.vhdr`, `.vmrk`, `.eeg` triplet with valid links.
+Use `MiscChannelCount`; `MISCChannelCount` is a deprecated alias for EEG/motion.
 
-### electrodes.tsv (EEG)
+Official modality pages: [EEG](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/electroencephalography.html),
+[iEEG](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/intracranial-electroencephalography.html),
+[MEG](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetoencephalography.html),
+[EMG](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/electromyography.html).
 
-| Column | Status | Description |
-|--------|--------|-------------|
-| `name` | R | Electrode name |
-| `x` | R | X coordinate |
-| `y` | R | Y coordinate |
-| `z` | R | Z coordinate |
-| `type` | OPT | Electrode type |
-| `material` | OPT | Electrode material |
-| `impedance` | OPT | Impedance in kOhm |
+## PET
 
-## MEG (meg/)
+PET metadata is substantially richer than tracer name and frame timing. Required
+raw `_pet` fields cover hardware (`Manufacturer`, `ManufacturersModelName`, `Units`),
+radiochemistry (including `SpecificRadioactivity` and its units), timing, and
+reconstruction (`AcquisitionMode`, decay correction fields, reconstruction method,
+parameter labels, filter type, and attenuation correction). Conditional reconstruction
+parameter values/units, filter sizes and infusion fields must also be satisfied.
+Use `rules.sidecars.pet` and the [PET specification](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/positron-emission-tomography.html)
+for the full inventory; a small example is not a complete PET sidecar.
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `TaskName` | R | string | Name of the task |
-| `SamplingFrequency` | R | number | In Hz |
-| `PowerLineFrequency` | R | number | 50 or 60 Hz |
-| `DewarPosition` | R | string | Position of the dewar |
-| `SoftwareFilters` | R | object | Online filters |
-| `DigitizedLandmarks` | R | boolean | Fiducials digitized |
-| `DigitizedHeadPoints` | R | boolean | Head shape digitized |
-| `MEGChannelCount` | REC | integer | Number of MEG channels |
-| `MEGREFChannelCount` | REC | integer | Reference channels |
-| `ContinuousHeadLocalization` | REC | boolean | HPI on |
-| `HeadCoilFrequency` | REC | array | HPI coil frequencies |
-| `InstitutionName` | REC | string | Institution name |
+`TimeZero` defines the reference clock time and is not necessarily injection time.
+`ScanStart`, `InjectionStart` and frame timing use the documented relation to that
+reference. State measured activity and mass units explicitly; do not relabel numeric
+values as MBq without conversion. `ReconFilterSize` accepts a number or an array under its definition.
+Blood recordings have separate required columns and availability/correction fields.
 
-## PET (pet/)
+## Microscopy, NIRS, motion and spectroscopy
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `TracerName` | R | string | Name of the radiotracer |
-| `TracerRadionuclide` | R | string | e.g., `C11`, `F18`, `O15` |
-| `InjectedRadioactivity` | R | number | In MBq |
-| `InjectedRadioactivityUnits` | R | string | Must be `MBq` |
-| `InjectedMass` | R | number | Mass of tracer injected |
-| `InjectedMassUnits` | R | string | e.g., `ug` |
-| `ModeOfAdministration` | R | string | `bolus`, `infusion`, `bolus-infusion` |
-| `TimeZero` | R | string | Time of injection (HH:MM:SS) |
-| `ScanStart` | R | number | Start time relative to TimeZero |
-| `InjectionStart` | R | number | Injection time relative to TimeZero |
-| `FrameTimesStart` | R | array | Frame start times in seconds |
-| `FrameDuration` | R | array | Frame durations in seconds |
-| `Units` | R | string | Unit of voxel values (e.g., `Bq/mL`) |
-| `TracerRadLex` | REC | string | RadLex ID for tracer |
-| `BodyWeight` | REC | number | In kg |
-| `BodyPart` | REC | string | Imaged body part |
-| `AttenuationCorrection` | REC | string | Method description |
-| `ReconMethodName` | REC | string | Reconstruction method |
-| `ReconMethodParameterLabels` | REC | array | Parameter names |
-| `ReconMethodParameterValues` | REC | array | Parameter values |
-| `ReconFilterType` | REC | string | Post-recon filter type |
-| `ReconFilterSize` | REC | number | Filter FWHM in mm |
+| Datatype | Core metadata and caveats |
+|---|---|
+| Microscopy | `PixelSize` and `PixelSizeUnits` are required for non-photo microscopy images. `PixelSize` is a two- or three-number array; `PixelSizeUnits` is `"mm"`, `"um"`, or `"nm"`. Manufacturer/model and `SampleEnvironment` are recommended. Validate embedded OME metadata and image dimensions. |
+| NIRS | `TaskName`, `SamplingFrequency`, `NIRSChannelCount`, `NIRSSourceOptodeCount`, `NIRSDetectorOptodeCount`; additional channel counts are conditional on channel type. Include channel/optode/coordinate companions according to the rules. |
+| Motion | `TaskName` and `SamplingFrequency` are required; `TrackingSystemName` is optional. Spatial-axis/rotation descriptions belong to the coordinate-system rules, not an invented universal motion sidecar requirement. |
+| MRS | `ResonantNucleus`, `SpectrometerFrequency`, `SpectralWidth`, and `EchoTime`; NIfTI-MRS also carries a header extension. A `voi-` entity requires body-part metadata. Verify nucleus/frequency arrays and acquisition-specific dimensions. |
 
-## Microscopy (micr/)
+Load `rules.sidecars.micr`, `.nirs`, `.motion`, or `.mrs` and corresponding
+`objects.metadata` definitions rather than copying scalar types across modalities.
+BIDS 1.11.2 adds OME-Zarr imaging support; confirm actual consumer support separately.
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `Manufacturer` | R | string | Microscope manufacturer |
-| `ManufacturersModelName` | R | string | Microscope model |
-| `PixelSize` | R | array | [X, Y] or [X, Y, Z] in micrometers |
-| `PixelSizeUnits` | R | string | `um` (micrometers) |
-| `Magnification` | REC | number | Objective magnification |
-| `SampleEnvironment` | R | string | `in vivo`, `ex vivo`, `in vitro` |
-| `SampleFixation` | REC | string | Fixation method |
-| `SampleStaining` | REC | string | Staining protocol |
-| `SliceThickness` | REC | number | In micrometers |
-| `TissueDeformationScaling` | REC | number | Scaling factor |
+## Events and validation
 
-## NIRS (nirs/)
+`onset` and `duration` are the first two columns of `_events.tsv`. Times are seconds
+relative to the first **stored** data point; negative onset values are allowed.
+A zero duration denotes an impulse; `n/a` denotes an unavailable duration.
+`trial_type` and `response_time` are optional. Sort rows by onset and describe custom
+columns in JSON. Resting-state tasks do not necessarily have recorded events.
 
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `TaskName` | R | string | Name of the task |
-| `SamplingFrequency` | R | number | In Hz |
-| `NIRSSourceOptodeCount` | R | integer | Number of sources |
-| `NIRSDetectorOptodeCount` | R | integer | Number of detectors |
-| `ACCELChannelCount` | REC | integer | Accelerometer channels |
-| `NIRSPlacementScheme` | REC | string | e.g., `10-20` |
-
-## Motion (motion/)
-
-| Field | Status | Type | Description |
-|-------|--------|------|-------------|
-| `TaskName` | R | string | Name of the task |
-| `SamplingFrequency` | R | number | In Hz |
-| `TrackingSystemName` | R | string | Name of tracking system |
-| `ACCELChannelCount` | REC | integer | Accelerometer channels |
-| `GYROChannelCount` | REC | integer | Gyroscope channels |
-| `MAGNChannelCount` | REC | integer | Magnetometer channels |
-| `RotationOrder` | REC | string | e.g., `XYZ` |
-| `RotationRule` | REC | string | `left-hand` or `right-hand` |
-| `SpatialAxes` | REC | string | e.g., `ALS` |
+Run the full validator including image-header checks. Validation establishes structural
+and metadata conformance, not the correctness of acquisition values, gradient orientation,
+fieldmap selection, deidentification, or scientific preprocessing choices.

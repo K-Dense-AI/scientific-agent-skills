@@ -4,9 +4,12 @@
 
 > **For AI agents:** Read this file for all core styling rules. Then use the [diagram selection table](#choosing-the-right-diagram) to pick the right type and follow its link — each type has its own file with a production-quality exemplar, tips, and a copy-paste template.
 >
-> **For humans:** This guide + the linked diagram files ensure every Mermaid diagram in your repo is accessible, professional, and renders cleanly in GitHub light and dark modes. Reference it from your `AGENTS.md` or contributing guide.
+> **For humans:** This guide + the linked diagram files provide a starting point for readable diagrams; validate rendering and accessibility in the actual destination. Reference it from your `AGENTS.md` or contributing guide.
 
-**Target platform:** GitHub Markdown (Issues, PRs, Discussions, Wikis, `.md` files)
+**Target platform:** Mermaid-capable Markdown; check the particular host and version.
+**Verified renderer:** Mermaid 12.0.0. See [Current rendering and validation](current-rendering.md) for CLI export, browser APIs, and accessibility results.
+These are house-style preferences, not Mermaid grammar or universal GitHub guarantees.
+All business workflows, endpoints, scores, and dates in examples are illustrative.
 **Design goal:** Minimal professional styling that renders beautifully in both GitHub light and dark modes, is accessible to screen readers, and communicates clearly with zero visual noise.
 
 ---
@@ -26,8 +29,8 @@
 | #   | Principle                      | Rule                                                                                                   |
 | --- | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | 1   | **Clarity at every scale**     | Simple diagrams stay flat. Complex ones use subgraphs. Very complex ones split into overview + detail. |
-| 2   | **Accessibility always**       | Every diagram gets `accTitle` + `accDescr`. No exceptions.                                             |
-| 3   | **Theme neutral**              | No `%%{init}` theme directives. No inline `style`. Let GitHub auto-theme.                              |
+| 2   | **Accessibility always**       | Use supported SVG metadata plus a visible description; verify the exported result.                                             |
+| 3   | **Theme neutral**              | Prefer host themes and documented per-type styling; verify contrast.                              |
 | 4   | **Semantic clarity**           | `snake_case` node IDs that match labels. Active voice. Sentence case.                                  |
 | 5   | **Consistent styling**         | Same emoji = same meaning everywhere. Same shapes = same semantics.                                    |
 | 6   | **Minimal professional flair** | A touch of emoji + strategic bold + optional `classDef` — never more.                                  |
@@ -36,7 +39,7 @@
 
 ## Accessibility Requirements
 
-**Every diagram MUST include both `accTitle` and `accDescr`:**
+**Use both annotations where the renderer supports them:**
 
 ```
 accTitle: Short Name 3-8 Words
@@ -44,9 +47,15 @@ accDescr: One or two sentences explaining what this diagram shows and what insig
 ```
 
 - `accTitle` — 3–8 words, plain text, names the diagram
-- `accDescr` — 1–2 sentences on a **single line** (GitHub limitation), explains purpose and key structure
+- `accDescr` — 1–2 sentences; single-line form is convenient. Mermaid also supports `accDescr { ... }` across multiple lines
 
-**Diagram types that do NOT support `accTitle`/`accDescr`:** Mindmap, Timeline, Quadrant, Sankey, XY Chart, Block, Kanban, Packet, Architecture, Radar, Treemap. For these, place a descriptive _italic_ Markdown paragraph directly above the code block as the accessible description.
+Mermaid 12.0.0 emits these annotations for flowchart, sequence, class, state, ER,
+gantt, pie, git graph, journey, requirement, quadrant, XY, architecture, packet,
+radar, and treemap. Block, kanban, mindmap, and Sankey need a visible text alternative.
+Timeline accepts annotations but the tested SVG omitted both; C4 omitted the SVG title.
+ZenUML is a separate plugin. See the tested matrix in [Current rendering and validation](current-rendering.md).
+A paragraph does not automatically become an SVG accessible name; include meaningful image
+alt text when exporting, and a data table or detailed equivalent for complex figures.
 
 > **ZenUML note:** ZenUML requires an external plugin and may not render on GitHub. Prefer standard `sequenceDiagram` syntax.
 
@@ -64,10 +73,10 @@ flowchart LR
     auth[🔐 Authenticate] --> process[⚙️ Process request] --> respond[📤 Return response]
 ```
 
-### ❌ Don't: Inline styles or custom themes
+### Prefer host defaults unless custom styling is required
 
 ```
-%% BAD — breaks dark mode
+%% Custom colors may reduce contrast; inspect both themes
 style A fill:#e8f5e9
 %%{init: {'theme':'base'}}%%
 ```
@@ -157,11 +166,11 @@ One emoji per node, at the start of the label. Same emoji = same meaning across 
 
 ---
 
-## GitHub-Compatible Color Classes
+## Suggested Color Classes
 
 Use **only** when you genuinely need color-coding (multi-actor diagrams, severity levels). Prefer shapes + emoji first.
 
-**Approved palette (tested in both GitHub light and dark modes):**
+**Suggested palette (verify in your target light and dark themes):**
 
 | Semantic Use           | `classDef` Definition                                        | Visual                                             |
 | ---------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
@@ -203,7 +212,7 @@ flowchart LR
 **Rules:**
 
 1. Always include `color:` (text color) — dark-mode backgrounds can hide default text
-2. Use `classDef` + `class` — **never** inline `style` directives
+2. Use `classDef` + `class` where the diagram supports them. `style` is valid Mermaid syntax; C4 and sequence use different styling mechanisms
 3. Max **3–4 color classes** per diagram
 4. **Never rely on color alone** — always pair with emoji, shape, or label text
 
@@ -212,7 +221,7 @@ flowchart LR
 ## Node Naming & Labels
 
 | Rule                  | ✅ Good                    | ❌ Bad                              |
-| --------------------- | -------------------------- | ----------------------------------- | --- | ----- | ----------------------------- | --- |
+| --------------------- | -------------------------- | ----------------------------------- |
 | `snake_case` IDs      | `run_tests`, `deploy_prod` | `A`, `B`, `node1`                   |
 | IDs match labels      | `open_pr` → "Open PR"      | `x` → "Open PR"                     |
 | Specific names        | `check_unit_tests`         | `check`                             |
@@ -221,7 +230,7 @@ flowchart LR
 | 3–6 word labels       | `[📥 Fetch raw data]`      | `[Raw data is fetched from source]` |
 | Active voice          | `[🧪 Run tests]`           | `[Tests are run]`                   |
 | Sentence case         | `[Start pipeline]`         | `[Start Pipeline]`                  |
-| Edge labels 1–4 words | `-->                       | All green                           |     |`---> | All tests passed successfully |     |
+| Edge labels 1–4 words | A short phrase such as `Yes` | Long sentence labels |
 
 ---
 
@@ -243,11 +252,17 @@ Use shapes consistently to convey node type without color:
 
 ## Bold Text
 
-Use `**bold**` on **one** key term per node — the word the reader's eye should land on first.
+Flowchart Markdown strings need double quotes around a backtick-delimited label:
 
-- ✅ `[🚀 **Gradual** rollout]` — highlights the distinguishing word
-- ❌ `[**Gradual** **Rollout** **Process**]` — everything bold = nothing bold
-- Max 1–2 bold terms per node. Never bold entire labels.
+```mermaid
+flowchart LR
+    accTitle: Markdown Label Example
+    accDescr: Two pipeline stages, with the first label using Markdown emphasis.
+    start["`Run **quality control**`"] --> finish["Review results"]
+```
+
+Plain labels such as `node[**text**]` do not reliably interpret emphasis. Other
+diagram types have their own formatting support; prefer plain labels unless tested.
 
 ---
 
@@ -395,17 +410,17 @@ These will save you debugging time:
 
 | Diagram Type     | Gotcha                                          | Fix                                                                 |
 | ---------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
-| **Architecture** | Emoji in `[]` labels causes parse errors        | Use plain text labels only                                          |
-| **Architecture** | Hyphens in `[]` labels parsed as edge operators | `[US East Region]` not `[US-East Region]`                           |
+| **Architecture** | Label support varies in older hosts | Mermaid 12 accepts Unicode; preview on the destination                                          |
+| **Architecture** | Older hosts may reject punctuation | Mermaid 12 accepts `[US-East Region]`; verify older versions                           |
 | **Architecture** | `-->` arrow syntax is strict about spacing      | Use `lb:R --> L:api` format exactly                                 |
-| **Requirement**  | `id` field with dashes (`REQ-001`) can fail     | Use numeric IDs: `id: 1`                                            |
-| **Requirement**  | Capitalized risk/verify values can fail         | Use lowercase: `risk: high`, `verifymethod: test`                   |
+| **Requirement**  | Unquoted punctuation in fields can fail | Quote strings: `id: "REQ-001"`, `docref: "component-ref"`                                            |
+| **Requirement**  | Risk and verification use enumerated values | Copy documented values such as `risk: high`, `verifymethod: test`                   |
 | **C4**           | Long descriptions cause label overlaps          | Keep descriptions under 4 words; use `UpdateRelStyle()` for offsets |
 | **C4**           | Emoji in labels render but look odd             | Skip emoji in C4 — renderer has its own icons                       |
 | **Flowchart**    | The word `end` breaks parsing                   | Wrap in quotes: `["End"]` or use `end_node` as ID                   |
-| **Sankey**       | No emoji in node names                          | Parser doesn't support them — use plain text                        |
+| **Sankey**       | Emoji labels failed in the tested parser | Prefer plain text; quote fields containing commas or double quotes                        |
 | **ZenUML**       | Requires external plugin                        | May not render on GitHub — prefer `sequenceDiagram`                 |
-| **Treemap**      | Very new (v11.12.0+)                            | Verify GitHub supports it before using                              |
+| **Treemap**      | Experimental syntax and host versions vary | Verify the destination renderer before using                              |
 | **Radar**        | Requires v11.6.0+                               | Verify GitHub supports it before using                              |
 
 ---
@@ -423,7 +438,7 @@ These will save you debugging time:
 - [ ] Edge labels: 1–4 words
 - [ ] Consistent shapes for consistent meanings
 - [ ] Single primary flow direction (`TB` or `LR`)
-- [ ] No inline `style` directives
+- [ ] Per-type style syntax and readable contrast verified
 - [ ] Minimal edge crossings (reorganize groupings if chaotic)
 
 ### If Using Color/Emoji/Bold
@@ -445,8 +460,8 @@ These will save you debugging time:
 
 ## Testing
 
-1. **GitHub:** Push to branch → toggle Profile → Settings → Appearance → Theme
-2. **VS Code:** "Markdown Preview Mermaid Support" extension → `Cmd/Ctrl + Shift + V`
+1. **Destination:** Preview in the actual host and toggle its light/dark appearance. Do not publish solely to run a rendering test.
+2. **Local:** Run the pinned CLI examples in [Current rendering and validation](current-rendering.md). Editor preview extensions may bundle another Mermaid version.
 3. **Live editor:** [mermaid.live](https://mermaid.live/) — paste and toggle themes
 4. **Screen reader:** Verify `accTitle`/`accDescr` announced (VoiceOver, NVDA, JAWS)
 
@@ -455,4 +470,4 @@ These will save you debugging time:
 ## Resources
 
 - [Markdown Style Guide](markdown_style_guide.md) — Formatting, citations, and document structure for the markdown that wraps your diagrams
-- [Mermaid Docs](https://mermaid.js.org/) · [Live Editor](https://mermaid.live/) · [Accessibility](https://mermaid.js.org/config/accessibility.html) · [GitHub Support](https://github.blog/2022-02-14-include-diagrams-markdown-files-mermaid/) · [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=vstirbu.vscode-mermaid-preview)
+- [Mermaid Docs](https://mermaid.js.org/) · [Live Editor](https://mermaid.live/) · [Accessibility](https://mermaid.js.org/config/accessibility.html) · [GitHub Support](https://github.blog/2022-02-14-include-diagrams-markdown-files-mermaid/) · [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli)
