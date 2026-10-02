@@ -1,0 +1,55 @@
+{
+  "gene.json": {
+    "captured": "2026-09-23",
+    "evidence_file": "gene-mettl3.response",
+    "sha256": "0ba9d991a07e01d10067cd5efd28920f0e33d53baa5b8c4fcdaf8fac9ced802c"
+  },
+  "empty.json": {
+    "captured": "2026-09-23",
+    "evidence_file": "gene-missing.response",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "motif.json": {
+    "captured": "2026-09-23",
+    "evidence_file": "motif-m6a.response",
+    "sha256": "30bd7cfb80d2b12df57de55c2fb592597210c807d7e82a7c71dddded3c88eb6a"
+  },
+  "gene-sites.html": {
+    "captured": "2026-09-23",
+    "evidence_file": "gene-mettl3-m6a-detail",
+    "sha256": "ec31930a2edbd4fb03719052b99951fe685199df925db67f906a3d6a6bc0d7b6"
+  },
+  "modification.html": {
+    "captured": "2026-09-23",
+    "evidence_file": "modification-detail.html",
+    "sha256": "25b25da2f31ab2c8ace439e6b71ced076640f48b42c9ba72090e14f660cd83b5"
+  },
+  "service-unavailable.html": {
+    "captured": "2026-09-23",
+    "evidence_file": "annotation-submit.html",
+    "sha256": "360551ccd9a8d1d61f9199e53e053a6f8622a7c58f60d06ef5e547878f51a701"
+  },
+  "genes.tsv": {
+    "source": "http://bioinformaticsscience.cn/rmbase/download/modGene/geneFiles/genes.hg38.tar.gz",
+    "captured": "2026-09-23",
+    "selection": "Exact gene symbols METTL3 and METTL14; unmodified tab-separated rows."
+  },
+  "modification-missing.html": {
+    "source": "http://bioinformaticsscience.cn/rmbase/detailModResult.php?db=rmbase3_m6abase&table=hg38_m6abase_modsite&modID=m6A_site_0",
+    "captured": "2026-09-23",
+    "selection": "Complete observed missing-record response",
+    "sha256": "2d6815f87e7f6ca685c5d44abd4a117fa64975a559ef97f6fd198910195a1cad"
+  },
+  "cancer.json": {
+    "source": "http://bioinformaticsscience.cn/rmbase/ajaxFiles/getCancerRes.RBP.table.php",
+    "captured": "2026-09-23",
+    "selection": "METTL3, Counts; first record in each decoded SCNA/CNV/DIFF section, then JSON re-encoded",
+    "sha256": "e5df6c7f57c3773a6478b4424b1ffcc36ab8ddf19351bde602f9061aa9d49d0f"
+  },
+  "enzyme.json": {
+    "source": "http://bioinformaticsscience.cn/rmbase/ajaxFiles/getEnzymeRes.php",
+    "captured": "2026-09-23",
+    "selection": "hg38, Homo sapiens, METTL3; first three returned records",
+    "sha256": "aa43342bf83c7a61639cea7b418f21e67b6284c77718b89bdb4b71084c2d1293"
+  }
+}

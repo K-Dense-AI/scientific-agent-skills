@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html>
+  <!--  RMBase v3.0 database built by Jiajia Xuan
+<!DOCTYPE HTML>
+<html> -->
+<!-- header -->
+  <head>
+    <meta charset="utf-8">
+    <!-- <meta http-equiv="X-UA-Compatible" content="IE=edge"> -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <!-- 上面这个插件可以让用户的IE浏览器外不变，但用户在浏览网页时，实际上使用的是Google Chrome浏览器内核，而且支持IE6、7、8等多个版本的IE浏览器。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta name="keywords" content="RMBase, RNA modification, MeRIP-seq, m6A-seq, m6A-CLIP-seq, miCLIP, m6A-REF-seq, DART-seq, MAZTER-seq, MASTER-seq, m1A-seq, m1A-ID-seq, m1A-MAP-seq, m5C-RIP, Bisulfute-seq, BS-seq, iCLIP-seq, Aza-IP, Ψ-seq, PSI-seq, CeU-seq, Pseudo-seq, RiboMeth-seq, Nm-seq, m7G-seq, BoRed-seq, m7G-RIP-seq, motif, disease, high-throughput sequencing data, lncRNAs, miRNAs, pseudogenes, circRNAs, snoRNAs, tRNAs, mRNA, rRNAs, snRNAs, protein-coding gene, miRNA target, GWAS, SNP, SNV, m6A, m1A, m5C, 2'-O-Me, pseudouridine, RNA-editing, A-I, m7G">
+    <meta name="author" content="JJ Xuan, Jianhua Yang, Lianghu Qu, xjiajia_strive@163.com, yangjh7@mail.sysu.edu.cn, lssqlh@mail.sysu.edu.cn">
+    <meta name="copyright" content="The copyright of this page belongs to Qu Lab">
+    <!-- <meta http-equiv=X-UA-Compatible content=IE=EmulateIE7> -->
+    <title>RMBase v3.0: Decipher the Landscape, Mechanism and Function of RNA Modifications by Integrating Multi-dimensional High-throughput Sequencing Data.</title>
+    <link rel='stylesheet' href="css/bootstrap.css">
+    <link rel='stylesheet' href="css/rmbase3.css">
+    <link rel="stylesheet" type="text/css" href="./css/jquery-ui.modified.min.css">
+    <!-- <link rel='stylesheet' href="packages/DataTables/datatables.min.css"> -->
+    <!-- <link rel="stylesheet" type="text/css" href="css/dataTables.jqueryui.css"> -->
+
+    <!-- <link rel="stylesheet" type="text/css" href="packages/DataTables-1.10.16/media/css/dataTables.jqueryui.css"> -->
+    <!-- 上一版本的datatable -->
+    <link rel="stylesheet" type="text/css" href="packages/DataTables-1.10.12/media/css/dataTables.jqueryui.css">
+    
+
+
+    <link rel="icon" href="pictures/icon2.png" style="width: 20%;">
+
+    <!-- <script type="text/javascript" src="js/jquery-3.4.1.min.js"></script> -->
+    <script type="text/javascript" src="js/jquery-3.1.1.min.js"></script>
+    <script type="text/javascript" src="js/popper.min.js"></script>
+    <script type="text/javascript" src="js/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="js/bootstrap.min.js"></script>
+    <script type="text/javascript" language="javascript" src="./packages/DataTables-1.10.12/media/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript" language="javascript" src="./packages/DataTables-1.10.12/media/js/dataTables.jqueryui.js"></script>
+    <script type="text/javascript" language="javascript" src="./packages/Highcharts-5.0.0/js/highcharts.js"></script>
+    <script type="text/javascript" language="javascript" src="./packages/Highcharts-5.0.0/js/modules/exporting.js"></script>
+    <script>window.__theme = 'bs4';</script>
+    <!-- new -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/1.5.1/css/buttons.dataTables.min.css">
+    <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/buttons/1.5.1/js/dataTables.buttons.min.js"></script>
+    <script type="text/javascript" language="javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+    <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/buttons/1.5.1/js/buttons.html5.min.js"></script>
+
+</head>
+
+<!-- <body> -->
+<body style="background-color: #f5f5f5; background:url('pictures/RNAbgc.png');">
+    <nav class="navbar navbar-expand-md bg-dark navbar-dark fixed-top" role="navigation" style="max-height: 60px; ">
+    <!-- define function    -->
+    
+      <!-- Links -->
+      <div class="container-fluid" style="font-size:18px;padding-left: 0;">
+        <div class="collapse navbar-collapse" id="navbar-collapse" style="margin-left: 0px">
+          <a class="navbar-brand js-scroll-trigger" href="index.php"><img src="pictures/logoRMBase3.png" class="img-fluid" style="max-height: 60px; "></a>
+          <ul class="navbar-nav">
+            <li class="nav-item" >
+              <a class="nav-link " href="index.php">Home</a>
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle active" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" >RNA Modifications</a>
+              <div class="dropdown-menu" style="font-size:15px">
+                <a class="dropdown-item" style="font-size:15px" href="m1Asearch.php"><b>m1A Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="m5Csearch.php"><b>m5C Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="m6Asearch.php"><b>m6A Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="m7Gsearch.php"><b>m7G Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="Nmsearch.php"><b>2'-O-Me Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="pseudosearch.php"><b>Pseudo Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="RNAeditingsearch.php"><b>RNA Editing</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="ac4csearch.php"><b>ac4C Modification</b></a>
+                <a class="dropdown-item" style="font-size:15px" href="othertypesearch.php"><b>other Type of Modification</b></a>
+              </div>
+            </li>
+            <!-- <li class="nav-item" >
+              <a class="nav-link " href="modSeeker.php">modSeeker</a>
+            </li> -->
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle " data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Mechanisms</a>
+              <div class="dropdown-menu" style="font-size:15px">
+                <a class="dropdown-item" href="methylase.php"><b>Enzymes</b></a>
+                <a class="dropdown-item" href="snornaguide.php"><b>snoRNAs</b></a>
+                <a class="dropdown-item" href="snornaguidepseudo.php"><b>Browser</b></a>
+              </div>
+            </li>
+
+            <!-- add start 1 -->
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle " data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">modGene</a>
+              <div class="dropdown-menu" style="font-size:15px">
+                <a class="dropdown-item" href="modgene.php"><b>Genes</b></a>
+                <a class="dropdown-item" href="modcluster.php"><b>Clusters</b></a>
+              </div>
+            </li>
+            <!-- add end 1 -->
+
+            <!-- <li class="nav-item">
+              <a class="nav-link " href="modgene.php">modGene</a>
+            </li> -->
+            <li class="nav-item">
+              <a class="nav-link " href="modRBP.php">modRBP</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link " href="modmirTar.php">modMirTar</a>
+            </li>
+            <!-- 修改：将SNP和SNV合并 -->
+            <li class="nav-item">
+              <a class="nav-link " href="modvar.php">modVar</a>
+            </li>
+
+            <!-- add start 2 -->
+            <li class="nav-item">
+              <a class="nav-link " href="modHistone.php">Co-localization</a>
+            </li>
+            <!-- add end 2 -->
+
+            <li class="nav-item">
+              <a class="nav-link " href="rbpCancer.php">RMP</a>
+            </li>
+
+            <!-- add start 3 -->
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle " data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Motif</a>
+              <div class="dropdown-menu" style="font-size:15px">
+                <a class="dropdown-item" href="motif.php"><b>m6A Datasets</b></a>
+                <a class="dropdown-item" href="otherMotif.php"><b>All Modifications</b></a>
+              </div>
+            </li>
+            <!-- add end 3 -->
+            
+            <!-- <li class="nav-item">
+              <a class="nav-link " href="motif.php">Motif</a>
+            </li> -->
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle " data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Tools</a>
+              <div class="dropdown-menu" style="font-size:15px">
+                <!-- <a class="dropdown-item" href="toolsdeepAnno.php"><b>deepAnno</b></a> -->
+                <!-- <a class="dropdown-item" href="toolsmodFunction.php"><b>modFunction</b></a> -->
+                <a class="dropdown-item" href="toolsmodGeneTool.php"><b>modGeneTool</b></a>
+                <a class="dropdown-item" href="toolsmodmetagene.php"><b>modMetagene</b></a>
+                <a class="dropdown-item" href="toolsmodannotation.php"><b>modAnnotation</b></a>
+                <!-- <a class="dropdown-item" href="toolsConserved.php"><b>ConservedFunc</b></a> -->
+                <!-- <a class="dropdown-item" href="toolsHistone.php"><b>modHistoneTool</b></a> -->
+                <!-- <a class="dropdown-item" href="toolsMotif.php">Motif Analysis</a> -->
+              </div>
+            </li>
+          </ul>
+          <ul class="navbar-nav ml-auto">
+          </ul>
+          <ul class="navbar-nav">
+            <li class="nav-item">
+              <a class="nav-link " href="help.php">Help</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link " href="download.php">Download</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link js-scroll-trigger " href="contact.php">About</a>
+            </li>
+          </ul>
+        </div>
+      </div>  
+    </nav><br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>93</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>94</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>95</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>96</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>97</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>98</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>99</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>100</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>101</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>102</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>103</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>104</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>105</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>106</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>107</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>108</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>109</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>110</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>114</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>115</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>116</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>117</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>119</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>120</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>121</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>122</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>123</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>124</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>125</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>126</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>139</b><br />
+<br />
+<b>Notice</b>:  Trying to get property of non-object in <b>/www/wwwroot/html/rmbase/detailModResult.php</b> on line <b>140</b><br />
+
+  <div class="container-fluid" style="padding-top: 55px; margin: 10px 0; padding-bottom: 1px;">
+    <div class="row">
+      <div class="col-lg-1 col-md-1 col-sm-1"></div>
+      <div class="col-lg-10 col-md-10 col-sm-10" style="background-color: #fff;">
+        <div class="panel panel-default">
+          <div class="panel-heading">
+            <div class="panel-title">
+              <strong>
+                Details of RNA Modification Site of <font style="color: red;">hg38</font>
+              </strong>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="row">
+              <table id="detailResult" class="table table-sm table-bordered table-striped table-hover display nowrap" style='table-layout: fixed;'>
+                <tbody>
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">mod ID</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style="color: red; word-wrap: break-word;">m6A_site_0</td>
+                    <th class="col-lg-2 col-md-2 col-sm-2">mod Site</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                      :-:  
+                    </td>
+                  </tr>
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">mod Type</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                                    
+                    </td>
+                    <th class="col-lg-2 col-md-2 col-sm-2">Sequence</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                      <strong><abbr title=""><font color="red"></font></abbr></strong><br>                    </td>
+                  </tr>
+                  <!-- motif score -->
+                  
+                  <!-- motif structure : add 20231021 -->
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">RNA Structure Motif</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                      <strong style="color: green;"><abbr title=""><font color="red"></font></abbr></strong><br>            
+                    </td>
+                    <th class="col-lg-2 col-md-2 col-sm-2">MFE <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="Minimum free energy." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                      <strong style="color: green;"></strong> 
+                    </td>
+                  </tr>
+
+                  <!-- support dataset -->
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Support Dataset Num</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                      1                    </td>
+                    <th class="col-lg-2 col-md-2 col-sm-2">Support sub-Dataset Num</th>
+                    <td class="col-lg-4 col-md-4 col-sm-4" style='word-wrap: break-word;'>
+                                          </td>
+                  </tr>
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Support Dataset List <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="Support datasets list like GSE." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'>
+                      <a href="https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=" title="Cilck to GEO." target="_blank" style="background-color: #bde8e3; border-radius: 0.25rem;"></a> 
+                    </td>
+                  </tr>
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Support sub-Dataset List <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="Support sub-datasets list like GSM." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'>
+                                    
+                    </td>
+                  </tr>
+                  <!-- cell/tissue -->
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Cell/Tissue List <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="Cells or tissues where the sequencing data from." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'>
+                       
+                    </td>
+                  </tr>
+                  <!-- seqtype -->
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Seq Type List <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="A type of data from which the modification site is identified." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'></td>
+                  </tr>
+                  <!-- trasncript -->
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Transcript ID List <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="A list of transcript that annotated the modification site." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'></td>
+                  </tr>
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">Transcript Detail <span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="Details about transcript list that include gene ID, name, type, region." style="font-size:11px;top:-5px"></span></th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'>
+                                    <button id="showdetail" class="btn btn-danger" title="Click for details" style="padding:0px;margin: 0 auto;" onclick="doHideRNA('myTransDetail')">Show Detail</button>
+              <div id="myTransDetail">
+                <br>
+                <table id="transdetailResult" class="table table-sm table-bordered table-striped table-hover display nowrap" style='table-layout: fixed;'>
+                  <tbody>
+                  <tr>
+                    <th>Transcript ID</th>
+                    <th>Gene ID</th>
+                    <th>Gene Name</th>
+                    <th>Gene Type</th>
+                    <th>Region</th>
+                  </tr>
+                    <tr><td style="word-wrap:break-word;"></td></tr> 
+                  </tbody>
+                </table>
+              </div>
+                    </td>
+                  </tr>
+                  <!-- consevation -->
+                                    <!-- snoRNA info -->
+                                    <!-- writer info -->
+                                    <!-- pubmed -->
+                  <tr class="row" style="margin:auto 0;">
+                    <th class="col-lg-2 col-md-2 col-sm-2">PubMed ID</th>
+                    <td class="col-lg-10 col-md-10 col-sm-10" style='word-wrap: break-word;'>
+                      <a href=http://www.ncbi.nlm.nih.gov/pubmed/?term= target="_blank" style="background-color: #bde8e3; border-radius: 0.25rem;"></a>                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <!-- Decriptopns -->
+          <div class="alert alert-info" style="background-color: #33336614; border-color: #33336614; padding-bottom: 3px; margin-top: 10px;">
+            <div id="helpPart" class="panel-heading" >
+              <div class="panel-title" >
+                <strong><span style="padding-top: 10px;"><a href="help.php#rnaModification">Discription &amp; Help</a></span></strong>
+              </div>
+            </div>
+            <div class="panel-body" style="text-align: justify;">
+              <p>&hearts; There is a specific explanation when <font style="color: red;">the mouse hover the logo<span class="glyphicon glyphicon-info-sign" data-toggle="tooltip" title="Move the mouse over here in details section." style="font-size:11px;top:-5px"></span></font> in the upper right corner of each entry.</p>
+              <p>&hearts; <font style="color: red;">The <b>"modID"</b> is unique ID among all modules and can be used to retrieve in all files of the RMBase v3.0 for more information.</font></p>
+              <p>&hearts; The <b>"Motif score"</b> is alignment score to evaluate the accuracy of identified motif regions of m6A. The higher of motif score means a more accurate motif and a more reliable modification site. The range is from 0 to 5.</p>             
+              <p>&hearts; In <b>"Transcript Detail"</b>, the <b>"Gene Type"</b> is <font style="color: red;">gene biotypes</font> including protein-coding genes (mRNAs), tRNAs, rRNAs, Mt-tRNAs, lincRNAs, pseudogenes etc.; While the "Region" is <font style="color: red;">gene features</font> including CDS, 3′-UTR, 5′-UTR, intron, exon and intergenic.</p>
+              <p>&hearts; Click the <b>"Show Detail"</b> button to show detailed list and click again to hide it.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-1 col-md-1 col-sm-1"></div>
+    </div> 
+  </div>
+
+  <!-- 模态框 -->
+<!--    -->
+
+<script type="text/javascript">
+  function doHideRNA(myobj){
+    var myobj = document.getElementById(myobj);
+    if (myobj.style.display =="block"){
+      myobj.style.display = "none";
+    }else{
+      myobj.style.display = "block";
+    }
+  }
+  // support list
+  $("#mySupportDetail").hide();
+  // sub support list
+  $("#mySubSupportDetail").hide();
+  // transcript detail
+  $("#myTransDetail").hide();
+  // snoRNA detail
+  $("#mysnoRNADetail").hide();
+  // writer detail
+  $("#mywriterDetail").hide();
+  // cell
+  $("#mycelldis").hide();
+  // pubmed
+  $("#mypubdis").hide();
+
+  // window.parent.frames["iframedetail"].height="600px";
+// 模态框显示
+  // var datasetsid = document.getElementById('Datasetsid');
+ //  var subdatasetsid = document.getElementById('subDatasetsid');
+ //  // var transdetailid = document.getElementById('tranDetailsid');
+ //  datasetsid.onclick = function(){
+ //    // 整个页面阴影
+ //    // window.parent.parent.$('#Datasets').modal('show');
+ //    // 只有iframe部分阴影
+ //    window.$('#Datasets').modal('show');
+ //  }
+ //  subdatasetsid.onclick = function(){
+ //    // window.parent.parent.alert("hello");
+ //    // window.parent.parent.$('#subDatasets').modal('show');
+ //    window.$('#subDatasets').modal('show');
+ //  }
+  // transdetailid.onclick = function(){
+  //  // window.parent.parent.$('#tranDetails').modal('show');
+  //  window.$('#tranDetails').modal('show');
+  // }
+</script>
+<!-- footer -->
+  <hr style="margin-top: 70px; color:#6c6cad; ">
+  <!-- copyright -->
+    <div style="margin-top: 10px;">
+      <p class="text-center" style="margin-left: 30px;">
+        &copy; 2023, Qu Lab. 
+        <a href="http://lifesciences.sysu.edu.cn/en" target="_blank">School of Life Science</a>,
+        <a href="http://www.sysu.edu.cn/2012/en/index.htm" target="_blank">Sun Yat-sen University</a>, China.<br>
+        <!-- <img src="./pictures/logo2.png" style="width: 1.2%;"> -->
+        <!-- Guangdong ICP 2022122093 -1 -->
+        <a href="https://beian.miit.gov.cn/" target="_blank">Guangdong ICP 2022122093 -1</a>
+      </p>
+    </div>
+</body>
+</html>
