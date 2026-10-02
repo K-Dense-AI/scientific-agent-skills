@@ -313,7 +313,7 @@ CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 DemoBlockTests = skill_contract.cli.demo_test_case(SKILL_ROOT, ("doe_designs.py",))
 ```
 
-`skill_contract.office` and `skill_contract.schematic` cover files that several skills ship byte-identical copies of — the OOXML `office/` tree under `docx`/`pptx`/`xlsx`, and the AI schematic generator under five skills. Instantiate them against your skill root rather than writing the tests again; `tests/_meta` separately fails if the copies drift apart, so those files have to be changed together.
+`skill_contract.schematic` covers the AI schematic generator that several skills ship byte-identical copies of. Instantiate it against your skill root rather than writing the tests again; `tests/_meta` separately fails if the copies drift apart, so those files have to be changed together.
 
 Guard heavy imports at module scope so a suite degrades to skips rather than a collection error when a package is missing:
 

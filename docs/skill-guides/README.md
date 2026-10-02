@@ -2,7 +2,7 @@
 
 # Scientific skill guides
 
-Explore **181 skills** through guides written for scientists. Each guide explains
+Explore **177 skills** through guides written for scientists. Each guide explains
 what the skill helps you do, what information it needs, what it produces, and how
 to interpret the results. You will also find an example research request, a workflow
 image, and links to setup and technical instructions.
@@ -253,13 +253,9 @@ Browse by area:
 
 ### Document Processing & Conversion
 
-- [DOCX](docx.md)
 - [MarkItDown](markitdown.md)
 - [LiteParse](liteparse.md)
 - [Markdown & Mermaid Writing](markdown-mermaid-writing.md)
-- [PDF](pdf.md)
-- [PPTX](pptx.md)
-- [XLSX](xlsx.md)
 
 ### Laboratory Automation & Equipment Control
 

@@ -5,7 +5,7 @@ license: Apache-2.0
 allowed-tools: Read Write Edit Bash
 compatibility: Python 3.10+ with liteparse 2.15.0. LibreOffice required for Office formats; images convert natively. Tesseract is bundled but missing language data downloads on first use. Optional HTTP OCR requires network access and server-specific authentication.
 metadata:
-  version: "1.5"
+  version: "1.6"
   last-reviewed: "2026-10-01"
   upstream-version: "2.15.0"
   skill-author: K-Dense Inc.
@@ -19,7 +19,7 @@ LiteParse is an open-source document parser (Rust core, Python/Node bindings) fo
 
 **Verified release:** Python **liteparse 2.15.0** (September 29, 2026); CLI and synthetic local PDF/image fixtures tested on Python 3.13. Node/Rust examples below are source-checked and illustrative. Images convert through bundled Rust libraries, not ImageMagick. No cloud account is needed, but missing Tesseract language data can download from GitHub and an explicitly configured HTTP OCR service receives document images.
 
-For parser selection vs MarkItDown, the `pdf` skill, or LlamaParse, see `references/choosing_a_parser.md`.
+For parser selection vs MarkItDown, PDF manipulation libraries, or LlamaParse, see `references/choosing_a_parser.md`.
 
 ## When to Use This Skill
 
@@ -37,7 +37,7 @@ Use LiteParse when you need:
 | Task | Use instead |
 |------|-------------|
 | Markdown for LLM ingestion (EPUB, audio, YouTube, HTML) | `markitdown` skill |
-| Merge/split PDFs, forms, watermarks, rotation | `pdf` skill |
+| Merge/split PDFs, forms, watermarks, rotation | A PDF manipulation library such as `pypdf` |
 | Dense tables, handwriting, production cloud pipelines | [LlamaParse](https://developers.llamaindex.ai/llamaparse/parse/) (cloud; sign up separately) |
 
 ## Installation

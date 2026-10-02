@@ -8,7 +8,7 @@ from it solely because the consumer wants Markdown.
 | Text boxes, page PNGs, local PDF/Office/image parsing | LiteParse |
 | Heuristic Markdown from PDFs or converted Office files | LiteParse; visually inspect complex layouts |
 | HTML, EPUB, audio or other formats outside LiteParse's supported inputs | Review the `markitdown` skill and its converter dependencies |
-| Merge/split/rotate, watermark or fill PDF forms | A PDF manipulation workflow (`pdf` skill where available) |
+| Merge/split/rotate, watermark or fill PDF forms | A PDF manipulation library such as `pypdf` |
 | Local extraction fails on dense tables, handwriting or hard scans | Review LlamaParse cloud capabilities, document-sharing authorization and pricing separately |
 
 LiteParse's HTTP OCR is optional and may send rasterized pages to a remote

@@ -1,12 +1,12 @@
 # Security Scan Report
 
 **Generated:** 2026-09-28 09:31 UTC  
-**Skills scanned:** 166  
-**Total findings:** 674  
-**Critical:** 28 | **High:** 4 | **Safe skills:** 155/166
+**Skills scanned:** 162  
+**Total findings:** 658  
+**Critical:** 28 | **High:** 4 | **Safe skills:** 151/162
 
 **Scanner:** cisco-ai-skill-scanner 2.1.0 · **Model:** claude-opus-5  
-**This run:** 0 skill(s) rescanned; 166 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
+**This run:** 0 skill(s) rescanned; 162 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
 
 ## Summary
 
@@ -110,7 +110,6 @@
 | deepspot-m | 🟢 SAFE | 0 | ✅ | 8.3s |
 | depmap | 🟢 SAFE | 0 | ✅ | 6.1s |
 | dhdna-profiler | 🟢 SAFE | 0 | ✅ | 6.5s |
-| docx | 🟢 SAFE | 0 | ✅ | 32.1s |
 | exa-search | 🟢 SAFE | 0 | ✅ | 10.5s |
 | flowio | 🟢 SAFE | 0 | ✅ | 8.4s |
 | fluidsim | 🟢 SAFE | 0 | ✅ | 10.9s |
@@ -143,12 +142,10 @@
 | parallel-web | 🟢 SAFE | 0 | ✅ | 18.1s |
 | pathml | 🟢 SAFE | 0 | ✅ | 12.4s |
 | pathogen-variant-surveillance | 🟢 SAFE | 0 | ✅ | 20.1s |
-| pdf | 🟢 SAFE | 0 | ✅ | 8.8s |
 | peer-review | 🟢 SAFE | 0 | ✅ | 31.9s |
 | pi-agent | 🟢 SAFE | 0 | ✅ | 20.6s |
 | pkpd-modeling | 🟢 SAFE | 0 | ✅ | 25.6s |
 | polars-bio | 🟢 SAFE | 0 | ✅ | 16.6s |
-| pptx | 🟢 SAFE | 0 | ✅ | 16.5s |
 | pptx-posters | 🟢 SAFE | 0 | ✅ | 11.8s |
 | primekg | 🟢 SAFE | 0 | ✅ | 13.2s |
 | protocolsio-integration | 🟢 SAFE | 0 | ✅ | 20.0s |
@@ -176,7 +173,6 @@
 | treatment-plans | 🟢 SAFE | 0 | ✅ | 10.1s |
 | uncertainty-and-units | 🟢 SAFE | 0 | ✅ | 11.0s |
 | what-if-oracle | 🟢 SAFE | 0 | ✅ | 6.0s |
-| xlsx | 🟢 SAFE | 0 | ✅ | 18.7s |
 | zarr-python | 🟢 SAFE | 0 | ✅ | 14.1s |
 
 ## Detailed Findings

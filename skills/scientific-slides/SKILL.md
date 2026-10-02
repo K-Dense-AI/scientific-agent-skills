@@ -3,10 +3,10 @@ name: scientific-slides
 description: Builds slide decks and presentations for research talks. Used for making PowerPoint slides, conference presentations, seminar talks, research presentations, thesis defense slides, or any scientific talk. Provides slide structure, design templates, timing guidance, and visual validation. Works with PowerPoint and LaTeX Beamer.
 allowed-tools: Read Write Edit Bash
 license: MIT license
-compatibility: Python 3.12+; requests for OpenRouter generation, Pillow for image PDFs, PyMuPDF for rendering, pypdf and python-pptx for validation. Generation needs network and OPENROUTER_API_KEY. Beamer needs TeX Live/MiKTeX; programmatic PPTX needs Node.js and PptxGenJS.
+compatibility: Python 3.12+; requests for OpenRouter generation, Pillow for image PDFs, PyMuPDF for rendering, pypdf and python-pptx for validation and template editing. Generation needs network and OPENROUTER_API_KEY. Beamer needs TeX Live/MiKTeX; programmatic PPTX needs Node.js and PptxGenJS; rendering PPTX for review needs LibreOffice.
 metadata:
-  version: "1.11"
-  last-reviewed: "2026-09-30"
+  version: "1.12"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -165,12 +165,12 @@ python scripts/slides_to_pdf.py slides/*.png -o presentation.pdf
 
 ### PPT Workflow: PowerPoint with Generated Visuals
 
-When creating PowerPoint presentations, use Nano Banana 2 to generate images and figures for each slide, then add text separately using the PPTX skill.
+When creating PowerPoint presentations, use Nano Banana 2 to generate images and figures for each slide, then add text separately with PptxGenJS.
 
 **How it works:**
 1. **Plan the deck**: Create content plan for each slide
 2. **Generate visuals**: Use Nano Banana 2 with `--visual-only` flag to create images for slides
-3. **Build PPTX**: Use the PPTX skill (PptxGenJS or template-based) to create slides with generated visuals and separate text
+3. **Build PPTX**: Use PptxGenJS (or python-pptx for an existing template) to create slides with generated visuals and separate text
 
 **Step 1: Generate Visuals for Each Slide**
 
@@ -185,14 +185,14 @@ python scripts/generate_slide_image.py "Neural network architecture diagram show
 python scripts/generate_slide_image.py "Before and after comparison showing improvement: left side shows cluttered data, right side shows organized insights. Arrow connecting them. Professional business style." -o figures/results_visual.png --visual-only
 ```
 
-**Step 2: Build PowerPoint with PPTX Skill**
+**Step 2: Build PowerPoint with PptxGenJS**
 
-Use the PPTX skill's PptxGenJS workflow to create slides that include:
+Use PptxGenJS to create slides that include:
 - Generated images from step 1
 - Title and body text added separately
 - Professional layout and formatting
 
-See `skills/pptx/SKILL.md` for complete PPTX creation documentation.
+See `assets/powerpoint_design_guide.md` for the PptxGenJS and template workflows and the rendering check.
 
 ---
 
@@ -249,11 +249,8 @@ often sink a talk are catalogued in
 - Use same figures (but redesigned for slides)
 - Maintain consistent terminology
 
-**PPTX Skill**:
-- Use for PowerPoint creation and editing
-- Leverage scripts for template workflows
-- Use thumbnail generation for validation
-- Reference the PPTX skill's `SKILL.md` for programmatic creation
+**MarkItDown**:
+- Extract the text of an existing template or prior deck before reusing it (`markitdown template.pptx`)
 
 **Data Visualization**:
 - Create presentation-appropriate figures
@@ -349,10 +346,10 @@ If you need editable slides (e.g., for company templates):
    ```bash
    python scripts/generate_slide_image.py "diagram description" -o figures/fig1.png --visual-only
    ```
-3. **Build PPTX** using the PPTX skill with generated images
-4. **Add text** separately using PPTX workflow
+3. **Build PPTX** with PptxGenJS using the generated images
+4. **Add text** separately as native, editable text boxes
 
-See `skills/pptx/SKILL.md` for complete PowerPoint workflow.
+See `assets/powerpoint_design_guide.md` for the complete PowerPoint workflow.
 
 ## Summary: Key Principles
 

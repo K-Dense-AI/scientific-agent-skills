@@ -23,31 +23,8 @@ python = "3.13"
 
 # --- output formats and writing -------------------------------------------
 
-[skills.docx]
-packages = ["defusedxml", "lxml"]
-
-[skills.xlsx]
-packages = ["openpyxl", "defusedxml", "lxml"]
-
-[skills.pptx]
-packages = ["pillow", "defusedxml", "lxml"]
-
 [skills.pptx-posters]
 packages = ["python-pptx==1.0.2", "Pillow==12.3.0", "lxml==6.1.3"]
-
-[skills.pdf]
-packages = [
-    "pypdf[crypto]",
-    "pdfplumber",
-    "pypdfium2",
-    "reportlab",
-    "pdf2image",
-    "pytesseract",
-    "pillow",
-    "numpy",
-    "pandas",
-    "openpyxl",
-]
 
 [skills.liteparse]
 packages = ["liteparse==2.15.0"]

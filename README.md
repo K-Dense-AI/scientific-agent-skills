@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.00065-b31b1b.svg)](https://arxiv.org/abs/2609.00065)
-[![Version](https://img.shields.io/badge/Version-2.71.0-blue.svg)](pyproject.toml)
-[![Skills](https://img.shields.io/badge/Skills-181-brightgreen.svg)](#-whats-included)
+[![Version](https://img.shields.io/badge/Version-2.72.0-blue.svg)](pyproject.toml)
+[![Skills](https://img.shields.io/badge/Skills-177-brightgreen.svg)](#-whats-included)
 [![Databases](https://img.shields.io/badge/Databases-100%2B-orange.svg)](#-whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io/)
 [![Agent Plugins](https://img.shields.io/badge/Standard-Agent_Plugins-0A7A72.svg)](https://agent-plugins.org/)
@@ -17,7 +17,7 @@
 
 > **🔔 Claude Scientific Skills is now Scientific Agent Skills.** Same skills, broader compatibility — now works with any AI agent that supports the open [Agent Skills](https://agentskills.io/) standard, not just Claude.
 
-> **New: [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)** — A free, open-source AI co-scientist that runs on your desktop, powered by Scientific Agent Skills. Bring your own API keys, pick from 40+ models, and get a full research workspace with web search, file handling, 100+ scientific databases, and access to all 182 skills in this repo. Your data stays on your computer, and you can optionally scale to cloud compute via [Modal](https://modal.com/) for heavy workloads. [Get started here.](https://github.com/K-Dense-AI/k-dense-byok)
+> **New: [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok)** — A free, open-source AI co-scientist that runs on your desktop, powered by Scientific Agent Skills. Bring your own API keys, pick from 40+ models, and get a full research workspace with web search, file handling, 100+ scientific databases, and access to all 177 skills in this repo. Your data stays on your computer, and you can optionally scale to cloud compute via [Modal](https://modal.com/) for heavy workloads. [Get started here.](https://github.com/K-Dense-AI/k-dense-byok)
 
 > **🎥 Webinar recording — [Getting Started with K-Dense BYOK](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)**
 > A hands-on walkthrough of [K-Dense BYOK](https://github.com/K-Dense-AI/k-dense-byok), our free, open-source AI co-scientist that runs locally on your own machine and is powered by Scientific Agent Skills. We cover how to set it up, bring your own API keys, and run real research workflows with these skills. No prior technical experience needed. **[Watch the recording →](https://youtu.be/Du3BIE48DKc?si=9dPpETKSc2PeQbvU)**
@@ -26,7 +26,7 @@
 
 > **📄 Paper:** Scientific Agent Skills is described in [*Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents*](https://arxiv.org/abs/2609.00065) (arXiv:2609.00065). If you use these skills in your research, please [cite the paper](#-citation).
 
-A collection of **182 scientific and research skills** for AI agents, created by [K-Dense](https://k-dense.ai). The skills cover biology, chemistry, medicine, physics, engineering, Earth science, data analysis, and scientific communication. Each provides guidance for a specific package, data source, or workflow, including the scientific conventions and validation checks needed to use it.
+A collection of **177 scientific and research skills** for AI agents, created by [K-Dense](https://k-dense.ai). The skills cover biology, chemistry, medicine, physics, engineering, Earth science, data analysis, and scientific communication. Each provides guidance for a specific package, data source, or workflow, including the scientific conventions and validation checks needed to use it.
 
 The collection follows the open [Agent Skills](https://agentskills.io/) standard and works with **Cursor, Claude Code, Codex, Google Antigravity, and other compatible hosts**. It is also a portable [Agent Plugins](https://agent-plugins.org/) package (`plugin.json` + `skills/`), so clients that support that standard can load the collection as one plugin. Browse the [illustrated skill guides](docs/skill-guides/README.md), [skill categories](#-available-skills), or [complete catalog](docs/skills.md) to choose the skills relevant to your work.
 
@@ -78,7 +78,7 @@ Recorded walkthroughs of these skills on real research tasks, from the [K-Dense 
 
 ## 📦 What's Included
 
-This repository provides **182 scientific and research skills** organized into the following categories:
+This repository provides **177 scientific and research skills** organized into the following categories:
 
 - **100+ Scientific & Financial Databases** - The [Database Lookup](skills/database-lookup/SKILL.md) skill documents 80 databases with public, registered, or licensed access (PubChem, ChEMBL, UniProt, COSMIC, ClinicalTrials.gov, FRED, USPTO, and more), including endpoint selection, pagination, and provenance. Dedicated skills cover DepMap, Imaging Data Commons, PrimeKG, NCATS ARAX, U.S. Treasury Fiscal Data, Hugging Science, OneKGPd, Genomic Intelligence, and AlphaGenome. Multi-database packages such as BioServices, Biopython, and gget add further coverage
 - **70+ Optimized Python Package Skills** - Explicitly defined, version-aware workflows for RDKit, Scanpy, PyTorch Lightning, scikit-learn, PyTDC, PathML, pydicom, NeuroKit2, PufferLib, QuTiP, GeoPandas, pymatgen, BioPython, Qiskit, Molecular Dynamics (OpenMM/MDAnalysis), and others. The agent can still use *any* Python package; these skills provide stronger, safer guidance for the packages listed
@@ -87,6 +87,10 @@ This repository provides **182 scientific and research skills** organized into t
 - **10+ Research & Clinical Tools** - Evidence-bounded hypothesis generation, grant writing, aggregate clinical decision-support research, clinician-authored treatment-plan formatting, PK/PD modelling and simulation (NCA, population PK, exposure-response, bioequivalence, first-in-human dose), BIDS, ISO standards-readiness evidence preparation (ISO 13485, ISO 14971, ISO/IEC 17025, ISO 15189), analytical method validation and transfer (ICH Q2(R2)/Q14, ICH M10, USP, CLSI EP), scenario analysis, and workflow-derived skill drafting with Autoskill
 
 Every skill has a `SKILL.md` with its purpose, workflow, and version metadata. Depending on the workflow, it also includes code examples, reference documentation, executable helpers, or templates. Skills with bundled `scripts/` have a corresponding test suite under `tests/<skill-name>/` and a dependency entry in [`tests/skill-requirements.toml`](tests/skill-requirements.toml).
+
+### What's new in 2.72.0
+
+The `docx`, `pdf`, `pptx`, and `xlsx` document skills, which were vendored from [anthropics/skills](https://github.com/anthropics/skills) under Anthropic's own license, are no longer bundled. The collection now has **177 skills**; install those four from Anthropic's repository if you rely on them. [Scientific Slides](skills/scientific-slides/SKILL.md) now builds PowerPoint decks with PptxGenJS or python-pptx and reviews them through LibreOffice and its own rendering and validation scripts.
 
 ### What's new in 2.71.0
 
@@ -114,13 +118,12 @@ Each skill records its own compatibility requirements and validation scope. Chec
 ## 📋 Table of Contents
 
 - [What's Included](#-whats-included)
-- [What's New in 2.71.0](#whats-new-in-2710)
+- [What's New in 2.72.0](#whats-new-in-2720)
 - [Recently Added Workflows](#recently-added-workflows)
 - [Why Use This?](#-why-use-this)
 - [Getting Started](#-getting-started)
 - [Security Disclaimer](#%EF%B8%8F-security-disclaimer)
 - [Support Open Source](#%EF%B8%8F-support-the-open-source-community)
-- [Skill Credits](#-skill-credits)
 - [Prerequisites](#%EF%B8%8F-prerequisites)
 - [Quick Examples](#-quick-examples)
 - [Use Cases](#-use-cases)
@@ -143,7 +146,7 @@ Each skill records its own compatibility requirements and validation scope. Chec
 - **Multi-Step Workflows** - Execute complex pipelines with a single prompt
 
 ### 🎯 **Comprehensive Coverage**
-- **181 Skills** - Extensive coverage across all major scientific domains
+- **177 Skills** - Extensive coverage across all major scientific domains
 - **100+ Databases** - 80 databases documented by Database Lookup, plus dedicated data access skills and multi-database packages such as BioServices, Biopython, and gget
 - **70+ Optimized Python Package Skills** - Current, version-scoped guidance for packages including RDKit, Scanpy, PyTorch Lightning, scikit-learn, PyTDC, pydicom, PufferLib, QuTiP, GeoPandas, pymatgen, Qiskit, Molecular Dynamics (OpenMM/MDAnalysis), scVelo, and TimesFM (the agent can use any Python package; these are the pre-documented paths)
 
@@ -198,7 +201,7 @@ Pin to a specific release tag or commit SHA for reproducible installs:
 
 ```bash
 # Pin to a release tag
-gh skill install K-Dense-AI/scientific-agent-skills --pin v2.66.0
+gh skill install K-Dense-AI/scientific-agent-skills --pin v2.71.0
 
 # Pin to a commit SHA
 gh skill install K-Dense-AI/scientific-agent-skills --pin abc123def
@@ -296,12 +299,6 @@ Scientific Agent Skills is powered by **50+ incredible open source projects** ma
 - 💻 **Contribute** code, docs, or bug reports
 
 👉 **[View the full list of projects to support](docs/open-source-sponsors.md)**
-
----
-
-## 🙏 Skill Credits
-
-The **[docx](skills/docx/)**, **[pdf](skills/pdf/)**, **[pptx](skills/pptx/)**, and **[xlsx](skills/xlsx/)** document skills are created and maintained by **Anthropic** and vendored here from [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills). They are used under Anthropic's terms — see each skill's `LICENSE.txt` — and we track upstream so you get their latest improvements. All credit for those four skills goes to Anthropic.
 
 ---
 
@@ -493,13 +490,13 @@ networks, and search GEO for similar patterns.
 
 ## 📚 Available Skills
 
-This repository contains **182 scientific and research skills** organized across multiple domains. Each skill provides comprehensive documentation, code examples, and best practices for working with scientific libraries, databases, and tools.
+This repository contains **177 scientific and research skills** organized across multiple domains. Each skill provides comprehensive documentation, code examples, and best practices for working with scientific libraries, databases, and tools.
 
 ### Skill Categories
 
 > **Note:** The Python package and integration skills listed below are *explicitly defined* skills — curated with documentation, examples, and best practices for stronger, more reliable performance. They are not a ceiling: the agent can install and use *any* Python package or call *any* API, even without a dedicated skill. The skills listed simply make common workflows faster and more dependable.
 
-Categories overlap: a skill may appear in more than one domain, so the category counts do not sum to the 182 unique skills.
+Categories overlap: a skill may appear in more than one domain, so the category counts do not sum to the 177 unique skills.
 
 Package versions below identify the baselines documented by the skills. Follow each linked `SKILL.md` for its complete dependency stack, runtime requirements, and validation scope.
 
@@ -590,12 +587,12 @@ Package versions below identify the baselines documented by the skills. Follow e
 
 - [Marine Carbonate Chemistry](skills/marine-carbonate-chemistry/SKILL.md): paired seawater measurements with PyCO2SYS, carbonate speciation, pH-scale handling, lab-to-in-situ corrections, aragonite/calcite saturation, and uncertainty propagation
 
-#### 📊 **Data Analysis & Visualization** (22 skills)
+#### 📊 **Data Analysis & Visualization** (18 skills)
 - Visualization: Matplotlib, Seaborn, Scientific Visualization
 - Geospatial analysis: [GeoPandas 1.2.0](skills/geopandas/SKILL.md) and GeoMaster (remote sensing, GIS, satellite imagery, and spatial ML)
 - Data processing: Dask, Polars, Vaex
 - Network analysis: NetworkX
-- Document processing: LiteParse (local PDF/document parsing with bounding boxes and OCR), MarkItDown, PDF, DOCX, PPTX, and XLSX
+- Document processing: LiteParse (local PDF/document parsing with bounding boxes and OCR) and MarkItDown
 - Infographics: Infographics (AI-powered professional infographic creation)
 - Diagrams: Markdown & Mermaid Writing (text-based diagrams as default documentation standard)
 - Exploratory data analysis: bounded local EDA for explicitly supported formats, with unknown formats failing closed
@@ -623,14 +620,14 @@ Package versions below identify the baselines documented by the skills. Follow e
 - Cloud laboratory platform: Adaptyv (automated protein testing and validation)
 - Cloud structure & design platform: Tamarind (managed-GPU access to AlphaFold, Boltz, Chai, ESMFold, RFdiffusion, ProteinMPNN, BoltzGen, antibody/nanobody design, DiffDock/Vina docking, binding affinity, and MSA generation via REST API or MCP)
 
-#### 📚 **Scientific Communication** (27 skills)
+#### 📚 **Scientific Communication** (23 skills)
 - Literature: Paper Lookup (PubMed, PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall), Literature Review, Paperzilla
 - Full-text corpus access: Paperclip (read-only virtual filesystem over ~11M full-text papers, 217K+ FDA/PMDA/EMA regulatory documents, clinical trial registries, and UniProt/PDB/ChEMBL entries — source-scoped semantic search, corpus-wide grep, SQL metadata queries, map/reduce reading across many papers, figure vision analysis, and line-pinned citations)
 - Advanced paper search: BGPT Paper Search (25+ structured fields per paper — methods, results, sample sizes, quality scores — from full text, not just abstracts)
 - Web intelligence: Parallel Web (web search, URL/PDF extraction, deep research, structured enrichment, entity discovery, and recurring monitoring), Exa Search, and Research Lookup
 - Research notebooks: Open Notebook (self-hosted NotebookLM alternative — PDFs, videos, audio, web pages; 16+ AI providers; multi-speaker podcast generation)
 - Writing: evidence-traceable Scientific Writing and local, confidential, authorized Peer Review
-- Document processing: LiteParse, PDF, DOCX, PPTX, XLSX, and MarkItDown
+- Document processing: LiteParse and MarkItDown
 - Publishing and paper workflows: Venue Templates
 - Presentations: Scientific Slides, LaTeX Posters, and macro-free PPTX Posters generated from author-approved local manifests
 - Diagrams: Scientific Schematics, Markdown & Mermaid Writing
@@ -981,7 +978,7 @@ If you also need to cite a specific version of the repository itself (for exampl
   title = {Scientific Agent Skills: A Comprehensive Collection of Scientific Tools for AI Agents},
   year = {2026},
   url = {https://github.com/K-Dense-AI/scientific-agent-skills},
-  note = {182 skills covering databases, packages, integrations, and analysis tools}
+  note = {177 skills covering databases, packages, integrations, and analysis tools}
 }
 ```
 

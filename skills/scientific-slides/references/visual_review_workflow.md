@@ -96,17 +96,16 @@ python skills/scientific-slides/scripts/pdf_to_images.py presentation.pdf review
 python skills/scientific-slides/scripts/pdf_to_images.py presentation.pdf output/presentation --dpi 150
 ```
 
-### Method 2: Using PowerPoint Thumbnail Script
+### Method 2: Exporting PowerPoint Through LibreOffice
 
-For PowerPoint presentations, use the pptx skill's thumbnail tool:
+For PowerPoint presentations, export to PDF with LibreOffice, then render as in Method 1:
 
 ```bash
-# Create thumbnail grid
-python scripts/thumbnail.py presentation.pptx output --cols 4
-
-# Individual slides
-python scripts/thumbnail.py presentation.pptx slides/slide --cols 1
+soffice --headless --convert-to pdf --outdir review presentation.pptx
+python skills/scientific-slides/scripts/pdf_to_images.py review/presentation.pdf review/slide --dpi 150
 ```
+
+LibreOffice substitutes fonts that are not installed, so confirm final text fit in PowerPoint.
 
 **Advantages**:
 - Optimized for PowerPoint files

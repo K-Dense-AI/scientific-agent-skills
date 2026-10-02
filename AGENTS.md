@@ -20,8 +20,8 @@ more length, plus the pull-request process.
 - Broad "orchestrator" skills that route to other skills — they overlap every specialist by design.
 - A second provider for a service an existing skill already reaches.
 
-The general-purpose skills that do exist are narrow output-format helpers (`docx`, `pdf`, `pptx`,
-`generate-image`, `markdown-mermaid-writing`). They are not precedent for broadening scope.
+The general-purpose skills that do exist are narrow output-format helpers (`generate-image`,
+`markdown-mermaid-writing`). They are not precedent for broadening scope.
 
 ## Layout
 
@@ -283,9 +283,8 @@ DemoBlockTests = skill_contract.cli.demo_test_case(SKILL_ROOT, ("doe_designs.py"
   no hardcoded local paths, shell scripts valid. Run repo-wide by `tests/_meta`; do not duplicate
   these in a per-skill suite.
 - `cli` — the `--help` and demo-block cases above.
-- `office` / `schematic` — behaviour for files several skills ship byte-identical copies of (the
-  OOXML tree under docx/pptx/xlsx; the AI schematic generator under five skills). `tests/_meta`
-  separately fails if those copies drift apart, so fix them together.
+- `schematic` — behaviour for the AI schematic generator that several skills ship byte-identical
+  copies of. `tests/_meta` separately fails if those copies drift apart, so fix them together.
 
 ### One environment per skill
 

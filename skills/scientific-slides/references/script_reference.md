@@ -181,9 +181,8 @@ or the full bibliography build before delivery.
 `slides_to_pdf.py` uses Pillow's `save_all`/`append_images`; DPI controls page dimensions,
 not new image detail. All input slides should share an aspect ratio and pixel size.
 
-PowerPoint helpers belong to a separately available `pptx` skill. Read its installed
-version before invoking `thumbnail.py`, `add_slide.py`, `clean.py`, or Office validators.
-If unavailable, export to PDF in PowerPoint/LibreOffice and use the bundled PDF renderer.
+To review a PPTX deck, export it to PDF in PowerPoint or LibreOffice
+(`soffice --headless --convert-to pdf deck.pptx`) and use the bundled PDF renderer.
 
 Sources: [PyMuPDF rendering](https://pymupdf.readthedocs.io/en/latest/recipes-images.html),
 [Pillow PDF](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#pdf),

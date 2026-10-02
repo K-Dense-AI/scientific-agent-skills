@@ -4,7 +4,7 @@ description: Converts heterogeneous documents and selected URIs to Markdown with
 license: MIT
 compatibility: Python >=3.10,<3.15 and uv. Examples target MarkItDown 0.1.8. Core local conversion can run offline; URL, YouTube, audio transcription, LLM, Azure, and MCP workflows may use network or external services.
 metadata:
-  version: "2.4"
+  version: "2.5"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -28,7 +28,7 @@ This skill targets **MarkItDown 0.1.8**, released September 21, 2026. New code s
 | Video, structured fields, or custom multimodal extraction | Azure Content Understanding |
 | Local agent integration | Official `markitdown-mcp` server over STDIO or localhost |
 | Bounding boxes, page coordinates, or screenshots | Use a layout-aware parser such as LiteParse instead |
-| PDF merge/split/forms/watermarks | Use the `pdf` skill instead |
+| PDF merge/split/forms/watermarks | Use a PDF manipulation library such as `pypdf` instead |
 
 ## Installation
 

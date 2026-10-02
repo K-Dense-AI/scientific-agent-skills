@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides comprehensive instructions for creating professional scientific presentations using PowerPoint, with emphasis on integration with the pptx skill for programmatic creation and best practices for scientific content.
+This guide provides comprehensive instructions for creating professional scientific presentations using PowerPoint, with emphasis on programmatic creation with PptxGenJS and best practices for scientific content.
 
 **CRITICAL**: Avoid dry, text-heavy presentations. Scientific slides should be:
 - **Visually engaging**: High-quality images, figures, diagrams on EVERY slide
@@ -19,13 +19,11 @@ Code fragments assume supplied images and verified research claims; example numb
 and citations are placeholders. Native slide composition preserves quantitative
 figures; generative image attachments do not guarantee unchanged data.
 
-## Using the PPTX Skill
+## Building the Deck
 
-### Reference
-
-For complete technical documentation on PowerPoint creation, refer to:
-- **Main documentation**: the `pptx` skill's `SKILL.md`, which covers creation,
-  template editing, and the OOXML round-trip in one place
+New decks are built with PptxGenJS; existing templates are filled with
+[python-pptx](https://python-pptx.readthedocs.io/) 1.0.2. Either way, render the result
+through LibreOffice and inspect the images before delivery.
 
 ### Two Approaches to PowerPoint Creation
 
@@ -34,11 +32,11 @@ For complete technical documentation on PowerPoint creation, refer to:
 **Best for**: Creating presentations from scratch with custom designs and data visualizations.
 
 **Workflow**:
-1. Read the `pptx` skill's `SKILL.md` completely — its "Creating with pptxgenjs" section lists the footguns
+1. Read the PptxGenJS documentation (linked above) for each API call you use
 2. Set `pres.layout` before adding slides (`LAYOUT_16x9` is 10" × 5.625"; coordinates are inches)
 3. Create a JavaScript file that builds the deck with the PptxGenJS API
 4. Add charts and tables using the PptxGenJS API
-5. Generate thumbnails and validate visually
+5. Render the deck to images and validate visually (see Visual Validation Workflow)
 6. Iterate based on visual inspection
 
 **Image dimensions:** `1000, 500` below are illustrative source pixel dimensions.
@@ -79,20 +77,29 @@ pptx.writeFile({ fileName: "presentation.pptx" });
 
 **Best for**: Using existing PowerPoint templates or editing existing presentations.
 
-**Workflow** (all scripts live in the `pptx` skill; run them from the repository root):
+**Workflow** (python-pptx 1.0.2):
 1. Start with template.pptx
-2. Render a thumbnail grid to see which layouts the template offers
+2. List the template's layouts and placeholders, and render it to images to see each layout
 3. Read the existing text with `markitdown` to plan replacements
-4. Unzip the deck, edit `ppt/slides/slideN.xml` directly, and zip it back up
-5. Duplicate slides with `add_slide.py`, then drop orphaned parts with `clean.py`
-6. Validate the result and re-render thumbnails
+4. Add slides from the layouts you need and fill their placeholders
+5. Save, run `validate_presentation.py`, and re-render to check the result
 
-**Key Scripts** (under `skills/pptx/scripts/`):
-- `thumbnail.py`: Labeled grid of every slide — for picking template layouts and visual validation
-- `add_slide.py`: Duplicate a slide or layout with the package bookkeeping handled
-- `clean.py`: Delete slides, media, and rels that are no longer referenced
-- `office/validate.py`: Schema, relationship, and content-type checks; pass `--original` for template-derived decks
-- `office/soffice.py`: LibreOffice wrapper for converting to PDF
+```python
+from pptx import Presentation
+
+prs = Presentation("template.pptx")
+for index, layout in enumerate(prs.slide_layouts):
+    print(index, layout.name, [p.placeholder_format.idx for p in layout.placeholders])
+
+slide = prs.slides.add_slide(prs.slide_layouts[1])  # choose by the printed name
+slide.shapes.title.text = "Results"
+slide.placeholders[1].text = "Response rate doubled in cohort B"
+prs.save("output.pptx")
+```
+
+Layout indices and placeholder `idx` values differ between templates, so read them from
+the printout rather than reusing the numbers above. python-pptx has no slide-duplication
+API: build each new slide from a layout instead of copying an existing slide.
 
 Text extraction uses `markitdown` rather than a dedicated script:
 
@@ -269,7 +276,7 @@ Consider your subject matter and audience:
 - Avoid: 3D rotations, complex effects
 - Duration: Very fast (0.3-0.5 seconds)
 
-## Creating Presentations with PPTX Skill
+## Creating Presentations with PptxGenJS
 
 ### Design-First Workflow
 
@@ -480,17 +487,18 @@ slide.addChart(pptx.ChartType.bar, [
 
 ## Visual Validation Workflow
 
-### Generate Thumbnails
+### Render Slides to Images
 
-After creating presentation:
+After creating the presentation, export it to PDF with LibreOffice and render each page
+with the bundled script (run from the repository root):
 
 ```bash
-# Create thumbnail grid for quick review
-python skills/pptx/scripts/thumbnail.py presentation.pptx review/thumbnails --cols 4
-
-# Or a single-column strip for per-slide detail
-python skills/pptx/scripts/thumbnail.py presentation.pptx review/slide --cols 1
+soffice --headless --convert-to pdf --outdir review presentation.pptx
+python skills/scientific-slides/scripts/pdf_to_images.py review/presentation.pdf review/slide --dpi 100
 ```
+
+LibreOffice substitutes fonts that are not installed, so line breaks can differ from
+PowerPoint. Confirm final text fit in PowerPoint itself.
 
 ### Inspection Checklist
 
@@ -530,23 +538,20 @@ If you have an existing template:
 markitdown template.pptx > inventory.md
 ```
 
-2. **Create thumbnail grid**:
+2. **Render the template** to see its layouts:
 ```bash
-python skills/pptx/scripts/thumbnail.py template.pptx template_review
+soffice --headless --convert-to pdf --outdir template_review template.pptx
+python skills/scientific-slides/scripts/pdf_to_images.py template_review/template.pdf template_review/slide
 ```
 
 3. **Analyze layouts** and document which slides to use
 
-4. **Duplicate the layouts you need**, then drop what you don't:
-```bash
-python skills/pptx/scripts/add_slide.py template.pptx slide2.xml -o working.pptx
-python skills/pptx/scripts/clean.py unpacked/
-```
+4. **Add slides from the layouts you need** with python-pptx (see Template-Based
+   Creation above)
 
-5. **Replace content** by editing `ppt/slides/slideN.xml` in the unzipped deck, then
-   zip it back up and check the result:
+5. **Replace content** in the placeholders, save, and check the result:
 ```bash
-python skills/pptx/scripts/office/validate.py output.pptx --original template.pptx
+python skills/scientific-slides/scripts/validate_presentation.py output.pptx --duration 15
 ```
 
 ## Best Practices Summary
@@ -630,9 +635,10 @@ python skills/pptx/scripts/office/validate.py output.pptx --original template.pp
 - Icon libraries (Noun Project)
 - Image editing (PowerPoint built-in, external tools)
 
-**PPTX Skill Documentation**:
-- `skills/pptx/SKILL.md`: Main documentation — creation, template editing, and OOXML
-- `skills/pptx/scripts/`: Utility scripts
+**PowerPoint Tooling Documentation**:
+- [PptxGenJS](https://gitbrent.github.io/PptxGenJS/docs/): programmatic creation
+- [python-pptx](https://python-pptx.readthedocs.io/): template editing
+- `scripts/pdf_to_images.py` and `scripts/validate_presentation.py`: rendering and checks bundled with this skill
 
 ## Quick Reference
 
@@ -692,5 +698,5 @@ Effective PowerPoint presentations for science require:
 5. Visual validation
 6. Accessibility considerations
 
-Use the pptx skill for programmatic creation and the visual review workflow to ensure professional quality before presenting.
+Use PptxGenJS for programmatic creation and the visual review workflow to ensure professional quality before presenting.
 
