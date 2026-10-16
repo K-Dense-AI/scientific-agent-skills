@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "runtime": "python",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "assets",
+          "format": "url",
+          "env": "ASSETS_URL"
+        },
+        {
+          "type": "service",
+          "service": "assets-2",
+          "format": "url",
+          "env": "ASSETS_2_URL"
+        }
+      ]
+    },
+    "assets": {
+      "root": "skills/13c-metabolic-flux/assets",
+      "runtime": "python"
+    },
+    "assets-2": {
+      "root": "skills/primer-design/assets",
+      "runtime": "python"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    }
+  ]
+}
