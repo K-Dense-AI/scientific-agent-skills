@@ -1,0 +1,9 @@
+{
+  "name": "scientific-agent-skills",
+  "version": "2.72.0",
+  "private": true,
+  "description": "Scientific and research Agent Skills",
+  "engines": {
+    "node": ">=20"
+  }
+}
