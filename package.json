@@ -3,6 +3,10 @@
   "version": "2.72.0",
   "private": true,
   "description": "Scientific and research Agent Skills",
+  "scripts": {
+    "dev": "python server.py",
+    "start": "python server.py"
+  },
   "engines": {
     "node": ">=20"
   }
