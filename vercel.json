@@ -4,6 +4,7 @@
     "app": {
       "root": ".",
       "runtime": "python",
+      "entrypoint": "api/index.py",
       "bindings": [
         {
           "type": "service",
@@ -21,11 +22,13 @@
     },
     "assets": {
       "root": "skills/13c-metabolic-flux/assets",
-      "runtime": "python"
+      "runtime": "python",
+      "entrypoint": "api/index.py"
     },
     "assets-2": {
       "root": "skills/primer-design/assets",
-      "runtime": "python"
+      "runtime": "python",
+      "entrypoint": "api/index.py"
     }
   },
   "rewrites": [
