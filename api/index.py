@@ -83,16 +83,33 @@ h1 {{ margin:0; font-size:clamp(44px, 7vw, 84px); line-height:.98; letter-spacin
 
 
 class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path.startswith("/api"):
-            payload = {"status": "ok", "service": "app", "skill_count": len(get_skills())}
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-        else:
-            body = page().encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+    def _send(self, status, body, content_type):
+        encoded = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(encoded)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(encoded)
+
+    def do_HEAD(self):
+        self.do_GET()
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/api" or path.startswith("/api/"):
+            payload = {"status": "ok", "service": "app", "skill_count": len(get_skills())}
+            self._send(200, json.dumps(payload), "application/json; charset=utf-8")
+            return
+        if path != "/" and path.endswith("/"):
+            self._send(404, json.dumps({"error": "Not found"}), "application/json; charset=utf-8")
+            return
+        self._send(200, page(), "text/html; charset=utf-8")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Allow", "GET, HEAD, OPTIONS")
+        self.end_headers()
