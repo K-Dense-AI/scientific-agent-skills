@@ -103,15 +103,25 @@ class MetadataEndpointTests(unittest.TestCase):
     def test_doi_negotiation_quotes_suffix_and_normalises_key(self):
         converter = doi_to_bibtex.DOIConverter()
         bib = '@article{providerkey, author={Doe, Jane}, title={A study}, year={2026}}'
-        with patch.object(converter.session, 'get', return_value=response(text=bib)) as get:
+        with patch.object(converter.session, 'get', return_value=response(content=bib.encode())) as get:
             entry = converter.doi_to_bibtex('10.1234/a#b?c')
         self.assertEqual(get.call_args.args[0], 'https://doi.org/10.1234/a%23b%3Fc')
         self.assertEqual(get.call_args.kwargs['headers']['Accept'], 'application/x-bibtex')
         self.assertEqual(_common.parse_bibtex(entry)[0]['key'], 'Doe2026study')
 
+    def test_doi_negotiation_decodes_body_as_utf8(self):
+        converter = doi_to_bibtex.DOIConverter()
+        bib = '@article{k, author={Doe, Jane}, title={A study}, year={2026}, pages={54\u201358}}'
+        # Mirrors Crossref: x-bibtex has no charset, so .text would be mis-guessed.
+        with patch.object(converter.session, 'get',
+                          return_value=response(content=bib.encode('utf-8'), text=bib.encode('utf-8').decode('cp1252', 'replace'))):
+            entry = converter.doi_to_bibtex('10.1234/x')
+        self.assertIn('54\u201358', entry)
+        self.assertNotIn('\u00e2', entry)
+
     def test_doi_negotiation_rejects_html(self):
         converter = doi_to_bibtex.DOIConverter()
-        with patch.object(converter.session, 'get', return_value=response(text='<html>Captcha</html>')):
+        with patch.object(converter.session, 'get', return_value=response(content=b'<html>Captcha</html>')):
             self.assertIsNone(converter.doi_to_bibtex('10.1234/x'))
 
     def test_crossref_issued_year_is_retained(self):

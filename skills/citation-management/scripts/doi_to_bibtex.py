@@ -51,7 +51,10 @@ class DOIConverter:
             response = self.session.get(url, headers=headers, timeout=15)
             
             if response.status_code == 200:
-                bibtex = response.text.strip()
+                # Crossref sends application/x-bibtex without a charset, so
+                # requests would guess the encoding for .text and mangle
+                # non-ASCII characters (e.g. an en dash in a page range).
+                bibtex = response.content.decode('utf-8', errors='replace').strip()
                 entries = parse_bibtex(bibtex)
                 if len(entries) != 1:
                     print(f'Error: DOI service returned no single BibTeX entry for {doi}', file=sys.stderr)
