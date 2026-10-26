@@ -122,12 +122,13 @@ class BibTeXFormatter:
                 if doi in seen_dois:
                     print(f'Duplicate DOI found: {doi} (skipping {key})', file=sys.stderr)
                     continue
-                seen_dois.add(doi)
 
             # Check citation key
             if key in seen_keys:
                 print(f'Duplicate citation key found: {key} (skipping)', file=sys.stderr)
                 continue
+            if doi:
+                seen_dois.add(doi)
             seen_keys.add(key)
 
             unique_entries.append(entry)
