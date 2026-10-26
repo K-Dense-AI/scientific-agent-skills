@@ -15,6 +15,7 @@ run it on every pull request in seconds.
 from __future__ import annotations
 
 import json
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -127,6 +128,98 @@ class StructuralContractTests(unittest.TestCase):
                         else check(skill)
                     )
                     self.assertEqual(problems, [])
+
+
+class NestedDocCoverageTests(unittest.TestCase):
+    """The document rules see past the top level of references/ and assets/.
+
+    Regression lock for the nested-docs gap: `link_problems` and
+    `personal_path_problems` used `glob("*.md")`, so a broken
+    `references/diagrams/flowchart.md` reference (24 such files ship under
+    markdown-mermaid-writing alone) never surfaced. These build a miniature
+    skill in a temp dir, so they fail on the old glob and pass on rglob.
+    """
+
+    maxDiff = None
+
+    def _skill(self, root: Path) -> Path:
+        skill = root / "nested-probe"
+        (skill / "references" / "diagrams").mkdir(parents=True)
+        (skill / "assets" / "examples").mkdir(parents=True)
+        (skill / "scripts").mkdir(parents=True)
+        (skill / "SKILL.md").write_text("# Probe\n", encoding="utf-8")
+        return skill
+
+    def test_broken_nested_reference_link_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = self._skill(Path(directory))
+            (skill / "references" / "diagrams" / "flowchart.md").write_text(
+                "See `scripts/does_not_exist_xyz.py` for details.\n",
+                encoding="utf-8",
+            )
+            problems = structure.link_problems(skill, [])
+            self.assertTrue(
+                any("does_not_exist_xyz" in problem for problem in problems),
+                f"nested broken link went unreported: {problems}",
+            )
+
+    def test_broken_nested_asset_link_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = self._skill(Path(directory))
+            (skill / "assets" / "examples" / "guide.md").write_text(
+                "See [missing](assets/examples/does_not_exist_xyz.md).\n",
+                encoding="utf-8",
+            )
+            problems = structure.link_problems(skill, [])
+            self.assertTrue(
+                any("does_not_exist_xyz" in problem for problem in problems),
+                f"nested asset link went unreported: {problems}",
+            )
+
+    def test_valid_top_level_and_nested_links_still_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = self._skill(Path(directory))
+            (skill / "scripts" / "real_helper.py").write_text(
+                "VALUE = 1\n", encoding="utf-8"
+            )
+            (skill / "references" / "top.md").write_text(
+                "See `scripts/real_helper.py`.\n", encoding="utf-8"
+            )
+            (skill / "references" / "diagrams" / "flowchart.md").write_text(
+                "See `scripts/real_helper.py`.\n", encoding="utf-8"
+            )
+            self.assertEqual(structure.link_problems(skill, []), [])
+
+    def test_personal_path_in_nested_and_asset_docs_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = self._skill(Path(directory))
+            (skill / "references" / "diagrams" / "flowchart.md").write_text(
+                "Load /home/alice/Data/kg.csv for the demo.\n", encoding="utf-8"
+            )
+            (skill / "assets" / "examples" / "guide.md").write_text(
+                "Load /Users/bob/Data/kg.csv for the demo.\n", encoding="utf-8"
+            )
+            problems = structure.personal_path_problems(skill)
+            self.assertEqual(len(problems), 2, f"expected nested + asset hits: {problems}")
+
+    def test_nested_stdlib_shadow_is_caught_outside_office(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = self._skill(Path(directory))
+            nested = skill / "scripts" / "helpers" / "json.py"
+            nested.parent.mkdir(parents=True, exist_ok=True)
+            nested.write_text("VALUE = 1\n", encoding="utf-8")
+            vendored = skill / "scripts" / "office" / "helpers" / "json.py"
+            vendored.parent.mkdir(parents=True, exist_ok=True)
+            vendored.write_text("VALUE = 1\n", encoding="utf-8")
+            problems = structure.shadow_module_problems(skill)
+            self.assertTrue(
+                any("helpers/json.py" in problem for problem in problems),
+                f"nested shadow went unreported: {problems}",
+            )
+            self.assertFalse(
+                any("office/" in problem for problem in problems),
+                f"vendored office/ tree must stay excluded: {problems}",
+            )
 
 
 class SharedCopyTests(unittest.TestCase):
