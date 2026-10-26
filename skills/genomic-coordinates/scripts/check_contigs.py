@@ -267,6 +267,10 @@ def compare(loaded: list[tuple[Path, dict[str, int], str, bool]]) -> list[str]:
         for j in range(i + 1, len(loaded)):
             path_a, sizes_a, _, exact_a = loaded[i]
             path_b, sizes_b, _, exact_b = loaded[j]
+            # No records means no observed incompatibility, not a disjoint
+            # contig set. Still compare any declared headers/references.
+            if (not exact_a and not sizes_a) or (not exact_b and not sizes_b):
+                continue
             fold_a = {canonical_contig(n): v for n, v in sizes_a.items()}
             fold_b = {canonical_contig(n): v for n, v in sizes_b.items()}
             shared = set(fold_a) & set(fold_b)
