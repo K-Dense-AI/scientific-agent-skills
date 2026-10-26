@@ -132,13 +132,30 @@ def propagate(
 ) -> float:
     """Carry an uncertainty through the conversion's local derivative.
 
-    A central difference is exact for the affine conversions (including offset
-    temperatures) and accurate to second order for the reciprocal relations a
-    context introduces.
+    Multiplicative units and temperature differences use Pint's scale factors
+    directly. Context and logarithmic conversions use a local central
+    difference, accurate to second order for reciprocal relations.
     """
 
     if uncertainty == 0:
         return 0.0
+    if not contexts:
+        source = registry.Quantity(1.0, unit)
+        destination = registry.Quantity(1.0, target)
+        temperature = source.check("[temperature]") and destination.check("[temperature]")
+        if temperature or (is_multiplicative(registry, unit)
+                           and is_multiplicative(registry, target)):
+            # Subtraction in the same temperature scale produces its delta
+            # unit using Pint's public API, including aliases such as degC.
+            # Convert a difference, not two nearly identical absolute points:
+            # near 0 degC the latter can round to the same Kelvin magnitude.
+            source_unit = (source - registry.Quantity(0.0, unit)).units
+            target_unit = (destination - registry.Quantity(0.0, target)).units
+            converted = convert(registry, uncertainty, source_unit, target_unit, [], {})
+            propagated = abs(float(converted.m_as(target_unit)))
+            if not math.isfinite(propagated):
+                raise CliError("propagated uncertainty is not finite")
+            return propagated
     # Keep the perturbation relative to the supplied magnitude: a fixed floor
     # of 1 made 532e-9 metres differ from 532 nanometres for reciprocal contexts.
     step = (math.ulp(1.0) ** (1.0 / 3.0)) * (abs(value) if value else 1.0)
