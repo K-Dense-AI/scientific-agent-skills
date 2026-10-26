@@ -141,7 +141,11 @@ def read_table(source: str | Path) -> list[dict[str, str]]:
         raise InputError(f"{path}: duplicate column names: {', '.join(dupes)}")
 
     rows: list[dict[str, str]] = []
-    for raw in reader:
+    for record_number, raw in enumerate(reader, start=1):
+        if any(value.strip() for value in raw.get(None, [])):
+            raise InputError(
+                f"{path}: data record {record_number} has nonempty fields beyond the header"
+            )
         row = {}
         for key, value in zip(fieldnames, (raw.get(orig) for orig in reader.fieldnames)):
             row[key] = (value or "").strip()

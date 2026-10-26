@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.12+ with NumPy 2+ and SciPy. No network access and no proprietary software. The estimation tools this skill orients you towards (NONMEM, Monolix, Phoenix, Simcyp, GastroPlus) are licensed separately and are never invoked by these scripts.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "2.0"
+  version: "2.1"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-10-01"
 ---
@@ -47,6 +47,10 @@ All scripts accept `--format table|tsv|json`. Table/TSV data go to stdout and no
 stderr; JSON includes all four components on stdout and uses `null` for unavailable diagnostics.
 Exit 0 means no findings, 1 means findings, and 2 means invalid input. Dataset validation defaults
 to failing on errors; `--strict` also fails on warnings. Inspect findings even when exit 0.
+
+Delimited input rows with nonempty fields beyond the header are rejected rather than silently
+truncated. Empty trailing fields and short rows keep their existing missing-value behavior.
+This does not add support for thousands separators in numeric fields.
 
 Commands below using CSV inputs are invocation templates; supply the indicated columns and a
 suitable study design. Tests under `tests/pkpd-modeling/` execute the numerical paths with small
