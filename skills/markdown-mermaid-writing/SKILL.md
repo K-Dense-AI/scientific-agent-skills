@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: Apache-2.0
 compatibility: Markdown authoring needs no runtime. Local rendering targets Mermaid and Mermaid CLI 12.0.0, Node.js 22.13+ and a supported Chromium browser. Package or CDN installation needs network access; no credentials required.
 metadata:
-  version: "1.3"
+  version: "1.4"
   last-reviewed: "2026-10-01"
   mermaid-tested: "12.0.0"
   mermaid-cli-tested: "12.0.0"

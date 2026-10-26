@@ -18,7 +18,7 @@ All business workflows, endpoints, scores, and dates in examples are illustrativ
 
 1. **Pick the diagram type** → [Selection table](#choosing-the-right-diagram)
 2. **Open that type's file** → Copy the template, fill in your content
-3. **Apply styling from this file** → Emoji from [approved set](#approved-emoji-set), colors from [approved palette](#github-compatible-color-classes)
+3. **Apply styling from this file** → Emoji from [approved set](#approved-emoji-set), colors from [approved palette](#suggested-color-classes)
 4. **Add accessibility** → `accTitle` + `accDescr` (or italic Markdown paragraph for unsupported types)
 5. **Verify** → Renders in light mode, dark mode, and screen reader
 
