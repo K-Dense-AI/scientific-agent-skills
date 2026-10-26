@@ -246,6 +246,27 @@ class JatsTests(unittest.TestCase):
         section = jats_to_text.collect_sections(body)[0]
         self.assertEqual(section["text"], "Results Growth increased after treatment.")
 
+    def test_paragraphs_beside_sections_are_kept_in_reading_order(self) -> None:
+        """Lead-in <p> blocks directly under <body> must survive next to <sec>s."""
+        body = jats_to_text.parse(
+            "<body><p>Opening paragraph.</p><p>Second lead-in.</p>"
+            "<sec><title>Results</title><p>Growth increased.</p></sec>"
+            "<p>Bridging paragraph.</p>"
+            "<sec sec-type=\"methods\"><title>Methods</title><p>Cells were grown.</p></sec>"
+            "</body>"
+        )
+        sections = jats_to_text.collect_sections(body)
+        self.assertEqual(
+            [(s["title"], s["text"]) for s in sections],
+            [
+                ("", "Opening paragraph. Second lead-in."),
+                ("Results", "Results Growth increased."),
+                ("", "Bridging paragraph."),
+                ("Methods", "Methods Cells were grown."),
+            ],
+        )
+        self.assertEqual(sections[3]["sec_type"], "methods")
+
 
 class ArxivTests(unittest.TestCase):
     def test_entry_is_parsed_with_version_split(self) -> None:

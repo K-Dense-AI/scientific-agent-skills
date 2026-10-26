@@ -131,20 +131,35 @@ def collect_sections(body: ET.Element) -> list[dict[str, Any]]:
     """Top-level `<sec>` blocks, each with its nested subsection text inlined."""
     sections: list[dict[str, Any]] = []
 
-    top_level = body.findall("sec")
-    if not top_level:
+    if body.find("sec") is None:
         # Some articles put paragraphs straight under <body> with no sections.
         text = element_text(body)
         return [{"title": "", "sec_type": None, "text": text}] if text else []
 
-    for section in top_level:
+    # Others mix the two: an untitled lead-in of bare <p> blocks before (or
+    # between) the first <sec>. Keep that text, in reading order, as an
+    # untitled section rather than dropping it.
+    loose: list[str] = []
+
+    def flush_loose() -> None:
+        text = collapse_ws(" ".join(loose))
+        if text:
+            sections.append({"title": "", "sec_type": None, "text": text})
+        loose.clear()
+
+    for child in body:
+        if child.tag != "sec":
+            loose.append(element_text(child))
+            continue
+        flush_loose()
         sections.append(
             {
-                "title": section_title(section),
-                "sec_type": section.get("sec-type"),
-                "text": element_text(section),
+                "title": section_title(child),
+                "sec_type": child.get("sec-type"),
+                "text": element_text(child),
             }
         )
+    flush_loose()
     return sections
 
 
