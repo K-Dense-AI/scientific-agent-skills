@@ -179,7 +179,7 @@ latency separately. Record circuit splitting, gradient evaluations and shot budg
 
 ## Sources
 
-- [Templates](https://docs.pennylane.ai/en/stable/code/qml_templates.html)
+- [Templates](https://docs.pennylane.ai/en/stable/introduction/templates.html)
 - [pulse.drive and frequency conversion source](https://github.com/PennyLaneAI/pennylane/blob/v0.45.1/pennylane/pulse/hardware_hamiltonian.py)
 - [ParametrizedEvolution](https://docs.pennylane.ai/en/stable/code/api/pennylane.pulse.ParametrizedEvolution.html)
 - [Noise module](https://docs.pennylane.ai/en/stable/code/qml_noise.html)

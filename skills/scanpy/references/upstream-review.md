@@ -72,7 +72,7 @@ partition graph, and cluster heatmaps are not automatically ordered by pseudotim
   1.12.4 released 2026-08-27; Python >=3.12; deprecated Louvain/plot `save` remain.
 - [HVG](https://scanpy.readthedocs.io/en/stable/generated/scanpy.pp.highly_variable_genes.html),
   [PCA](https://scanpy.readthedocs.io/en/stable/generated/scanpy.pp.pca.html),
-  [neighbors](https://scanpy.readthedocs.io/en/stable/generated/scanpy.pp.neighbors.html),
+  [neighbors](https://scanpy.readthedocs.io/en/stable/api/generated/scanpy.pp.neighbors.html),
   [Leiden](https://scanpy.readthedocs.io/en/stable/generated/scanpy.tl.leiden.html).
 - [Marker ranking](https://scanpy.readthedocs.io/en/stable/generated/scanpy.tl.rank_genes_groups.html),
   [aggregation](https://scanpy.readthedocs.io/en/stable/generated/scanpy.get.aggregate.html),
