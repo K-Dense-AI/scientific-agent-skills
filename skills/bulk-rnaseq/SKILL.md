@@ -4,7 +4,7 @@ description: Prepares bulk RNA-seq FASTQ, Salmon, STAR or featureCounts output f
 license: MIT
 compatibility: Requires Python 3.11+ with pandas and numpy; Salmon import also needs pytximport. Read processing needs Nextflow with containers or standalone bioinformatics tools. Network access is needed for installation and reference downloads.
 metadata:
-  version: "2.0"
+  version: "2.1"
   last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---

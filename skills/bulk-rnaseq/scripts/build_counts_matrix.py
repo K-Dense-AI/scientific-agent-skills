@@ -39,7 +39,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from _tabular import validate_header
+from _tabular import read_table, validate_header
 
 # STAR ReadsPerGene.out.tab column index per strandedness (col 0 is the gene id).
 STAR_STRAND_COL = {"unstranded": 1, "forward": 2, "reverse": 3}
@@ -117,7 +117,7 @@ def build_from_salmon(quant_dir: Path, tx2gene: Path,
     if len(sample_names) != len(set(sample_names)):
         raise ValueError("Duplicate sample IDs after filename normalization")
     validate_header(tx2gene, delimiter=None)
-    mapping = pd.read_csv(tx2gene, sep=None, engine="python", dtype=str, keep_default_na=False)
+    mapping = read_table(tx2gene, sep=None, engine="python", dtype=str, keep_default_na=False)
     if not {"transcript_id", "gene_id"}.issubset(mapping.columns):
         raise ValueError("tx2gene needs transcript_id and gene_id headers")
     mapping = mapping[["transcript_id", "gene_id"]].copy()
@@ -130,7 +130,7 @@ def build_from_salmon(quant_dir: Path, tx2gene: Path,
     reference_ids = None
     for path in sf_files:
         validate_header(path, delimiter="\t")
-        quant = pd.read_csv(path, sep="\t", dtype={"Name": str}, keep_default_na=False)
+        quant = read_table(path, sep="\t", dtype={"Name": str}, keep_default_na=False)
         required = {"Name", "Length", "EffectiveLength", "TPM", "NumReads"}
         if not required.issubset(quant.columns):
             raise ValueError(f"Invalid Salmon quant.sf columns: {path}")
@@ -216,7 +216,7 @@ def build_from_featurecounts(counts_file: Path) -> pd.DataFrame:
         sys.exit(f"featureCounts file not found: {counts_file}")
     # featureCounts prepends a '#' command line; real header is the next row.
     validate_header(counts_file, delimiter="\t", comment="#")
-    df = pd.read_csv(counts_file, sep="\t", comment="#", dtype={"Geneid": str}, keep_default_na=False)
+    df = read_table(counts_file, sep="\t", comment="#", dtype={"Geneid": str}, keep_default_na=False)
     # Layout: Geneid, Chr, Start, End, Strand, Length, <bam1>, <bam2>, ...
     meta_cols = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
     if not set(meta_cols).issubset(df.columns):
