@@ -150,6 +150,8 @@ def inspect_alignments(args: argparse.Namespace) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "threads": args.threads,
         "require_index": args.region is not None,
+        # A sequential unmapped-only SAM/BAM may have no reference dictionary.
+        "check_sq": mode == "rc" or args.region is not None,
     }
     if reference is not None:
         kwargs["reference_filename"] = str(reference)
@@ -170,6 +172,9 @@ def inspect_alignments(args: argparse.Namespace) -> dict[str, Any]:
             if args.max_records and counts["total_records"] >= args.max_records:
                 record_limit_reached = True
                 break
+
+            if not alignments.nreferences and not read.is_unmapped:
+                raise ValueError("Mapped records require a reference sequence dictionary")
 
             counts["total_records"] += 1
 
