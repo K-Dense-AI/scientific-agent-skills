@@ -216,6 +216,8 @@ def check(path: str, process: str) -> dict:
     elif ext == ".stl":
         s = inspect_stl(path)
         r["info"].update(s)
+        if s["triangles"] == 0:
+            r["blocking"].append("no triangles found in STL")
         if s.get("watertight") is False:
             r["warnings"].append(f"mesh is not watertight ({s['non_manifold_or_open_edges']} open/non-manifold edges) — "
                                  "repair it (e.g. Netfabb, Meshmixer) or re-export from the solid modeler")
