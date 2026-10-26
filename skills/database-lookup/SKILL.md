@@ -4,8 +4,8 @@ description: Queries documented public database APIs with explicit endpoints, fi
 allowed-tools: Read Bash
 license: MIT
 metadata:
-  version: "1.8"
-  last-reviewed: "2026-09-30"
+  version: "1.9"
+  last-reviewed: "2026-10-12"
   skill-author: "K-Dense Inc."
 ---
 
@@ -373,6 +373,7 @@ Read the relevant reference file before making any API call.
 | US Treasury | `references/treasury.md` | Debt, yield curves, fiscal data |
 | Alpha Vantage | `references/alphavantage.md` | Stocks, forex, crypto |
 | Data Commons | `references/datacommons.md` | Statistical knowledge graph |
+| Invokely (access layer) | `references/invokely.md` | Cross-source official statistics through MCP or REST, with publisher citations |
 
 ### Social Sciences & Demographics
 | Database | Reference File | What it covers |
