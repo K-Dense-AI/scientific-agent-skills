@@ -391,6 +391,18 @@ class ValidationTests(BibTeXTestCase):
         entries = self.formatter.parse_bibtex_file(self.bib())
         self.assertEqual(self.validator.detect_duplicates(entries), [])
 
+    def test_dois_differing_only_in_case_are_one_duplicate(self) -> None:
+        # DOI names are case-insensitive; titles differ so only the DOI signals it.
+        entries = [
+            {"key": "a", "type": "article",
+             "fields": {"doi": "10.1038/s41586-021-03819-2", "title": "A paper"}},
+            {"key": "b", "type": "article",
+             "fields": {"doi": "10.1038/S41586-021-03819-2", "title": "A paper: addendum"}},
+        ]
+        found = self.validator.detect_duplicates(entries)
+        self.assertEqual([d["type"] for d in found], ["duplicate_doi"])
+        self.assertEqual(sorted(found[0]["entries"]), ["a", "b"])
+
     def test_manuscript_citation_keys_are_extracted(self) -> None:
         manuscript = self.root / "paper.tex"
         manuscript.write_text(
