@@ -1,0 +1,114 @@
+{
+  "name": "6bus-110kv-ring-overload",
+  "base_mva": 100,
+  "buses": [
+    {
+      "id": "B1",
+      "vn_kv": 110
+    },
+    {
+      "id": "B2",
+      "vn_kv": 110
+    },
+    {
+      "id": "B3",
+      "vn_kv": 110
+    },
+    {
+      "id": "B4",
+      "vn_kv": 110
+    },
+    {
+      "id": "B5",
+      "vn_kv": 10
+    }
+  ],
+  "ext_grids": [
+    {
+      "id": "GRID",
+      "bus": "B1",
+      "vm_pu": 1.02,
+      "va_degree": 0
+    }
+  ],
+  "gens": [
+    {
+      "id": "G1",
+      "bus": "B2",
+      "p_mw": 5,
+      "vm_pu": 1.01,
+      "min_q_mvar": -40,
+      "max_q_mvar": 40
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD3",
+      "bus": "B3",
+      "p_mw": 120,
+      "q_mvar": 55
+    },
+    {
+      "id": "LD5",
+      "bus": "B5",
+      "p_mw": 20,
+      "q_mvar": 8
+    }
+  ],
+  "lines": [
+    {
+      "id": "L12",
+      "from": "B1",
+      "to": "B2",
+      "length_km": 20,
+      "r_ohm_per_km": 0.06,
+      "x_ohm_per_km": 0.3,
+      "c_nf_per_km": 10,
+      "max_i_ka": 0.28
+    },
+    {
+      "id": "L23",
+      "from": "B2",
+      "to": "B3",
+      "length_km": 15,
+      "r_ohm_per_km": 0.06,
+      "x_ohm_per_km": 0.3,
+      "c_nf_per_km": 10,
+      "max_i_ka": 0.28
+    },
+    {
+      "id": "L34",
+      "from": "B3",
+      "to": "B4",
+      "length_km": 25,
+      "r_ohm_per_km": 0.06,
+      "x_ohm_per_km": 0.3,
+      "c_nf_per_km": 10,
+      "max_i_ka": 0.28
+    },
+    {
+      "id": "L14",
+      "from": "B1",
+      "to": "B4",
+      "length_km": 30,
+      "r_ohm_per_km": 0.06,
+      "x_ohm_per_km": 0.3,
+      "c_nf_per_km": 10,
+      "max_i_ka": 0.28
+    }
+  ],
+  "trafos": [
+    {
+      "id": "T45",
+      "hv_bus": "B4",
+      "lv_bus": "B5",
+      "sn_mva": 40,
+      "vn_hv_kv": 110,
+      "vn_lv_kv": 10,
+      "vk_percent": 12,
+      "vkr_percent": 0.4,
+      "pfe_kw": 30,
+      "i0_percent": 0.1
+    }
+  ]
+}

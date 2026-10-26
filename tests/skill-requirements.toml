@@ -103,6 +103,10 @@ packages = []
 [skills.paperzilla]
 packages = []
 
+[skills.pandapower]
+python = "3.12"
+packages = ["pandapower"]
+
 [skills.bgpt-paper-search]
 packages = []
 
