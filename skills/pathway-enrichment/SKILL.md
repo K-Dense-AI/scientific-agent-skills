@@ -4,7 +4,7 @@ description: Performs pathway and gene-set enrichment analysis on gene lists or 
 license: MIT
 compatibility: Requires Python 3.12+ with gseapy 1.3.1, numpy, pandas and matplotlib. Optional gprofiler-official, mygene and lxml for online mapping/catalogs. Online queries need network access; local GMT workflows run offline.
 metadata:
-  version: "1.3"
+  version: "1.4"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -186,6 +186,19 @@ For nonhuman runs, provide explicit `--libraries`; `--organism` selects the serv
 instance and does not convert genes or choose species-specific libraries. CSV/TSV
 gene lists require headers; rank files accept comma/tab separators and an optional
 `gene,score` header. Local GMT ORA requires `--background`.
+
+The bundled input cleanup trims identifiers and passes case-preserved literal
+strings to GSEApy. Only actual missing
+objects or empty/whitespace-only identifiers are missing; nonempty strings such as
+`na` and `nan` remain IDs (both are Drosophila gene symbols), not missing-value
+markers. In files, leave missing IDs blank rather than using text placeholders.
+ORA omits missing IDs; ranked input rejects them. Numeric ranking statistics retain
+their separate missing-value policy: blank, `NA`, `NaN`, `None`, and `N/A`
+(case-insensitive) are excluded with a warning. No identifier validation or mapping
+is implied; IDs must still match the selected organism and gene-set namespace.
+GSEApy's existing downstream normalization is unchanged (including its uppercase
+heuristic for mostly-uppercase gene sets); this is not an end-to-end case-matching
+guarantee.
 
 Run `python scripts/run_enrichment.py --help` for all options (background file, FDR cutoff, min/max set size, permutations).
 

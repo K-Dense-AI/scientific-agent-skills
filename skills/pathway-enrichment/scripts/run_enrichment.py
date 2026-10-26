@@ -34,7 +34,9 @@ except ImportError:
     sys.exit("[FAIL] Install gseapy==1.3.1 in an isolated environment.")
 
 DEFAULT_LIBRARIES = ["MSigDB_Hallmark_2020", "GO_Biological_Process_2026"]
-_MISSING = {"", "nan", "none", "na", "n/a"}
+# Missing-value tokens apply to numeric statistics only. Nonempty identifiers
+# are literal strings: for example, na and nan are valid Drosophila symbols.
+_MISSING_STATISTICS = {"", "nan", "none", "na", "n/a"}
 
 
 def _clean_index(index, organism: str):
@@ -44,7 +46,7 @@ def _clean_index(index, organism: str):
 
 def _clean_symbols(genes, organism: str):
     return list(dict.fromkeys(g for g in _clean_index(genes, organism)
-                              if g.lower() not in _MISSING))
+                              if g))
 
 
 def _read_gene_list(path: Path):
@@ -58,14 +60,14 @@ def _read_gene_list(path: Path):
 def _numeric(values):
     # Missing estimates may be excluded; malformed numbers must never disappear.
     values = pd.Series(values, copy=True)
-    missing = values.astype(str).str.strip().str.lower().isin(_MISSING) | values.isna()
+    missing = values.astype(str).str.strip().str.lower().isin(_MISSING_STATISTICS) | values.isna()
     return pd.to_numeric(values.mask(missing), errors="raise")
 
 
 def _prepare_rank(rnk: pd.Series, organism: str) -> pd.Series:
     rnk = rnk.copy()
     rnk.index = _clean_index(rnk.index, organism)
-    if any(g.lower() in _MISSING for g in rnk.index):
+    if any(not g for g in rnk.index):
         raise ValueError("Ranked genes must have nonempty identifiers; repair missing IDs.")
     rnk = pd.Series(_numeric(rnk.to_numpy()).to_numpy(), index=rnk.index, dtype=float)
     missing = int(rnk.isna().sum())
