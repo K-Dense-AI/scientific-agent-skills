@@ -146,7 +146,7 @@ class ResearchLookup:
         *,
         academic: bool | None = None,
         target_references: int = DEFAULT_TARGET_REFERENCES,
-        search_mode: str = "basic",
+        search_mode: str | None = None,
         max_results: int = DEFAULT_MAX_RESULTS,
         include_domains: list[str] | None = None,
         after_date: str | None = None,
@@ -173,10 +173,11 @@ class ResearchLookup:
             "research",
             "chat",
             "perplexity",
+            "mcp",
         }:
             raise ValueError(
                 "force_backend must be one of: search, research, parallel, chat, "
-                "perplexity"
+                "perplexity, mcp"
             )
         if chat_model not in {"speed", "lite", "base", "core"}:
             raise ValueError("chat_model must be one of: speed, lite, base, core")
@@ -186,20 +187,22 @@ class ResearchLookup:
             raise ValueError("max_results must be at least 1")
         if not 1 <= extract_batch_size <= 20:
             raise ValueError("extract_batch_size must be between 1 and 20")
-        if search_mode not in {"turbo", "fast", "basic", "advanced"}:
+        if search_mode not in {None, "turbo", "fast", "basic", "advanced"}:
             raise ValueError("search_mode must be one of: turbo, fast, basic, advanced")
 
         self.force_backend = normalized_backend
         self.requested_backend = force_backend
         self.academic = academic
         self.target_references = target_references
-        self.search_mode = search_mode
+        self.requested_search_mode = search_mode
+        self.search_mode = search_mode or "basic"
         self.max_results = max_results
         self.include_domains = include_domains or []
         self.after_date = after_date
         self.extract_limit = (
             target_references if extract_limit is None else max(0, extract_limit)
         )
+        self.mcp_fetch_limit = 3 if extract_limit is None else extract_limit
         self.extract_batch_size = extract_batch_size
         self.processor = processor
         self.chat_model = chat_model
@@ -227,7 +230,8 @@ class ResearchLookup:
                 "OPENROUTER_API_KEY is required when forcing the Perplexity backend."
             )
         if (
-            not self.parallel_available
+            self.force_backend != "mcp"
+            and not self.parallel_available
             and not self.chat_available
             and not self.perplexity_available
         ):
@@ -236,6 +240,37 @@ class ResearchLookup:
                 "PARALLEL_API_KEY for explicit Chat use, or OPENROUTER_API_KEY for "
                 "the optional Perplexity backend."
             )
+
+    def _anonymous_search(self, query: str) -> dict[str, Any]:
+        """Explicit bounded lookup; never substitute for the academic pipeline."""
+        if self.academic is not False:
+            raise ValueError("MCP requires --no-academic; use authenticated Search for manuscript packets")
+        if self.target_references != DEFAULT_TARGET_REFERENCES or self.extract_batch_size != DEFAULT_EXTRACT_BATCH_SIZE:
+            raise ValueError("MCP does not support academic reference targets or extraction batch sizing")
+        if self.include_domains or self.after_date or self.manuscript_context or self.previous_interaction_id:
+            raise ValueError("MCP does not support domain/date filters, manuscript context or research continuation")
+        if self.requested_search_mode not in {None, "fast"}:
+            raise ValueError("Anonymous MCP uses Fast mode; select authenticated Search for other modes")
+        if self.allow_perplexity_fallback:
+            raise ValueError("MCP does not use a paid fallback")
+        from anonymous_search import lookup
+        evidence = lookup(query, max_results=self.max_results,
+                          fetch_limit=self.mcp_fetch_limit, timeout=min(self.cli_timeout, 60))
+        sources = evidence["search"]["results"]
+        pages = evidence["pages"]
+        lines = ["Public web evidence (not a verified manuscript reference packet):"]
+        for source in sources + pages["results"]:
+            lines.extend([source.get("title") or source["url"], source["url"], *source["excerpts"]])
+        for label, payload in (("Search", evidence["search"]), ("Fetch", pages)):
+            for key in ("errors", "warnings"):
+                if payload.get(key):
+                    lines.append(f"{label} {key}: {json.dumps(payload[key], ensure_ascii=False)}")
+        return {"success": True, "query": query, "backend": "mcp",
+                "model": "parallel-search/fast", "academic": False,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "response": "\n\n".join(lines), "sources": sources,
+                "citations": [{"url": s["url"], "title": s.get("title") or ""} for s in sources],
+                "raw": evidence}
 
     def _select_backend(self, query: str) -> str:
         """Select Search by default; provider changes require explicit intent."""
@@ -975,6 +1010,8 @@ class ResearchLookup:
             file=sys.stderr,
         )
         try:
+            if backend == "mcp":
+                return self._anonymous_search(query)
             if backend == "search":
                 return self._parallel_search(query)
             if backend == "research":
@@ -1105,10 +1142,10 @@ Examples:
     parser.add_argument("--batch", nargs="+", help="Run multiple queries")
     parser.add_argument(
         "--force-backend",
-        choices=["search", "research", "parallel", "chat", "perplexity"],
+        choices=["search", "research", "parallel", "chat", "perplexity", "mcp"],
         help=(
             "'parallel' is retained as a compatibility alias for 'research'; "
-            "'chat' is explicit and never selected by default"
+            "'mcp' enables keyless Fast lookup with --no-academic; 'chat' is explicit"
         ),
     )
     parser.add_argument(
@@ -1126,8 +1163,8 @@ Examples:
     parser.add_argument(
         "--search-mode",
         choices=["turbo", "fast", "basic", "advanced"],
-        default="basic",
-        help="Mode for non-academic Search calls (academic calls use advanced)",
+        default=None,
+        help="Mode for authenticated Search (default: basic); MCP supports only fast",
     )
     parser.add_argument(
         "--max-results",
@@ -1196,6 +1233,8 @@ def main() -> int:
     if not args.query and not args.batch:
         parser.print_help()
         return 1
+    if args.force_backend == "mcp" and args.packet_dir:
+        parser.error("MCP produces bounded web evidence, not manuscript packets")
     try:
         context = _load_context(args.context_file)
         research = ResearchLookup(

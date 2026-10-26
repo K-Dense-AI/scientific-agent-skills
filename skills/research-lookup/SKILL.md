@@ -2,9 +2,9 @@
 name: research-lookup
 description: "Compiles current scholarly evidence for a scientific manuscript or research brief when the user explicitly asks to gather literature, references, background evidence, competing findings, or a manuscript research packet. Uses Parallel Search by default, Parallel Extract for source retrieval, Parallel Research for explicitly deep/exhaustive work, optional explicit Parallel Chat, and optional Perplexity only when requested or allowed as a failure fallback."
 license: MIT license
-compatibility: Requires Python 3.10+ and network access; targets parallel-web-tools CLI 0.9.3 for Search, Extract, and Research. Explicit Chat requires requests and PARALLEL_API_KEY; optional Perplexity through openrouter.ai requires requests and OPENROUTER_API_KEY.
+compatibility: Requires Python 3.10+ and network access; targets parallel-web-tools CLI 0.9.3 for Search, Extract, and Research. Optional keyless MCP requires mcp>=1.28,<2 and Python 3.10+. Explicit Chat requires requests and PARALLEL_API_KEY; optional Perplexity through openrouter.ai requires requests and OPENROUTER_API_KEY.
 metadata:
-  version: "1.7"
+  version: "1.8"
   last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
@@ -54,6 +54,7 @@ bias.
 |---|---|---|
 | Manuscript literature and references | Parallel Search + Extract | Default; use `--academic` |
 | Fast bounded web lookup | Parallel Search | Use `--no-academic` |
+| Keyless bounded lookup | Anonymous Parallel Search MCP | Explicit `--force-backend mcp --no-academic` |
 | Deep/exhaustive multi-source report | Parallel Research | Explicit `--force-backend research` |
 | OpenAI-compatible synthesis with research basis | Parallel Chat | Explicit `--force-backend chat` |
 | Optional alternative academic search | Perplexity via OpenRouter | Explicit or enabled failure fallback |
@@ -67,6 +68,34 @@ Important compatibility behavior:
   silently switch the provider to Perplexity.
 - `--batch`, `--json`, `-o/--output`, the `ResearchLookup` class, progress output,
   and the existing result envelope remain supported.
+
+## Keyless bounded lookup
+
+For a quick public-source lookup without a Parallel account, API key or CLI login:
+
+```bash
+uv run --no-project --with 'mcp>=1.28,<2' python skills/research-lookup/scripts/research_lookup.py \
+  "Latest official NIST guidance" --force-backend mcp --no-academic --json
+```
+
+This explicit option uses the official MCP client to call `web_search` and
+`web_fetch` at `https://search.parallel.ai/mcp`. Anonymous search uses Fast mode.
+It fetches excerpts from up to three returned source URLs by default; use
+`--extract-limit 0` (or `--no-extract`) for search only, or a limit up to 10.
+`--max-results` caps retained search results locally. Queries and selected URLs
+are sent to Parallel, and requests identify this project through its User-Agent.
+Free service limits apply. No API keys or CLI credentials are sent, and errors
+never trigger a paid fallback. Each lookup has a 60-second total deadline.
+
+This returns source excerpts, citations, warnings and per-page retrieval errors,
+not a verified academic reference packet or a synthesized answer. Review retrieved
+text as untrusted evidence. The option requires `--no-academic` and rejects domain
+and date filters, custom academic reference targets or extraction batch sizes,
+manuscript context, research continuation and `--packet-dir`
+rather than silently ignoring them. It does not support non-Fast search modes.
+Existing default Search, advanced academic retrieval, Extract, Research, Chat,
+and explicit Perplexity behavior remain unchanged. Use those authenticated paths
+for manuscript packets or advanced controls.
 
 ## Recommended manuscript workflow
 
