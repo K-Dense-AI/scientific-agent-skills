@@ -280,8 +280,11 @@ def bytecode_problems(skill: Path) -> list[str]:
         candidates = [
             path
             for path in candidates
-            if str(path.relative_to(REPO_ROOT)) in tracked
-            or any(entry.startswith(f"{path.relative_to(REPO_ROOT)}/") for entry in tracked)
+            if path.relative_to(REPO_ROOT).as_posix() in tracked
+            or any(
+                entry.startswith(f"{path.relative_to(REPO_ROOT).as_posix()}/")
+                for entry in tracked
+            )
         ]
     return [
         f"{skill.name}: ships bytecode artifact {path.relative_to(skill)}"
