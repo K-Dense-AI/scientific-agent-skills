@@ -467,7 +467,7 @@ PDBFixer and OpenFF examples, installation requirements and current release deta
 
 ## Additional Resources
 
-- **OpenMM documentation**: https://openmm.org/documentation.html
+- **OpenMM documentation**: https://docs.openmm.org/
 - **MDAnalysis user guide**: https://docs.mdanalysis.org/
 - **GROMACS** (alternative MD engine): https://manual.gromacs.org/
 - **NAMD** (alternative): https://www.ks.uiuc.edu/Research/namd/
