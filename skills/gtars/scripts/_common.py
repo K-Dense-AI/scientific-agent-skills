@@ -315,7 +315,6 @@ def inspect_bed(
     warnings: Counter[str] = Counter()
     examples: list[dict[str, int | str]] = []
     seen: set[tuple[str, int, int]] = set()
-    max_end: dict[str, int] = {}
     records = 0
     skipped = 0
     contigs: set[str] = set()
@@ -323,7 +322,6 @@ def inspect_bed(
     max_columns = 0
     unsorted = 0
     duplicates = 0
-    overlap_observations = 0
     bed6_rows = 0
     previous_key: tuple[int | str, int, int] | None = None
     order_map = (
@@ -395,11 +393,6 @@ def inspect_bed(
             duplicates += 1
         else:
             seen.add(key)
-        prior_end = max_end.get(chrom)
-        if prior_end is not None and start < prior_end:
-            overlap_observations += 1
-        max_end[chrom] = max(end, prior_end or end)
-
         sort_key: tuple[int | str, int, int]
         if order_map is None:
             sort_key = (chrom, start, end)
@@ -408,6 +401,17 @@ def inspect_bed(
         if previous_key is not None and sort_key < previous_key:
             unsorted += 1
         previous_key = sort_key
+
+    # Sweep in coordinate order without rewriting the input. Reuse the unique
+    # intervals already retained for duplicate detection; every duplicate also
+    # contributes one overlap observation, as it does in a sorted BED.
+    overlap_observations = duplicates
+    max_end: dict[str, int] = {}
+    for chrom, start, end in sorted(seen):
+        prior_end = max_end.get(chrom)
+        if prior_end is not None and start < prior_end:
+            overlap_observations += 1
+        max_end[chrom] = max(end, prior_end or end)
 
     if duplicates:
         warnings["duplicate_intervals"] = duplicates

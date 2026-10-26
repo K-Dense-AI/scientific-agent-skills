@@ -5,7 +5,7 @@ license: MIT
 compatibility: Python bindings require Python 3.10+ and gtars 0.10.0. The Rust meta-crate and gtars-cli are 0.10.0 and require a Rust toolchain supporting Edition 2024; upstream declares no rust-version. Bundled audit CLIs use only Python 3.10+ standard library and are local/network-free. Remote constructors, pretrained tokenizers, refget, and BEDbase caching require explicit network and storage approval.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.5"
+  version: "1.6"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -113,6 +113,9 @@ Apply this contract before every operation:
    not treat `[0,10)` and `[10,20)` as overlapping.
 
 Run the local validator first:
+
+Overlap observations are computed in coordinate order regardless of input order;
+adjacent half-open intervals do not overlap, and input-order warnings are retained.
 
 ```bash
 python3 -B scripts/bed_validator.py \
