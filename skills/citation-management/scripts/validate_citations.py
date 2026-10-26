@@ -338,8 +338,16 @@ class CitationValidator:
         
         cited_keys = set()
         
-        # 1. LaTeX citations: \cite{key1, key2}, \citep{key}, \citet{key}, etc.
-        latex_matches = re.findall(r'\\cite[a-z]*\*?\{([^}]+)\}', content)
+        # 1. Standard LaTeX, natbib, and biblatex citation commands. Match
+        # known names rather than an arbitrary suffix (which includes
+        # configuration commands such as \citestyle). Notes are not keys.
+        latex_matches = re.findall(
+            r'\\(?:[Cc]ite(?:[tp]|alp|alt|author|fullauthor|year(?:par)?|title|date|url|num)?'
+            r'|[Pp]arencite|[Tt]extcite|[Aa]utocite|footcite(?:text)?'
+            r'|[Ss]martcite|supercite|fullcite|footfullcite)'
+            r'\*?\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]+)\}',
+            content,
+        )
         for match in latex_matches:
             keys = [k.strip() for k in match.split(',')]
             for key in keys:
