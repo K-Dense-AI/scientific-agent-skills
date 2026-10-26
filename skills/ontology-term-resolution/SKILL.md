@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages. Needs network access to https://www.ebi.ac.uk/ols4, https://bioregistry.io, https://resolver.api.identifiers.org, and https://www.ebi.ac.uk/spot/zooma (all public, no API key).
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.4"
+  version: "1.5"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -104,6 +104,9 @@ python3 validate_terms.py --input metadata.tsv --strict
 python3 validate_terms.py --input tissue_ids.tsv \
     --branch UBERON:0000465 --expect-ontology uberon
 ```
+
+CSV/TSV labels may contain quoted line breaks; these keep their word boundaries
+when the validator normalizes whitespace for label comparison.
 
 | Status | Meaning | Verdict |
 | --- | --- | --- |

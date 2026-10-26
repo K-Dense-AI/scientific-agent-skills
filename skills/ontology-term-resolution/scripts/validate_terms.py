@@ -74,7 +74,8 @@ def read_pairs(args: argparse.Namespace) -> list[tuple[str, str | None]]:
         if args.input == "-"
         else Path(args.input).read_text(encoding="utf-8")
     )
-    lines = [line for line in raw.splitlines() if line.strip()]
+    # csv.reader needs line endings to retain word boundaries in quoted labels.
+    lines = [line for line in raw.splitlines(keepends=True) if line.strip()]
     if not lines:
         return pairs
 
