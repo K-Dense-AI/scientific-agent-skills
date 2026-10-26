@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no numpy, scipy, or network access. Statistical distributions are computed from first principles so results are reproducible in any conforming interpreter.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "2.0"
+  version: "2.1"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-09-30"
 ---
@@ -138,6 +138,10 @@ python3 check_response.py -i calibration.csv --max-back-calc-error 2
 
 Input is `level,response`, one row per injection; repeated rows at the same level are replicates,
 and supplying them is what makes the linearity test possible.
+Levels are grouped by their parsed numeric values, without decimal rounding or an implicit
+tolerance. Use the same nominal value for intended replicates; normalize near-equal values
+from an upstream calculation to the experimental design before analysis. Changing concentration
+units must not merge distinct nominal levels or change their back-calculated relative errors.
 
 Real output from a curve that a coefficient of determination would wave through:
 
