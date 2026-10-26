@@ -69,7 +69,7 @@ def load_requirements() -> tuple[dict[str, dict], str, dict[str, str]]:
     """Return (per-skill entries, default interpreter, uninstallable packages)."""
     if not REQUIREMENTS.exists():
         sys.exit(f"missing {REQUIREMENTS.relative_to(REPO_ROOT)}, required by --isolated")
-    manifest = tomllib.loads(REQUIREMENTS.read_text())
+    manifest = tomllib.loads(REQUIREMENTS.read_text(encoding="utf-8"))
     default_python = manifest.get("defaults", {}).get("python", "3.13")
     return manifest.get("skills", {}), default_python, manifest.get("unavailable", {})
 

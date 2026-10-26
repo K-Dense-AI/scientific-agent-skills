@@ -329,7 +329,7 @@ def load_previous_report(path: str | None = None) -> dict | None:
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
         print(f"  Previous report unusable ({e}); scanning everything.")
         return None
@@ -597,10 +597,10 @@ def main(argv=None):
 
     md = generate_report(report, run_meta=run_meta)
     Path(OUTPUT_FILE).parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, "w") as f:
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(md)
 
-    with open(JSON_OUTPUT_FILE, "w") as f:
+    with open(JSON_OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(
             generate_json_report(report, skill_meta=skill_meta, run_meta=run_meta),
             f, indent=2, sort_keys=False,
