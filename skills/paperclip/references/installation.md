@@ -34,7 +34,11 @@ For an environment managed by uv:
 
 ```bash
 uv venv .venv
-uv pip install --python .venv/bin/python https://paperclip.gxl.ai/paperclip.whl
+curl -fsSL https://paperclip.gxl.ai/paperclip.whl -o paperclip.whl
+# Verify the wheel against the SHA-256 published in
+# https://paperclip.gxl.ai/version.json before installing it:
+sha256sum paperclip.whl
+uv pip install --python .venv/bin/python ./paperclip.whl
 .venv/bin/paperclip --version
 ```
 
