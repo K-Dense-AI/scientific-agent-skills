@@ -14,6 +14,7 @@ try:
         DEFAULT_ORIGIN,
         MAX_JSON_RESPONSE_BYTES,
         MAX_PDF_RESPONSE_BYTES,
+        MAX_REMOTE_COLLECTION_ITEMS,
         ApiError,
         SafetyError,
         build_url,
@@ -36,6 +37,7 @@ except ImportError:
         DEFAULT_ORIGIN,
         MAX_JSON_RESPONSE_BYTES,
         MAX_PDF_RESPONSE_BYTES,
+        MAX_REMOTE_COLLECTION_ITEMS,
         ApiError,
         SafetyError,
         build_url,
@@ -379,7 +381,10 @@ def _execute_list(
         "network_accessed": True,
         "request_count": pages,
         "attempt_count": attempts,
-        "returned_items": len(collected),
+        "collected_items": len(collected),
+        # The sanitizer caps the output list and may append a marker, which
+        # is not a returned protocol record.
+        "returned_items": min(len(collected), MAX_REMOTE_COLLECTION_ITEMS),
         "local_caps": {
             "max_pages": args.max_pages,
             "max_items": args.max_items,
