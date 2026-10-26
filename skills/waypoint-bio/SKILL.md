@@ -4,7 +4,7 @@ description: Supports work with Outpost Bio's open microbiome foundation models 
 license: MIT
 compatibility: Requires Python 3.10+ and waypoint-bio; the documented compatibility stack uses Transformers 4.57.6 and PEFT 0.18.1. Network access and approved Hugging Face access are needed for Hub downloads, but not for local conversion. Training benefits from a GPU.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
   upstream-version: "waypoint-bio 1.0.2 (PyPI); GitHub main 1.0.4"
   last-reviewed: "2026-10-01"

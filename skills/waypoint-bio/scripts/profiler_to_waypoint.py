@@ -259,7 +259,9 @@ def parse_table(
         first = handle.readline()
     skiprows = 1 if first.startswith("# Constructed from biom file") else 0
 
-    frame = pd.read_csv(path, sep=sep, skiprows=skiprows)
+    # The first column holds identifiers, not measurements. A converter also
+    # bypasses default NA tokens without changing missing abundance handling.
+    frame = pd.read_csv(path, sep=sep, skiprows=skiprows, converters={0: str})
     frame.columns = [str(c).lstrip("#").strip() for c in frame.columns]
 
     if taxonomy_column and taxonomy_column not in frame.columns:
@@ -367,8 +369,8 @@ def attach_metadata(frame: pd.DataFrame, metadata_path: Path) -> pd.DataFrame:
             raise ValueError("parquet metadata must have a sample-ID index")
     else:
         sep = "\t" if suffix in {".tsv", ".tab"} else ","
-        id_column = pd.read_csv(metadata_path, sep=sep, nrows=0).columns[0]
-        meta = pd.read_csv(metadata_path, sep=sep, index_col=0, dtype={id_column: str})
+        meta = pd.read_csv(metadata_path, sep=sep, converters={0: str})
+        meta = meta.set_index(meta.columns[0])
     meta.index = meta.index.astype(str)
     if not meta.index.is_unique:
         raise ValueError("metadata sample IDs must be unique")
