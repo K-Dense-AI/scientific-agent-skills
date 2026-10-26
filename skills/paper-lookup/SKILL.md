@@ -5,7 +5,7 @@ allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.4"
+  version: "2.5"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
@@ -201,6 +201,10 @@ Standard library only, Python 3.11+. Each exists because the logic is fragile, r
 | `scripts/jats_to_text.py` | PMC / Europe PMC JATS XML → sectioned text | **2** = no `<body>`: metadata only, not full text |
 | `scripts/arxiv_atom.py` | arXiv Atom XML → JSON records | **3** = arXiv error feed (arrives as HTTP 200); **5** = throttled (`Rate exceeded.`, plain text, not XML) |
 | `scripts/openalex_abstract.py` | Reconstructing abstracts from `abstract_inverted_index` | — |
+
+The JATS author list uses contributors within article metadata, including nested
+collaboration members, while excluding explicitly non-author roles such as editors.
+Contributors without a declared type retain the legacy inclusion.
 
 ```bash
 # Exhaustive preprint walk, reconciled against the reported total
