@@ -30,7 +30,7 @@ packages = ["python-pptx==1.0.2", "Pillow==12.3.0", "lxml==6.1.3"]
 packages = ["liteparse==2.15.0"]
 
 [skills.markitdown]
-packages = ["markitdown[all]==0.1.8", "markitdown-ocr==0.1.1", "markitdown-mcp==0.0.1a7", "openai==3.22.1"]
+packages = ["markitdown[all]==0.1.8", "markitdown-ocr==0.1.1", "markitdown-mcp==0.0.1a7", "openai==3.22.1", "azure-ai-contentunderstanding==1.2.0b3"]
 python = "3.12"
 
 [skills.latex-posters]
