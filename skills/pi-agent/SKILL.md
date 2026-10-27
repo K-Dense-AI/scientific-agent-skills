@@ -4,7 +4,7 @@ description: Builds with and operates Pi, the minimal terminal coding harness. U
 license: MIT
 compatibility: Requires Node.js >= 22.19 and npm for Pi CLI and SDK usage. Pi package name is @earendil-works/pi-coding-agent.
 metadata:
-  version: "1.6"
+  version: "1.7"
   last-reviewed: "2026-09-30"
   upstream-version: "0.99.2"
   skill-author: K-Dense Inc.

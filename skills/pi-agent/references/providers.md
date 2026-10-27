@@ -118,7 +118,7 @@ A leading `!` executes the whole value as a command and uses stdout (cached for 
 
 ## Custom Providers
 
-Via `models.json` for anything speaking a supported API (`references/models.md`); via extensions for custom APIs or OAuth flows (`references/custom-provider.md`).
+Via `models.json` for anything speaking a supported API, including self-hosted gateways such as [Bifrost](https://github.com/maximhq/bifrost) (`references/models.md`); via extensions for custom APIs or OAuth flows (`references/custom-provider.md`).
 
 ## Resolution Order
 
