@@ -82,15 +82,30 @@ def script_bearing_skills(skills_dir: Path = SKILLS_DIR) -> list[Path]:
 
     An empty `scripts/` directory does not count. Git cannot track empty
     directories, so one only ever exists as local cruft, and requiring a test
-    suite for a skill that ships no scripts would be nonsense.
+    suite for a skill that ships no scripts would be nonsense. The same goes
+    for a `scripts/` that holds only gitignored leftovers, such as the
+    `__pycache__/` a script run leaves behind or a `.DS_Store`.
     """
     return [
         skill
         for skill in sorted(skills_dir.iterdir())
         if skill.is_dir()
         and (skill / "SKILL.md").is_file()
-        and any((skill / "scripts").rglob("*"))
+        and _ships_script_files(skill / "scripts")
     ]
+
+
+def _ships_script_files(scripts: Path) -> bool:
+    """`scripts/` holds a file that is not bytecode, a cache, or a dotfile."""
+    return any(
+        path.is_file()
+        and path.suffix not in {".pyc", ".pyo"}
+        and not any(
+            part == "__pycache__" or part.startswith(".")
+            for part in path.relative_to(scripts).parts
+        )
+        for path in scripts.rglob("*")
+    )
 
 
 def all_skill_names(skills_dir: Path = SKILLS_DIR) -> set[str]:
