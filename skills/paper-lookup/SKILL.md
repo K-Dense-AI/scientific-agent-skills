@@ -5,7 +5,7 @@ allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.4"
+  version: "2.5"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
@@ -52,7 +52,7 @@ Match the user's intent to the right database(s).
 | Health/medical preprints, by date or DOI | medRxiv | Europe PMC |
 | Physics, math, or CS preprints | arXiv | Semantic Scholar, OpenAlex |
 | Papers across all fields | OpenAlex | Semantic Scholar, Crossref |
-| A specific paper by DOI | Crossref | Unpaywall, Semantic Scholar |
+| A specific paper by DOI | Crossref | OpenAlex, Unpaywall, Semantic Scholar |
 | Open-access PDF for a paper | Unpaywall | CORE, PMC |
 | Citation graph (who cites whom) | Semantic Scholar | OpenAlex, Europe PMC, OpenCitations |
 | Open citation edges / OCI | OpenCitations | Semantic Scholar, Europe PMC |
@@ -62,7 +62,7 @@ Match the user's intent to the right database(s).
 | Journal/publisher metadata | Crossref | OpenAlex |
 | Funder information | Crossref | OpenAlex |
 | Convert between PMID/PMCID/DOI | PMC (ID Converter) | Crossref, Europe PMC |
-| Is this paper retracted? | Crossref (`update-type:retraction`, inspect `update-to`) | PubMed publication types / publisher notices |
+| Is this paper retracted? | Crossref (`update-type:retraction`, inspect `update-to`) | OpenAlex (`is_retracted` on the work record), PubMed publication types / publisher notices |
 | Genes/diseases/chemicals in a paper | PubTator3 | Europe PMC Annotations API |
 | Institution / affiliation → ROR ID | ROR | OpenAlex (already-linked ROR) |
 | Deposited dataset, software, or poster | Zenodo | Figshare, BioStudies |
