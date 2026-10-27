@@ -499,6 +499,9 @@ class PrecisionComponents:
         var_total = self.sd_intermediate ** 2
         if var_total <= 0:
             return float("nan")
+        if self.sd_between == 0.0:
+            # Truncated between-group variance: the total is MS_within alone.
+            return float(self.df_within)
         n = self.n_effective
         c1 = 1.0 / n
         c2 = (n - 1.0) / n
@@ -908,6 +911,15 @@ def to_float(value: str, column: str, row_index: int) -> float:
         raise InputError(
             f"row {row_index + 1}: column '{column}' is not numeric (finite required): {value!r}"
         ) from exc
+
+
+def within_limit(value: float, limit: float) -> bool:
+    """Inclusive ``value <= limit`` that absorbs binary rounding.
+
+    Acceptance limits such as ICH M10's "within +/-15%" include the limit, but
+    100 * (3.45 - 3) / 3 evaluates to 15.000000000000005.
+    """
+    return value <= limit + 1e-9 * max(1.0, abs(limit))
 
 
 def fmt(value: Any, digits: int = 4) -> str:
