@@ -5,7 +5,7 @@ license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.11+ and scikit-learn 1.9.1. NumPy, SciPy, and joblib are dependencies; bundled scripts also require pandas and matplotlib. Installation needs network access; bundled examples use local datasets without credentials.
 metadata:
-  version: "1.5"
+  version: "1.6"
   last-reviewed: "2026-10-01"
   upstream-version: "1.9.1"
   skill-author: K-Dense Inc.
