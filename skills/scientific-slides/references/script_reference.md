@@ -1,8 +1,8 @@
 # Bundled Script Reference
 
 Arguments, options, and usage for `generate_slide_image.py`, `slides_to_pdf.py`,
-`validate_presentation.py`, and `pdf_to_images.py`, plus the pptx-skill scripts and
-external tools this skill relies on.
+`validate_presentation.py`, and `pdf_to_images.py`, plus the external tools this skill
+relies on.
 
 ## Current runtime and API contracts
 

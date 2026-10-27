@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: MIT license
 compatibility: Python 3.12+; requests for OpenRouter generation, Pillow for image PDFs, PyMuPDF for rendering, pypdf and python-pptx for validation and template editing. Generation needs network and OPENROUTER_API_KEY. Beamer needs TeX Live/MiKTeX; programmatic PPTX needs Node.js and PptxGenJS; rendering PPTX for review needs LibreOffice.
 metadata:
-  version: "1.12"
+  version: "1.13"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
   openclaw:
