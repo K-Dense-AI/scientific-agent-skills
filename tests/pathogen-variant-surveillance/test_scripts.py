@@ -646,6 +646,76 @@ class MutationProfileTests(unittest.TestCase):
             )
         self.assertEqual(len(keyed), 2)
 
+    # Single-sequence instances (SARS-CoV-2, mpox, RSV, ...) list one nucleotide
+    # sequence, "main", in referenceGenome but return sequenceName null on rows.
+    NUC_ROWS = [
+        {"mutation": "C21T", "count": 347, "coverage": 348, "proportion": 0.997,
+         "sequenceName": None, "position": 21, "mutationFrom": "C", "mutationTo": "T"},
+        {"mutation": "C2790T", "count": 2029, "coverage": 2029, "proportion": 1.0,
+         "sequenceName": None, "position": 2790, "mutationFrom": "C", "mutationTo": "T"},
+    ]
+
+    def test_null_sequence_name_matches_the_only_sequence(self):
+        with patch.object(mutation_profile, "mutations", return_value=self.NUC_ROWS):
+            keyed = mutation_profile.profile(
+                "u", {}, amino_acid=False, min_proportion=0.05, gene="main",
+                unnamed_sequence="main",
+            )
+        self.assertEqual(list(keyed), ["C21T", "C2790T"])
+        self.assertEqual(keyed["C21T"]["sequenceName"], "main")
+
+    def test_null_sequence_name_not_guessed_without_a_single_sequence(self):
+        with patch.object(mutation_profile, "mutations", return_value=self.NUC_ROWS):
+            keyed = mutation_profile.profile(
+                "u", {}, amino_acid=False, min_proportion=0.05, gene="seg4"
+            )
+        self.assertEqual(keyed, {})
+
+    def _run_cli(self, argv, reference, side_effect):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(mutation_profile, "describe_instance", return_value=schema()), \
+             patch.object(mutation_profile, "count", return_value=2258), \
+             patch.object(mutation_profile, "request", return_value=reference), \
+             patch.object(mutation_profile, "mutations", side_effect=side_effect), \
+             patch.object(mutation_profile, "data_version", return_value="v1"), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = mutation_profile.main(argv)
+        return code, out.getvalue()
+
+    def test_cli_segment_filter_on_a_single_sequence_instance(self):
+        reference = {"nucleotideSequences": [{"name": "main"}], "genes": [{"name": "S"}]}
+        code, out = self._run_cli(
+            ["XFG.1.1", "--nucleotide", "--gene", "MAIN", "--min-proportion", "0.99",
+             "--format", "json"],
+            reference, [self.NUC_ROWS],
+        )
+        rows = json.loads(out)
+        self.assertEqual(code, 0)
+        self.assertEqual([r["mutation"] for r in rows], ["C21T", "C2790T"])
+        self.assertEqual({r["gene"] for r in rows}, {"main"})
+
+    def test_cli_versus_on_a_single_sequence_instance(self):
+        reference = {"nucleotideSequences": [{"name": "main"}], "genes": [{"name": "S"}]}
+        other = [dict(self.NUC_ROWS[1], proportion=0.4, count=40, coverage=100)]
+        code, out = self._run_cli(
+            ["XFG.1.1", "--versus", "XFG", "--nucleotide", "--gene", "main",
+             "--min-proportion", "0.99", "--format", "json"],
+            reference, [self.NUC_ROWS, other],
+        )
+        verdicts = {r["mutation"]: r["verdict"] for r in json.loads(out)}
+        self.assertEqual(code, 0)
+        self.assertEqual(verdicts, {"C21T": "not_comparable", "C2790T": "above_a_only"})
+
+    def test_cli_multi_segment_instance_does_not_claim_unnamed_rows(self):
+        reference = {"nucleotideSequences": [{"name": f"seg{i}"} for i in range(1, 9)],
+                     "genes": [{"name": "HA"}]}
+        code, out = self._run_cli(
+            ["2.3.4.4b", "--nucleotide", "--gene", "seg4", "--format", "json"],
+            reference, [self.NUC_ROWS],
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out), [])
+
 
 class SanitizeTests(unittest.TestCase):
     """Remote-derived strings are flattened before they reach a table or TSV."""
@@ -1051,6 +1121,14 @@ class LiveApiTests(unittest.TestCase):
             lapis_client.pick_date_field(lapis_client.describe_instance(self.H5N1)),
             "sampleCollectionDateRangeLower",
         )
+
+    def test_single_sequence_rows_have_no_sequence_name(self):
+        reference = lapis_client.request(self.SARS, "sample/referenceGenome")
+        self.assertEqual([r["name"] for r in reference["nucleotideSequences"]], ["main"])
+        rows = lapis_client.mutations(self.SARS, {"pangoLineage": "XFG.1.1"},
+                                      amino_acid=False, min_proportion=0.99)
+        self.assertTrue(rows)
+        self.assertTrue(all(r["sequenceName"] is None for r in rows))
 
     def test_every_registered_instance_answers(self):
         for name, url in lapis_client.INSTANCES.items():
