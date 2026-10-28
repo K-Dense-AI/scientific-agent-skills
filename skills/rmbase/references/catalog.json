@@ -1,0 +1,5417 @@
+{
+  "audit_date": "2026-09-23",
+  "base_url": "http://bioinformaticsscience.cn/rmbase/",
+  "modules": {
+    "gene": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modGene/modGene.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "hg38"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "mm10"
+          ]
+        },
+        "rheMac8": {
+          "species": "Macaca mulatta",
+          "group": "Mammal",
+          "options": [
+            "rheMac8"
+          ]
+        },
+        "panTro5": {
+          "species": "Pan troglodytes",
+          "group": "Mammal",
+          "options": [
+            "panTro5"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "rn6"
+          ]
+        },
+        "susScr11": {
+          "species": "Sus scrofa",
+          "group": "Mammal",
+          "options": [
+            "susScr11"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "bosTau9"
+          ]
+        },
+        "MesAur1": {
+          "species": "Mesocricetus auratus",
+          "group": "Mammal",
+          "options": [
+            "MesAur1"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "OryCun2"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "Oarv3"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "ASM69118v1"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "ASM584v2"
+          ]
+        },
+        "ASM676v1": {
+          "species": "Pseudomonas aeruginosa",
+          "group": "Bacteria",
+          "options": [
+            "ASM676v1"
+          ]
+        },
+        "ASM78585v1": {
+          "species": "Clostridium acetobutylicum",
+          "group": "Bacteria",
+          "options": [
+            "ASM78585v1"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "ASM74998v1"
+          ]
+        },
+        "ASM680v1": {
+          "species": "Halobacterium salinarum",
+          "group": "Bacteria",
+          "options": [
+            "ASM680v1"
+          ]
+        },
+        "ASM33669v1": {
+          "species": "Halococcus morrhuae",
+          "group": "Bacteria",
+          "options": [
+            "ASM33669v1"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "ASM2568v1"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "ASM76111v1"
+          ]
+        },
+        "ASM76770v1": {
+          "species": "Mycobacterium smegmatis",
+          "group": "Bacteria",
+          "options": [
+            "ASM76770v1"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "ASM83033v1"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "ASM25307v1"
+          ]
+        },
+        "ASM19593v2": {
+          "species": "Pyrococcus abyssi",
+          "group": "Bacteria",
+          "options": [
+            "ASM19593v2"
+          ]
+        },
+        "ASM1308v1": {
+          "species": "Rhodospirillum rubrum",
+          "group": "Bacteria",
+          "options": [
+            "ASM1308v1"
+          ]
+        },
+        "ASM553737v1": {
+          "species": "Salmonella typhimurium",
+          "group": "Bacteria",
+          "options": [
+            "ASM553737v1"
+          ]
+        },
+        "ASM188685v1": {
+          "species": "Spiroplasma citri",
+          "group": "Bacteria",
+          "options": [
+            "ASM188685v1"
+          ]
+        },
+        "ASM20383v1": {
+          "species": "Streptomyces coelicolor A3(2)",
+          "group": "Bacteria",
+          "options": [
+            "ASM20383v1"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "ASM93222v1"
+          ]
+        },
+        "ASM1228v1": {
+          "species": "Sulfolobus acidocaldarius",
+          "group": "Bacteria",
+          "options": [
+            "ASM1228v1"
+          ]
+        },
+        "ASM96839v1": {
+          "species": "Sulfolobus solfataricus",
+          "group": "Bacteria",
+          "options": [
+            "ASM96839v1"
+          ]
+        },
+        "ASM1006v1": {
+          "species": "Synechococcus elongatus PCC 6301",
+          "group": "Bacteria",
+          "options": [
+            "ASM1006v1"
+          ]
+        },
+        "ASM1948v1": {
+          "species": "Synechococcus sp.PCC 7002",
+          "group": "Bacteria",
+          "options": [
+            "ASM1948v1"
+          ]
+        },
+        "ASM34078v1": {
+          "species": "Synechocystis sp",
+          "group": "Bacteria",
+          "options": [
+            "ASM34078v1"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "ASM19591v1"
+          ]
+        },
+        "ASM97857v1": {
+          "species": "Thermotoga maritima",
+          "group": "Bacteria",
+          "options": [
+            "ASM97857v1"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "ASM812v1"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "sacCer3"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "ASM294v2"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "Cand_albi12Cv2"
+          ]
+        },
+        "ASM24013v3": {
+          "species": "Fusarium graminearum",
+          "group": "Fungi",
+          "options": [
+            "ASM24013v3"
+          ]
+        },
+        "ASM14955v1": {
+          "species": "Fusarium verticillioides",
+          "group": "Fungi",
+          "options": [
+            "ASM14955v1"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "NC12"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "Cybja1"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "BDGP6"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "ASM15162v1"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "ce11"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "Xenopus_laevisv2"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "TAIR10"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "AST_PRJEB5043v1"
+          ]
+        },
+        "CHLRE3": {
+          "species": "Chlamydomonas reinhardtii",
+          "group": "Plant",
+          "options": [
+            "CHLRE3"
+          ]
+        },
+        "ASM407v2": {
+          "species": "Cucumis sativus",
+          "group": "Plant",
+          "options": [
+            "ASM407v2"
+          ]
+        },
+        "glyMax2": {
+          "species": "Glycine max",
+          "group": "Plant",
+          "options": [
+            "glyMax2"
+          ]
+        },
+        "Ntab_TN90": {
+          "species": "Nicotiana tabacum",
+          "group": "Plant",
+          "options": [
+            "Ntab_TN90"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "PhaVulg1"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "SolTub3"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "ASM200726v1"
+          ]
+        },
+        "RefGenv4": {
+          "species": "Zea mays",
+          "group": "Plant",
+          "options": [
+            "RefGenv4"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "JCVI_TTA1_2"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "danRer11"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "GRCg6a"
+          ]
+        },
+        "ViralProj14044": {
+          "species": "Enterobacteria phage T4",
+          "group": "Virus",
+          "options": [
+            "ViralProj14044"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "ASM292140v1"
+          ]
+        }
+      }
+    },
+    "m6a": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/m6Amod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "HEK293",
+            "A549",
+            "AML",
+            "BGC823",
+            "brain",
+            "CD34",
+            "CD4T",
+            "CD8T",
+            "endometrial",
+            "fibroblasts",
+            "GM12878",
+            "GSC-11",
+            "GSCs",
+            "H1299",
+            "H1A",
+            "H1B",
+            "HEC-1-A",
+            "HEK293A-TOA",
+            "HEK293T",
+            "HeLa",
+            "HepG2",
+            "hESC-HEK293T",
+            "hESCs",
+            "hNPCs",
+            "Huh7",
+            "iSLK",
+            "Jurkat",
+            "kidney",
+            "LCLs",
+            "liver",
+            "MM6",
+            "MSC",
+            "MT4",
+            "NB4",
+            "peripheral-blood",
+            "TIME",
+            "TREX",
+            "U2OS"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "heart",
+            "3T3-L1",
+            "BMDC",
+            "brain",
+            "CCE",
+            "Dendritic-cells",
+            "Ebs",
+            "ESC",
+            "ESC-EBS",
+            "ESCs",
+            "Flt3L-DC",
+            "iPSC",
+            "kidney",
+            "liver",
+            "MEFs",
+            "mESCs",
+            "midbrain-and-striatum",
+            "MSCs",
+            "NSC",
+            "NSPCs",
+            "SC",
+            "testis"
+          ]
+        },
+        "rheMac8": {
+          "species": "Macaca mulatta",
+          "group": "Mammal",
+          "options": [
+            "LCL"
+          ]
+        },
+        "panTro5": {
+          "species": "Pan troglodytes",
+          "group": "Mammal",
+          "options": [
+            "LCL"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "brain",
+            "kidney",
+            "liver",
+            "MM"
+          ]
+        },
+        "susScr11": {
+          "species": "Sus scrofa",
+          "group": "Mammal",
+          "options": [
+            "liver"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "K12"
+          ]
+        },
+        "ASM676v1": {
+          "species": "Pseudomonas aeruginosa",
+          "group": "Bacteria",
+          "options": [
+            "PAO1"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "SK1",
+            "yeast"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "other"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "S2R"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "whole-plant"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "Embryo"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        }
+      }
+    },
+    "m1a": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/m1Amod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "HEK293T",
+            "mitochondrial"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "MesAur1": {
+          "species": "Mesocricetus auratus",
+          "group": "Mammal",
+          "options": [
+            "mitochondrial"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76770v1": {
+          "species": "Mycobacterium smegmatis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1228v1": {
+          "species": "Sulfolobus acidocaldarius",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM407v2": {
+          "species": "Cucumis sativus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Ntab_TN90": {
+          "species": "Nicotiana tabacum",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "cytosolic"
+          ]
+        }
+      }
+    },
+    "m5c": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/m5Cmod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "frontalcortex",
+            "heart",
+            "HEK293T",
+            "HeLa",
+            "liver",
+            "lung",
+            "mitochondrial",
+            "muscle",
+            "spleen",
+            "T24",
+            "testis",
+            "other"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "C57BL6",
+            "cytosolic",
+            "heart",
+            "liver",
+            "lung",
+            "muscle",
+            "smallintestine",
+            "spleen",
+            "testis",
+            "other"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM680v1": {
+          "species": "Halobacterium salinarum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1228v1": {
+          "species": "Sulfolobus acidocaldarius",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM97857v1": {
+          "species": "Thermotoga maritima",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "CHLRE3": {
+          "species": "Chlamydomonas reinhardtii",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "ASM407v2": {
+          "species": "Cucumis sativus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "cytosolic"
+          ]
+        }
+      }
+    },
+    "m7g": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/m7Gmod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "A549",
+            "cytosolic",
+            "HEK293T",
+            "HeLa",
+            "HepG2",
+            "other"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM78585v1": {
+          "species": "Clostridium acetobutylicum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76770v1": {
+          "species": "Mycobacterium smegmatis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1308v1": {
+          "species": "Rhodospirillum rubrum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM553737v1": {
+          "species": "Salmonella typhimurium",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM188685v1": {
+          "species": "Spiroplasma citri",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1006v1": {
+          "species": "Synechococcus elongatus PCC 6301",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1948v1": {
+          "species": "Synechococcus sp.PCC 7002",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM97857v1": {
+          "species": "Thermotoga maritima",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "glyMax2": {
+          "species": "Glycine max",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ViralProj14044": {
+          "species": "Enterobacteria phage T4",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        }
+      }
+    },
+    "nm": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/Nmmod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "HEK293",
+            "HeLa",
+            "PA1",
+            "other"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM78585v1": {
+          "species": "Clostridium acetobutylicum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM680v1": {
+          "species": "Halobacterium salinarum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM553737v1": {
+          "species": "Salmonella typhimurium",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1228v1": {
+          "species": "Sulfolobus acidocaldarius",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1006v1": {
+          "species": "Synechococcus elongatus PCC 6301",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1948v1": {
+          "species": "Synechococcus sp.PCC 7002",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM97857v1": {
+          "species": "Thermotoga maritima",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "other"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "CHLRE3": {
+          "species": "Chlamydomonas reinhardtii",
+          "group": "Plant",
+          "options": [
+            "plastidic",
+            "other"
+          ]
+        },
+        "glyMax2": {
+          "species": "Glycine max",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "Ntab_TN90": {
+          "species": "Nicotiana tabacum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "plastidic"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "mitochondrial"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "RefGenv4": {
+          "species": "Zea mays",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "other"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ViralProj14044": {
+          "species": "Enterobacteria phage T4",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        }
+      }
+    },
+    "pseudo": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/pseudomod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "A549",
+            "HEK293T",
+            "HeLa",
+            "other"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "Liver",
+            "Heart",
+            "Kidney",
+            "B cell",
+            "Bone marrow",
+            "CD4 T",
+            "CD8 T",
+            "Cerebellum",
+            "Cerebral cortex",
+            "Small intestine",
+            "Testis",
+            "Thymus",
+            "other"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "MesAur1": {
+          "species": "Mesocricetus auratus",
+          "group": "Mammal",
+          "options": [
+            "mitochondrial"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM680v1": {
+          "species": "Halobacterium salinarum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM33669v1": {
+          "species": "Halococcus morrhuae",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76770v1": {
+          "species": "Mycobacterium smegmatis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1308v1": {
+          "species": "Rhodospirillum rubrum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM553737v1": {
+          "species": "Salmonella typhimurium",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM188685v1": {
+          "species": "Spiroplasma citri",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM20383v1": {
+          "species": "Streptomyces coelicolor A3(2)",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1006v1": {
+          "species": "Synechococcus elongatus PCC 6301",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1948v1": {
+          "species": "Synechococcus sp.PCC 7002",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM34078v1": {
+          "species": "Synechocystis sp",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "other"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic",
+            "heads",
+            "other"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "other"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "CHLRE3": {
+          "species": "Chlamydomonas reinhardtii",
+          "group": "Plant",
+          "options": [
+            "plastidic",
+            "other"
+          ]
+        },
+        "ASM407v2": {
+          "species": "Cucumis sativus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "glyMax2": {
+          "species": "Glycine max",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "Ntab_TN90": {
+          "species": "Nicotiana tabacum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "plastidic"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "RefGenv4": {
+          "species": "Zea mays",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "other"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "other"
+          ]
+        },
+        "ViralProj14044": {
+          "species": "Enterobacteria phage T4",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        }
+      }
+    },
+    "rnaediting": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/RNAeditingmod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ASM24013v3": {
+          "species": "Fusarium graminearum",
+          "group": "Fungi",
+          "options": [
+            "other"
+          ]
+        },
+        "ASM14955v1": {
+          "species": "Fusarium verticillioides",
+          "group": "Fungi",
+          "options": [
+            "other"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "other"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        }
+      }
+    },
+    "ac4c": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/ac4cmod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "DLD1",
+            "HEK293T",
+            "H1"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        }
+      }
+    },
+    "othermod": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modSite/othermod.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "MesAur1": {
+          "species": "Mesocricetus auratus",
+          "group": "Mammal",
+          "options": [
+            "mitochondrial"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM680v1": {
+          "species": "Halobacterium salinarum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM33669v1": {
+          "species": "Halococcus morrhuae",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM76770v1": {
+          "species": "Mycobacterium smegmatis",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM19593v2": {
+          "species": "Pyrococcus abyssi",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1308v1": {
+          "species": "Rhodospirillum rubrum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM553737v1": {
+          "species": "Salmonella typhimurium",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM188685v1": {
+          "species": "Spiroplasma citri",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM20383v1": {
+          "species": "Streptomyces coelicolor A3(2)",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1228v1": {
+          "species": "Sulfolobus acidocaldarius",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM96839v1": {
+          "species": "Sulfolobus solfataricus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1006v1": {
+          "species": "Synechococcus elongatus PCC 6301",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM1948v1": {
+          "species": "Synechococcus sp.PCC 7002",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM34078v1": {
+          "species": "Synechocystis sp",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM97857v1": {
+          "species": "Thermotoga maritima",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "nucleoplasmic",
+            "other"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic",
+            "other"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "CHLRE3": {
+          "species": "Chlamydomonas reinhardtii",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic",
+            "other"
+          ]
+        },
+        "ASM407v2": {
+          "species": "Cucumis sativus",
+          "group": "Plant",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "glyMax2": {
+          "species": "Glycine max",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "Ntab_TN90": {
+          "species": "Nicotiana tabacum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "plastidic"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "mitochondrial"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "cytosolic",
+            "plastidic"
+          ]
+        },
+        "RefGenv4": {
+          "species": "Zea mays",
+          "group": "Plant",
+          "options": [
+            "plastidic"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "cytosolic"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "cytosolic",
+            "mitochondrial",
+            "other"
+          ]
+        },
+        "ViralProj14044": {
+          "species": "Enterobacteria phage T4",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "prokaryotic_cytosol"
+          ]
+        }
+      }
+    },
+    "enzyme": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/mechanism/methylaseguide.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "ADAR",
+            "FBL",
+            "FMR1",
+            "FXR1",
+            "METTL14",
+            "METTL3",
+            "NOP56",
+            "NOP58",
+            "NSUN2",
+            "PUS1",
+            "RBM15B",
+            "RBM15",
+            "WTAP"
+          ]
+        }
+      }
+    },
+    "snorna": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/mechanism/snoRNAguide.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "hg38"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "mm10"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "sacCer3"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "BDGP6"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "ce11"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "TAIR10"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "danRer11"
+          ]
+        }
+      }
+    },
+    "cluster": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modGene/modCluster.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "m6A",
+            "m5C",
+            "Nm",
+            "Pseudo",
+            "RNAediting"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "m6A",
+            "RNAediting"
+          ]
+        }
+      }
+    },
+    "rbp": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modRBP/modRBP.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "m6A writer",
+            "m6A reader",
+            "m6A eraser",
+            "m5C writer",
+            "m5C reader",
+            "Pseudo writer",
+            "Nm writer",
+            "RNA-editing writer",
+            "other",
+            "explore"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "m6A reader",
+            "RNA-editing writer",
+            "other",
+            "explore"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "other"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "other"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "other"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "other"
+          ]
+        }
+      }
+    },
+    "mirna": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modmirTar/modmirTar.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "circRNA",
+            "lncRNA",
+            "mRNA",
+            "pseudogene",
+            "sncRNA"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "circRNA",
+            "lncRNA",
+            "mRNA",
+            "pseudogene",
+            "sncRNA"
+          ]
+        }
+      }
+    },
+    "variant": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/modVar/modvar.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "snp",
+            "snv"
+          ]
+        }
+      }
+    },
+    "motif": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/motif/othermotif.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "m6A",
+            "m1A",
+            "m5C",
+            "m6Am",
+            "m7G",
+            "Am",
+            "Cm",
+            "Gm",
+            "Um",
+            "Nm",
+            "Pseudo",
+            "RNA-editing"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "m6A",
+            "m1A",
+            "m5C",
+            "m7G",
+            "Am",
+            "Cm",
+            "Gm",
+            "Um",
+            "Nm",
+            "Pseudo",
+            "RNA-editing"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "m1A",
+            "m5C",
+            "m7G",
+            "Nm",
+            "Pseudo"
+          ]
+        },
+        "rheMac8": {
+          "species": "Macaca mulatta",
+          "group": "Mammal",
+          "options": [
+            "m6A"
+          ]
+        },
+        "MesAur1": {
+          "species": "Mesocricetus auratus",
+          "group": "Mammal",
+          "options": [
+            "m1A",
+            "Pseudo"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "m1A",
+            "m5C",
+            "m7G",
+            "Nm",
+            "Pseudo"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "m1A",
+            "m5C",
+            "m7G",
+            "Pseudo"
+          ]
+        },
+        "panTro5": {
+          "species": "Pan troglodytes",
+          "group": "Mammal",
+          "options": [
+            "m6A"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "m6A",
+            "m1A",
+            "m5C",
+            "m7G",
+            "Am",
+            "Cm",
+            "Gm",
+            "Um",
+            "Nm",
+            "Pseudo",
+            "RNA-editing"
+          ]
+        },
+        "susScr11": {
+          "species": "Sus scrofa",
+          "group": "Mammal",
+          "options": [
+            "m6A"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "m6A",
+            "m1A",
+            "m5C",
+            "m7G",
+            "Am",
+            "Cm",
+            "Gm",
+            "Um",
+            "Nm",
+            "Pseudo",
+            "RNA-editing"
+          ]
+        },
+        "Cand_albi12CV2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "m1A",
+            "m5C",
+            "Nm",
+            "Pseudo"
+          ]
+        },
+        "ASM24013v3": {
+          "species": "Fusarium graminearum",
+          "group": "Fungi",
+          "options": [
+            "RNA-editing"
+          ]
+        },
+        "ASM14955v1": {
+          "species": "Fusarium verticillioides",
+          "group": "Fungi",
+          "options": [
+            "RNA-editing"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "m1A",
+            "m5C",
+            "m7G",
+            "Pseudo",
+            "RNA-editing"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "m1A",
+            "m5C",
+            "m7G",
+            "Nm",
+            "Pseudo"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "m6A",
+            "m1A",
+            "m5C",
+            "m7G",
+            "Nm",
+            "Pseudo"
+          ]
+        }
+      }
+    },
+    "motif-datasets": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/motif/motif.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "hg38"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "mm10"
+          ]
+        },
+        "rheMac8": {
+          "species": "Macaca mulatta",
+          "group": "Mammal",
+          "options": [
+            "rheMac8"
+          ]
+        },
+        "panTro5": {
+          "species": "Pan troglodytes",
+          "group": "Mammal",
+          "options": [
+            "panTro5"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "rn6"
+          ]
+        },
+        "susScr11": {
+          "species": "Sus scrofa",
+          "group": "Mammal",
+          "options": [
+            "susScr11"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "ASM584v2"
+          ]
+        },
+        "ASM676v1": {
+          "species": "Pseudomonas aeruginosa",
+          "group": "Bacteria",
+          "options": [
+            "ASM676v1"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "sacCer3"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "BDGP6"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "TAIR10"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "danRer11"
+          ]
+        }
+      }
+    },
+    "tools": {
+      "source": "http://bioinformaticsscience.cn/rmbase/js/tools/modGeneToolSearch.js",
+      "assemblies": {
+        "hg38": {
+          "species": "Homo sapiens",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "mm10": {
+          "species": "Mus musculus",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "rheMac8": {
+          "species": "Macaca mulatta",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "panTro5": {
+          "species": "Pan troglodytes",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "rn6": {
+          "species": "Rattus norvegicus",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "susScr11": {
+          "species": "Sus scrofa",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "bosTau9": {
+          "species": "Bos taurus",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "MesAur1": {
+          "species": "Mesocricetus auratus",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "OryCun2": {
+          "species": "Oryctolagus cuniculus",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "Oarv3": {
+          "species": "Ovis aries",
+          "group": "Mammal",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM69118v1": {
+          "species": "Bacillus subtilis",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM584v2": {
+          "species": "E.coli",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM676v1": {
+          "species": "Pseudomonas aeruginosa",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM78585v1": {
+          "species": "Clostridium acetobutylicum",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM74998v1": {
+          "species": "Geobacillus stearothermophilus",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM680v1": {
+          "species": "Halobacterium salinarum",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM33669v1": {
+          "species": "Halococcus morrhuae",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM2568v1": {
+          "species": "Haloferax volcanii",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM76111v1": {
+          "species": "Lactococcus lactis",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM76770v1": {
+          "species": "Mycobacterium smegmatis",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM83033v1": {
+          "species": "Mycoplasma capricolum",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM25307v1": {
+          "species": "Mycoplasma mycoides",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM19593v2": {
+          "species": "Pyrococcus abyssi",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM1308v1": {
+          "species": "Rhodospirillum rubrum",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM553737v1": {
+          "species": "Salmonella typhimurium",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM188685v1": {
+          "species": "Spiroplasma citri",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM20383v1": {
+          "species": "Streptomyces coelicolor A3(2)",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM93222v1": {
+          "species": "Streptomyces griseus",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM1228v1": {
+          "species": "Sulfolobus acidocaldarius",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM96839v1": {
+          "species": "Sulfolobus solfataricus",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM1006v1": {
+          "species": "Synechococcus elongatus PCC 6301",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM1948v1": {
+          "species": "Synechococcus sp.PCC 7002",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM34078v1": {
+          "species": "Synechocystis sp",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM19591v1": {
+          "species": "Thermoplasma acidophilum",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM97857v1": {
+          "species": "Thermotoga maritima",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM812v1": {
+          "species": "Thermus thermophilus",
+          "group": "Bacteria",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "sacCer3": {
+          "species": "Saccharomyces cerevisiae",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM294v2": {
+          "species": "Schizosaccharomyces pombe",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "Cand_albi12Cv2": {
+          "species": "Candida albicans",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM24013v3": {
+          "species": "Fusarium graminearum",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM14955v1": {
+          "species": "Fusarium verticillioides",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "NC12": {
+          "species": "Neurospora crassa",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "Cybja1": {
+          "species": "Pichia jadinii",
+          "group": "Fungi",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "BDGP6": {
+          "species": "Drosophila melanogaster",
+          "group": "Insect",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM15162v1": {
+          "species": "Bombyx mori",
+          "group": "Metazoa",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ce11": {
+          "species": "Caenorhabditis elegans",
+          "group": "Metazoa",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "Xenopus_laevisv2": {
+          "species": "Xenopus laevis",
+          "group": "Metazoa",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "TAIR10": {
+          "species": "Arabidopsis thaliana",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "AST_PRJEB5043v1": {
+          "species": "Brassica napus",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "CHLRE3": {
+          "species": "Chlamydomonas reinhardtii",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM407v2": {
+          "species": "Cucumis sativus",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "glyMax2": {
+          "species": "Glycine max",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "Ntab_TN90": {
+          "species": "Nicotiana tabacum",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "PhaVulg1": {
+          "species": "Phaseolus vulgaris",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "SolTub3": {
+          "species": "Solanum tuberosum",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM200726v1": {
+          "species": "Spinacia oleracea",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "RefGenv4": {
+          "species": "Zea mays",
+          "group": "Plant",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "JCVI_TTA1_2": {
+          "species": "Tetrahymena thermophila",
+          "group": "Protists",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "danRer11": {
+          "species": "Danio rerio",
+          "group": "Vertebrate",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "GRCg6a": {
+          "species": "Gallus gallus",
+          "group": "Vertebrate",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ViralProj14044": {
+          "species": "Enterobacteria phage T4",
+          "group": "Virus",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        },
+        "ASM292140v1": {
+          "species": "Enterobacteria phage T5",
+          "group": "Virus",
+          "options": [
+            "Gene Case",
+            "Transcript Case"
+          ]
+        }
+      }
+    }
+  },
+  "downloads": {
+    "downRnaModObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "ac4C",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "rheMac8": {
+        "species": "Macaca mulatta",
+        "group": "Mammal",
+        "options": [
+          "m6A"
+        ]
+      },
+      "panTro5": {
+        "species": "Pan troglodytes",
+        "group": "Mammal",
+        "options": [
+          "m6A"
+        ]
+      },
+      "rn6": {
+        "species": "Rattus norvegicus",
+        "group": "Mammal",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "susScr11": {
+        "species": "Sus scrofa",
+        "group": "Mammal",
+        "options": [
+          "m6A"
+        ]
+      },
+      "bosTau9": {
+        "species": "Bos taurus",
+        "group": "Mammal",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "MesAur1": {
+        "species": "Mesocricetus auratus",
+        "group": "Mammal",
+        "options": [
+          "m1A",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "OryCun2": {
+        "species": "Oryctolagus cuniculus",
+        "group": "Mammal",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "Oarv3": {
+        "species": "Ovis aries",
+        "group": "Mammal",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM69118v1": {
+        "species": "Bacillus subtilis",
+        "group": "Bacteria",
+        "options": [
+          "m6A",
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM584v2": {
+        "species": "E.coli",
+        "group": "Bacteria",
+        "options": [
+          "m6A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "ASM676v1": {
+        "species": "Pseudomonas aeruginosa",
+        "group": "Bacteria",
+        "options": [
+          "m6A"
+        ]
+      },
+      "ASM78585v1": {
+        "species": "Clostridium acetobutylicum",
+        "group": "Bacteria",
+        "options": [
+          "m7G",
+          "Nm"
+        ]
+      },
+      "ASM74998v1": {
+        "species": "Geobacillus stearotherModmophilus",
+        "group": "Bacteria",
+        "options": [
+          "m6A",
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM680v1": {
+        "species": "Halobacterium salinarum",
+        "group": "Bacteria",
+        "options": [
+          "m5C",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM33669v1": {
+        "species": "Halococcus morrhuae",
+        "group": "Bacteria",
+        "options": [
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM2568v1": {
+        "species": "Haloferax volcanii",
+        "group": "Bacteria",
+        "options": [
+          "m5C",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM76111v1": {
+        "species": "Lactococcus lactis",
+        "group": "Bacteria",
+        "options": [
+          "m6A",
+          "m1A",
+          "m7G",
+          "otherMod"
+        ]
+      },
+      "ASM76770v1": {
+        "species": "Mycobacterium smegmatis",
+        "group": "Bacteria",
+        "options": [
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM83033v1": {
+        "species": "Mycoplasma capricolum",
+        "group": "Bacteria",
+        "options": [
+          "m6A",
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM25307v1": {
+        "species": "Mycoplasma mycoides",
+        "group": "Bacteria",
+        "options": [
+          "m6A",
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM19593v2": {
+        "species": "Pyrococcus abyssi",
+        "group": "Bacteria",
+        "options": [
+          "otherMod"
+        ]
+      },
+      "ASM1308v1": {
+        "species": "Rhodospirillum rubrum",
+        "group": "Bacteria",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM553737v1": {
+        "species": "Salmonella typhimurium",
+        "group": "Bacteria",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM188685v1": {
+        "species": "Spiroplasma citri",
+        "group": "Bacteria",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM20383v1": {
+        "species": "Streptomyces coelicolor A3(2)",
+        "group": "Bacteria",
+        "options": [
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM93222v1": {
+        "species": "Streptomyces griseus",
+        "group": "Bacteria",
+        "options": [
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM1228v1": {
+        "species": "Sulfolobus acidocaldarius",
+        "group": "Bacteria",
+        "options": [
+          "m1A",
+          "m5C",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM96839v1": {
+        "species": "Sulfolobus solfataricus",
+        "group": "Bacteria",
+        "options": [
+          "otherMod"
+        ]
+      },
+      "ASM1006v1": {
+        "species": "Synechococcus elongatus PCC 6301",
+        "group": "Bacteria",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM1948v1": {
+        "species": "Synechococcus sp.PCC 7002",
+        "group": "Bacteria",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM34078v1": {
+        "species": "Synechocystis sp",
+        "group": "Bacteria",
+        "options": [
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "ASM19591v1": {
+        "species": "Thermoplasma acidophilum",
+        "group": "Bacteria",
+        "options": [
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM97857v1": {
+        "species": "Thermotoga maritima",
+        "group": "Bacteria",
+        "options": [
+          "m5C",
+          "m7G",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM812v1": {
+        "species": "Thermus thermophilus",
+        "group": "Bacteria",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "sacCer3": {
+        "species": "Saccharomyces cerevisiae",
+        "group": "Fungi",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "ac4C",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "ASM294v2": {
+        "species": "Schizosaccharomyces pombe",
+        "group": "Fungi",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "Cand_albi12Cv2": {
+        "species": "Candida albicans",
+        "group": "Fungi",
+        "options": [
+          "m1A",
+          "m5C",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM24013v3": {
+        "species": "Fusarium graminearum",
+        "group": "Fungi",
+        "options": [
+          "RNA-editing"
+        ]
+      },
+      "ASM14955v1": {
+        "species": "Fusarium verticillioides",
+        "group": "Fungi",
+        "options": [
+          "RNA-editing"
+        ]
+      },
+      "NC12": {
+        "species": "Neurospora crassa",
+        "group": "Fungi",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "Cybja1": {
+        "species": "Pichia jadinii",
+        "group": "Fungi",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "BDGP6": {
+        "species": "Drosophila melanogaster",
+        "group": "Insect",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "ASM15162v1": {
+        "species": "Bombyx mori",
+        "group": "Metazoa",
+        "options": [
+          "m6A",
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ce11": {
+        "species": "Caenorhabditis elegans",
+        "group": "Metazoa",
+        "options": [
+          "Pseudo",
+          "Nm",
+          "RNA-editing",
+          "otherMod"
+        ]
+      },
+      "Xenopus_laevisv2": {
+        "species": "Xenopus laevis",
+        "group": "Metazoa",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "TAIR10": {
+        "species": "Arabidopsis thaliana",
+        "group": "Plant",
+        "options": [
+          "m6A",
+          "Pseudo",
+          "Nm"
+        ]
+      },
+      "AST_PRJEB5043v1": {
+        "species": "Brassica napus",
+        "group": "Plant",
+        "options": [
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "CHLRE3": {
+        "species": "Chlamydomonas reinhardtii",
+        "group": "Plant",
+        "options": [
+          "m5C",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM407v2": {
+        "species": "Cucumis sativus",
+        "group": "Plant",
+        "options": [
+          "m1A",
+          "m5C",
+          "Pseudo",
+          "otherMod"
+        ]
+      },
+      "glyMax2": {
+        "species": "Glycine max",
+        "group": "Plant",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "Ntab_TN90": {
+        "species": "Nicotiana tabacum",
+        "group": "Plant",
+        "options": [
+          "m1A",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "PhaVulg1": {
+        "species": "Phaseolus vulgaris",
+        "group": "Plant",
+        "options": [
+          "m1A",
+          "m5C",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "SolTub3": {
+        "species": "Solanum tuberosum",
+        "group": "Plant",
+        "options": [
+          "m1A",
+          "m5C",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM200726v1": {
+        "species": "Spinacia oleracea",
+        "group": "Plant",
+        "options": [
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "RefGenv4": {
+        "species": "Zea mays",
+        "group": "Plant",
+        "options": [
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "JCVI_TTA1_2": {
+        "species": "Tetrahymena thermophila",
+        "group": "Protists",
+        "options": [
+          "m1A",
+          "m5C",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "danRer11": {
+        "species": "Danio rerio",
+        "group": "Vertebrate",
+        "options": [
+          "m6A",
+          "Pseudo",
+          "Nm"
+        ]
+      },
+      "GRCg6a": {
+        "species": "Gallus gallus",
+        "group": "Vertebrate",
+        "options": [
+          "m1A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ViralProj14044": {
+        "species": "Enterobacteria phage T4",
+        "group": "Virus",
+        "options": [
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      },
+      "ASM292140v1": {
+        "species": "Enterobacteria phage T5",
+        "group": "Virus",
+        "options": [
+          "m6A",
+          "m7G",
+          "Pseudo",
+          "Nm",
+          "otherMod"
+        ]
+      }
+    },
+    "downMechaEnzyObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "ADAR",
+          "FBL",
+          "FMR1",
+          "FMR1",
+          "METTL14",
+          "METTL3",
+          "NOP56",
+          "NOP58",
+          "NSUN2",
+          "PUS1",
+          "RBM15B",
+          "RBM15",
+          "WTAP"
+        ]
+      }
+    },
+    "downMechaSnoObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "hg38"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "mm10"
+        ]
+      },
+      "sacCer3": {
+        "species": "Saccharomyces cerevisiae",
+        "group": "Fungi",
+        "options": [
+          "sacCer3"
+        ]
+      },
+      "BDGP6": {
+        "species": "Drosophila melanogaster",
+        "group": "Insect",
+        "options": [
+          "BDGP6"
+        ]
+      },
+      "ce11": {
+        "species": "Caenorhabditis elegans",
+        "group": "Metazoa",
+        "options": [
+          "ce11"
+        ]
+      },
+      "TAIR10": {
+        "species": "Arabidopsis thaliana",
+        "group": "Plant",
+        "options": [
+          "TAIR10"
+        ]
+      },
+      "danRer11": {
+        "species": "Danio rerio",
+        "group": "Vertebrate",
+        "options": [
+          "danRer11"
+        ]
+      }
+    },
+    "downModSeekerObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "GSM1464214_pseudo",
+          "SRR12026853_m6A",
+          "SRR1327264_pseudo",
+          "SRR1663500_pseudo",
+          "SRR5515131_m6A",
+          "GSM1464216_pseudo",
+          "SRR12712041_pseudo",
+          "SRR1327267_pseudo",
+          "SRR1663502_pseudo",
+          "SRR5882579_m1A",
+          "GSM1464218_pseudo",
+          "SRR12712042_pseudo",
+          "SRR1327268_pseudo",
+          "SRR1663504_pseudo",
+          "SRR5882580_m1A",
+          "GSM1464220_pseudo",
+          "SRR12712043_pseudo",
+          "SRR1327270_pseudo",
+          "SRR1663506_pseudo",
+          "SRR5884182_pseudo",
+          "SRR10139766_m6A",
+          "SRR12712044_pseudo",
+          "SRR1535822_pseudo",
+          "SRR1663508_pseudo",
+          "SRR5884184_pseudo",
+          "SRR10139767_m6A",
+          "SRR12712045_pseudo",
+          "SRR1535823_pseudo",
+          "SRR1663510_pseudo",
+          "SRR5884186_pseudo",
+          "SRR10139768_m6A",
+          "SRR12712046_pseudo",
+          "SRR1535826_pseudo",
+          "SRR1663512_pseudo",
+          "SRR5884188_pseudo",
+          "SRR10139769_m6A",
+          "SRR12712047_pseudo",
+          "SRR1535827_pseudo",
+          "SRR1663514_pseudo",
+          "SRR5884190_pseudo",
+          "SRR10139770_m6A",
+          "SRR12712048_pseudo",
+          "SRR1535830_pseudo",
+          "SRR1663516_pseudo",
+          "SRR5884192_pseudo",
+          "SRR10139771_m6A",
+          "SRR12712049_pseudo",
+          "SRR1535831_pseudo",
+          "SRR1663518_pseudo",
+          "SRR5884194_pseudo",
+          "SRR10139772_m6A",
+          "SRR12712059_pseudo",
+          "SRR1535834_pseudo",
+          "SRR1686787_m6A",
+          "SRR5884196_pseudo",
+          "SRR10139773_m6A",
+          "SRR12712060_pseudo",
+          "SRR1535835_pseudo",
+          "SRR1686789_m6A",
+          "SRR5884198_pseudo",
+          "SRR10139774_m6A",
+          "SRR12712061_pseudo",
+          "SRR1535838_pseudo",
+          "SRR1686790_m6A",
+          "SRR5884200_pseudo",
+          "SRR10139775_m6A",
+          "SRR12712062_pseudo",
+          "SRR1535840_pseudo",
+          "SRR1686791_m6A",
+          "SRR5884202_pseudo",
+          "SRR10139776_m6A",
+          "SRR12712063_pseudo",
+          "SRR1535842_pseudo",
+          "SRR2003406_m6A",
+          "SRR6876852_m7G",
+          "SRR10139777_m6A",
+          "SRR12712064_pseudo",
+          "SRR1535844_pseudo",
+          "SRR5418425_m1A",
+          "SRR6876853_m7G",
+          "SRR11364735_pseudo",
+          "SRR12712065_pseudo",
+          "SRR1535846_pseudo",
+          "SRR5418427_m1A",
+          "SRR8113928_m7G",
+          "SRR11364736_pseudo",
+          "SRR12712066_pseudo",
+          "SRR1535848_pseudo",
+          "SRR5418429_m1A",
+          "SRR8113929_m7G",
+          "SRR11364737_pseudo",
+          "SRR12712067_pseudo",
+          "SRR16089212_m6A",
+          "SRR5418430_m1A",
+          "SRR8113930_m7G",
+          "SRR11364739_pseudo",
+          "SRR12712072_pseudo",
+          "SRR16089213_m6A",
+          "SRR5418431_m1A",
+          "SRR8113931_m7G",
+          "SRR11364740_pseudo",
+          "SRR12712073_pseudo",
+          "SRR16089214_m6A",
+          "SRR5418433_m1A",
+          "SRR8113944_m7G",
+          "SRR11364741_pseudo",
+          "SRR12712074_pseudo",
+          "SRR16089215_m6A",
+          "SRR5418435_m1A",
+          "SRR8113945_m7G",
+          "SRR11364742_pseudo",
+          "SRR12712075_pseudo",
+          "SRR16089216_m6A",
+          "SRR5418436_m1A",
+          "SRR8113946_m7G",
+          "SRR11364743_pseudo",
+          "SRR13036641_m6A",
+          "SRR16089217_m6A",
+          "SRR5418437_m1A",
+          "SRR8113947_m7G",
+          "SRR12026848_m6A",
+          "SRR1327254_pseudo",
+          "SRR16089218_m6A",
+          "SRR5418439_m1A",
+          "SRR8244458_m6A",
+          "SRR12026849_m6A",
+          "SRR1327256_pseudo",
+          "SRR16089219_m6A",
+          "SRR5418441_m1A",
+          "SRR8767363_m6A",
+          "SRR12026850_m6A",
+          "SRR1327259_pseudo",
+          "SRR1663494_pseudo",
+          "SRR5418443_m1A",
+          "SRR8767364_m6A",
+          "SRR12026851_m6A",
+          "SRR1327260_pseudo",
+          "SRR1663496_pseudo",
+          "SRR5515129_m6A",
+          "SRR12026852_m6A",
+          "SRR1327263_pseudo",
+          "SRR1663498_pseudo",
+          "SRR5515130_m6A"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "SRR11409411_m6A",
+          "SRR16089202_m6A",
+          "SRR16089221_m6A",
+          "SRR3176909_pseudo",
+          "SRR5656206_m6A",
+          "SRR11409413_m6A",
+          "SRR16089203_m6A",
+          "SRR16089222_m6A",
+          "SRR3176911_pseudo",
+          "SRR5656207_m6A",
+          "SRR11409415_m6A",
+          "SRR16089208_m6A",
+          "SRR1663520_pseudo",
+          "SRR3176913_pseudo",
+          "SRR8244461_m6A",
+          "SRR1535850_pseudo",
+          "SRR16089209_m6A",
+          "SRR1663522_pseudo",
+          "SRR3176915_pseudo",
+          "SRR8244462_m6A",
+          "SRR1535851_pseudo",
+          "SRR16089210_m6A",
+          "SRR1663524_pseudo",
+          "SRR3176917_pseudo",
+          "SRR16089200_m6A",
+          "SRR16089211_m6A",
+          "SRR1663526_pseudo",
+          "SRR3176919_pseudo",
+          "SRR16089201_m6A",
+          "SRR16089220_m6A",
+          "SRR1686792_m6A",
+          "SRR3176921_pseudo"
+        ]
+      },
+      "sacCer3": {
+        "species": "Saccharomyces cerevisiae",
+        "group": "Fungi",
+        "options": [
+          "GSM1464170_pseudo",
+          "SRR1327209_pseudo",
+          "SRR1327241_pseudo",
+          "SRR1535798_pseudo",
+          "SRR1552365_pseudo",
+          "GSM1464176_pseudo",
+          "SRR1327211_pseudo",
+          "SRR1327243_pseudo",
+          "SRR1535800_pseudo",
+          "SRR1552367_pseudo",
+          "SRR1327188_pseudo",
+          "SRR1327213_pseudo",
+          "SRR1327245_pseudo",
+          "SRR1535802_pseudo",
+          "SRR1552369_pseudo",
+          "SRR1327189_pseudo",
+          "SRR1327215_pseudo",
+          "SRR1327247_pseudo",
+          "SRR1535804_pseudo",
+          "SRR1552371_pseudo",
+          "SRR1327190_pseudo",
+          "SRR1327217_pseudo",
+          "SRR1327249_pseudo",
+          "SRR1535806_pseudo",
+          "SRR1559194_pseudo",
+          "SRR1327191_pseudo",
+          "SRR1327219_pseudo",
+          "SRR1535750_pseudo",
+          "SRR1535808_pseudo",
+          "SRR1559196_pseudo",
+          "SRR1327194_pseudo",
+          "SRR1327221_pseudo",
+          "SRR1535752_pseudo",
+          "SRR1535810_pseudo",
+          "SRR1559198_pseudo",
+          "SRR1327195_pseudo",
+          "SRR1327223_pseudo",
+          "SRR1535754_pseudo",
+          "SRR1535812_pseudo",
+          "SRR1559200_pseudo",
+          "SRR1327196_pseudo",
+          "SRR1327225_pseudo",
+          "SRR1535756_pseudo",
+          "SRR1535814_pseudo",
+          "SRR1559202_pseudo",
+          "SRR1327197_pseudo",
+          "SRR1327227_pseudo",
+          "SRR1535769_pseudo",
+          "SRR1535816_pseudo",
+          "SRR1559204_pseudo",
+          "SRR1327200_pseudo",
+          "SRR1327229_pseudo",
+          "SRR1535786_pseudo",
+          "SRR1535818_pseudo",
+          "SRR1559206_pseudo",
+          "SRR1327201_pseudo",
+          "SRR1327231_pseudo",
+          "SRR1535788_pseudo",
+          "SRR1535820_pseudo",
+          "SRR1559208_pseudo",
+          "SRR1327202_pseudo",
+          "SRR1327233_pseudo",
+          "SRR1535790_pseudo",
+          "SRR1552357_pseudo",
+          "SRR1559210_pseudo",
+          "SRR1327203_pseudo",
+          "SRR1327235_pseudo",
+          "SRR1535792_pseudo",
+          "SRR1552359_pseudo",
+          "SRR1559212_pseudo",
+          "SRR1327205_pseudo",
+          "SRR1327237_pseudo",
+          "SRR1535794_pseudo",
+          "SRR1552361_pseudo",
+          "SRR1559214_pseudo",
+          "SRR1327207_pseudo",
+          "SRR1327239_pseudo",
+          "SRR1535796_pseudo",
+          "SRR1552363_pseudo",
+          "SRR1559216_pseudo"
+        ]
+      },
+      "BDGP6": {
+        "species": "Drosophila melanogaster",
+        "group": "Insect",
+        "options": [
+          "SRR8041712_pseudo",
+          "SRR8041718_pseudo"
+        ]
+      }
+    },
+    "downModGeneObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "rheMac8": {
+        "species": "Macaca mulatta",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "panTro5": {
+        "species": "Pan troglodytes",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "rn6": {
+        "species": "Rattus norvegicus",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "susScr11": {
+        "species": "Sus scrofa",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "bosTau9": {
+        "species": "Bos taurus",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "MesAur1": {
+        "species": "Mesocricetus auratus",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "OryCun2": {
+        "species": "Oryctolagus cuniculus",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "Oarv3": {
+        "species": "Ovis aries",
+        "group": "Mammal",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM69118v1": {
+        "species": "Bacillus subtilis",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM584v2": {
+        "species": "E.coli",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM676v1": {
+        "species": "Pseudomonas aeruginosa",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM78585v1": {
+        "species": "Clostridium acetobutylicum",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM74998v1": {
+        "species": "Geobacillus stearotherModmophilus",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM680v1": {
+        "species": "Halobacterium salinarum",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM33669v1": {
+        "species": "Halococcus morrhuae",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM2568v1": {
+        "species": "Haloferax volcanii",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM76111v1": {
+        "species": "Lactococcus lactis",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM76770v1": {
+        "species": "Mycobacterium smegmatis",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM83033v1": {
+        "species": "Mycoplasma capricolum",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM25307v1": {
+        "species": "Mycoplasma mycoides",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM19593v2": {
+        "species": "Pyrococcus abyssi",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM1308v1": {
+        "species": "Rhodospirillum rubrum",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM553737v1": {
+        "species": "Salmonella typhimurium",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM188685v1": {
+        "species": "Spiroplasma citri",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM20383v1": {
+        "species": "Streptomyces coelicolor A3(2)",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM93222v1": {
+        "species": "Streptomyces griseus",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM1228v1": {
+        "species": "Sulfolobus acidocaldarius",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM96839v1": {
+        "species": "Sulfolobus solfataricus",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM1006v1": {
+        "species": "Synechococcus elongatus PCC 6301",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM1948v1": {
+        "species": "Synechococcus sp.PCC 7002",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM34078v1": {
+        "species": "Synechocystis sp",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM19591v1": {
+        "species": "Thermoplasma acidophilum",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM97857v1": {
+        "species": "Thermotoga maritima",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM812v1": {
+        "species": "Thermus thermophilus",
+        "group": "Bacteria",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "sacCer3": {
+        "species": "Saccharomyces cerevisiae",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM294v2": {
+        "species": "Schizosaccharomyces pombe",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "Cand_albi12Cv2": {
+        "species": "Candida albicans",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM24013v3": {
+        "species": "Fusarium graminearum",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM14955v1": {
+        "species": "Fusarium verticillioides",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "NC12": {
+        "species": "Neurospora crassa",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "Cybja1": {
+        "species": "Pichia jadinii",
+        "group": "Fungi",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "BDGP6": {
+        "species": "Drosophila melanogaster",
+        "group": "Insect",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM15162v1": {
+        "species": "Bombyx mori",
+        "group": "Metazoa",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ce11": {
+        "species": "Caenorhabditis elegans",
+        "group": "Metazoa",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "Xenopus_laevisv2": {
+        "species": "Xenopus laevis",
+        "group": "Metazoa",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "TAIR10": {
+        "species": "Arabidopsis thaliana",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "AST_PRJEB5043v1": {
+        "species": "Brassica napus",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "CHLRE3": {
+        "species": "Chlamydomonas reinhardtii",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM407v2": {
+        "species": "Cucumis sativus",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "glyMax2": {
+        "species": "Glycine max",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "Ntab_TN90": {
+        "species": "Nicotiana tabacum",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "PhaVulg1": {
+        "species": "Phaseolus vulgaris",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "SolTub3": {
+        "species": "Solanum tuberosum",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM200726v1": {
+        "species": "Spinacia oleracea",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "RefGenv4": {
+        "species": "Zea mays",
+        "group": "Plant",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "JCVI_TTA1_2": {
+        "species": "Tetrahymena thermophila",
+        "group": "Protists",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "danRer11": {
+        "species": "Danio rerio",
+        "group": "Vertebrate",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "GRCg6a": {
+        "species": "Gallus gallus",
+        "group": "Vertebrate",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ViralProj14044": {
+        "species": "Enterobacteria phage T4",
+        "group": "Virus",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      },
+      "ASM292140v1": {
+        "species": "Enterobacteria phage T5",
+        "group": "Virus",
+        "options": [
+          "Gene Case",
+          "Transcript Case"
+        ]
+      }
+    },
+    "downModRBPObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "m6A writer",
+          "m6A reader",
+          "m6A eraser",
+          "m5C writer",
+          "m5C reader",
+          "Pseudo writer",
+          "Nm writer",
+          "RNA-editing writer",
+          "other"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "m6A reader",
+          "RNA-editing writer",
+          "other"
+        ]
+      },
+      "sacCer3": {
+        "species": "Saccharomyces cerevisiae",
+        "group": "Fungi",
+        "options": [
+          "other"
+        ]
+      },
+      "BDGP6": {
+        "species": "Drosophila melanogaster",
+        "group": "Insect",
+        "options": [
+          "other"
+        ]
+      },
+      "ce11": {
+        "species": "Caenorhabditis elegans",
+        "group": "Metazoa",
+        "options": [
+          "other"
+        ]
+      },
+      "TAIR10": {
+        "species": "Arabidopsis thaliana",
+        "group": "Plant",
+        "options": [
+          "other"
+        ]
+      }
+    },
+    "downModMirTarObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "circRNA",
+          "lncRNA",
+          "mRNA",
+          "pseudogene",
+          "sncRNA"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "circRNA",
+          "lncRNA",
+          "mRNA",
+          "pseudogene",
+          "sncRNA"
+        ]
+      }
+    },
+    "downModVarObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "SNP",
+          "SNV"
+        ]
+      }
+    },
+    "downModClusterObj": {
+      "hg38": {
+        "species": "Homo sapiens",
+        "group": "Mammal",
+        "options": [
+          "m6A",
+          "m5C",
+          "Nm",
+          "Pseudo",
+          "RNAediting"
+        ]
+      },
+      "mm10": {
+        "species": "Mus musculus",
+        "group": "Mammal",
+        "options": [
+          "m6A",
+          "RNAediting"
+        ]
+      }
+    }
+  },
+  "colocalization": {
+    "Homo sapiens": [
+      {
+        "A549": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "GM12878": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "GM23248": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3F3A": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "GM23338": [
+          {
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "H1": [
+          {
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "H9": [
+          {
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "HCT116": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "HeLa-S3": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "HepG2": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "K562": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "MCF-7": [
+          {
+            "H2AFZ": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3F3A": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K79me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ],
+        "SK-N-SH": [
+          {
+            "H3K27ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K27me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K36me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me1": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K4me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9ac": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me2": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H3K9me3": "m1A、m5C、m6A、m7G、Nm、Pseudo",
+            "H4K20me1": "m1A、m5C、m6A、m7G、Nm、Pseudo"
+          }
+        ]
+      }
+    ]
+  }
+}
