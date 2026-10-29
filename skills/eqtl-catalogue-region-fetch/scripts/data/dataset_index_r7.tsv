@@ -1,0 +1,759 @@
+study_id	dataset_id	study_label	sample_group	tissue_id	tissue_label	condition_label	sample_size	quant_method	file_class
+QTS000001	QTD000001	Alasoo_2018	macrophage_naive	CL_0000235	macrophage	naive	84	ge	all
+QTS000001	QTD000002	Alasoo_2018	macrophage_naive	CL_0000235	macrophage	naive	84	exon	cc
+QTS000001	QTD000003	Alasoo_2018	macrophage_naive	CL_0000235	macrophage	naive	84	tx	cc
+QTS000001	QTD000004	Alasoo_2018	macrophage_naive	CL_0000235	macrophage	naive	84	txrev	cc
+QTS000001	QTD000005	Alasoo_2018	macrophage_naive	CL_0000235	macrophage	naive	84	leafcutter	cc
+QTS000001	QTD000006	Alasoo_2018	macrophage_IFNg	CL_0000235	macrophage	IFNg_18h	84	ge	all
+QTS000001	QTD000007	Alasoo_2018	macrophage_IFNg	CL_0000235	macrophage	IFNg_18h	84	exon	cc
+QTS000001	QTD000008	Alasoo_2018	macrophage_IFNg	CL_0000235	macrophage	IFNg_18h	84	tx	cc
+QTS000001	QTD000009	Alasoo_2018	macrophage_IFNg	CL_0000235	macrophage	IFNg_18h	84	txrev	cc
+QTS000001	QTD000010	Alasoo_2018	macrophage_IFNg	CL_0000235	macrophage	IFNg_18h	84	leafcutter	cc
+QTS000001	QTD000011	Alasoo_2018	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	84	ge	all
+QTS000001	QTD000012	Alasoo_2018	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	84	exon	cc
+QTS000001	QTD000013	Alasoo_2018	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	84	tx	cc
+QTS000001	QTD000014	Alasoo_2018	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	84	txrev	cc
+QTS000001	QTD000015	Alasoo_2018	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	84	leafcutter	cc
+QTS000001	QTD000016	Alasoo_2018	macrophage_IFNg+Salmonella	CL_0000235	macrophage	IFNg_18h+Salmonella_5h	84	ge	all
+QTS000001	QTD000017	Alasoo_2018	macrophage_IFNg+Salmonella	CL_0000235	macrophage	IFNg_18h+Salmonella_5h	84	exon	cc
+QTS000001	QTD000018	Alasoo_2018	macrophage_IFNg+Salmonella	CL_0000235	macrophage	IFNg_18h+Salmonella_5h	84	tx	cc
+QTS000001	QTD000019	Alasoo_2018	macrophage_IFNg+Salmonella	CL_0000235	macrophage	IFNg_18h+Salmonella_5h	84	txrev	cc
+QTS000001	QTD000020	Alasoo_2018	macrophage_IFNg+Salmonella	CL_0000235	macrophage	IFNg_18h+Salmonella_5h	84	leafcutter	cc
+QTS000002	QTD000021	BLUEPRINT	monocyte	CL_0002057	monocyte	naive	191	ge	all
+QTS000002	QTD000022	BLUEPRINT	monocyte	CL_0002057	monocyte	naive	191	exon	cc
+QTS000002	QTD000023	BLUEPRINT	monocyte	CL_0002057	monocyte	naive	191	tx	cc
+QTS000002	QTD000024	BLUEPRINT	monocyte	CL_0002057	monocyte	naive	191	txrev	cc
+QTS000002	QTD000025	BLUEPRINT	monocyte	CL_0002057	monocyte	naive	191	leafcutter	cc
+QTS000002	QTD000026	BLUEPRINT	neutrophil	CL_0000775	neutrophil	naive	196	ge	all
+QTS000002	QTD000027	BLUEPRINT	neutrophil	CL_0000775	neutrophil	naive	196	exon	cc
+QTS000002	QTD000028	BLUEPRINT	neutrophil	CL_0000775	neutrophil	naive	196	tx	cc
+QTS000002	QTD000029	BLUEPRINT	neutrophil	CL_0000775	neutrophil	naive	196	txrev	cc
+QTS000002	QTD000030	BLUEPRINT	neutrophil	CL_0000775	neutrophil	naive	196	leafcutter	cc
+QTS000002	QTD000031	BLUEPRINT	T-cell	CL_0000624	CD4+ T cell	naive	167	ge	all
+QTS000002	QTD000032	BLUEPRINT	T-cell	CL_0000624	CD4+ T cell	naive	167	exon	cc
+QTS000002	QTD000033	BLUEPRINT	T-cell	CL_0000624	CD4+ T cell	naive	167	tx	cc
+QTS000002	QTD000034	BLUEPRINT	T-cell	CL_0000624	CD4+ T cell	naive	167	txrev	cc
+QTS000002	QTD000035	BLUEPRINT	T-cell	CL_0000624	CD4+ T cell	naive	167	leafcutter	cc
+QTS000003	QTD000036	Bossini-Castillo_2019	Treg_naive	CL_0002677	Treg memory	naive	119	ge	all
+QTS000003	QTD000037	Bossini-Castillo_2019	Treg_naive	CL_0002677	Treg memory	naive	119	exon	cc
+QTS000003	QTD000038	Bossini-Castillo_2019	Treg_naive	CL_0002677	Treg memory	naive	119	tx	cc
+QTS000003	QTD000039	Bossini-Castillo_2019	Treg_naive	CL_0002677	Treg memory	naive	119	txrev	cc
+QTS000003	QTD000040	Bossini-Castillo_2019	Treg_naive	CL_0002677	Treg memory	naive	119	leafcutter	cc
+QTS000004	QTD000041	Braineac2	putamen	UBERON_0001874	brain (putamen)	naive	102	ge	all
+QTS000004	QTD000042	Braineac2	putamen	UBERON_0001874	brain (putamen)	naive	102	exon	cc
+QTS000004	QTD000043	Braineac2	putamen	UBERON_0001874	brain (putamen)	naive	102	tx	cc
+QTS000004	QTD000044	Braineac2	putamen	UBERON_0001874	brain (putamen)	naive	102	txrev	cc
+QTS000004	QTD000045	Braineac2	putamen	UBERON_0001874	brain (putamen)	naive	102	leafcutter	cc
+QTS000004	QTD000046	Braineac2	substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	65	ge	all
+QTS000004	QTD000047	Braineac2	substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	65	exon	cc
+QTS000004	QTD000048	Braineac2	substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	65	tx	cc
+QTS000004	QTD000049	Braineac2	substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	65	txrev	cc
+QTS000004	QTD000050	Braineac2	substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	65	leafcutter	cc
+QTS000005	QTD000051	BrainSeq	brain	UBERON_0009834	brain (DLPFC)	naive	479	ge	all
+QTS000005	QTD000052	BrainSeq	brain	UBERON_0009834	brain (DLPFC)	naive	479	exon	cc
+QTS000005	QTD000053	BrainSeq	brain	UBERON_0009834	brain (DLPFC)	naive	479	tx	cc
+QTS000005	QTD000054	BrainSeq	brain	UBERON_0009834	brain (DLPFC)	naive	479	txrev	cc
+QTS000005	QTD000055	BrainSeq	brain	UBERON_0009834	brain (DLPFC)	naive	479	leafcutter	cc
+QTS000006	QTD000056	CAP	LCL_naive	EFO_0005292	LCL	naive	148	ge	all
+QTS000006	QTD000057	CAP	LCL_naive	EFO_0005292	LCL	naive	148	exon	cc
+QTS000006	QTD000058	CAP	LCL_naive	EFO_0005292	LCL	naive	148	tx	cc
+QTS000006	QTD000059	CAP	LCL_naive	EFO_0005292	LCL	naive	148	txrev	cc
+QTS000006	QTD000060	CAP	LCL_naive	EFO_0005292	LCL	naive	148	leafcutter	cc
+QTS000006	QTD000061	CAP	LCL_statin	EFO_0005292	LCL	statin	148	ge	all
+QTS000006	QTD000062	CAP	LCL_statin	EFO_0005292	LCL	statin	148	exon	cc
+QTS000006	QTD000063	CAP	LCL_statin	EFO_0005292	LCL	statin	148	tx	cc
+QTS000006	QTD000064	CAP	LCL_statin	EFO_0005292	LCL	statin	148	txrev	cc
+QTS000006	QTD000065	CAP	LCL_statin	EFO_0005292	LCL	statin	148	leafcutter	cc
+QTS000007	QTD000066	CEDAR	T-cell_CD8	CL_0000625	CD8+ T cell	naive	277	microarray	all
+QTS000007	QTD000067	CEDAR	T-cell_CD4	CL_0000624	CD4+ T cell	naive	290	microarray	all
+QTS000007	QTD000068	CEDAR	transverse_colon	UBERON_0001157	transverse colon	naive	286	microarray	all
+QTS000007	QTD000069	CEDAR	monocyte_CD14	CL_0002057	monocyte	naive	286	microarray	all
+QTS000007	QTD000070	CEDAR	neutrophil_CD15	CL_0000775	neutrophil	naive	280	microarray	all
+QTS000007	QTD000071	CEDAR	platelet	CL_0000233	platelet	naive	205	microarray	all
+QTS000007	QTD000072	CEDAR	rectum	UBERON_0001052	rectum	naive	271	microarray	all
+QTS000007	QTD000073	CEDAR	B-cell_CD19	CL_0000236	B cell	naive	262	microarray	all
+QTS000007	QTD000074	CEDAR	ileum	UBERON_0002116	ileum	naive	180	microarray	all
+QTS000008	QTD000075	CommonMind	DLPFC_naive	UBERON_0009834	brain (DLPFC)	naive	586	ge	all
+QTS000008	QTD000076	CommonMind	DLPFC_naive	UBERON_0009834	brain (DLPFC)	naive	586	exon	cc
+QTS000008	QTD000077	CommonMind	DLPFC_naive	UBERON_0009834	brain (DLPFC)	naive	586	tx	cc
+QTS000008	QTD000078	CommonMind	DLPFC_naive	UBERON_0009834	brain (DLPFC)	naive	586	txrev	cc
+QTS000008	QTD000079	CommonMind	DLPFC_naive	UBERON_0009834	brain (DLPFC)	naive	586	leafcutter	cc
+QTS000009	QTD000080	Fairfax_2012	B-cell_CD19	CL_0000236	B cell	naive	281	microarray	all
+QTS000010	QTD000081	Fairfax_2014	monocyte_naive	CL_0002057	monocyte	naive	420	microarray	all
+QTS000010	QTD000082	Fairfax_2014	monocyte_IFN24	CL_0002057	monocyte	IFNg_24h	370	microarray	all
+QTS000010	QTD000083	Fairfax_2014	monocyte_LPS2	CL_0002057	monocyte	LPS_2h	256	microarray	all
+QTS000010	QTD000084	Fairfax_2014	monocyte_LPS24	CL_0002057	monocyte	LPS_24h	325	microarray	all
+QTS000011	QTD000085	FUSION	muscle_naive	UBERON_0001134	muscle	naive	288	ge	all
+QTS000011	QTD000086	FUSION	muscle_naive	UBERON_0001134	muscle	naive	288	exon	cc
+QTS000011	QTD000087	FUSION	muscle_naive	UBERON_0001134	muscle	naive	288	tx	cc
+QTS000011	QTD000088	FUSION	muscle_naive	UBERON_0001134	muscle	naive	288	txrev	cc
+QTS000011	QTD000089	FUSION	muscle_naive	UBERON_0001134	muscle	naive	288	leafcutter	cc
+QTS000011	QTD000090	FUSION	adipose_naive	UBERON_0001013	adipose	naive	271	ge	all
+QTS000011	QTD000091	FUSION	adipose_naive	UBERON_0001013	adipose	naive	271	exon	cc
+QTS000011	QTD000092	FUSION	adipose_naive	UBERON_0001013	adipose	naive	271	tx	cc
+QTS000011	QTD000093	FUSION	adipose_naive	UBERON_0001013	adipose	naive	271	txrev	cc
+QTS000011	QTD000094	FUSION	adipose_naive	UBERON_0001013	adipose	naive	271	leafcutter	cc
+QTS000012	QTD000095	GENCORD	LCL	EFO_0005292	LCL	naive	190	ge	all
+QTS000012	QTD000096	GENCORD	LCL	EFO_0005292	LCL	naive	190	exon	cc
+QTS000012	QTD000097	GENCORD	LCL	EFO_0005292	LCL	naive	190	tx	cc
+QTS000012	QTD000098	GENCORD	LCL	EFO_0005292	LCL	naive	190	txrev	cc
+QTS000012	QTD000099	GENCORD	LCL	EFO_0005292	LCL	naive	190	leafcutter	cc
+QTS000012	QTD000100	GENCORD	fibroblast	CL_0000057	fibroblast	naive	186	ge	all
+QTS000012	QTD000101	GENCORD	fibroblast	CL_0000057	fibroblast	naive	186	exon	cc
+QTS000012	QTD000102	GENCORD	fibroblast	CL_0000057	fibroblast	naive	186	tx	cc
+QTS000012	QTD000103	GENCORD	fibroblast	CL_0000057	fibroblast	naive	186	txrev	cc
+QTS000012	QTD000104	GENCORD	fibroblast	CL_0000057	fibroblast	naive	186	leafcutter	cc
+QTS000012	QTD000105	GENCORD	T-cell	CL_0000084	T cell	naive	184	ge	all
+QTS000012	QTD000106	GENCORD	T-cell	CL_0000084	T cell	naive	184	exon	cc
+QTS000012	QTD000107	GENCORD	T-cell	CL_0000084	T cell	naive	184	tx	cc
+QTS000012	QTD000108	GENCORD	T-cell	CL_0000084	T cell	naive	184	txrev	cc
+QTS000012	QTD000109	GENCORD	T-cell	CL_0000084	T cell	naive	184	leafcutter	cc
+QTS000013	QTD000110	GEUVADIS	LCL	EFO_0005292	LCL	naive	445	ge	all
+QTS000013	QTD000111	GEUVADIS	LCL	EFO_0005292	LCL	naive	445	exon	cc
+QTS000013	QTD000112	GEUVADIS	LCL	EFO_0005292	LCL	naive	445	tx	cc
+QTS000013	QTD000113	GEUVADIS	LCL	EFO_0005292	LCL	naive	445	txrev	cc
+QTS000013	QTD000114	GEUVADIS	LCL	EFO_0005292	LCL	naive	445	leafcutter	cc
+QTS000014	QTD000115	Gilchrist_2021	NK-cell_naive	CL_0000623	NK cell	naive	247	microarray	all
+QTS000015	QTD000116	GTEx	adipose_subcutaneous	UBERON_0001013	adipose	naive	581	ge	all
+QTS000015	QTD000117	GTEx	adipose_subcutaneous	UBERON_0001013	adipose	naive	581	exon	cc
+QTS000015	QTD000118	GTEx	adipose_subcutaneous	UBERON_0001013	adipose	naive	581	tx	cc
+QTS000015	QTD000119	GTEx	adipose_subcutaneous	UBERON_0001013	adipose	naive	581	txrev	cc
+QTS000015	QTD000120	GTEx	adipose_subcutaneous	UBERON_0001013	adipose	naive	581	leafcutter	cc
+QTS000015	QTD000121	GTEx	adipose_visceral	UBERON_0010414	adipose (visceral)	naive	469	ge	all
+QTS000015	QTD000122	GTEx	adipose_visceral	UBERON_0010414	adipose (visceral)	naive	469	exon	cc
+QTS000015	QTD000123	GTEx	adipose_visceral	UBERON_0010414	adipose (visceral)	naive	469	tx	cc
+QTS000015	QTD000124	GTEx	adipose_visceral	UBERON_0010414	adipose (visceral)	naive	469	txrev	cc
+QTS000015	QTD000125	GTEx	adipose_visceral	UBERON_0010414	adipose (visceral)	naive	469	leafcutter	cc
+QTS000015	QTD000126	GTEx	adrenal_gland	UBERON_0002369	adrenal gland	naive	233	ge	all
+QTS000015	QTD000127	GTEx	adrenal_gland	UBERON_0002369	adrenal gland	naive	233	exon	cc
+QTS000015	QTD000128	GTEx	adrenal_gland	UBERON_0002369	adrenal gland	naive	233	tx	cc
+QTS000015	QTD000129	GTEx	adrenal_gland	UBERON_0002369	adrenal gland	naive	233	txrev	cc
+QTS000015	QTD000130	GTEx	adrenal_gland	UBERON_0002369	adrenal gland	naive	233	leafcutter	cc
+QTS000015	QTD000131	GTEx	artery_aorta	UBERON_0001496	artery (aorta)	naive	387	ge	all
+QTS000015	QTD000132	GTEx	artery_aorta	UBERON_0001496	artery (aorta)	naive	387	exon	cc
+QTS000015	QTD000133	GTEx	artery_aorta	UBERON_0001496	artery (aorta)	naive	387	tx	cc
+QTS000015	QTD000134	GTEx	artery_aorta	UBERON_0001496	artery (aorta)	naive	387	txrev	cc
+QTS000015	QTD000135	GTEx	artery_aorta	UBERON_0001496	artery (aorta)	naive	387	leafcutter	cc
+QTS000015	QTD000136	GTEx	artery_coronary	UBERON_0001621	artery (coronary)	naive	213	ge	all
+QTS000015	QTD000137	GTEx	artery_coronary	UBERON_0001621	artery (coronary)	naive	213	exon	cc
+QTS000015	QTD000138	GTEx	artery_coronary	UBERON_0001621	artery (coronary)	naive	213	tx	cc
+QTS000015	QTD000139	GTEx	artery_coronary	UBERON_0001621	artery (coronary)	naive	213	txrev	cc
+QTS000015	QTD000140	GTEx	artery_coronary	UBERON_0001621	artery (coronary)	naive	213	leafcutter	cc
+QTS000015	QTD000141	GTEx	artery_tibial	UBERON_0007610	artery (tibial)	naive	584	ge	all
+QTS000015	QTD000142	GTEx	artery_tibial	UBERON_0007610	artery (tibial)	naive	584	exon	cc
+QTS000015	QTD000143	GTEx	artery_tibial	UBERON_0007610	artery (tibial)	naive	584	tx	cc
+QTS000015	QTD000144	GTEx	artery_tibial	UBERON_0007610	artery (tibial)	naive	584	txrev	cc
+QTS000015	QTD000145	GTEx	artery_tibial	UBERON_0007610	artery (tibial)	naive	584	leafcutter	cc
+QTS000015	QTD000146	GTEx	brain_amygdala	UBERON_0001876	brain (amygdala)	naive	129	ge	all
+QTS000015	QTD000147	GTEx	brain_amygdala	UBERON_0001876	brain (amygdala)	naive	129	exon	cc
+QTS000015	QTD000148	GTEx	brain_amygdala	UBERON_0001876	brain (amygdala)	naive	129	tx	cc
+QTS000015	QTD000149	GTEx	brain_amygdala	UBERON_0001876	brain (amygdala)	naive	129	txrev	cc
+QTS000015	QTD000150	GTEx	brain_amygdala	UBERON_0001876	brain (amygdala)	naive	129	leafcutter	cc
+QTS000015	QTD000151	GTEx	brain_anterior_cingulate_cortex	UBERON_0009835	brain (anterior cingulate cortex)	naive	147	ge	all
+QTS000015	QTD000152	GTEx	brain_anterior_cingulate_cortex	UBERON_0009835	brain (anterior cingulate cortex)	naive	147	exon	cc
+QTS000015	QTD000153	GTEx	brain_anterior_cingulate_cortex	UBERON_0009835	brain (anterior cingulate cortex)	naive	147	tx	cc
+QTS000015	QTD000154	GTEx	brain_anterior_cingulate_cortex	UBERON_0009835	brain (anterior cingulate cortex)	naive	147	txrev	cc
+QTS000015	QTD000155	GTEx	brain_anterior_cingulate_cortex	UBERON_0009835	brain (anterior cingulate cortex)	naive	147	leafcutter	cc
+QTS000015	QTD000156	GTEx	brain_caudate	UBERON_0001873	brain (caudate)	naive	194	ge	all
+QTS000015	QTD000157	GTEx	brain_caudate	UBERON_0001873	brain (caudate)	naive	194	exon	cc
+QTS000015	QTD000158	GTEx	brain_caudate	UBERON_0001873	brain (caudate)	naive	194	tx	cc
+QTS000015	QTD000159	GTEx	brain_caudate	UBERON_0001873	brain (caudate)	naive	194	txrev	cc
+QTS000015	QTD000160	GTEx	brain_caudate	UBERON_0001873	brain (caudate)	naive	194	leafcutter	cc
+QTS000015	QTD000161	GTEx	brain_cerebellar_hemisphere	UBERON_0002037	brain (cerebellum)	naive	175	ge	all
+QTS000015	QTD000162	GTEx	brain_cerebellar_hemisphere	UBERON_0002037	brain (cerebellum)	naive	175	exon	cc
+QTS000015	QTD000163	GTEx	brain_cerebellar_hemisphere	UBERON_0002037	brain (cerebellum)	naive	175	tx	cc
+QTS000015	QTD000164	GTEx	brain_cerebellar_hemisphere	UBERON_0002037	brain (cerebellum)	naive	175	txrev	cc
+QTS000015	QTD000165	GTEx	brain_cerebellar_hemisphere	UBERON_0002037	brain (cerebellum)	naive	175	leafcutter	cc
+QTS000015	QTD000166	GTEx	brain_cerebellum	UBERON_0002037	brain (cerebellum)	naive	209	ge	all
+QTS000015	QTD000167	GTEx	brain_cerebellum	UBERON_0002037	brain (cerebellum)	naive	209	exon	cc
+QTS000015	QTD000168	GTEx	brain_cerebellum	UBERON_0002037	brain (cerebellum)	naive	209	tx	cc
+QTS000015	QTD000169	GTEx	brain_cerebellum	UBERON_0002037	brain (cerebellum)	naive	209	txrev	cc
+QTS000015	QTD000170	GTEx	brain_cerebellum	UBERON_0002037	brain (cerebellum)	naive	209	leafcutter	cc
+QTS000015	QTD000171	GTEx	brain_cortex	UBERON_0001870	brain (cortex)	naive	205	ge	all
+QTS000015	QTD000172	GTEx	brain_cortex	UBERON_0001870	brain (cortex)	naive	205	exon	cc
+QTS000015	QTD000173	GTEx	brain_cortex	UBERON_0001870	brain (cortex)	naive	205	tx	cc
+QTS000015	QTD000174	GTEx	brain_cortex	UBERON_0001870	brain (cortex)	naive	205	txrev	cc
+QTS000015	QTD000175	GTEx	brain_cortex	UBERON_0001870	brain (cortex)	naive	205	leafcutter	cc
+QTS000015	QTD000176	GTEx	brain_frontal_cortex	UBERON_0009834	brain (DLPFC)	naive	175	ge	all
+QTS000015	QTD000177	GTEx	brain_frontal_cortex	UBERON_0009834	brain (DLPFC)	naive	175	exon	cc
+QTS000015	QTD000178	GTEx	brain_frontal_cortex	UBERON_0009834	brain (DLPFC)	naive	175	tx	cc
+QTS000015	QTD000179	GTEx	brain_frontal_cortex	UBERON_0009834	brain (DLPFC)	naive	175	txrev	cc
+QTS000015	QTD000180	GTEx	brain_frontal_cortex	UBERON_0009834	brain (DLPFC)	naive	175	leafcutter	cc
+QTS000015	QTD000181	GTEx	brain_hippocampus	UBERON_0001954	brain (hippocampus)	naive	165	ge	all
+QTS000015	QTD000182	GTEx	brain_hippocampus	UBERON_0001954	brain (hippocampus)	naive	165	exon	cc
+QTS000015	QTD000183	GTEx	brain_hippocampus	UBERON_0001954	brain (hippocampus)	naive	165	tx	cc
+QTS000015	QTD000184	GTEx	brain_hippocampus	UBERON_0001954	brain (hippocampus)	naive	165	txrev	cc
+QTS000015	QTD000185	GTEx	brain_hippocampus	UBERON_0001954	brain (hippocampus)	naive	165	leafcutter	cc
+QTS000015	QTD000186	GTEx	brain_hypothalamus	UBERON_0001898	brain (hypothalamus)	naive	170	ge	all
+QTS000015	QTD000187	GTEx	brain_hypothalamus	UBERON_0001898	brain (hypothalamus)	naive	170	exon	cc
+QTS000015	QTD000188	GTEx	brain_hypothalamus	UBERON_0001898	brain (hypothalamus)	naive	170	tx	cc
+QTS000015	QTD000189	GTEx	brain_hypothalamus	UBERON_0001898	brain (hypothalamus)	naive	170	txrev	cc
+QTS000015	QTD000190	GTEx	brain_hypothalamus	UBERON_0001898	brain (hypothalamus)	naive	170	leafcutter	cc
+QTS000015	QTD000191	GTEx	brain_nucleus_accumbens	UBERON_0001882	brain (nucleus accumbens)	naive	202	ge	all
+QTS000015	QTD000192	GTEx	brain_nucleus_accumbens	UBERON_0001882	brain (nucleus accumbens)	naive	202	exon	cc
+QTS000015	QTD000193	GTEx	brain_nucleus_accumbens	UBERON_0001882	brain (nucleus accumbens)	naive	202	tx	cc
+QTS000015	QTD000194	GTEx	brain_nucleus_accumbens	UBERON_0001882	brain (nucleus accumbens)	naive	202	txrev	cc
+QTS000015	QTD000195	GTEx	brain_nucleus_accumbens	UBERON_0001882	brain (nucleus accumbens)	naive	202	leafcutter	cc
+QTS000015	QTD000196	GTEx	brain_putamen	UBERON_0001874	brain (putamen)	naive	170	ge	all
+QTS000015	QTD000197	GTEx	brain_putamen	UBERON_0001874	brain (putamen)	naive	170	exon	cc
+QTS000015	QTD000198	GTEx	brain_putamen	UBERON_0001874	brain (putamen)	naive	170	tx	cc
+QTS000015	QTD000199	GTEx	brain_putamen	UBERON_0001874	brain (putamen)	naive	170	txrev	cc
+QTS000015	QTD000200	GTEx	brain_putamen	UBERON_0001874	brain (putamen)	naive	170	leafcutter	cc
+QTS000015	QTD000201	GTEx	brain_spinal_cord	UBERON_0006469	brain (spinal cord)	naive	126	ge	all
+QTS000015	QTD000202	GTEx	brain_spinal_cord	UBERON_0006469	brain (spinal cord)	naive	126	exon	cc
+QTS000015	QTD000203	GTEx	brain_spinal_cord	UBERON_0006469	brain (spinal cord)	naive	126	tx	cc
+QTS000015	QTD000204	GTEx	brain_spinal_cord	UBERON_0006469	brain (spinal cord)	naive	126	txrev	cc
+QTS000015	QTD000205	GTEx	brain_spinal_cord	UBERON_0006469	brain (spinal cord)	naive	126	leafcutter	cc
+QTS000015	QTD000206	GTEx	brain_substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	114	ge	all
+QTS000015	QTD000207	GTEx	brain_substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	114	exon	cc
+QTS000015	QTD000208	GTEx	brain_substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	114	tx	cc
+QTS000015	QTD000209	GTEx	brain_substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	114	txrev	cc
+QTS000015	QTD000210	GTEx	brain_substantia_nigra	UBERON_0002038	brain (substantia nigra)	naive	114	leafcutter	cc
+QTS000015	QTD000211	GTEx	breast	UBERON_0008367	breast	naive	394	ge	all
+QTS000015	QTD000212	GTEx	breast	UBERON_0008367	breast	naive	394	exon	cc
+QTS000015	QTD000213	GTEx	breast	UBERON_0008367	breast	naive	394	tx	cc
+QTS000015	QTD000214	GTEx	breast	UBERON_0008367	breast	naive	394	txrev	cc
+QTS000015	QTD000215	GTEx	breast	UBERON_0008367	breast	naive	394	leafcutter	cc
+QTS000015	QTD000216	GTEx	fibroblast	CL_0000057	fibroblast	naive	483	ge	all
+QTS000015	QTD000217	GTEx	fibroblast	CL_0000057	fibroblast	naive	483	exon	cc
+QTS000015	QTD000218	GTEx	fibroblast	CL_0000057	fibroblast	naive	483	tx	cc
+QTS000015	QTD000219	GTEx	fibroblast	CL_0000057	fibroblast	naive	483	txrev	cc
+QTS000015	QTD000220	GTEx	fibroblast	CL_0000057	fibroblast	naive	483	leafcutter	cc
+QTS000015	QTD000221	GTEx	LCL	EFO_0005292	LCL	naive	147	ge	all
+QTS000015	QTD000222	GTEx	LCL	EFO_0005292	LCL	naive	147	exon	cc
+QTS000015	QTD000223	GTEx	LCL	EFO_0005292	LCL	naive	147	tx	cc
+QTS000015	QTD000224	GTEx	LCL	EFO_0005292	LCL	naive	147	txrev	cc
+QTS000015	QTD000225	GTEx	LCL	EFO_0005292	LCL	naive	147	leafcutter	cc
+QTS000015	QTD000226	GTEx	colon_sigmoid	UBERON_0001159	sigmoid colon	naive	318	ge	all
+QTS000015	QTD000227	GTEx	colon_sigmoid	UBERON_0001159	sigmoid colon	naive	318	exon	cc
+QTS000015	QTD000228	GTEx	colon_sigmoid	UBERON_0001159	sigmoid colon	naive	318	tx	cc
+QTS000015	QTD000229	GTEx	colon_sigmoid	UBERON_0001159	sigmoid colon	naive	318	txrev	cc
+QTS000015	QTD000230	GTEx	colon_sigmoid	UBERON_0001159	sigmoid colon	naive	318	leafcutter	cc
+QTS000015	QTD000231	GTEx	colon_transverse	UBERON_0001157	transverse colon	naive	368	ge	all
+QTS000015	QTD000232	GTEx	colon_transverse	UBERON_0001157	transverse colon	naive	368	exon	cc
+QTS000015	QTD000233	GTEx	colon_transverse	UBERON_0001157	transverse colon	naive	368	tx	cc
+QTS000015	QTD000234	GTEx	colon_transverse	UBERON_0001157	transverse colon	naive	368	txrev	cc
+QTS000015	QTD000235	GTEx	colon_transverse	UBERON_0001157	transverse colon	naive	368	leafcutter	cc
+QTS000015	QTD000236	GTEx	esophagus_gej	UBERON_0004550	esophagus (gej)	naive	330	ge	all
+QTS000015	QTD000237	GTEx	esophagus_gej	UBERON_0004550	esophagus (gej)	naive	330	exon	cc
+QTS000015	QTD000238	GTEx	esophagus_gej	UBERON_0004550	esophagus (gej)	naive	330	tx	cc
+QTS000015	QTD000239	GTEx	esophagus_gej	UBERON_0004550	esophagus (gej)	naive	330	txrev	cc
+QTS000015	QTD000240	GTEx	esophagus_gej	UBERON_0004550	esophagus (gej)	naive	330	leafcutter	cc
+QTS000015	QTD000241	GTEx	esophagus_mucosa	UBERON_0006920	esophagus (mucosa)	naive	493	ge	all
+QTS000015	QTD000242	GTEx	esophagus_mucosa	UBERON_0006920	esophagus (mucosa)	naive	493	exon	cc
+QTS000015	QTD000243	GTEx	esophagus_mucosa	UBERON_0006920	esophagus (mucosa)	naive	493	tx	cc
+QTS000015	QTD000244	GTEx	esophagus_mucosa	UBERON_0006920	esophagus (mucosa)	naive	493	txrev	cc
+QTS000015	QTD000245	GTEx	esophagus_mucosa	UBERON_0006920	esophagus (mucosa)	naive	493	leafcutter	cc
+QTS000015	QTD000246	GTEx	esophagus_muscularis	UBERON_0004648	esophagus (muscularis)	naive	461	ge	all
+QTS000015	QTD000247	GTEx	esophagus_muscularis	UBERON_0004648	esophagus (muscularis)	naive	461	exon	cc
+QTS000015	QTD000248	GTEx	esophagus_muscularis	UBERON_0004648	esophagus (muscularis)	naive	461	tx	cc
+QTS000015	QTD000249	GTEx	esophagus_muscularis	UBERON_0004648	esophagus (muscularis)	naive	461	txrev	cc
+QTS000015	QTD000250	GTEx	esophagus_muscularis	UBERON_0004648	esophagus (muscularis)	naive	461	leafcutter	cc
+QTS000015	QTD000251	GTEx	heart_atrial_appendage	UBERON_0006631	heart (atrial appendage)	naive	372	ge	all
+QTS000015	QTD000252	GTEx	heart_atrial_appendage	UBERON_0006631	heart (atrial appendage)	naive	372	exon	cc
+QTS000015	QTD000253	GTEx	heart_atrial_appendage	UBERON_0006631	heart (atrial appendage)	naive	372	tx	cc
+QTS000015	QTD000254	GTEx	heart_atrial_appendage	UBERON_0006631	heart (atrial appendage)	naive	372	txrev	cc
+QTS000015	QTD000255	GTEx	heart_atrial_appendage	UBERON_0006631	heart (atrial appendage)	naive	372	leafcutter	cc
+QTS000015	QTD000256	GTEx	heart_left_ventricle	UBERON_0006566	heart (left ventricle)	naive	382	ge	all
+QTS000015	QTD000257	GTEx	heart_left_ventricle	UBERON_0006566	heart (left ventricle)	naive	382	exon	cc
+QTS000015	QTD000258	GTEx	heart_left_ventricle	UBERON_0006566	heart (left ventricle)	naive	382	tx	cc
+QTS000015	QTD000259	GTEx	heart_left_ventricle	UBERON_0006566	heart (left ventricle)	naive	382	txrev	cc
+QTS000015	QTD000260	GTEx	heart_left_ventricle	UBERON_0006566	heart (left ventricle)	naive	382	leafcutter	cc
+QTS000015	QTD000261	GTEx	kidney_cortex	UBERON_0001225	kidney (cortex)	naive	73	ge	all
+QTS000015	QTD000262	GTEx	kidney_cortex	UBERON_0001225	kidney (cortex)	naive	73	exon	cc
+QTS000015	QTD000263	GTEx	kidney_cortex	UBERON_0001225	kidney (cortex)	naive	73	tx	cc
+QTS000015	QTD000264	GTEx	kidney_cortex	UBERON_0001225	kidney (cortex)	naive	73	txrev	cc
+QTS000015	QTD000265	GTEx	kidney_cortex	UBERON_0001225	kidney (cortex)	naive	73	leafcutter	cc
+QTS000015	QTD000266	GTEx	liver	UBERON_0001114	liver	naive	208	ge	all
+QTS000015	QTD000267	GTEx	liver	UBERON_0001114	liver	naive	208	exon	cc
+QTS000015	QTD000268	GTEx	liver	UBERON_0001114	liver	naive	208	tx	cc
+QTS000015	QTD000269	GTEx	liver	UBERON_0001114	liver	naive	208	txrev	cc
+QTS000015	QTD000270	GTEx	liver	UBERON_0001114	liver	naive	208	leafcutter	cc
+QTS000015	QTD000271	GTEx	lung	UBERON_0008952	lung	naive	510	ge	all
+QTS000015	QTD000272	GTEx	lung	UBERON_0008952	lung	naive	510	exon	cc
+QTS000015	QTD000273	GTEx	lung	UBERON_0008952	lung	naive	510	tx	cc
+QTS000015	QTD000274	GTEx	lung	UBERON_0008952	lung	naive	510	txrev	cc
+QTS000015	QTD000275	GTEx	lung	UBERON_0008952	lung	naive	510	leafcutter	cc
+QTS000015	QTD000276	GTEx	minor_salivary_gland	UBERON_0006330	minor salivary gland	naive	144	ge	all
+QTS000015	QTD000277	GTEx	minor_salivary_gland	UBERON_0006330	minor salivary gland	naive	144	exon	cc
+QTS000015	QTD000278	GTEx	minor_salivary_gland	UBERON_0006330	minor salivary gland	naive	144	tx	cc
+QTS000015	QTD000279	GTEx	minor_salivary_gland	UBERON_0006330	minor salivary gland	naive	144	txrev	cc
+QTS000015	QTD000280	GTEx	minor_salivary_gland	UBERON_0006330	minor salivary gland	naive	144	leafcutter	cc
+QTS000015	QTD000281	GTEx	muscle	UBERON_0001134	muscle	naive	702	ge	all
+QTS000015	QTD000282	GTEx	muscle	UBERON_0001134	muscle	naive	702	exon	cc
+QTS000015	QTD000283	GTEx	muscle	UBERON_0001134	muscle	naive	702	tx	cc
+QTS000015	QTD000284	GTEx	muscle	UBERON_0001134	muscle	naive	702	txrev	cc
+QTS000015	QTD000285	GTEx	muscle	UBERON_0001134	muscle	naive	702	leafcutter	cc
+QTS000015	QTD000286	GTEx	nerve_tibial	UBERON_0001323	tibial nerve	naive	532	ge	all
+QTS000015	QTD000287	GTEx	nerve_tibial	UBERON_0001323	tibial nerve	naive	532	exon	cc
+QTS000015	QTD000288	GTEx	nerve_tibial	UBERON_0001323	tibial nerve	naive	532	tx	cc
+QTS000015	QTD000289	GTEx	nerve_tibial	UBERON_0001323	tibial nerve	naive	532	txrev	cc
+QTS000015	QTD000290	GTEx	nerve_tibial	UBERON_0001323	tibial nerve	naive	532	leafcutter	cc
+QTS000015	QTD000291	GTEx	ovary	UBERON_0000992	ovary	naive	167	ge	all
+QTS000015	QTD000292	GTEx	ovary	UBERON_0000992	ovary	naive	167	exon	cc
+QTS000015	QTD000293	GTEx	ovary	UBERON_0000992	ovary	naive	167	tx	cc
+QTS000015	QTD000294	GTEx	ovary	UBERON_0000992	ovary	naive	167	txrev	cc
+QTS000015	QTD000295	GTEx	ovary	UBERON_0000992	ovary	naive	167	leafcutter	cc
+QTS000015	QTD000296	GTEx	pancreas	UBERON_0001150	pancreas	naive	305	ge	all
+QTS000015	QTD000297	GTEx	pancreas	UBERON_0001150	pancreas	naive	305	exon	cc
+QTS000015	QTD000298	GTEx	pancreas	UBERON_0001150	pancreas	naive	305	tx	cc
+QTS000015	QTD000299	GTEx	pancreas	UBERON_0001150	pancreas	naive	305	txrev	cc
+QTS000015	QTD000300	GTEx	pancreas	UBERON_0001150	pancreas	naive	305	leafcutter	cc
+QTS000015	QTD000301	GTEx	pituitary	UBERON_0000007	pituitary	naive	237	ge	all
+QTS000015	QTD000302	GTEx	pituitary	UBERON_0000007	pituitary	naive	237	exon	cc
+QTS000015	QTD000303	GTEx	pituitary	UBERON_0000007	pituitary	naive	237	tx	cc
+QTS000015	QTD000304	GTEx	pituitary	UBERON_0000007	pituitary	naive	237	txrev	cc
+QTS000015	QTD000305	GTEx	pituitary	UBERON_0000007	pituitary	naive	237	leafcutter	cc
+QTS000015	QTD000306	GTEx	prostate	UBERON_0002367	prostate	naive	218	ge	all
+QTS000015	QTD000307	GTEx	prostate	UBERON_0002367	prostate	naive	218	exon	cc
+QTS000015	QTD000308	GTEx	prostate	UBERON_0002367	prostate	naive	218	tx	cc
+QTS000015	QTD000309	GTEx	prostate	UBERON_0002367	prostate	naive	218	txrev	cc
+QTS000015	QTD000310	GTEx	prostate	UBERON_0002367	prostate	naive	218	leafcutter	cc
+QTS000015	QTD000311	GTEx	skin_not_sun_exposed	UBERON_0036149	skin (suprapubic)	naive	517	ge	all
+QTS000015	QTD000312	GTEx	skin_not_sun_exposed	UBERON_0036149	skin (suprapubic)	naive	517	exon	cc
+QTS000015	QTD000313	GTEx	skin_not_sun_exposed	UBERON_0036149	skin (suprapubic)	naive	517	tx	cc
+QTS000015	QTD000314	GTEx	skin_not_sun_exposed	UBERON_0036149	skin (suprapubic)	naive	517	txrev	cc
+QTS000015	QTD000315	GTEx	skin_not_sun_exposed	UBERON_0036149	skin (suprapubic)	naive	517	leafcutter	cc
+QTS000015	QTD000316	GTEx	skin_sun_exposed	UBERON_0002097	skin	naive	602	ge	all
+QTS000015	QTD000317	GTEx	skin_sun_exposed	UBERON_0002097	skin	naive	602	exon	cc
+QTS000015	QTD000318	GTEx	skin_sun_exposed	UBERON_0002097	skin	naive	602	tx	cc
+QTS000015	QTD000319	GTEx	skin_sun_exposed	UBERON_0002097	skin	naive	602	txrev	cc
+QTS000015	QTD000320	GTEx	skin_sun_exposed	UBERON_0002097	skin	naive	602	leafcutter	cc
+QTS000015	QTD000321	GTEx	small_intestine	UBERON_0001211	small intestine	naive	174	ge	all
+QTS000015	QTD000322	GTEx	small_intestine	UBERON_0001211	small intestine	naive	174	exon	cc
+QTS000015	QTD000323	GTEx	small_intestine	UBERON_0001211	small intestine	naive	174	tx	cc
+QTS000015	QTD000324	GTEx	small_intestine	UBERON_0001211	small intestine	naive	174	txrev	cc
+QTS000015	QTD000325	GTEx	small_intestine	UBERON_0001211	small intestine	naive	174	leafcutter	cc
+QTS000015	QTD000326	GTEx	spleen	UBERON_0002106	spleen	naive	227	ge	all
+QTS000015	QTD000327	GTEx	spleen	UBERON_0002106	spleen	naive	227	exon	cc
+QTS000015	QTD000328	GTEx	spleen	UBERON_0002106	spleen	naive	227	tx	cc
+QTS000015	QTD000329	GTEx	spleen	UBERON_0002106	spleen	naive	227	txrev	cc
+QTS000015	QTD000330	GTEx	spleen	UBERON_0002106	spleen	naive	227	leafcutter	cc
+QTS000015	QTD000331	GTEx	stomach	UBERON_0000945	stomach	naive	324	ge	all
+QTS000015	QTD000332	GTEx	stomach	UBERON_0000945	stomach	naive	324	exon	cc
+QTS000015	QTD000333	GTEx	stomach	UBERON_0000945	stomach	naive	324	tx	cc
+QTS000015	QTD000334	GTEx	stomach	UBERON_0000945	stomach	naive	324	txrev	cc
+QTS000015	QTD000335	GTEx	stomach	UBERON_0000945	stomach	naive	324	leafcutter	cc
+QTS000015	QTD000336	GTEx	testis	UBERON_0000473	testis	naive	322	ge	all
+QTS000015	QTD000337	GTEx	testis	UBERON_0000473	testis	naive	322	exon	cc
+QTS000015	QTD000338	GTEx	testis	UBERON_0000473	testis	naive	322	tx	cc
+QTS000015	QTD000339	GTEx	testis	UBERON_0000473	testis	naive	322	txrev	cc
+QTS000015	QTD000340	GTEx	testis	UBERON_0000473	testis	naive	322	leafcutter	cc
+QTS000015	QTD000341	GTEx	thyroid	UBERON_0002046	thyroid	naive	574	ge	all
+QTS000015	QTD000342	GTEx	thyroid	UBERON_0002046	thyroid	naive	574	exon	cc
+QTS000015	QTD000343	GTEx	thyroid	UBERON_0002046	thyroid	naive	574	tx	cc
+QTS000015	QTD000344	GTEx	thyroid	UBERON_0002046	thyroid	naive	574	txrev	cc
+QTS000015	QTD000345	GTEx	thyroid	UBERON_0002046	thyroid	naive	574	leafcutter	cc
+QTS000015	QTD000346	GTEx	uterus	UBERON_0000995	uterus	naive	129	ge	all
+QTS000015	QTD000347	GTEx	uterus	UBERON_0000995	uterus	naive	129	exon	cc
+QTS000015	QTD000348	GTEx	uterus	UBERON_0000995	uterus	naive	129	tx	cc
+QTS000015	QTD000349	GTEx	uterus	UBERON_0000995	uterus	naive	129	txrev	cc
+QTS000015	QTD000350	GTEx	uterus	UBERON_0000995	uterus	naive	129	leafcutter	cc
+QTS000015	QTD000351	GTEx	vagina	UBERON_0000996	vagina	naive	141	ge	all
+QTS000015	QTD000352	GTEx	vagina	UBERON_0000996	vagina	naive	141	exon	cc
+QTS000015	QTD000353	GTEx	vagina	UBERON_0000996	vagina	naive	141	tx	cc
+QTS000015	QTD000354	GTEx	vagina	UBERON_0000996	vagina	naive	141	txrev	cc
+QTS000015	QTD000355	GTEx	vagina	UBERON_0000996	vagina	naive	141	leafcutter	cc
+QTS000015	QTD000356	GTEx	blood	UBERON_0000178	blood	naive	670	ge	all
+QTS000015	QTD000357	GTEx	blood	UBERON_0000178	blood	naive	670	exon	cc
+QTS000015	QTD000358	GTEx	blood	UBERON_0000178	blood	naive	670	tx	cc
+QTS000015	QTD000359	GTEx	blood	UBERON_0000178	blood	naive	670	txrev	cc
+QTS000015	QTD000360	GTEx	blood	UBERON_0000178	blood	naive	670	leafcutter	cc
+QTS000016	QTD000361	HipSci	iPSC	EFO_0004905	iPSC	naive	322	ge	all
+QTS000016	QTD000362	HipSci	iPSC	EFO_0004905	iPSC	naive	322	exon	cc
+QTS000016	QTD000363	HipSci	iPSC	EFO_0004905	iPSC	naive	322	tx	cc
+QTS000016	QTD000364	HipSci	iPSC	EFO_0004905	iPSC	naive	322	txrev	cc
+QTS000016	QTD000365	HipSci	iPSC	EFO_0004905	iPSC	naive	322	leafcutter	cc
+QTS000017	QTD000366	iPSCORE	iPSC	EFO_0004905	iPSC	naive	101	ge	all
+QTS000017	QTD000367	iPSCORE	iPSC	EFO_0004905	iPSC	naive	101	exon	cc
+QTS000017	QTD000368	iPSCORE	iPSC	EFO_0004905	iPSC	naive	101	tx	cc
+QTS000017	QTD000369	iPSCORE	iPSC	EFO_0004905	iPSC	naive	101	txrev	cc
+QTS000017	QTD000370	iPSCORE	iPSC	EFO_0004905	iPSC	naive	101	leafcutter	cc
+QTS000018	QTD000371	Kasela_2017	T-cell_CD4	CL_0000624	CD4+ T cell	naive	280	microarray	all
+QTS000018	QTD000372	Kasela_2017	T-cell_CD8	CL_0000625	CD8+ T cell	naive	269	microarray	all
+QTS000019	QTD000373	Lepik_2017	blood	UBERON_0000178	blood	naive	471	ge	all
+QTS000019	QTD000374	Lepik_2017	blood	UBERON_0000178	blood	naive	471	exon	cc
+QTS000019	QTD000375	Lepik_2017	blood	UBERON_0000178	blood	naive	471	tx	cc
+QTS000019	QTD000376	Lepik_2017	blood	UBERON_0000178	blood	naive	471	txrev	cc
+QTS000019	QTD000377	Lepik_2017	blood	UBERON_0000178	blood	naive	471	leafcutter	cc
+QTS000020	QTD000378	Naranbhai_2015	neutrophil_CD16	CL_0000775	neutrophil	naive	93	microarray	all
+QTS000021	QTD000379	Nedelec_2016	macrophage_Listeria	CL_0000235	macrophage	Listeria_5h	163	ge	all
+QTS000021	QTD000380	Nedelec_2016	macrophage_Listeria	CL_0000235	macrophage	Listeria_5h	163	exon	cc
+QTS000021	QTD000381	Nedelec_2016	macrophage_Listeria	CL_0000235	macrophage	Listeria_5h	163	tx	cc
+QTS000021	QTD000382	Nedelec_2016	macrophage_Listeria	CL_0000235	macrophage	Listeria_5h	163	txrev	cc
+QTS000021	QTD000383	Nedelec_2016	macrophage_Listeria	CL_0000235	macrophage	Listeria_5h	163	leafcutter	cc
+QTS000021	QTD000384	Nedelec_2016	macrophage_naive	CL_0000235	macrophage	naive	163	ge	all
+QTS000021	QTD000385	Nedelec_2016	macrophage_naive	CL_0000235	macrophage	naive	163	exon	cc
+QTS000021	QTD000386	Nedelec_2016	macrophage_naive	CL_0000235	macrophage	naive	163	tx	cc
+QTS000021	QTD000387	Nedelec_2016	macrophage_naive	CL_0000235	macrophage	naive	163	txrev	cc
+QTS000021	QTD000388	Nedelec_2016	macrophage_naive	CL_0000235	macrophage	naive	163	leafcutter	cc
+QTS000021	QTD000389	Nedelec_2016	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	167	ge	all
+QTS000021	QTD000390	Nedelec_2016	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	167	exon	cc
+QTS000021	QTD000391	Nedelec_2016	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	167	tx	cc
+QTS000021	QTD000392	Nedelec_2016	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	167	txrev	cc
+QTS000021	QTD000393	Nedelec_2016	macrophage_Salmonella	CL_0000235	macrophage	Salmonella_5h	167	leafcutter	cc
+QTS000022	QTD000394	Peng_2018	placenta_naive	UBERON_0001987	placenta	naive	149	ge	all
+QTS000022	QTD000395	Peng_2018	placenta_naive	UBERON_0001987	placenta	naive	149	exon	cc
+QTS000022	QTD000396	Peng_2018	placenta_naive	UBERON_0001987	placenta	naive	149	tx	cc
+QTS000022	QTD000397	Peng_2018	placenta_naive	UBERON_0001987	placenta	naive	149	txrev	cc
+QTS000022	QTD000398	Peng_2018	placenta_naive	UBERON_0001987	placenta	naive	149	leafcutter	cc
+QTS000023	QTD000399	PhLiPS	iPSC	EFO_0004905	iPSC	naive	83	ge	all
+QTS000023	QTD000400	PhLiPS	iPSC	EFO_0004905	iPSC	naive	83	exon	cc
+QTS000023	QTD000401	PhLiPS	iPSC	EFO_0004905	iPSC	naive	83	tx	cc
+QTS000023	QTD000402	PhLiPS	iPSC	EFO_0004905	iPSC	naive	83	txrev	cc
+QTS000023	QTD000403	PhLiPS	iPSC	EFO_0004905	iPSC	naive	83	leafcutter	cc
+QTS000023	QTD000404	PhLiPS	HLC	CL_0000182	hepatocyte	naive	79	ge	all
+QTS000023	QTD000405	PhLiPS	HLC	CL_0000182	hepatocyte	naive	79	exon	cc
+QTS000023	QTD000406	PhLiPS	HLC	CL_0000182	hepatocyte	naive	79	tx	cc
+QTS000023	QTD000407	PhLiPS	HLC	CL_0000182	hepatocyte	naive	79	txrev	cc
+QTS000023	QTD000408	PhLiPS	HLC	CL_0000182	hepatocyte	naive	79	leafcutter	cc
+QTS000024	QTD000409	Quach_2016	monocyte_naive	CL_0002057	monocyte	naive	200	ge	all
+QTS000024	QTD000410	Quach_2016	monocyte_naive	CL_0002057	monocyte	naive	200	exon	cc
+QTS000024	QTD000411	Quach_2016	monocyte_naive	CL_0002057	monocyte	naive	200	tx	cc
+QTS000024	QTD000412	Quach_2016	monocyte_naive	CL_0002057	monocyte	naive	200	txrev	cc
+QTS000024	QTD000413	Quach_2016	monocyte_naive	CL_0002057	monocyte	naive	200	leafcutter	cc
+QTS000024	QTD000414	Quach_2016	monocyte_LPS	CL_0002057	monocyte	LPS_6h	184	ge	all
+QTS000024	QTD000415	Quach_2016	monocyte_LPS	CL_0002057	monocyte	LPS_6h	184	exon	cc
+QTS000024	QTD000416	Quach_2016	monocyte_LPS	CL_0002057	monocyte	LPS_6h	184	tx	cc
+QTS000024	QTD000417	Quach_2016	monocyte_LPS	CL_0002057	monocyte	LPS_6h	184	txrev	cc
+QTS000024	QTD000418	Quach_2016	monocyte_LPS	CL_0002057	monocyte	LPS_6h	184	leafcutter	cc
+QTS000024	QTD000419	Quach_2016	monocyte_Pam3CSK4	CL_0002057	monocyte	Pam3CSK4_6h	196	ge	all
+QTS000024	QTD000420	Quach_2016	monocyte_Pam3CSK4	CL_0002057	monocyte	Pam3CSK4_6h	196	exon	cc
+QTS000024	QTD000421	Quach_2016	monocyte_Pam3CSK4	CL_0002057	monocyte	Pam3CSK4_6h	196	tx	cc
+QTS000024	QTD000422	Quach_2016	monocyte_Pam3CSK4	CL_0002057	monocyte	Pam3CSK4_6h	196	txrev	cc
+QTS000024	QTD000423	Quach_2016	monocyte_Pam3CSK4	CL_0002057	monocyte	Pam3CSK4_6h	196	leafcutter	cc
+QTS000024	QTD000424	Quach_2016	monocyte_R848	CL_0002057	monocyte	R848_6h	191	ge	all
+QTS000024	QTD000425	Quach_2016	monocyte_R848	CL_0002057	monocyte	R848_6h	191	exon	cc
+QTS000024	QTD000426	Quach_2016	monocyte_R848	CL_0002057	monocyte	R848_6h	191	tx	cc
+QTS000024	QTD000427	Quach_2016	monocyte_R848	CL_0002057	monocyte	R848_6h	191	txrev	cc
+QTS000024	QTD000428	Quach_2016	monocyte_R848	CL_0002057	monocyte	R848_6h	191	leafcutter	cc
+QTS000024	QTD000429	Quach_2016	monocyte_IAV	CL_0002057	monocyte	Influenza_6h	198	ge	all
+QTS000024	QTD000430	Quach_2016	monocyte_IAV	CL_0002057	monocyte	Influenza_6h	198	exon	cc
+QTS000024	QTD000431	Quach_2016	monocyte_IAV	CL_0002057	monocyte	Influenza_6h	198	tx	cc
+QTS000024	QTD000432	Quach_2016	monocyte_IAV	CL_0002057	monocyte	Influenza_6h	198	txrev	cc
+QTS000024	QTD000433	Quach_2016	monocyte_IAV	CL_0002057	monocyte	Influenza_6h	198	leafcutter	cc
+QTS000025	QTD000434	ROSMAP	brain_naive	UBERON_0009834	brain (DLPFC)	naive	560	ge	all
+QTS000025	QTD000435	ROSMAP	brain_naive	UBERON_0009834	brain (DLPFC)	naive	560	exon	cc
+QTS000025	QTD000436	ROSMAP	brain_naive	UBERON_0009834	brain (DLPFC)	naive	560	tx	cc
+QTS000025	QTD000437	ROSMAP	brain_naive	UBERON_0009834	brain (DLPFC)	naive	560	txrev	cc
+QTS000025	QTD000438	ROSMAP	brain_naive	UBERON_0009834	brain (DLPFC)	naive	560	leafcutter	cc
+QTS000026	QTD000439	Schmiedel_2018	Tfh_memory	CL_0002038	Tfh cell	naive	89	ge	all
+QTS000026	QTD000440	Schmiedel_2018	Tfh_memory	CL_0002038	Tfh cell	naive	89	exon	cc
+QTS000026	QTD000441	Schmiedel_2018	Tfh_memory	CL_0002038	Tfh cell	naive	89	tx	cc
+QTS000026	QTD000442	Schmiedel_2018	Tfh_memory	CL_0002038	Tfh cell	naive	89	txrev	cc
+QTS000026	QTD000443	Schmiedel_2018	Tfh_memory	CL_0002038	Tfh cell	naive	89	leafcutter	cc
+QTS000026	QTD000444	Schmiedel_2018	Th17_memory	CL_0000899	Th17 cell	naive	89	ge	all
+QTS000026	QTD000445	Schmiedel_2018	Th17_memory	CL_0000899	Th17 cell	naive	89	exon	cc
+QTS000026	QTD000446	Schmiedel_2018	Th17_memory	CL_0000899	Th17 cell	naive	89	tx	cc
+QTS000026	QTD000447	Schmiedel_2018	Th17_memory	CL_0000899	Th17 cell	naive	89	txrev	cc
+QTS000026	QTD000448	Schmiedel_2018	Th17_memory	CL_0000899	Th17 cell	naive	89	leafcutter	cc
+QTS000026	QTD000449	Schmiedel_2018	Th1_memory	CL_0000545	Th1 cell	naive	82	ge	all
+QTS000026	QTD000450	Schmiedel_2018	Th1_memory	CL_0000545	Th1 cell	naive	82	exon	cc
+QTS000026	QTD000451	Schmiedel_2018	Th1_memory	CL_0000545	Th1 cell	naive	82	tx	cc
+QTS000026	QTD000452	Schmiedel_2018	Th1_memory	CL_0000545	Th1 cell	naive	82	txrev	cc
+QTS000026	QTD000453	Schmiedel_2018	Th1_memory	CL_0000545	Th1 cell	naive	82	leafcutter	cc
+QTS000026	QTD000454	Schmiedel_2018	Th2_memory	CL_0000546	Th2 cell	naive	89	ge	all
+QTS000026	QTD000455	Schmiedel_2018	Th2_memory	CL_0000546	Th2 cell	naive	89	exon	cc
+QTS000026	QTD000456	Schmiedel_2018	Th2_memory	CL_0000546	Th2 cell	naive	89	tx	cc
+QTS000026	QTD000457	Schmiedel_2018	Th2_memory	CL_0000546	Th2 cell	naive	89	txrev	cc
+QTS000026	QTD000458	Schmiedel_2018	Th2_memory	CL_0000546	Th2 cell	naive	89	leafcutter	cc
+QTS000026	QTD000459	Schmiedel_2018	Th1-17_memory	CL_0000899	Th17 cell	naive	88	ge	all
+QTS000026	QTD000460	Schmiedel_2018	Th1-17_memory	CL_0000899	Th17 cell	naive	88	exon	cc
+QTS000026	QTD000461	Schmiedel_2018	Th1-17_memory	CL_0000899	Th17 cell	naive	88	tx	cc
+QTS000026	QTD000462	Schmiedel_2018	Th1-17_memory	CL_0000899	Th17 cell	naive	88	txrev	cc
+QTS000026	QTD000463	Schmiedel_2018	Th1-17_memory	CL_0000899	Th17 cell	naive	88	leafcutter	cc
+QTS000026	QTD000464	Schmiedel_2018	Treg_memory	CL_0002678	Treg naive	naive	89	ge	all
+QTS000026	QTD000465	Schmiedel_2018	Treg_memory	CL_0002678	Treg naive	naive	89	exon	cc
+QTS000026	QTD000466	Schmiedel_2018	Treg_memory	CL_0002678	Treg naive	naive	89	tx	cc
+QTS000026	QTD000467	Schmiedel_2018	Treg_memory	CL_0002678	Treg naive	naive	89	txrev	cc
+QTS000026	QTD000468	Schmiedel_2018	Treg_memory	CL_0002678	Treg naive	naive	89	leafcutter	cc
+QTS000026	QTD000469	Schmiedel_2018	Treg_naive	CL_0002677	Treg memory	naive	89	ge	all
+QTS000026	QTD000470	Schmiedel_2018	Treg_naive	CL_0002677	Treg memory	naive	89	exon	cc
+QTS000026	QTD000471	Schmiedel_2018	Treg_naive	CL_0002677	Treg memory	naive	89	tx	cc
+QTS000026	QTD000472	Schmiedel_2018	Treg_naive	CL_0002677	Treg memory	naive	89	txrev	cc
+QTS000026	QTD000473	Schmiedel_2018	Treg_naive	CL_0002677	Treg memory	naive	89	leafcutter	cc
+QTS000026	QTD000474	Schmiedel_2018	B-cell_naive	CL_0000236	B cell	naive	91	ge	all
+QTS000026	QTD000475	Schmiedel_2018	B-cell_naive	CL_0000236	B cell	naive	91	exon	cc
+QTS000026	QTD000476	Schmiedel_2018	B-cell_naive	CL_0000236	B cell	naive	91	tx	cc
+QTS000026	QTD000477	Schmiedel_2018	B-cell_naive	CL_0000236	B cell	naive	91	txrev	cc
+QTS000026	QTD000478	Schmiedel_2018	B-cell_naive	CL_0000236	B cell	naive	91	leafcutter	cc
+QTS000026	QTD000479	Schmiedel_2018	CD4_T-cell_naive	CL_0000624	CD4+ T cell	naive	88	ge	all
+QTS000026	QTD000480	Schmiedel_2018	CD4_T-cell_naive	CL_0000624	CD4+ T cell	naive	88	exon	cc
+QTS000026	QTD000481	Schmiedel_2018	CD4_T-cell_naive	CL_0000624	CD4+ T cell	naive	88	tx	cc
+QTS000026	QTD000482	Schmiedel_2018	CD4_T-cell_naive	CL_0000624	CD4+ T cell	naive	88	txrev	cc
+QTS000026	QTD000483	Schmiedel_2018	CD4_T-cell_naive	CL_0000624	CD4+ T cell	naive	88	leafcutter	cc
+QTS000026	QTD000484	Schmiedel_2018	CD4_T-cell_anti-CD3-CD28	CL_0000624	CD4+ T cell	anti-CD3-CD28_4h	89	ge	all
+QTS000026	QTD000485	Schmiedel_2018	CD4_T-cell_anti-CD3-CD28	CL_0000624	CD4+ T cell	anti-CD3-CD28_4h	89	exon	cc
+QTS000026	QTD000486	Schmiedel_2018	CD4_T-cell_anti-CD3-CD28	CL_0000624	CD4+ T cell	anti-CD3-CD28_4h	89	tx	cc
+QTS000026	QTD000487	Schmiedel_2018	CD4_T-cell_anti-CD3-CD28	CL_0000624	CD4+ T cell	anti-CD3-CD28_4h	89	txrev	cc
+QTS000026	QTD000488	Schmiedel_2018	CD4_T-cell_anti-CD3-CD28	CL_0000624	CD4+ T cell	anti-CD3-CD28_4h	89	leafcutter	cc
+QTS000026	QTD000489	Schmiedel_2018	CD8_T-cell_naive	CL_0000625	CD8+ T cell	naive	89	ge	all
+QTS000026	QTD000490	Schmiedel_2018	CD8_T-cell_naive	CL_0000625	CD8+ T cell	naive	89	exon	cc
+QTS000026	QTD000491	Schmiedel_2018	CD8_T-cell_naive	CL_0000625	CD8+ T cell	naive	89	tx	cc
+QTS000026	QTD000492	Schmiedel_2018	CD8_T-cell_naive	CL_0000625	CD8+ T cell	naive	89	txrev	cc
+QTS000026	QTD000493	Schmiedel_2018	CD8_T-cell_naive	CL_0000625	CD8+ T cell	naive	89	leafcutter	cc
+QTS000026	QTD000494	Schmiedel_2018	CD8_T-cell_anti-CD3-CD28	CL_0000625	CD8+ T cell	anti-CD3-CD28_4h	88	ge	all
+QTS000026	QTD000495	Schmiedel_2018	CD8_T-cell_anti-CD3-CD28	CL_0000625	CD8+ T cell	anti-CD3-CD28_4h	88	exon	cc
+QTS000026	QTD000496	Schmiedel_2018	CD8_T-cell_anti-CD3-CD28	CL_0000625	CD8+ T cell	anti-CD3-CD28_4h	88	tx	cc
+QTS000026	QTD000497	Schmiedel_2018	CD8_T-cell_anti-CD3-CD28	CL_0000625	CD8+ T cell	anti-CD3-CD28_4h	88	txrev	cc
+QTS000026	QTD000498	Schmiedel_2018	CD8_T-cell_anti-CD3-CD28	CL_0000625	CD8+ T cell	anti-CD3-CD28_4h	88	leafcutter	cc
+QTS000026	QTD000499	Schmiedel_2018	monocyte_CD16_naive	CL_0002396	CD16+ monocyte	naive	90	ge	all
+QTS000026	QTD000500	Schmiedel_2018	monocyte_CD16_naive	CL_0002396	CD16+ monocyte	naive	90	exon	cc
+QTS000026	QTD000501	Schmiedel_2018	monocyte_CD16_naive	CL_0002396	CD16+ monocyte	naive	90	tx	cc
+QTS000026	QTD000502	Schmiedel_2018	monocyte_CD16_naive	CL_0002396	CD16+ monocyte	naive	90	txrev	cc
+QTS000026	QTD000503	Schmiedel_2018	monocyte_CD16_naive	CL_0002396	CD16+ monocyte	naive	90	leafcutter	cc
+QTS000026	QTD000504	Schmiedel_2018	monocyte_naive	CL_0002057	monocyte	naive	91	ge	all
+QTS000026	QTD000505	Schmiedel_2018	monocyte_naive	CL_0002057	monocyte	naive	91	exon	cc
+QTS000026	QTD000506	Schmiedel_2018	monocyte_naive	CL_0002057	monocyte	naive	91	tx	cc
+QTS000026	QTD000507	Schmiedel_2018	monocyte_naive	CL_0002057	monocyte	naive	91	txrev	cc
+QTS000026	QTD000508	Schmiedel_2018	monocyte_naive	CL_0002057	monocyte	naive	91	leafcutter	cc
+QTS000026	QTD000509	Schmiedel_2018	NK-cell_naive	CL_0000623	NK cell	naive	90	ge	all
+QTS000026	QTD000510	Schmiedel_2018	NK-cell_naive	CL_0000623	NK cell	naive	90	exon	cc
+QTS000026	QTD000511	Schmiedel_2018	NK-cell_naive	CL_0000623	NK cell	naive	90	tx	cc
+QTS000026	QTD000512	Schmiedel_2018	NK-cell_naive	CL_0000623	NK cell	naive	90	txrev	cc
+QTS000026	QTD000513	Schmiedel_2018	NK-cell_naive	CL_0000623	NK cell	naive	90	leafcutter	cc
+QTS000027	QTD000514	Schwartzentruber_2018	sensory_neuron	CL_0000101	sensory neuron	naive	98	ge	all
+QTS000027	QTD000515	Schwartzentruber_2018	sensory_neuron	CL_0000101	sensory neuron	naive	98	exon	cc
+QTS000027	QTD000516	Schwartzentruber_2018	sensory_neuron	CL_0000101	sensory neuron	naive	98	tx	cc
+QTS000027	QTD000517	Schwartzentruber_2018	sensory_neuron	CL_0000101	sensory neuron	naive	98	txrev	cc
+QTS000027	QTD000518	Schwartzentruber_2018	sensory_neuron	CL_0000101	sensory neuron	naive	98	leafcutter	cc
+QTS000028	QTD000519	Steinberg_2020	synovium_naive	UBERON_0007616	synovium	naive	72	ge	all
+QTS000028	QTD000520	Steinberg_2020	synovium_naive	UBERON_0007616	synovium	naive	72	exon	cc
+QTS000028	QTD000521	Steinberg_2020	synovium_naive	UBERON_0007616	synovium	naive	72	tx	cc
+QTS000028	QTD000522	Steinberg_2020	synovium_naive	UBERON_0007616	synovium	naive	72	txrev	cc
+QTS000028	QTD000523	Steinberg_2020	synovium_naive	UBERON_0007616	synovium	naive	72	leafcutter	cc
+QTS000028	QTD000524	Steinberg_2020	low_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	ge	all
+QTS000028	QTD000525	Steinberg_2020	low_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	exon	cc
+QTS000028	QTD000526	Steinberg_2020	low_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	tx	cc
+QTS000028	QTD000527	Steinberg_2020	low_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	txrev	cc
+QTS000028	QTD000528	Steinberg_2020	low_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	leafcutter	cc
+QTS000028	QTD000529	Steinberg_2020	high_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	ge	all
+QTS000028	QTD000530	Steinberg_2020	high_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	exon	cc
+QTS000028	QTD000531	Steinberg_2020	high_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	tx	cc
+QTS000028	QTD000532	Steinberg_2020	high_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	txrev	cc
+QTS000028	QTD000533	Steinberg_2020	high_grade_cartilage_naive	UBERON_0002418	cartilage	naive	69	leafcutter	cc
+QTS000029	QTD000534	TwinsUK	fat	UBERON_0001013	adipose	naive	381	ge	all
+QTS000029	QTD000535	TwinsUK	fat	UBERON_0001013	adipose	naive	381	exon	cc
+QTS000029	QTD000536	TwinsUK	fat	UBERON_0001013	adipose	naive	381	tx	cc
+QTS000029	QTD000537	TwinsUK	fat	UBERON_0001013	adipose	naive	381	txrev	cc
+QTS000029	QTD000538	TwinsUK	fat	UBERON_0001013	adipose	naive	381	leafcutter	cc
+QTS000029	QTD000539	TwinsUK	LCL	EFO_0005292	LCL	naive	418	ge	all
+QTS000029	QTD000540	TwinsUK	LCL	EFO_0005292	LCL	naive	418	exon	cc
+QTS000029	QTD000541	TwinsUK	LCL	EFO_0005292	LCL	naive	418	tx	cc
+QTS000029	QTD000542	TwinsUK	LCL	EFO_0005292	LCL	naive	418	txrev	cc
+QTS000029	QTD000543	TwinsUK	LCL	EFO_0005292	LCL	naive	418	leafcutter	cc
+QTS000029	QTD000544	TwinsUK	skin	UBERON_0002097	skin	naive	370	ge	all
+QTS000029	QTD000545	TwinsUK	skin	UBERON_0002097	skin	naive	370	exon	cc
+QTS000029	QTD000546	TwinsUK	skin	UBERON_0002097	skin	naive	370	tx	cc
+QTS000029	QTD000547	TwinsUK	skin	UBERON_0002097	skin	naive	370	txrev	cc
+QTS000029	QTD000548	TwinsUK	skin	UBERON_0002097	skin	naive	370	leafcutter	cc
+QTS000029	QTD000549	TwinsUK	blood	UBERON_0000178	blood	naive	195	ge	all
+QTS000029	QTD000550	TwinsUK	blood	UBERON_0000178	blood	naive	195	exon	cc
+QTS000029	QTD000551	TwinsUK	blood	UBERON_0000178	blood	naive	195	tx	cc
+QTS000029	QTD000552	TwinsUK	blood	UBERON_0000178	blood	naive	195	txrev	cc
+QTS000029	QTD000553	TwinsUK	blood	UBERON_0000178	blood	naive	195	leafcutter	cc
+QTS000030	QTD000554	van_de_Bunt_2015	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	117	ge	all
+QTS000030	QTD000555	van_de_Bunt_2015	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	117	exon	cc
+QTS000030	QTD000556	van_de_Bunt_2015	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	117	tx	cc
+QTS000030	QTD000557	van_de_Bunt_2015	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	117	txrev	cc
+QTS000030	QTD000558	van_de_Bunt_2015	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	117	leafcutter	cc
+QTS000031	QTD000559	Young_2019	microglia_naive	CL_0000129	microglia	naive	104	ge	all
+QTS000031	QTD000560	Young_2019	microglia_naive	CL_0000129	microglia	naive	104	exon	cc
+QTS000031	QTD000561	Young_2019	microglia_naive	CL_0000129	microglia	naive	104	tx	cc
+QTS000031	QTD000562	Young_2019	microglia_naive	CL_0000129	microglia	naive	104	txrev	cc
+QTS000031	QTD000563	Young_2019	microglia_naive	CL_0000129	microglia	naive	104	leafcutter	cc
+QTS000032	QTD000564	Aygun_2021	Progenitor	CL_0011020	neural progenitor	naive	85	ge	all
+QTS000032	QTD000565	Aygun_2021	Progenitor	CL_0011020	neural progenitor	naive	85	exon	cc
+QTS000032	QTD000566	Aygun_2021	Progenitor	CL_0011020	neural progenitor	naive	85	tx	cc
+QTS000032	QTD000567	Aygun_2021	Progenitor	CL_0011020	neural progenitor	naive	85	txrev	cc
+QTS000032	QTD000568	Aygun_2021	Progenitor	CL_0011020	neural progenitor	naive	85	leafcutter	cc
+QTS000032	QTD000569	Aygun_2021	Neuron	CL_0000540	neuron	naive	73	ge	all
+QTS000032	QTD000570	Aygun_2021	Neuron	CL_0000540	neuron	naive	73	exon	cc
+QTS000032	QTD000571	Aygun_2021	Neuron	CL_0000540	neuron	naive	73	tx	cc
+QTS000032	QTD000572	Aygun_2021	Neuron	CL_0000540	neuron	naive	73	txrev	cc
+QTS000032	QTD000573	Aygun_2021	Neuron	CL_0000540	neuron	naive	73	leafcutter	cc
+QTS000033	QTD000574	PISA	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	127	ge	all
+QTS000033	QTD000575	PISA	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	127	exon	cc
+QTS000033	QTD000576	PISA	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	127	tx	cc
+QTS000033	QTD000577	PISA	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	127	txrev	cc
+QTS000033	QTD000578	PISA	pancreatic_islet	UBERON_0000006	pancreatic islet	naive	127	leafcutter	cc
+QTS000034	QTD000579	Walker_2019	Neocortex	UBERON_0001950	neocortex	naive	211	ge	all
+QTS000034	QTD000580	Walker_2019	Neocortex	UBERON_0001950	neocortex	naive	211	exon	cc
+QTS000034	QTD000581	Walker_2019	Neocortex	UBERON_0001950	neocortex	naive	211	tx	cc
+QTS000034	QTD000582	Walker_2019	Neocortex	UBERON_0001950	neocortex	naive	211	txrev	cc
+QTS000034	QTD000583	Walker_2019	Neocortex	UBERON_0001950	neocortex	naive	211	leafcutter	cc
+QTS000035	QTD000584	Sun_2018	plasma	UBERON_0001969	plasma	naive	3301	aptamer	all
+QTS000036	QTD000585	Randolph_2021	B_NI	CL_0000236	B cell	naive	89	ge	all
+QTS000036	QTD000586	Randolph_2021	B_flu	CL_0000236	B cell	Influenza_6h	89	ge	all
+QTS000036	QTD000587	Randolph_2021	CD4_T_NI	CL_0000624	CD4+ T cell	naive	89	ge	all
+QTS000036	QTD000588	Randolph_2021	CD4_T_flu	CL_0000624	CD4+ T cell	Influenza_6h	89	ge	all
+QTS000036	QTD000589	Randolph_2021	CD8_T_NI	CL_0000625	CD8+ T cell	naive	89	ge	all
+QTS000036	QTD000590	Randolph_2021	CD8_T_flu	CL_0000625	CD8+ T cell	Influenza_6h	89	ge	all
+QTS000036	QTD000591	Randolph_2021	NK_NI	CL_0000623	NK cell	naive	89	ge	all
+QTS000036	QTD000592	Randolph_2021	NK_flu	CL_0000623	NK cell	Influenza_6h	89	ge	all
+QTS000036	QTD000593	Randolph_2021	highly_infected_flu	CL_0002057	monocyte	Influenza_6h	89	ge	all
+QTS000036	QTD000594	Randolph_2021	infected_monocytes_flu	CL_0002057	monocyte	Influenza_6h	88	ge	all
+QTS000036	QTD000595	Randolph_2021	monocytes_NI	CL_0002057	monocyte	naive	89	ge	all
+QTS000036	QTD000596	Randolph_2021	monocytes_flu	CL_0002057	monocyte	Influenza_6h	89	ge	all
+QTS000037	QTD000597	Perez_2022	B	CL_0000236	B cell	naive	191	ge	all
+QTS000037	QTD000598	Perez_2022	NK	CL_0000623	NK cell	naive	193	ge	all
+QTS000037	QTD000599	Perez_2022	Prolif	CL_0000623	NK cell	naive	193	ge	all
+QTS000037	QTD000600	Perez_2022	T4	CL_0000624	CD4+ T cell	naive	193	ge	all
+QTS000037	QTD000601	Perez_2022	T8	CL_0000625	CD8+ T cell	naive	193	ge	all
+QTS000037	QTD000602	Perez_2022	cDC	CL_0000451	dendritic cell	naive	191	ge	all
+QTS000037	QTD000603	Perez_2022	cM	CL_0002057	monocyte	naive	193	ge	all
+QTS000037	QTD000604	Perez_2022	ncM	CL_0002396	CD16+ monocyte	naive	193	ge	all
+QTS000037	QTD000605	Perez_2022	pDC	CL_0000784	plasmacytoid dendritic cell	naive	190	ge	all
+QTS000038	QTD000606	OneK1K	B_intermediate	CL_0000236	B cell	naive	977	ge	all
+QTS000038	QTD000607	OneK1K	B_memory	CL_0000787	memory B cell	naive	981	ge	all
+QTS000038	QTD000608	OneK1K	B_naive	CL_0000236	B cell	naive	980	ge	all
+QTS000038	QTD000609	OneK1K	CD14_Mono	CL_0002057	monocyte	naive	959	ge	all
+QTS000038	QTD000610	OneK1K	CD16_Mono	CL_0002396	CD16+ monocyte	naive	930	ge	all
+QTS000038	QTD000611	OneK1K	CD4_CTL	CL_0000934	CD4+ CTL cell	naive	946	ge	all
+QTS000038	QTD000612	OneK1K	CD4_Naive	CL_0000624	CD4+ T cell	naive	981	ge	all
+QTS000038	QTD000613	OneK1K	CD4_TCM	CL_0000904	CD4+ TCM cell	naive	981	ge	all
+QTS000038	QTD000614	OneK1K	CD4_TEM	CL_0000905	CD4+ TEM cell	naive	981	ge	all
+QTS000038	QTD000615	OneK1K	CD8_Naive	CL_0000625	CD8+ T cell	naive	980	ge	all
+QTS000038	QTD000616	OneK1K	CD8_TCM	CL_0000907	CD8+ TCM cell	naive	977	ge	all
+QTS000038	QTD000617	OneK1K	CD8_TEM	CL_0000913	CD8+ TEM cell	naive	981	ge	all
+QTS000038	QTD000618	OneK1K	HSPC	CL_0008001	hematopoietic precursor cell	naive	705	ge	all
+QTS000038	QTD000619	OneK1K	MAIT	CL_0000940	MAIT cell	naive	900	ge	all
+QTS000038	QTD000620	OneK1K	NK	CL_0000623	NK cell	naive	981	ge	all
+QTS000038	QTD000621	OneK1K	NK_CD56bright	CL_0000938	CD56+ NK cell	naive	952	ge	all
+QTS000038	QTD000622	OneK1K	NK_Proliferating	CL_0000623	NK cell	naive	696	ge	all
+QTS000038	QTD000623	OneK1K	Plasmablast	CL_0000980	plasmablast	naive	795	ge	all
+QTS000038	QTD000624	OneK1K	Platelet	CL_0000233	platelet	naive	534	ge	all
+QTS000038	QTD000625	OneK1K	Treg	CL_0002677	Treg memory	naive	981	ge	all
+QTS000038	QTD000626	OneK1K	cDC2	CL_0000451	dendritic cell	naive	869	ge	all
+QTS000038	QTD000627	OneK1K	dnT	CL_0002489	dnT cell	naive	678	ge	all
+QTS000038	QTD000628	OneK1K	gdT	CL_0000798	gdT cell	naive	975	ge	all
+QTS000038	QTD000629	OneK1K	pDC	CL_0000784	plasmacytoid dendritic cell	naive	639	ge	all
+QTS000039	QTD000630	Jerber_2021	NB_Naive_D11	BTO_0000930	neuroblast	naive_D11	149	ge	all
+QTS000039	QTD000631	Jerber_2021	U_Neur1_ROT_D52	CL_0000540	neuron	rotenone_D52	152	ge	all
+QTS000039	QTD000632	Jerber_2021	P_FPP_ROT_D52	UBERON_0003079	floor plate progenitor	rotenone_D52	157	ge	all
+QTS000039	QTD000633	Jerber_2021	DA_ROT_D52	CL_0000700	dopaminergic neuron	rotenone_D52	186	ge	all
+QTS000039	QTD000634	Jerber_2021	Epen1_ROT_D52	CL_0000065	ependymal cell	rotenone_D52	190	ge	all
+QTS000039	QTD000635	Jerber_2021	P_FPP_Naive_D30	UBERON_0003079	floor plate progenitor	naive_D30	163	ge	all
+QTS000039	QTD000636	Jerber_2021	U_Neur1_Naive_D30	CL_0000540	neuron	naive_D30	154	ge	all
+QTS000039	QTD000637	Jerber_2021	FPP_Naive_D11	UBERON_0003079	floor plate progenitor	naive_D11	174	ge	all
+QTS000039	QTD000638	Jerber_2021	FPP_Naive_D30	UBERON_0003079	floor plate progenitor	naive_D30	165	ge	all
+QTS000039	QTD000639	Jerber_2021	P_Sert_Naive_D52	CL_0000850	serotonergic neuron	naive_D52	126	ge	all
+QTS000039	QTD000640	Jerber_2021	Astro_Naive_D52	CL_0000127	astrocyte	naive_D52	181	ge	all
+QTS000039	QTD000641	Jerber_2021	Epen2_Naive_D52	CL_0000065	ependymal cell	naive_D52	146	ge	all
+QTS000039	QTD000642	Jerber_2021	FPP_Naive_D52	UBERON_0003079	floor plate progenitor	naive_D52	191	ge	all
+QTS000039	QTD000643	Jerber_2021	Sert_Naive_D52	CL_0000850	serotonergic neuron	naive_D52	188	ge	all
+QTS000039	QTD000644	Jerber_2021	P_FPP_Naive_D11	UBERON_0003079	floor plate progenitor	naive_D11	172	ge	all
+QTS000039	QTD000645	Jerber_2021	Astro_ROT_D52	CL_0000127	astrocyte	rotenone_D52	172	ge	all
+QTS000039	QTD000646	Jerber_2021	FPP_ROT_D52	UBERON_0003079	floor plate progenitor	rotenone_D52	190	ge	all
+QTS000039	QTD000647	Jerber_2021	U_Neur3_ROT_D52	CL_0000540	neuron	rotenone_D52	173	ge	all
+QTS000039	QTD000648	Jerber_2021	Sert_ROT_D52	CL_0000850	serotonergic neuron	rotenone_D52	188	ge	all
+QTS000039	QTD000649	Jerber_2021	Epen1_Naive_D30	CL_0000065	ependymal cell	naive_D30	156	ge	all
+QTS000039	QTD000650	Jerber_2021	P_FPP_Naive_D52	UBERON_0003079	floor plate progenitor	naive_D52	175	ge	all
+QTS000039	QTD000651	Jerber_2021	Sert_Naive_D30	CL_0000850	serotonergic neuron	naive_D30	165	ge	all
+QTS000039	QTD000652	Jerber_2021	U_Neur1_Naive_D52	CL_0000540	neuron	naive_D52	172	ge	all
+QTS000039	QTD000653	Jerber_2021	Epen2_ROT_D52	CL_0000065	ependymal cell	rotenone_D52	128	ge	all
+QTS000039	QTD000654	Jerber_2021	U_Neur2_Naive_D30	CL_0000540	neuron	naive_D30	72	ge	all
+QTS000039	QTD000655	Jerber_2021	P_Sert_ROT_D52	CL_0000850	serotonergic neuron	rotenone_D52	93	ge	all
+QTS000039	QTD000656	Jerber_2021	U_Neur3_Naive_D52	CL_0000540	neuron	naive_D52	180	ge	all
+QTS000039	QTD000657	Jerber_2021	DA_Naive_D30	CL_0000700	dopaminergic neuron	naive_D30	166	ge	all
+QTS000039	QTD000658	Jerber_2021	Epen1_Naive_D52	CL_0000065	ependymal cell	naive_D52	191	ge	all
+QTS000039	QTD000659	Jerber_2021	DA_Naive_D52	CL_0000700	dopaminergic neuron	naive_D52	194	ge	all
+QTS000040	QTD000660	Nathan_2022	CD4+_CCR4+ICOS+_central	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000661	Nathan_2022	CD4+_central	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000662	Nathan_2022	CD4+_CCR5+_cytotoxic	CL_0000624	CD4+ T cell	naive	245	ge	all
+QTS000040	QTD000663	Nathan_2022	CD4+_CD161+_cytotoxic	CL_0000624	CD4+ T cell	naive	248	ge	all
+QTS000040	QTD000664	Nathan_2022	CD8+_GZMK+	CL_0000624	CD4+ T cell	naive	247	ge	all
+QTS000040	QTD000665	Nathan_2022	CD8+_GZMB+	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000666	Nathan_2022	CD4+_activated	CL_0000624	CD4+ T cell	naive	248	ge	all
+QTS000040	QTD000667	Nathan_2022	Vd2	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000668	Nathan_2022	CD4+_CD161+_Th2	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000669	Nathan_2022	CD4-8+_PD-1+TIGIT+	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000670	Nathan_2022	Vd1	CL_0000624	CD4+ T cell	naive	110	ge	all
+QTS000040	QTD000671	Nathan_2022	CD8+_central	CL_0000624	CD4+ T cell	naive	247	ge	all
+QTS000040	QTD000672	Nathan_2022	CD4+_CD161+_Th1	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000673	Nathan_2022	CD4+_Th17-1	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000674	Nathan_2022	CD4+_HLA-DR+	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000675	Nathan_2022	CD4+_CCR4+_central	CL_0000624	CD4+ T cell	naive	248	ge	all
+QTS000040	QTD000676	Nathan_2022	CD8+_CXCR3+	CL_0000624	CD4+ T cell	naive	244	ge	all
+QTS000040	QTD000677	Nathan_2022	CD4+_Th2	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000678	Nathan_2022	CD4+_CCR4+	CL_0000624	CD4+ T cell	naive	248	ge	all
+QTS000040	QTD000679	Nathan_2022	CD4+_CD38+ICOS+_central	CL_0000624	CD4+ T cell	naive	245	ge	all
+QTS000040	QTD000680	Nathan_2022	CD4+_cytotoxic	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000681	Nathan_2022	CD4+_CD27+CD161+	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000682	Nathan_2022	CD4+_RORC+_Treg	CL_0000624	CD4+ T cell	naive	248	ge	all
+QTS000040	QTD000683	Nathan_2022	CD4+_Th1	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000684	Nathan_2022	CD8+_activated	CL_0000624	CD4+ T cell	naive	232	ge	all
+QTS000040	QTD000685	Nathan_2022	CD4+_CD27+	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000686	Nathan_2022	CD4+_lncRNA	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000687	Nathan_2022	CD4+_Treg	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000040	QTD000688	Nathan_2022	CD4+_Th17	CL_0000624	CD4+ T cell	naive	249	ge	all
+QTS000041	QTD000689	Cytoimmgen	combined_CD4_Naive_UNS_16H	CL_0000624	CD4+ T cell	naive	105	ge	all
+QTS000041	QTD000690	Cytoimmgen	combined_CD4_Naive_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	94	ge	all
+QTS000041	QTD000691	Cytoimmgen	combined_CD4_Memory_STIM_40H	CL_0000897	CD4+ memory T cell	anti-CD3-CD28_40h	94	ge	all
+QTS000041	QTD000692	Cytoimmgen	combined_CD4_Memory_STIM_5D	CL_0000897	CD4+ memory T cell	anti-CD3-CD28_5D	93	ge	all
+QTS000041	QTD000693	Cytoimmgen	combined_CD4_Naive_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	99	ge	all
+QTS000041	QTD000694	Cytoimmgen	combined_CD4_Memory_UNS_16H	CL_0000897	CD4+ memory T cell	naive	106	ge	all
+QTS000041	QTD000695	Cytoimmgen	combined_CD4_Memory_STIM_16H	CL_0000897	CD4+ memory T cell	anti-CD3-CD28_16h	95	ge	all
+QTS000041	QTD000696	Cytoimmgen	combined_CD4_Naive_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	88	ge	all
+QTS000041	QTD000697	Cytoimmgen	TN1_UNS_16H	CL_0000624	CD4+ T cell	naive	106	ge	all
+QTS000041	QTD000698	Cytoimmgen	TEM_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	97	ge	all
+QTS000041	QTD000699	Cytoimmgen	TEMRA_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	92	ge	all
+QTS000041	QTD000700	Cytoimmgen	TN_IFN_Lowly_Active_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	75	ge	all
+QTS000041	QTD000701	Cytoimmgen	TEM_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000702	Cytoimmgen	TN2_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	99	ge	all
+QTS000041	QTD000703	Cytoimmgen	nTreg_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	93	ge	all
+QTS000041	QTD000704	Cytoimmgen	TEM_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000705	Cytoimmgen	TCM1_Lowly_Active_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	72	ge	all
+QTS000041	QTD000706	Cytoimmgen	TN_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000707	Cytoimmgen	TCM_UNS_16H	CL_0000624	CD4+ T cell	naive	106	ge	all
+QTS000041	QTD000708	Cytoimmgen	TCM_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	94	ge	all
+QTS000041	QTD000709	Cytoimmgen	TEM_HLA+_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	94	ge	all
+QTS000041	QTD000710	Cytoimmgen	TN_A_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000711	Cytoimmgen	TN_HSP_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000712	Cytoimmgen	TN_A_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000713	Cytoimmgen	T_NFKB_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000714	Cytoimmgen	TN3_UNS_16H	CL_0000624	CD4+ T cell	naive	106	ge	all
+QTS000041	QTD000715	Cytoimmgen	TCM1_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	99	ge	all
+QTS000041	QTD000716	Cytoimmgen	TCM_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000717	Cytoimmgen	TN_NFKB_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000718	Cytoimmgen	TN_B_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000719	Cytoimmgen	TEMRA_UNS_16H	CL_0000624	CD4+ T cell	naive	103	ge	all
+QTS000041	QTD000720	Cytoimmgen	TN2_UNS_16H	CL_0000624	CD4+ T cell	naive	106	ge	all
+QTS000041	QTD000721	Cytoimmgen	nTreg_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	98	ge	all
+QTS000041	QTD000722	Cytoimmgen	TN1_Lowly_Active_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	79	ge	all
+QTS000041	QTD000723	Cytoimmgen	TN2_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000724	Cytoimmgen	TEM_Lowly_Active_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000725	Cytoimmgen	TN3_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	80	ge	all
+QTS000041	QTD000726	Cytoimmgen	TCM_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000727	Cytoimmgen	TN_cycling_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000728	Cytoimmgen	TN_IFN_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000729	Cytoimmgen	TM_cycling_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000730	Cytoimmgen	TEM_HLA+_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	93	ge	all
+QTS000041	QTD000731	Cytoimmgen	TEMRA_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	96	ge	all
+QTS000041	QTD000732	Cytoimmgen	TM_ER-stress_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	93	ge	all
+QTS000041	QTD000733	Cytoimmgen	TN1_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000734	Cytoimmgen	TEM_UNS_16H	CL_0000624	CD4+ T cell	naive	106	ge	all
+QTS000041	QTD000735	Cytoimmgen	TN2_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000736	Cytoimmgen	TEMRA_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	91	ge	all
+QTS000041	QTD000737	Cytoimmgen	TN_IFN_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000738	Cytoimmgen	TN_cycling_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	95	ge	all
+QTS000041	QTD000739	Cytoimmgen	TN_NFKB_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	89	ge	all
+QTS000041	QTD000740	Cytoimmgen	TCM2_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	97	ge	all
+QTS000041	QTD000741	Cytoimmgen	TN_C_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000742	Cytoimmgen	TEM_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000743	Cytoimmgen	T_ER-stress_STIM_5D	CL_0000624	CD4+ T cell	anti-CD3-CD28_5D	94	ge	all
+QTS000041	QTD000744	Cytoimmgen	TCM2_Lowly_Active_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	93	ge	all
+QTS000041	QTD000745	Cytoimmgen	TN_IFN_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	77	ge	all
+QTS000041	QTD000746	Cytoimmgen	HSP_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	100	ge	all
+QTS000041	QTD000747	Cytoimmgen	nTreg_UNS_16H	CL_0000624	CD4+ T cell	naive	106	ge	all
+QTS000041	QTD000748	Cytoimmgen	TN_IFN_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	89	ge	all
+QTS000041	QTD000749	Cytoimmgen	TN-TCM_CXCR4+_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	93	ge	all
+QTS000041	QTD000750	Cytoimmgen	TEMRA_STIM_40H	CL_0000624	CD4+ T cell	anti-CD3-CD28_40h	91	ge	all
+QTS000041	QTD000751	Cytoimmgen	TN1_Lowly_Active_STIM_16H	CL_0000624	CD4+ T cell	anti-CD3-CD28_16h	97	ge	all
+QTS000042	QTD000752	Kim-Hellmuth_2017	monocyte_naive	CL_0002057	monocyte	naive	96	microarray	all
+QTS000042	QTD000753	Kim-Hellmuth_2017	monocyte_IVT_6h	CL_0002057	monocyte	IVT_6h	96	microarray	all
+QTS000042	QTD000754	Kim-Hellmuth_2017	monocyte_IVT_90min	CL_0002057	monocyte	IVT_90min	96	microarray	all
+QTS000042	QTD000755	Kim-Hellmuth_2017	monocyte_LPS_6h	CL_0002057	monocyte	LPS_6h	96	microarray	all
+QTS000042	QTD000756	Kim-Hellmuth_2017	monocyte_LPS_90min	CL_0002057	monocyte	LPS_90min	96	microarray	all
+QTS000042	QTD000757	Kim-Hellmuth_2017	monocyte_MDP_6h	CL_0002057	monocyte	MDP_6h	96	microarray	all
+QTS000042	QTD000758	Kim-Hellmuth_2017	monocyte_MDP_90min	CL_0002057	monocyte	MDP_90min	96	microarray	all
