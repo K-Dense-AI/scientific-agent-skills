@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Iterable
@@ -441,13 +442,20 @@ def personal_path_problems(skill: Path) -> list[str]:
 def shell_script_problems(skill: Path) -> list[str]:
     """Bundled shell scripts have a shebang, the executable bit, and parse."""
     problems = []
+    # CI runs ubuntu-latest with bash; Windows contributors have no bash and NTFS
+    # does not preserve the executable bit, so syntax and executable checks must
+    # degrade to skips on Windows — shebang is still checked.
+    has_bash = shutil.which("bash") is not None
+    is_windows = sys.platform == "win32"
     for path in _script_paths(skill, ".sh"):
         relative = path.relative_to(skill)
         first_line = path.read_text(encoding="utf-8").splitlines()[:1]
         if not first_line or not first_line[0].startswith("#!"):
             problems.append(f"{skill.name}: {relative} has no shebang")
-        if not path.stat().st_mode & 0o111:
+        if not is_windows and not path.stat().st_mode & 0o111:
             problems.append(f"{skill.name}: {relative} is not executable")
+        if not has_bash or is_windows:
+            continue
         syntax = subprocess.run(
             ["bash", "-n", str(path)], capture_output=True, text=True, timeout=30
         )
