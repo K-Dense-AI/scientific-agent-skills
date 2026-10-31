@@ -2,7 +2,7 @@
 
 # Scientific skill guides
 
-Explore **177 skills** through guides written for scientists. Each guide explains
+Explore **178 skills** through guides written for scientists. Each guide explains
 what the skill helps you do, what information it needs, what it produces, and how
 to interpret the results. You will also find an example research request, a workflow
 image, and links to setup and technical instructions.
@@ -82,6 +82,7 @@ Browse by area:
 - [Genomic Coordinates](genomic-coordinates.md)
 - [Genomic Intelligence](genomic-intelligence.md)
 - [geniml](geniml.md)
+- [glycowork](glycowork.md)
 - [Gtars](gtars.md)
 - [OneKGPd](onekgpd.md)
 - [Waypoint Bio](waypoint-bio.md)

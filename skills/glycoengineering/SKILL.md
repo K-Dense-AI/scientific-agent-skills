@@ -4,7 +4,7 @@ description: Analyzes and engineers protein glycosylation by scanning canonical 
 license: Unknown
 compatibility: Local sequence helpers require Python 3.10+. Public GlyTouCan lookup requires requests and network access. DTU predictors use a browser; optional GlycoSHIELD needs a separate source installation, glycan libraries, and GROMACS for SASA analysis.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: Kuan-lin Huang
   last-reviewed: "2026-10-01"
 ---
@@ -147,6 +147,20 @@ linkages, branch positions, or distinguish GlcNAc from GalNAc. A cartoon without
 linkages is schematic, not IUPAC condensed notation. Use an actual sequence
 (WURCS/GlycoCT/IUPAC with its uncertainty retained) and accession when available.
 Core fucose attaches to the innermost GlcNAc of an N-glycan, not to core mannose.
+
+To parse, convert or compare glycan sequences in code, use the
+[glycowork](../glycowork/SKILL.md) skill rather than string handling: it reads
+IUPAC, WURCS, GlycoCT, Oxford names and GlyTouCan IDs, computes compositions and
+masses, tests motifs such as core fucose or bisecting GlcNAc, draws SNFG figures,
+and runs statistics on released-glycan and site-specific glycoproteomics data.
+
+```python
+from glycowork.motif.processing import canonicalize_iupac
+from glycowork.motif.graph import subgraph_isomorphism
+
+g = canonicalize_iupac("FA2G2")  # Oxford name of a core-fucosylated Fc glycan
+assert subgraph_isomorphism(g, "Fuc(a1-6)GlcNAc", termini_list=["terminal", "flexible"])
+```
 
 ## Antibody engineering decisions
 
