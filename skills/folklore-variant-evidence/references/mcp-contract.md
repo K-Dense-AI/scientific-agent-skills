@@ -1,10 +1,17 @@
 # Folklore Clinical Variant Interpretation MCP public contract
 
 Use this reference when constructing calls or interpreting public results.
-Reviewed 2026-09-30 against adapter 1.5.0, official source commit
+The original seven-tool execution review was performed 2026-09-30 against adapter 1.5.0, official source commit
 `fef7220d66f99c3c021f8eee1cdd6b8ea4b0a64b`, and live discovery/calls. Discover the
 live schemas rather than assuming the published adapter source and deployment
 are identical.
+
+The four-tool public gene extension was reviewed 2026-10-31 against current
+adapter 1.6.0 `tools/list` schemas and the publisher's public gene guide at
+`55a332c6dd6bd4650e921c12ac145b8e0f90476a`. Its
+separate 2026-10-30 release acceptance flow exercised BRCA1 identity/profile,
+section continuation, live literature and ABC1 ambiguity. Older execution
+observations below retain their original date; they were not all rerun here.
 
 ## Connection
 
@@ -56,6 +63,10 @@ there is no verified universal request quota to hardcode.
 | `get_publication_details` | `s.publication` and `s.usage_boundary`; no scientific `status` field |
 | `search_literature_corpus` | `s.results`, `returned_count`, pagination and retrieval metadata; no scientific `status` field |
 | Both gene-disease tools | Direct `s.status` (`ok` or `not_found`), `associations`, `pagination`, `source`, `warnings`, `usage_boundary` |
+| `resolve_gene` | `s.result.status`, `identity_snapshot_id`, `candidates`, `candidate_total`, `complete` |
+| `get_gene_profile` | `s.result.gene_id`, `snapshot_id`, `identity`, `sources`, `sections`; no required scientific `status` field |
+| `get_gene_section` | `s.result.status`, `coverage`, `data`, `pagination`, with the same gene/snapshot/section |
+| `search_gene_literature` | `s.result.records`, `captured_at`, `capture_sha256`, `returned`, `has_more`, `next_cursor`; no required scientific `status` field |
 
 The evidence envelope has `contract_version: "1"` and its scientific result has
 `search_contract_version: "1.0"`. Literature/details/corpus use
@@ -64,10 +75,59 @@ Do not impose the evidence envelope on the other tools. Adapter failures for
 literature/details/corpus can use the evidence-style envelope with `result: null`;
 gene-disease failures contain `adapter_error` and `usage_boundary` directly.
 Unrecognized status values or missing required fields are a contract problem,
-not an empty result.
+not an empty result. Each new gene tool has `contract_version: "1"` with
+`result`, nullable `record_url`, `usage_boundary` and nullable `adapter_error`.
+Handle a non-null adapter error before scientific fields; `result` can be null
+on failure. Preserve `available_snapshot_id` if returned, but resolve again
+instead of silently substituting it. The usage boundary explicitly requires
+professional gene-reference review and excludes patient evaluation, diagnosis,
+treatment decisions and changes to variant pathogenicity classification.
 
 Preserve complete structured content. The evidence and literature text fallbacks
-are summaries and need not contain all provenance or candidate data.
+for the original variant tools are summaries and need not contain all provenance
+or candidate data. The four new gene tools instead return the same complete
+envelope as JSON text for text-only clients.
+
+## Public gene profiles in adapter 1.6.0
+
+`resolve_gene` accepts only `query`: one printable public symbol, previous symbol,
+alias, HGNC, Ensembl or NCBI Gene identifier, 1–128 characters. Preserve `exact`,
+`alias`, `ambiguous`, `not_found` and `withdrawn`, the complete returned candidate
+set and its completeness/count metadata. Require explicit selection for
+ambiguity; do not choose a replacement for a withdrawn identity. Gene-plus-HGVS
+expressions use the variant workflow instead.
+
+After resolution, select `s.result.candidates[].identity.gene_id` and pass
+`s.result.identity_snapshot_id` as `snapshot_id`. `gene_id` is a canonical
+`HGNC:` identifier with a positive integer; snapshots are 64 lowercase hexadecimal
+characters. Both fields are required for each of the other three new tools.
+Do not fabricate values or carry a snapshot from another gene/profile.
+
+`get_gene_profile` preserves these thirteen sections: `overview`,
+`disease_validity`, `structure`, `constraint`, `dosage`, `mechanisms`,
+`clinical_variants`, `clinical_variant_consequences`, `expression`, `gwas`,
+`phenotypes`, `protein_pathways` and `literature`.
+
+`get_gene_section` additionally requires one `section` from that set. Optional
+`limit` is 1–50 (default 20); optional `cursor` is the returned opaque continuation
+for that exact gene, snapshot and section. Preserve source assemblies/releases,
+assertions, links, coverage, limitations, nulls, `total`, `observed_total` and
+count units. An unknown total is not zero; overlapping clinical axes are not
+additive, and mirrored assertions are not independent votes. Native GRCh37
+transcript rows are reference evidence, not newly supported variant inputs.
+Unavailable/unintegrated evidence differs from a source having no record.
+For `snapshot_unavailable`, restart resolution and reload the entire profile;
+never mix pages from different snapshots or construct/repair opaque cursors.
+
+`search_gene_literature` takes the same resolved gene/snapshot, optional `limit`
+1–25 (default 20), `sort` of `relevance`, `newest` or `oldest` (default relevance),
+and an optional opaque cursor from the same gene/snapshot/sort capture. Preserve
+`captured_at`, `capture_sha256`, records, match labels, source links, degradation
+and continuation fields. Abstracts are excluded: do not append/hydrate them into
+this capture. Live query-matched discovery is not guaranteed exact gene filtering
+or curated gene-disease evidence; keep it separate from the immutable profile's
+literature section. Gene validity, dosage, constraint and GWAS do not by
+themselves establish variant pathogenicity or a patient diagnosis.
 
 ## `search_variant_evidence`
 
@@ -157,6 +217,9 @@ Request examples (not captured scientific results):
 
 ```json
 {"name":"get_gene_disease_associations","arguments":{"gene":"BRCA1","limit":20,"offset":0}}
+```
+
+```json
 {"name":"search_disease_genes","arguments":{"disease":"Marfan","limit":20,"offset":0}}
 ```
 
@@ -179,14 +242,16 @@ assessments; avoid collapsing them into a single gene-wide classification.
 
 ## Reviewed sources and execution scope
 
-- [Hosted technical guide](https://folklore.helena.bio/docs/folklore-connector)
+- [Public gene workflow, 1.6.0](https://github.com/helena-bioinformatics/folklore-mcp/blob/55a332c6dd6bd4650e921c12ac145b8e0f90476a/docs/PUBLIC_GENE_PROFILES.md)
+- [Public server card and input schemas](https://folklore.helena.bio/.well-known/mcp/server-card.json)
+- [Hosted technical guide](https://folklore.helena.bio/integrations/mcp)
 - [Protocol compatibility](https://github.com/helena-bioinformatics/folklore-mcp/blob/fef7220d66f99c3c021f8eee1cdd6b8ea4b0a64b/docs/COMPATIBILITY.md)
 - [Tool response construction](https://github.com/helena-bioinformatics/folklore-mcp/blob/fef7220d66f99c3c021f8eee1cdd6b8ea4b0a64b/src/folklore_mcp_service/presentation/mcp.py)
 - [Variant contracts](https://github.com/helena-bioinformatics/folklore-mcp/blob/fef7220d66f99c3c021f8eee1cdd6b8ea4b0a64b/src/folklore_mcp_service/domain/contracts.py)
 - [Literature contracts](https://github.com/helena-bioinformatics/folklore-mcp/blob/fef7220d66f99c3c021f8eee1cdd6b8ea4b0a64b/src/folklore_mcp_service/domain/literature_contracts.py)
 - [Gene-disease contracts](https://github.com/helena-bioinformatics/folklore-mcp/blob/fef7220d66f99c3c021f8eee1cdd6b8ea4b0a64b/src/folklore_mcp_service/domain/gene_disease_contracts.py)
 
-Live read-only public requests verified discovery, ambiguity, resolved identity,
+The 2026-09-30 live read-only public requests verified discovery, ambiguity, resolved identity,
 variant-linked literature, publication details, both gene-disease tools, and
 corpus/gene pagination. Eleven successful captured responses passed validation
 against their live tool output schemas; invalid-argument calls returned typed
